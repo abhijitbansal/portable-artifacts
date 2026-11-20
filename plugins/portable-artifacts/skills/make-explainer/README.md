@@ -90,7 +90,7 @@ page, so keep the two together.
   `bin/install.mjs` installs them for you (this skill's `package.json` lists
   them under `portableArtifacts.requires`). `npx skills add` does not resolve
   that list, so name all three:
-  `npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard`.
+  `npx skills add abhijitbansal/portable-artifacts --skill make-explainer make-diagram make-dashboard`.
   A `scene` section needs **`make-scene`** the same way, and only a spec with
   one asks for it. Without them a spec with no diagram, chart, scene or icon still builds; with one
   missing, validate prints that exact command.

@@ -16,11 +16,11 @@ an account or a particular model:
 | [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | An MP4 drawn from a script of shots (`film.json`, version 2) by one engine, with a local preview page that has a scrubber (`make.mjs film.json --preview`). Seven looks set the style of the whole film: `desk`, `pop`, `cosmos`, `ledger`, `poster`, `keynote` and `marker`, a hand-drawn whiteboard. Sixteen kinds of shot: `statement`, `number`, `clipping`, `end`, `list`, `quote`, `compare`, `chart`, `media`, `screen`, `map`, `diagram`, `timeline`, `code`, `feed` and `free`. `pro` is a calm 16:9 explainer and `viral` is a fast 9:16 short for Reels, TikTok and Shorts. One command validates the film, reviews every shot in a browser, writes review sheets and renders the MP4. Silent unless you ask for sound: narration made on your machine (`say` on a shot), a synthesised music bed or your own music file, and synthesised cues are each added only when the prompt asks. Also `--outline` (the timed script with no browser), `--poster <seconds>` (one still), `--subtitles srt\|vtt` (writes a subtitle file), `--workers`, typed `vars` with `--batch rows.json` (one MP4 per row), `beats.mjs` (the beat grid of a music file), `cutout.mjs` (a person cut out of a photo or clip, MODNet on onnxruntime-node, installed on demand) and `storyboard.mjs` (a plan page to answer before a film over 20 s). "Slow shot 2" changes one field, not the whole film. Two renders of the same film and media give the same frames. It reads version 2 films only: a version 1 spec is refused with a pointer to `references/migrating.md`. |
 | [`make-scene`](skills/make-scene/) | "Show our commits per week per folder as a 3D city, with a tour of the busiest weeks" | One self-contained 3D page drawn with a bundled three.js: your rows become a city, forest, galaxy or terrain, or a make-diagram diagram or one make-dashboard chart is lifted into 3D. Orbit, hover for exact values, an Explore list and a camera tour. The build recommends a world, then lists the alternatives with the one-line command to switch; switching costs no model tokens. `build.mjs --fragment` writes the scene as a block to paste into another page. |
 
-[**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#films): the two showreel films (a 16:9 film and a 9:16 short) and one film for each of five make-motion looks, all made with make-motion 2 from one film file each, which you can open from the page. [Real outputs](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase) has a dashboard an agent generated from one prompt, with the prompt and spec. The [gallery](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery) has a Theme switch that shows every explainer, deck and diagram in `dusk`, `press` and `poster`; the make-motion 2 films do not change with it. Clips made with make-motion 1.x stay on the page as a labelled archive.
+[**See them in action**](https://abhijitbansal.github.io/portable-artifacts/#films): the two showreel films (a 16:9 film and a 9:16 short) and one film for each of five make-motion looks, all made with make-motion 2 from one film file each, which you can open from the page. [Real outputs](https://abhijitbansal.github.io/portable-artifacts/#showcase) has a dashboard an agent generated from one prompt, with the prompt and spec. The [gallery](https://abhijitbansal.github.io/portable-artifacts/#gallery) has a Theme switch that shows every explainer, deck and diagram in `dusk`, `press` and `poster`; the make-motion 2 films do not change with it. Clips made with make-motion 1.x stay on the page as a labelled archive.
 
 <p>
-  <img src="../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="A make-dashboard page: four KPI tiles and four charts, each with a Query disclosure" width="49%">
-  <img src="../../docs/features/img/portable-artifacts/showreel-pro.gif" alt="The first 12 seconds of the make-motion 2 showreel: a dashboard in a window on a paper desk, a red line under the revenue figure, then a typed sales.json with its query line highlighted" width="49%">
+  <img src="../../docs/img/portable-artifacts/dashboard-light.jpg" alt="A make-dashboard page: four KPI tiles and four charts, each with a Query disclosure" width="49%">
+  <img src="../../docs/img/portable-artifacts/showreel-pro.gif" alt="The first 12 seconds of the make-motion 2 showreel: a dashboard in a window on a paper desk, a red line under the revenue figure, then a typed sales.json with its query line highlighted" width="49%">
 </p>
 
 ## How it works
@@ -130,9 +130,11 @@ The endpoint contract is in
 ### Claude Code
 
 ```bash
-/plugin marketplace add abhijitbansal/claude-skills
-/plugin install portable-artifacts@claude-skills
+/plugin marketplace add abhijitbansal/portable-artifacts
+/plugin install portable-artifacts@portable-artifacts
 ```
+
+Installed it from the `claude-skills` marketplace before? `portable-artifacts@claude-skills` still works and updates from this repo; no change is needed. Install from one marketplace only, either `portable-artifacts@portable-artifacts` or `portable-artifacts@claude-skills`: both at once load duplicate `/make-*` skills.
 
 Then ask for a dashboard, a diagram, an explainer, a 3D scene or a video, or call the skill directly:
 `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …` or `/make-scene …`. On first use the agent runs the
@@ -145,8 +147,8 @@ folders into whichever agents you pick (Claude Code, Codex, Copilot,
 Cursor, Gemini CLI, and others):
 
 ```bash
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene -a claude-code codex github-copilot -y
+npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene
+npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene -a claude-code codex github-copilot -y
 ```
 
 It copies the folders but doesn't install their dependencies, so on first use
@@ -161,7 +163,7 @@ diagram into 3D and `make-dashboard` only to lift a chart; a plain world needs n
 dependencies, so name them:
 
 ```bash
-npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard
+npx skills add abhijitbansal/portable-artifacts --skill make-explainer make-diagram make-dashboard
 ```
 
 If you forget, the first section that needs a missing skill fails validation
@@ -177,9 +179,9 @@ the slash command. The installer copies all five skills to the right place and
 installs their dependencies:
 
 ```bash
-git clone https://github.com/abhijitbansal/claude-skills
-node claude-skills/plugins/portable-artifacts/bin/install.mjs codex             # ~/.agents/skills
-node claude-skills/plugins/portable-artifacts/bin/install.mjs copilot --project .  # ./.github/skills
+git clone https://github.com/abhijitbansal/portable-artifacts
+node portable-artifacts/plugins/portable-artifacts/bin/install.mjs codex             # ~/.agents/skills
+node portable-artifacts/plugins/portable-artifacts/bin/install.mjs copilot --project .  # ./.github/skills
 ```
 
 | Host | `install.mjs` host | User dir | Project dir (`--project <dir>`) | Invoke |

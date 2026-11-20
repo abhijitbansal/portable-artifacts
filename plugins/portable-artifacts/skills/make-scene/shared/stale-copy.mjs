@@ -7,7 +7,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const PLUGIN_KEY = 'portable-artifacts@claude-skills';
+export const PLUGIN_KEY = 'portable-artifacts@portable-artifacts';
+// Installs made from the old claude-skills marketplace keep this key and keep updating from this repo.
+export const LEGACY_PLUGIN_KEY = 'portable-artifacts@claude-skills';
 const DEFAULT_SKILL = 'make-explainer';
 // <marketplace>/<plugin>/<version> under the cache root
 const COPY_SEGMENTS = 3;
@@ -21,8 +23,10 @@ function installPaths(home, readFile) {
   } catch {
     return [];
   }
-  const entries = parsed?.plugins?.[PLUGIN_KEY];
-  if (!Array.isArray(entries)) return [];
+  const entries = [PLUGIN_KEY, LEGACY_PLUGIN_KEY].flatMap((key) => {
+    const found = parsed?.plugins?.[key];
+    return Array.isArray(found) ? found : [];
+  });
   return entries.map((e) => e?.installPath).filter((p) => typeof p === 'string' && p !== '').map((p) => path.resolve(p));
 }
 

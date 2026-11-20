@@ -14,7 +14,7 @@ import { ALL } from '../shared/doctor.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:";
-const INSTALL = 'npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-scene -y';
+const INSTALL = 'npx --yes skills@1.7.2 add abhijitbansal/portable-artifacts --skill make-scene -y';
 const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 

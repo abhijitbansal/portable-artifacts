@@ -52,7 +52,7 @@ test('FFMPEG_PATH that exists counts as present', async () => {
 test('sister skill: missing folder is reported with its install command', async () => {
   const { missing } = await diagnose([sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h' }));
   assert.equal(missing[0].id, 'make-diagram');
-  assert.match(missing[0].fix.auto, /npx --yes skills@1\.7\.2 add abhijitbansal\/claude-skills --skill make-diagram -y/);
+  assert.match(missing[0].fix.auto, /npx --yes skills@1\.7\.2 add abhijitbansal\/portable-artifacts --skill make-diagram -y/);
 });
 
 test('optional misses do not flip ok', async () => {
@@ -816,9 +816,9 @@ test("builderAgent: auto fix writes the agent file for each host folder that exi
   assert.match(codexOnly.notes, /\/h\/\.codex\/agents\/artifact-builder\.toml/);
   const f = builderAgent().fix(agentCtx());
   const text = f.manual.darwin;
-  assert.match(text, /node <path-to-claude-skills>\/plugins\/portable-artifacts\/bin\/install\.mjs copilot --agents-only/);
+  assert.match(text, /node <path-to-portable-artifacts>\/plugins\/portable-artifacts\/bin\/install\.mjs copilot --agents-only/);
   assert.match(text, /install\.mjs codex --agents-only/);
-  assert.match(text, /<path-to-claude-skills> is a local checkout \(or clone the repo\)/);
+  assert.match(text, /<path-to-portable-artifacts> is a local checkout \(or clone the repo\)/);
   assert.match(text, /\bagents\b[^.]*both/);
   assert.deepEqual(Object.keys(f.manual).sort(), ["darwin", "linux", "win32"]);
 });

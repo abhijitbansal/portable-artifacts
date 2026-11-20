@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { staleCopyWarning, PLUGIN_KEY } from '../stale-copy.mjs';
+import { staleCopyWarning, PLUGIN_KEY, LEGACY_PLUGIN_KEY } from '../stale-copy.mjs';
 
 const home = path.resolve('/h');
 const cache = path.join(home, '.claude', 'plugins', 'cache', 'claude-skills', 'portable-artifacts');
@@ -19,6 +19,14 @@ test('silent from the installed copy, also with a trailing separator or as the s
   assert.equal(warn(script(path.join(cache, '1.0.0')), installed(path.join(cache, '1.0.0'))), null);
   assert.equal(warn(script(path.join(cache, '1.0.0')), installed(path.join(cache, '1.0.0') + path.sep)), null);
   assert.equal(warn(script(path.join(cache, '1.0.0')), installed(path.join(cache, '0.8.0'), path.join(cache, '1.0.0'))), null);
+});
+
+test('an install from the old claude-skills marketplace still counts: its entry is read under the legacy key', () => {
+  assert.equal(PLUGIN_KEY, 'portable-artifacts@portable-artifacts');
+  assert.equal(LEGACY_PLUGIN_KEY, 'portable-artifacts@claude-skills');
+  const legacy = JSON.stringify({ version: 2, plugins: { [LEGACY_PLUGIN_KEY]: [{ installPath: path.join(cache, '1.0.0') }] } });
+  assert.equal(warn(script(path.join(cache, '1.0.0')), legacy), null);
+  assert.match(warn(script(path.join(cache, '0.8.0')), legacy), /not the installed copy /);
 });
 
 test('silent outside the plugin cache, whatever the file says', () => {

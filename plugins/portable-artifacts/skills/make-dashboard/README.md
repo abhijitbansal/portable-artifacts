@@ -4,7 +4,7 @@
 its SQL and when it was refreshed.** Local, offline, open source, and usable
 by any agent that can run shell commands.
 
-<img src="../../../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="Dashboard with KPI tiles, bar, line and stacked charts; each card has a Query disclosure" width="100%">
+<img src="../../../../docs/img/portable-artifacts/dashboard-light.jpg" alt="Dashboard with KPI tiles, bar, line and stacked charts; each card has a Query disclosure" width="100%">
 
 - **One spec, `dashboard.json`**: data sources, named SQL queries, KPI tiles and
   charts (kinds or raw Vega-Lite). The agent writes it; scripts do the rest.

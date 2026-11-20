@@ -6,6 +6,35 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-20
+
+portable-artifacts now lives in its own repository, `abhijitbansal/portable-artifacts`, with its own CI and its own
+site. It used to be one plugin in the claude-skills repository. What the skills produce and the spec formats are
+unchanged. These things changed: the doctor's fix commands and the stale-copy check point at the new repository and
+recognise both marketplace names, and the hints printed when a sibling skill is not found show the new paths.
+
+### Behaviour changes to know about
+
+- **New install commands.** In Claude Code run `/plugin marketplace add abhijitbansal/portable-artifacts` and
+  `/plugin install portable-artifacts@portable-artifacts`. For other agents run
+  `npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene`,
+  or clone `https://github.com/abhijitbansal/portable-artifacts` and run
+  `node portable-artifacts/plugins/portable-artifacts/bin/install.mjs <host>`. The plugin keeps its path,
+  `plugins/portable-artifacts/`, inside the new repository.
+- **An existing install keeps working.** `portable-artifacts@claude-skills` still resolves, now to this repository, and
+  updates to 2.1.0 like any other version. You do not have to reinstall. The stale-copy warning reads the install under
+  either name.
+- **Installed with `npx skills add abhijitbansal/claude-skills`, or from a clone of claude-skills? Reinstall from the new
+  repository.** The claude-skills repository no longer carries this code, so those commands stop finding the skills.
+  Run `npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene`,
+  or run `git clone https://github.com/abhijitbansal/portable-artifacts` and then
+  `node portable-artifacts/plugins/portable-artifacts/bin/install.mjs <host>`.
+- **The doctor names the new repository** in every install command it prints: the `npx skills add` line for a missing
+  sister skill, and the `<path-to-portable-artifacts>` placeholder in the agent-file fix.
+- **The site moved.** The page is now `https://abhijitbansal.github.io/portable-artifacts/`. The old address
+  `https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html` redirects to it and keeps the `#hash`.
+  The claude-skills site links here.
+
 ## [2.0.0] - 2026-11-18
 
 make-motion 2 replaces make-motion 1: a film is a script of shots in one JSON file, written for one engine with seven

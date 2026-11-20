@@ -31,7 +31,7 @@ test('loadSibling imports a module from the sibling skill', async (t) => {
 test('MISSING_HINT is the exact install line', () => {
   assert.equal(
     MISSING_HINT(['make-diagram', 'make-dashboard']),
-    'install it with: npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram make-dashboard -y',
+    'install it with: npx --yes skills@1.7.2 add abhijitbansal/portable-artifacts --skill make-diagram make-dashboard -y',
   );
 });
 

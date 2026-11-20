@@ -20,14 +20,14 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 
 | You use | Do this | Then call |
 |---|---|---|
-| Claude Code | `/plugin marketplace add abhijitbansal/claude-skills` then `/plugin install portable-artifacts@claude-skills` | `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …`, `/make-scene …`, or just ask |
+| Claude Code | `/plugin marketplace add abhijitbansal/portable-artifacts` then `/plugin install portable-artifacts@portable-artifacts` (an existing `portable-artifacts@claude-skills` install keeps working and updating) | `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …`, `/make-scene …`, or just ask |
 | Codex CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs codex` | `$make-dashboard …`, `$make-diagram …`, `$make-explainer …`, `$make-motion …`, `$make-scene …` (or pick from `/skills`) |
 | GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …`, `/make-scene …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
-| Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`). It does not resolve dependencies: to get just the explainer, name its two required skills too, `--skill make-explainer make-diagram make-dashboard` | That agent's skill invocation |
+| Any agent `npx skills` supports | `npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`). It does not resolve dependencies: to get just the explainer, name its two required skills too, `--skill make-explainer make-diagram make-dashboard` | That agent's skill invocation |
 | Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram`, `skills/make-explainer`, `skills/make-motion` and/or `skills/make-scene` into your project (**make-explainer needs make-diagram and make-dashboard beside it; make-scene needs them only to lift a diagram or a chart**) **with each skill's `shared/` folder**, run `npm ci --ignore-scripts` in each (`npm ci --ignore-scripts --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram, an explainer, a 3D scene or a video |
 
-`<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The
+`<repo>` is a clone of `https://github.com/abhijitbansal/portable-artifacts`. The
 installer runs `npm ci --ignore-scripts` for you. Pass `--link` to symlink to the clone (then
 `git pull` updates the skills), `--skills make-motion` to install just one, or
 `--force` to replace an existing install. A skill's required skills come with it:

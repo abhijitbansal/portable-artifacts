@@ -395,14 +395,13 @@ const prose = [
   ...skillDirs.flatMap((skill) => ['SKILL.md', 'README.md'].map((name) => path.join(skill, name))),
   ...skillDirs.flatMap((skill) => filesIn(path.join(skill, 'references'), (name) => name.endsWith('.md'))),
 ].filter((file) => fs.existsSync(file));
-// The repo's own docs and site pages. docs/superpowers (plans and specs that quote old commands on purpose), the generated
-// showcase gallery (rebuilt by design step 9) and docs/second-wind (session notes) are left out.
-const DOC_SKIPPED = ['docs/superpowers/', 'docs/features/showcase/', 'docs/second-wind/'];
+// The repo's own docs and site pages. docs/superpowers (plans and specs that quote old commands on purpose) and the generated
+// showcase gallery (docs/showcase: built pages and their specs, not edited by hand) are left out.
+const DOC_SKIPPED = ['docs/superpowers/', 'docs/showcase/'];
 const repoDocs = [
   path.join(REPO, 'README.md'),
   path.join(REPO, 'AGENTS.md'),
   ...walk(path.join(REPO, 'docs'), (file) => isDoc(file) && !DOC_SKIPPED.some((skip) => rel(file).startsWith(skip))),
-  ...walk(path.join(REPO, 'site'), isDoc),
 ].filter((file) => fs.existsSync(file));
 const code = [
   ...skillDirs.flatMap((skill) => walk(path.join(skill, 'scripts'), isScript)),
@@ -441,7 +440,7 @@ test('the scans find what they should', () => {
   assert.ok(codeNames.includes('plugins/portable-artifacts/shared/doctor.mjs'));
   assert.ok(prose.map(rel).includes('plugins/portable-artifacts/skills/make-motion/SKILL.md'));
   const docNames = repoDocs.map(rel);
-  for (const wanted of ['README.md', 'AGENTS.md', 'docs/features/portable-artifacts.html', 'site/index.html']) assert.ok(docNames.includes(wanted), wanted);
+  for (const wanted of ['README.md', 'AGENTS.md', 'docs/index.html']) assert.ok(docNames.includes(wanted), wanted);
   assert.ok(motionScripts.length > 5 && motionScripts.includes(PINNED_FILE));
   assert.deepEqual(scriptFolders.sort(), ['cutout', 'voice'], 'both optional lockfiles carry onnxruntime-node, which has a postinstall');
 });

@@ -110,7 +110,7 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
     return [{ path: where, message: e.message }];
   }
   if (typeof api.validateSpec !== 'function') {
-    return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); update it: reinstall with npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram -y, then run npm ci --omit=dev --prefix ${quoteArg(siblingDir('make-diagram'))}` }];
+    return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); update it: reinstall with npx --yes skills@1.7.2 add abhijitbansal/portable-artifacts --skill make-diagram -y, then run npm ci --omit=dev --prefix ${quoteArg(siblingDir('make-diagram'))}` }];
   }
   const pageTheme = specTheme(spec);
   const warnings = source.spec.theme === undefined ? [] : [{

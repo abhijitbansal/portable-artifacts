@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const PLUGIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REPO = path.resolve(PLUGIN, '../..');
 const DOCS = [
-  'README.md', 'USAGE.md', 'plugins/portable-artifacts/README.md', 'plugins/portable-artifacts/USAGE.md', 'docs/features/portable-artifacts.html',
+  'README.md', 'plugins/portable-artifacts/README.md', 'plugins/portable-artifacts/USAGE.md', 'docs/index.html',
   ...['make-dashboard', 'make-diagram', 'make-explainer', 'make-motion', 'make-scene'].map((s) => `plugins/portable-artifacts/skills/${s}/README.md`),
   'plugins/portable-artifacts/skills/make-explainer/SKILL.md', 'plugins/portable-artifacts/skills/make-explainer/references/schema.md',
 ];

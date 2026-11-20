@@ -13,7 +13,7 @@ const schemaDoc = read('references/schema.md');
 const skill = read('SKILL.md');
 const readme = read('README.md');
 const kinds = read('references/kinds.md');
-const featurePage = fs.readFileSync(new URL('../../../../../docs/features/portable-artifacts.html', import.meta.url), 'utf8');
+const featurePage = fs.readFileSync(new URL('../../../../../docs/index.html', import.meta.url), 'utf8');
 
 test('schema.md names every root, node, participant and beat property', () => {
   const beat = SCHEMA.properties.stories.items.properties.beats.items.properties;

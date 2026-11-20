@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 import { CURRENT_MARKER } from './agents.mjs';
 
-const REPO = 'abhijitbansal/claude-skills';
+const REPO = 'abhijitbansal/portable-artifacts';
 const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
 const SKILLS_CLI = 'skills@1.7.2';
 
@@ -554,7 +554,7 @@ const pluginServes = (ctx) => ctx.exists(pluginBuilderAgent(ctx));
 const otherHostsPresent = (ctx) => ['.copilot', '.codex'].some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d)));
 
 export function builderAgent() {
-  const install = 'node <path-to-claude-skills>/plugins/portable-artifacts/bin/install.mjs';
+  const install = 'node <path-to-portable-artifacts>/plugins/portable-artifacts/bin/install.mjs';
   return {
     id: 'builder_agent',
     rank: RANK.other,
@@ -584,7 +584,7 @@ export function builderAgent() {
         return {
           auto: null,
           outdated: old.map((f) => f.file),
-          manual: manualAll(`${cmds.join(' ; ')} (replaces the outdated file; <path-to-claude-skills> is a local checkout, or clone the repo)`),
+          manual: manualAll(`${cmds.join(' ; ')} (replaces the outdated file; <path-to-portable-artifacts> is a local checkout, or clone the repo)`),
           notes: `${old.map((f) => f.file).join(' and ')} predates make.mjs; the doctor never overwrites an agent file, so run the command yourself`,
         };
       }
@@ -596,7 +596,7 @@ export function builderAgent() {
       const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
       return {
         auto: auto.length ? auto : null,
-        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} claude --agents-only (Claude Code), ${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both Copilot and Codex; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
+        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} claude --agents-only (Claude Code), ${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both Copilot and Codex; add --project <dir> to install into one repo; <path-to-portable-artifacts> is a local checkout (or clone the repo)`),
         notes: `writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`,
       };
     },

@@ -43,7 +43,7 @@ test('MISSING_HINT is the exact install line', async () => {
   const { mod } = await layout();
   assert.equal(
     mod.MISSING_HINT(['make-diagram', 'make-dashboard']),
-    'install it with: npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram make-dashboard -y',
+    'install it with: npx --yes skills@1.7.2 add abhijitbansal/portable-artifacts --skill make-diagram make-dashboard -y',
   );
 });
 
@@ -54,7 +54,7 @@ test('a missing sibling directory throws SiblingError with the exact command', a
     (e) => {
       assert.ok(e instanceof mod.SiblingError);
       assert.equal(e.name, 'SiblingError');
-      assert.equal(e.command, 'npx --yes skills@1.7.2 add abhijitbansal/claude-skills --skill make-diagram -y');
+      assert.equal(e.command, 'npx --yes skills@1.7.2 add abhijitbansal/portable-artifacts --skill make-diagram -y');
       assert.equal(
         e.message,
         `make-diagram skill not found next to make-explainer (looked in ${path.join(root, 'make-diagram')}); install it with: ${e.command} (doctor: node ${path.join(root, 'make-explainer/scripts/doctor.mjs')}, id make-diagram)`,
