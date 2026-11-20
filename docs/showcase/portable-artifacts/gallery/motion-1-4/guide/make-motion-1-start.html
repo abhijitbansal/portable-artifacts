@@ -1129,24 +1129,24 @@ html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transfor
 <h2 class="sec-title" id="install-claude-title">Claude Code installs it in two commands<a class="anchor" href="#install-claude" aria-label="Link to this section: Claude Code installs it in two commands">#</a></h2>
 <figure class="code">
 <div class="code-bar"><span class="code-lang">bash</span><button type="button" class="btn copy" data-copy aria-label="Copy code">Copy</button></div>
-<pre tabindex="0"><code>/plugin marketplace add abhijitbansal/claude-skills
-/plugin install portable-artifacts@claude-skills</code></pre>
+<pre tabindex="0"><code>/plugin marketplace add abhijitbansal/portable-artifacts
+/plugin install portable-artifacts@portable-artifacts</code></pre>
 <figcaption>Type these inside Claude Code. The plugin carries five skills: make-dashboard, make-diagram, make-explainer, make-motion and make-scene. On first use the agent runs the doctor and, once you agree, installs dependencies.</figcaption>
 </figure>
 </section>
 <section class="sec sec-table" id="hosts" aria-labelledby="hosts-title">
 <p class="sec-eyebrow pa-label">Other hosts</p>
 <h2 class="sec-title" id="hosts-title">Other agents install with one script<a class="anchor" href="#hosts" aria-label="Link to this section: Other agents install with one script">#</a></h2>
-<div class="tablewrap" role="region" aria-label="&lt;repo&gt; is a clone of https://github.com/abhijitbansal/claude-skills. npx skills copies folders but does not run npm ci; the first-use doctor does." tabindex="0">
-<table><caption>&lt;repo&gt; is a clone of https://github.com/abhijitbansal/claude-skills. npx skills copies folders but does not run npm ci; the first-use doctor does.</caption>
+<div class="tablewrap" role="region" aria-label="&lt;repo&gt; is a clone of https://github.com/abhijitbansal/portable-artifacts. npx skills copies folders but does not run npm ci; the first-use doctor does." tabindex="0">
+<table><caption>&lt;repo&gt; is a clone of https://github.com/abhijitbansal/portable-artifacts. npx skills copies folders but does not run npm ci; the first-use doctor does.</caption>
 <thead><tr><th scope="col" class="a-l">Host</th><th scope="col" class="a-l">Install</th><th scope="col" class="a-l">Invoke</th></tr></thead>
 <tbody>
-<tr><th scope="row" class="a-l">Claude Code</th><td class="a-l">/plugin marketplace add abhijitbansal/claude-skills, then /plugin install portable-artifacts@claude-skills</td><td class="a-l">/make-motion ...</td></tr>
+<tr><th scope="row" class="a-l">Claude Code</th><td class="a-l">/plugin marketplace add abhijitbansal/portable-artifacts, then /plugin install portable-artifacts@portable-artifacts</td><td class="a-l">/make-motion ...</td></tr>
 <tr><th scope="row" class="a-l">Codex CLI</th><td class="a-l">node &lt;repo&gt;/plugins/portable-artifacts/bin/install.mjs codex  (writes ~/.agents/skills)</td><td class="a-l">$make-motion ... (or pick from /skills)</td></tr>
 <tr><th scope="row" class="a-l">GitHub Copilot CLI and VS Code</th><td class="a-l">node &lt;repo&gt;/plugins/portable-artifacts/bin/install.mjs copilot  (add --project . for ./.github/skills)</td><td class="a-l">/make-motion ...</td></tr>
 <tr><th scope="row" class="a-l">Gemini CLI</th><td class="a-l">node &lt;repo&gt;/plugins/portable-artifacts/bin/install.mjs gemini  (skills in ~/.gemini/skills, commands in ~/.gemini/commands)</td><td class="a-l">/make-motion ... (a TOML command that activates the skill)</td></tr>
 <tr><th scope="row" class="a-l">Anything that reads .agents/skills</th><td class="a-l">node &lt;repo&gt;/plugins/portable-artifacts/bin/install.mjs agents</td><td class="a-l">Host specific</td></tr>
-<tr><th scope="row" class="a-l">Any agent supported by npx skills</th><td class="a-l">npx skills add abhijitbansal/claude-skills --skill make-motion  (add -a claude-code codex github-copilot -y to skip the picker)</td><td class="a-l">That agent&#39;s skill invocation</td></tr>
+<tr><th scope="row" class="a-l">Any agent supported by npx skills</th><td class="a-l">npx skills add abhijitbansal/portable-artifacts --skill make-motion  (add -a claude-code codex github-copilot -y to skip the picker)</td><td class="a-l">That agent&#39;s skill invocation</td></tr>
 <tr><th scope="row" class="a-l">Any other agent</th><td class="a-l">Copy skills/make-motion into your project together with its shared/ folder, run npm ci inside it, and add a line to AGENTS.md that says to read skills/make-motion/SKILL.md</td><td class="a-l">Ask for a video</td></tr>
 </tbody>
 </table>

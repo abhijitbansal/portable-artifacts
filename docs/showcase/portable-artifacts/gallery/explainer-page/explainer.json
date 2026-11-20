@@ -254,7 +254,7 @@
       "label": "Install",
       "language": "text",
       "caption": "The first two lines install in Claude Code. The third line installs with npx for any agent. The last two lines use the bundled installer.",
-      "code": "/plugin marketplace add abhijitbansal/claude-skills\n/plugin install portable-artifacts@claude-skills\nnpx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard\ngit clone https://github.com/abhijitbansal/claude-skills\nnode claude-skills/plugins/portable-artifacts/bin/install.mjs codex"
+      "code": "/plugin marketplace add abhijitbansal/portable-artifacts\n/plugin install portable-artifacts@portable-artifacts\nnpx skills add abhijitbansal/portable-artifacts --skill make-explainer make-diagram make-dashboard\ngit clone https://github.com/abhijitbansal/portable-artifacts\nnode portable-artifacts/plugins/portable-artifacts/bin/install.mjs codex"
     },
     {
       "type": "table",
