@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { targetsFor, agentTargetsFor, HOSTS, expandRequires, npmCommand, UsageError } from '../install.mjs';
+import { targetsFor, agentTargetsFor, HOSTS, expandRequires, npmCommand, swapIn, UsageError } from '../install.mjs';
 import { agentFile } from '../../shared/agents.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -149,8 +149,48 @@ test('a failed npm ci removes the half-installed copy and says so', () => {
     encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /npm ci failed.*removed/);
+  assert.match(r.stderr, /npm ci failed in \S*\.make-motion\.new-\d+.*nothing was installed at \S*make-motion/);
   assert.equal(fs.existsSync(path.join(home, '.claude/skills/make-motion')), false);
+});
+
+test('a failed npm ci under --force names the staged folder and says the existing install is unchanged', () => {
+  const { r, dst } = failingNpmInstall();
+  assert.match(r.stderr, /npm ci failed in \S*\.make-motion\.new-\d+.*the existing install at \S*make-motion is unchanged/);
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), 'the working install');
+});
+
+test('swapIn: a backup that cannot be removed after the swap is a warning naming the leftover path, not a failed install', () => {
+  const root = tmp();
+  const dst = path.join(root, 'skill');
+  const stage = path.join(root, '.skill.new-1');
+  fs.mkdirSync(dst);
+  fs.writeFileSync(path.join(dst, 'SKILL.md'), 'old');
+  fs.mkdirSync(stage);
+  fs.writeFileSync(path.join(stage, 'SKILL.md'), 'new');
+  const warnings = [];
+  const rm = () => { throw new Error('EBUSY: locked'); };
+  swapIn(stage, dst, true, { rm, warn: (m) => warnings.push(m) });
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), 'new', 'the new install is in place');
+  const backup = path.join(root, `.skill.old-${process.pid}`);
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0].includes(backup), warnings[0]);
+  assert.match(warnings[0], /EBUSY/);
+});
+
+test('an install removes .<skill>.new-* folders left by dead runs, keeps other skills\' folders, and warns about .old-* backups without deleting them', () => {
+  const home = tmp();
+  const skills = path.join(home, '.claude/skills');
+  const deadStage = path.join(skills, '.make-motion.new-99999');
+  const otherStage = path.join(skills, '.make-diagram.new-99999');
+  const oldBackup = path.join(skills, '.make-motion.old-99999');
+  for (const d of [deadStage, otherStage, oldBackup]) { fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, 'f.txt'), 'x'); }
+  const r = runInstall(['claude', '--skills', 'make-motion'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(deadStage), false, 'the dead run\'s stage folder is gone');
+  assert.ok(fs.existsSync(otherStage), 'another skill\'s stage folder is not ours to remove');
+  assert.ok(fs.existsSync(path.join(oldBackup, 'f.txt')), 'a backup may hold a user\'s copy and stays');
+  assert.ok(r.stderr.includes(oldBackup), r.stderr);
+  assert.match(r.stderr, /warning/i);
 });
 
 const NPM_CI_ARGS = ['ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'];

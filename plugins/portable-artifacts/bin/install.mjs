@@ -148,7 +148,9 @@ function installDeps(src, at, link) {
 }
 
 // Move the finished install into place. An existing install is renamed aside first and put back if the rename fails.
-function swapIn(stage, dst, existing) {
+// Once the swap has happened the install is done: a backup that will not delete (a locked file, a permission) is a
+// warning naming the leftover path, never a failed install. `rm` and `warn` are test seams.
+export function swapIn(stage, dst, existing, { rm = fs.rmSync, warn = warnStderr } = {}) {
   if (!existing) {
     fs.renameSync(stage, dst);
     return;
@@ -161,7 +163,31 @@ function swapIn(stage, dst, existing) {
     fs.renameSync(backup, dst);
     throw e;
   }
-  fs.rmSync(backup, { recursive: true, force: true }); // a link is removed, never its target
+  try {
+    rm(backup, { recursive: true, force: true }); // a link is removed, never its target
+  } catch (e) {
+    warn(`the new install is in place at ${dst}, but the old copy could not be removed (${e.message}); delete ${backup} yourself`);
+  }
+}
+
+function warnStderr(message) {
+  process.stderr.write(`install: warning: ${message}\n`);
+}
+
+// Folders an earlier run left beside the destination. A `.new-*` stage never held anything but a half-built copy, so
+// it goes. A `.old-*` backup may be the only copy of a user's install (a run that died between its two renames), so it
+// stays and the user is told.
+function clearLeftovers(dstRoot, skill) {
+  const stagePrefix = `.${skill}.new-`;
+  const backupPrefix = `.${skill}.old-`;
+  for (const name of fs.readdirSync(dstRoot)) {
+    const at = path.join(dstRoot, name);
+    if (name.startsWith(stagePrefix)) {
+      fs.rmSync(at, { recursive: true, force: true }); // a link is removed, never its target
+    } else if (name.startsWith(backupPrefix)) {
+      warnStderr(`${at} was left by an earlier install of ${skill} and may hold a previous copy; check it, then delete it`);
+    }
+  }
 }
 
 // The new install is built beside the destination (a dot folder in the same skills dir) and swapped in once npm ci has
@@ -176,13 +202,13 @@ function installSkill(skill, dstRoot, { link, force, deps }) {
   if (existing && !force) throw new Error(`${dst} already exists; pass --force to replace it`);
   fs.mkdirSync(dstRoot, { recursive: true });
   const stage = path.join(dstRoot, `.${skill}.new-${process.pid}`);
-  fs.rmSync(stage, { recursive: true, force: true }); // left by an earlier run that died
+  clearLeftovers(dstRoot, skill);
   try {
     placeSkill(src, stage, link);
     const failure = deps ? installDeps(src, stage, link) : null;
     if (failure !== null) {
-      const outcome = existing ? `discarded the new copy; the existing install at ${dst} is unchanged` : `removed the partial install at ${dst}`;
-      throw new Error(`npm ci failed in ${link ? src : dst}${failure}; ${outcome}`);
+      const outcome = existing ? `discarded the new copy; the existing install at ${dst} is unchanged` : `nothing was installed at ${dst}`;
+      throw new Error(`npm ci failed in ${link ? src : stage}${failure}; ${outcome}`);
     }
     swapIn(stage, dst, existing);
   } catch (e) {
