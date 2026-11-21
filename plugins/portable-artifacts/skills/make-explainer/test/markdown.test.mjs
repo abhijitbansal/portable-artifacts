@@ -154,6 +154,18 @@ test('nested and unclosed markers never produce unbalanced or hostile markup', (
   for (const s of ['***x***', '**`*`**', '*[a](https://x.example)*', '[*a*](https://x.example)', '_a_ __b__ ~~c~~']) assertInert(renderMarkdown(s));
 });
 
+test('asterisks that are not emphasis (globs, multiplication) stay literal; real emphasis still renders', () => {
+  assert.equal(renderMarkdown('Edits touch src/*.js and lib/*.js only'), '<p>Edits touch src/*.js and lib/*.js only</p>');
+  assert.equal(renderMarkdown('Match *.js and *.ts files'), '<p>Match *.js and *.ts files</p>');
+  assert.equal(renderMarkdown('The glob **/*.md is wide'), '<p>The glob **/*.md is wide</p>');
+  assert.equal(renderMarkdown('2 * 3 * 4 = 24'), '<p>2 * 3 * 4 = 24</p>');
+  assert.equal(renderMarkdown('a ** b ** c'), '<p>a ** b ** c</p>');
+  assert.equal(renderMarkdown('5*3*2 is 30'), '<p>5*3*2 is 30</p>');
+  assert.equal(renderMarkdown('*em* and **strong**'), '<p><em>em</em> and <strong>strong</strong></p>');
+  assert.equal(renderMarkdown('(*em*) and "**strong**".'), '<p>(<em>em</em>) and &quot;<strong>strong</strong>&quot;.</p>');
+  assert.equal(renderMarkdown('**a *b* c**'), '<p><strong>a <em>b</em> c</strong></p>');
+});
+
 test('unsupported markup stays literal text', () => {
   assert.equal(renderMarkdown('# Heading'), '<p># Heading</p>');
   assert.equal(renderMarkdown('1. one'), '<p>1. one</p>');

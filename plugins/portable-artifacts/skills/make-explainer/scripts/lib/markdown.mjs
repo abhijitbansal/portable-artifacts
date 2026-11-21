@@ -40,12 +40,29 @@ function safeUrl(url) {
   }
 }
 
+// Flanking rules, so that a literal asterisk in prose (a glob like src/*.js, "2 * 3 * 4") is not emphasis.
+// An opener must not be followed by whitespace, and must not sit right after a word character, a closing
+// bracket, a path separator or another "*" (an intraword or glob "*"); a closer must not be preceded by whitespace.
+// The start of the (inner) text counts as a boundary.
+const NOT_OPENER_AFTER = /[\p{L}\p{N})\]}/\\*]/u;
+const isSpace = (ch) => ch === undefined || /\s/.test(ch);
+const canOpen = (s, at, width) => !isSpace(s[at + width]) && !(at > 0 && NOT_OPENER_AFTER.test(s[at - 1]));
+const canClose = (s, at, from) => at > from && !isSpace(s[at - 1]);
+
+// Closing '**' for a strong opened with its content starting at `from`, or -1.
+function closeStrong(s, from) {
+  for (let j = s.indexOf('**', from); j !== -1; j = s.indexOf('**', j + 1)) {
+    if (canClose(s, j, from)) return j;
+  }
+  return -1;
+}
+
 // Closing single '*' for an emphasis opened at `from`; '**' pairs are skipped.
 function closeItalic(s, from) {
   for (let j = from; j < s.length; j++) {
     if (s[j] === '*') {
       if (s[j + 1] === '*') j++;
-      else return j;
+      else if (canClose(s, j, from)) return j;
     }
   }
   return -1;
@@ -100,14 +117,14 @@ function inline(s, { links, depth, unlink = false }) {
         }
       }
     } else if (c === '*' && s[i + 1] === '*') {
-      const end = s.indexOf('**', i + 2);
+      const end = canOpen(s, i, 2) ? closeStrong(s, i + 2) : -1;
       if (end > i + 2) {
         emit(`<strong>${inline(s.slice(i + 2, end), next)}</strong>`);
         i = end + 2;
         continue;
       }
     } else if (c === '*') {
-      const end = closeItalic(s, i + 1);
+      const end = canOpen(s, i, 1) ? closeItalic(s, i + 1) : -1;
       if (end > i + 1) {
         emit(`<em>${inline(s.slice(i + 1, end), next)}</em>`);
         i = end + 1;
