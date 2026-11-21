@@ -121,7 +121,7 @@
       "label": "Install",
       "language": "bash",
       "caption": "Name all three skills. Installing make-explainer alone fails on its first diagram or chart section.",
-      "code": "npx skills add abhijitbansal/claude-skills --skill make-explainer make-diagram make-dashboard"
+      "code": "npx skills add abhijitbansal/portable-artifacts --skill make-explainer make-diagram make-dashboard"
     },
     {
       "type": "kpis",

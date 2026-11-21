@@ -1,8 +1,8 @@
-"""Structure checks for docs/features/portable-artifacts.html (stdlib only).
+"""Structure checks for docs/index.html, the site's feature page (stdlib only).
 
 The page order is a product decision: showcase films, quick install, one line
 per skill, then the details. The install block follows the per-line
-copy-button contract in CLAUDE.md.
+copy-button contract in AGENTS.md.
 """
 import html
 import re
@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGE = ROOT / "docs" / "features" / "portable-artifacts.html"
+PAGE = ROOT / "docs" / "index.html"
 FILM_DIR = "showcase/portable-artifacts/gallery/showreel"
 FILMS = ("whats-new", "pro", "viral")
 # Set False if the showreel films ship by the silent fallback (no voiceover).
