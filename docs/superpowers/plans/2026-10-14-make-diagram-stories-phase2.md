@@ -21,7 +21,7 @@
 - Every control has an accessible name; a panel close returns focus to the node; colour is never the only signal (`pa-selected` and `pa-route` thicken the stroke, like `pa-hl`).
 - The look stays plain: the new CSS in `viewer.html` and `css.mjs` is layout and one accent rule per state class. Phase 3 restyles.
 - Every existing test stays green except where this phase changes behaviour; each such change is named in its task: the Play button loses `aria-pressed` (Task 1), `RUNTIME_FILES` grows (Tasks 3 and 4), `ctl.state()` replaces `pinned` with `selected` and `route` (Task 4), `test/build.test.mjs:141` hook list grows (Tasks 4 and 6).
-- Verification commands (exact, bare, no pipes): `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test`; one file: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/<file>.test.mjs`; `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test`; `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`. This phase does not touch `plugins/portable-artifacts/shared/`, so `node bin/sync-shared.mjs` is not run.
+- Verification commands (exact, bare, no pipes): `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test`; one file: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/<file>.test.mjs`; `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test`; `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`. This phase does not touch `plugins/portable-artifacts/shared/`, so `node bin/sync-shared.mjs` is not run.
 - Guard proofs: each new browser assertion is shown failing against a deliberately broken page (phase 1's Step-10 style) before it is trusted; every doctoring edit is reverted and `npm test` rerun.
 
 ## Review Focus
@@ -162,7 +162,7 @@ test('arrow keys on the scrubber move the beat and pause; the scrubber announces
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/story-browser.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/story-browser.test.mjs`
 Expected: `Space plays and pauses…` fails at `a button whose label says Play or Pause carries no aria-pressed` (actual `'false'`); `Space on a focused transport control…` fails at `Space on Next plays` (actual `false`: Space activated Next, so `count` is `2 / 9`); `arrow keys on the scrubber…` fails at `aria-valuetext` (actual `null`). The other tests pass.
 
 - [ ] **Step 3: Implement**
@@ -250,7 +250,7 @@ Update the header comment's `data-pa-play (aria-pressed; Play / Pause)` to `data
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/story-browser.test.mjs` — expected: all pass. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green (`check.test.mjs`'s doctored `function next()` string is in `story.js`, untouched). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay has no transport buttons; its `ArrowRight` steps are unchanged).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/story-browser.test.mjs` — expected: all pass. Then `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green (`check.test.mjs`'s doctored `function next()` string is in `story.js`, untouched). Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay has no transport buttons; its `ArrowRight` steps are unchanged).
 
 - [ ] **Step 5: Guard proofs** (revert each edit before moving on)
 
@@ -339,7 +339,7 @@ test('info keys edges by their ids, whatever order the geometry lists them in', 
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/data.test.mjs test/ids.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/data.test.mjs test/ids.test.mjs`
 Expected: `data.test.mjs` first test fails with `AssertionError … info for aws`; the third fails on `data.info.place` (the reversed geometry pairs `edge-6`'s label with `place`); `ids.test.mjs` fails for `a group named constructor` and the new `a group named constructor at a two-headed edge end` at `info has an own entry for the id named constructor`. The sequence test passes already.
 
 - [ ] **Step 3: Implement**
@@ -381,7 +381,7 @@ In `viewerData`, the call becomes `info: infoOf(spec),`.
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/data.test.mjs test/ids.test.mjs` — expected: pass. Then `npm test` — green (the browser suite's prototype loop builds the new spec too). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green, recap golden included: its diagram is a flow with no groups, so its data block is byte-identical (verified: the make-explainer suite ran green, 593 tests, against a scratch build of this whole phase).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/data.test.mjs test/ids.test.mjs` — expected: pass. Then `npm test` — green (the browser suite's prototype loop builds the new spec too). Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green, recap golden included: its diagram is a flow with no groups, so its data block is byte-identical (verified: the make-explainer suite ran green, 593 tests, against a scratch build of this whole phase).
 
 - [ ] **Step 5: Commit**
 
@@ -481,7 +481,7 @@ test('the runtime is camera, route, explore, story, transport, then viewer, join
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/route.test.mjs test/runtime.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/route.test.mjs test/runtime.test.mjs`
 Expected: `route.test.mjs` fails at import time with `Error: ENOENT: no such file or directory, open '…/template/route.js'`; `runtime.test.mjs` fails the order test with the `deepEqual` diff (`route.js` missing from `RUNTIME_FILES`); its factories test still loops the old list and passes until the list changes.
 
 - [ ] **Step 3: Implement**
@@ -555,7 +555,7 @@ export const RUNTIME_FILES = ['camera.js', 'route.js', 'explore.js', 'story.js',
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/route.test.mjs test/runtime.test.mjs` — expected: pass. Then `npm test` — green (the bundle gains a module nothing calls yet; every page still mounts). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its page embeds `viewerRuntime()`, now with `route.js`; the recap golden does not change: the inlined runtime is not part of the normalised body, verified against a scratch build of the whole phase).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/route.test.mjs test/runtime.test.mjs` — expected: pass. Then `npm test` — green (the bundle gains a module nothing calls yet; every page still mounts). Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its page embeds `viewerRuntime()`, now with `route.js`; the recap golden does not change: the inlined runtime is not part of the normalised body, verified against a scratch build of the whole phase).
 
 - [ ] **Step 5: Commit**
 
@@ -896,7 +896,7 @@ test('the runtime is camera, route, explore, panel, story, transport, then viewe
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs test/runtime.test.mjs test/render.test.mjs test/build.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs test/runtime.test.mjs test/render.test.mjs test/build.test.mjs`
 Expected: every explore test fails, the first at `page.isVisible('[data-pa-panel]')` (actual `false`: no such element) and the hover test at `page.isHidden('[data-pa-tip]')`; `runtime.test.mjs` fails its `deepEqual` (no `panel.js`) and the factories test; `render.test.mjs` fails at `a selected node outlines in the accent`; `build.test.mjs` fails at `data-pa-panel`.
 
 - [ ] **Step 3: Implement the trace (`template/explore.js`, rewritten)**
@@ -1683,7 +1683,7 @@ export const RUNTIME_FILES = ['camera.js', 'route.js', 'explore.js', 'panel.js',
 
 - [ ] **Step 7: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs test/runtime.test.mjs test/render.test.mjs test/build.test.mjs` — expected: pass. Then `npm test` — green: `browser.test.mjs` (`click pins the trace…`, `Tab walks the toolbar…`, the prototype loop with the new spec), `story-browser.test.mjs`, `check.test.mjs` (the 390 px check passes with the panel stacked under the stage; the story page stays under 400 KB). `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js` — every file under 400. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay passes no panel; a click on an inline node now adds `pa-selected`, which make-diagram's stylesheet in the page styles; the recap golden does not change). A golden failure here is a bug in the change, never a reason to regenerate.
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs test/runtime.test.mjs test/render.test.mjs test/build.test.mjs` — expected: pass. Then `npm test` — green: `browser.test.mjs` (`click pins the trace…`, `Tab walks the toolbar…`, the prototype loop with the new spec), `story-browser.test.mjs`, `check.test.mjs` (the 390 px check passes with the panel stacked under the stage; the story page stays under 400 KB). `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js` — every file under 400. Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay passes no panel; a click on an inline node now adds `pa-selected`, which make-diagram's stylesheet in the page styles; the recap golden does not change). A golden failure here is a bug in the change, never a reason to regenerate.
 
 - [ ] **Step 8: Guard proofs** (revert each edit before moving on)
 
@@ -1812,7 +1812,7 @@ test('a route export carries no pa-route', async (t) => {
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test --test-name-pattern="route|shift-click" test/explore-browser.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test --test-name-pattern="route|shift-click" test/explore-browser.test.mjs`
 Expected: the first three fail at `title(page) === 'Route'` (actual `Orders DB`, `Web app`, `B`: a shift-click only toggled the selection); `shift-click with nothing selected…` passes already (a plain select is today's behaviour); `a route export…` passes (nothing was routed).
 
 - [ ] **Step 3: Implement**
@@ -1862,7 +1862,7 @@ The Enter key line:
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs` — expected: pass. Then `npm test` — green. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green.
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs` — expected: pass. Then `npm test` — green. Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green.
 
 - [ ] **Step 5: Guard proofs** (revert each edit before moving on)
 
@@ -1997,7 +1997,7 @@ test('Tab still reaches the nodes after the Find box', async (t) => {
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test --test-name-pattern="count chips|Find|Tab still" test/explore-browser.test.mjs test/build.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test --test-name-pattern="count chips|Find|Tab still" test/explore-browser.test.mjs test/build.test.mjs`
 Expected: `nothing selected: count chips…` fails at the first `chips` deepEqual (actual `[]`: no `[data-pa-tally]`); `/ focuses Find…` fails at `page.isHidden('[data-pa-found]')` (no element: Playwright reports hidden as `true` for a missing element, so the failure lands at `/ focuses the box`); `Find matches regex…` fails at `page.fill` with `Timeout … waiting for locator('[data-pa-find]')`; `Tab still reaches the nodes` passes already; `build.test.mjs` fails at `data-pa-find`.
 
 - [ ] **Step 3: Implement**
@@ -2097,7 +2097,7 @@ Update the keyboard comment: `// the edge animation; / focuses Find; Escape clos
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs test/build.test.mjs` — expected: pass. Then `npm test` — green (`browser.test.mjs` `Tab walks the toolbar…` still finds two nodes within 20 Tabs: the toolbar has ten stops now; `check.test.mjs` 390 px). `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js` — every file under 400; `viewer.html` under 400 too. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green. From the repo root: `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green (shared untouched).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/explore-browser.test.mjs test/build.test.mjs` — expected: pass. Then `npm test` — green (`browser.test.mjs` `Tab walks the toolbar…` still finds two nodes within 20 Tabs: the toolbar has ten stops now; `check.test.mjs` 390 px). `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js` — every file under 400; `viewer.html` under 400 too. Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green. From the repo root: `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green (shared untouched).
 
 - [ ] **Step 5: Guard proofs** (revert each edit before moving on)
 
@@ -2118,9 +2118,9 @@ Message: `feat(make-diagram): find box, count chips and the explore hint` — th
 
 After Task 6, with everything on disk:
 
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green with no golden regeneration (the recap golden does not change in this phase).
-- `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green (nothing in `shared/` changed, so `node bin/sync-shared.mjs` was not run).
+- `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
+- `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green with no golden regeneration (the recap golden does not change in this phase).
+- `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green (nothing in `shared/` changed, so `node bin/sync-shared.mjs` was not run).
 - `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js plugins/portable-artifacts/skills/make-diagram/template/viewer.html` — every file under 400; the built story example under 400 KB (`check.test.mjs`).
 - Spec coverage this phase delivers (§2 Explore): hover tooltip "label — note"; node panel with emoji or icon, kind in small caps, label, note, detail, Sends to / Receives from (edge label and the other end; a click jumps and selects); upstream and downstream highlighted while selected; edge panel with label, both ends, style and Used in (a click enters Play at that beat); shift-click shortest route along arrows, the undirected fallback that says so, "no route" said; Find filtering as you type with Enter or a click fitting and selecting; count chips and the hint when nothing is selected; keys `/` and Escape-closes-the-panel-first; nodes reachable with Tab, Enter opens the panel, closing returns focus. Deferred phase-2 findings fixed (Task 1, Task 2). Left to later phases: the look (3: the panel, chips, tooltip and the selected/route styling are plain here), full screen, the make-explainer overlay mounting the panel, docs, eval, the gallery sample (4).
 - Then a fresh reviewer reads the phase diff and reports every finding (the report-everything sentence from `code-review.md` goes in its prompt); CRITICAL and HIGH findings are fixed before the orchestrator commits and pushes.

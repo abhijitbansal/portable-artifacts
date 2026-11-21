@@ -33,7 +33,8 @@ sweeps, mods, machine setup, bats) was dropped.
   `docs/showcase/portable-artifacts/gallery/` holds the outputs and their specs. The design system is recorded in
   `.agents/context/DESIGN.md`, product truth in `.agents/context/PRODUCT.md`. Old one-page anchors are redirected by
   the `LEGACY` table in `pa.js`. `docs/superpowers/` keeps design specs and plans; they quote old commands on purpose,
-  so leave their text as written.
+  so leave their text as written. The one exception: machine paths are written as `<repo>` and `<scratchpad>`, never
+  a real home folder (the owner scrubbed them on 2026-11-21, since the folder is public).
 - **Copy-button contract.** On `docs/index.html`, a command block (`.code.cmds`) holds one
   `<div class="cl"><code class="ct">cmd</code><button class="copy" data-copy="cmd">copy</button></div>` per command: one
   button per command, never one button for several. A trailing `# comment` may stay in the visible `<code class="ct">`

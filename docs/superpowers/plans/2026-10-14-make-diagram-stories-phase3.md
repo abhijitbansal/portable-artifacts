@@ -24,7 +24,7 @@
 - Goldens (`test/golden/*.svg`, `*.layout.json`, and make-explainer's `test/golden/recap.body.html`) are regenerated once, in Part C's commit, and that commit message says so. They are red between Task 3 and the regeneration step of Task 5 and never regenerated to hide an unrelated failure. Every other test stays green after every task.
 - Reduced motion: no travelling dot, the camera jumps, `autoplay` is ignored (unchanged by this phase; the glow is a static style).
 - Design skills for the implementer of Task 5: `redesign-existing-projects` for the static pass over `viewer.html` and `css.mjs` values, then (unloaded first) `emil-design-eng` for the dot and glow motion values. Never both at once. The tests pin structure (class names, selectors, the 10% tint, the 28 px tile, the 10 px type line, the 11 px mono note); the passes may tune the other numbers (blur radius, dot radius, lane bar, chip padding) as long as `npm test` stays green.
-- Verification commands (exact, bare, no pipes): `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test`; one file: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/<file>.test.mjs`; `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test`; `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`; after editing `plugins/portable-artifacts/shared/`: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node bin/sync-shared.mjs`. Goldens: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && PA_WRITE_GOLDEN=1 npm test` and `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && UPDATE_GOLDEN=1 node --test test/golden.test.mjs`, each run once, in Task 5.
+- Verification commands (exact, bare, no pipes): `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test`; one file: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/<file>.test.mjs`; `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test`; `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`; after editing `plugins/portable-artifacts/shared/`: `cd <repo>/plugins/portable-artifacts && node bin/sync-shared.mjs`. Goldens: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && PA_WRITE_GOLDEN=1 npm test` and `cd <repo>/plugins/portable-artifacts/skills/make-explainer && UPDATE_GOLDEN=1 node --test test/golden.test.mjs`, each run once, in Task 5.
 - Guard proofs: each new browser assertion is shown failing against a deliberately broken page (phase 1's Step-10 style) before it is trusted; every doctoring edit is reverted and `npm test` rerun.
 - Look at the result (agent-autonomy rule): the implementer of Task 5 opens the screenshots the browser tests write (`look-light.png`, `look-dark.png`, and `browser.test.mjs`'s `architecture-light.png`/`architecture-dark.png` in the scratch dir the test prints) and views them before declaring the task done.
 
@@ -286,7 +286,7 @@ with
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/story-browser.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/story-browser.test.mjs`
 Expected: `a step beat glides…` fails at `the camera is asked for its own pace` (actual `{ ms: 600 }`); `the dot is placed…` fails at `position first, then visible` (actual `['class', 'r', 'pa-dot-on']`: the class is added before any `cx`); `a timeline with beats but no chapters…` fails with `TypeError: Cannot read properties of undefined (reading 'start')` from `prevChapter`. In the browser suite `the dot appears on the start of the new edge…` fails at `first shown at …`: the recorded point lies on edge-0, tens of px from edge-4's start. The one-beat loop test still passes.
 
 - [ ] **Step 3: Implement**
@@ -360,7 +360,7 @@ Update the header comment's duration line to: `Playing runs each beat as glide (
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/story-browser.test.mjs` — expected: all pass. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green (`runtime.test.mjs`: story.js ≈ 326 lines, camera.js 168). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay steps with ArrowRight; the glide now takes 300 ms as before phase 1).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/story-browser.test.mjs` — expected: all pass. Then `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green (`runtime.test.mjs`: story.js ≈ 326 lines, camera.js 168). Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay steps with ArrowRight; the glide now takes 300 ms as before phase 1).
 
 - [ ] **Step 5: Guard proofs** (revert each edit before moving on)
 
@@ -452,7 +452,7 @@ and to `dark` (after its `"seq7"`):
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`
+Run: `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`
 Expected: `contrast.test.mjs` fails at import (`does not provide an export named 'mixHex'`); `theme.test.mjs` `kind hues and the glow…` fails at `kindPerson` (`TOKENS` lacks it).
 
 - [ ] **Step 3: Implement**
@@ -528,11 +528,11 @@ and, inside `checkTheme`'s mode loop, after the `UI` loop:
     }
 ```
 
-Then sync: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node bin/sync-shared.mjs` — expected `synced shared/ into make-dashboard, make-diagram, make-explainer`.
+Then sync: `cd <repo>/plugins/portable-artifacts && node bin/sync-shared.mjs` — expected `synced shared/ into make-dashboard, make-diagram, make-explainer`.
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — expected: all pass (`every shipped theme passes checkTheme` now covers the kind rule). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — `shared/ copies are in sync`. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test`, `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` and `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-dashboard && npm test` — green: the pages gain seven variables nothing reads yet; no test pins the variable list.
+Run: `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — expected: all pass (`every shipped theme passes checkTheme` now covers the kind rule). Then `cd <repo>/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — `shared/ copies are in sync`. Then `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test`, `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` and `cd <repo>/plugins/portable-artifacts/skills/make-dashboard && npm test` — green: the pages gain seven variables nothing reads yet; no test pins the variable list.
 
 - [ ] **Step 5: Commit**
 
@@ -799,7 +799,7 @@ and in `geometry carries the contract fields`:
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/look.test.mjs test/render.test.mjs test/layout-graph.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/look.test.mjs test/render.test.mjs test/layout-graph.test.mjs`
 Expected: `look.test.mjs` fails at import (`does not provide an export named 'FAMILIES'`); `render.test.mjs` `every node is a focusable group…` fails at import too (`family`); `layout-graph.test.mjs` fails at import (`TILE_SIZE`).
 
 - [ ] **Step 3: Implement `kinds.mjs` and `sizes.mjs`**
@@ -1295,7 +1295,7 @@ export function diagramCss() {
 
 - [ ] **Step 6: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/look.test.mjs test/render.test.mjs test/layout-graph.test.mjs test/layout-sequence.test.mjs test/lint.test.mjs test/edges.test.mjs` — expected: everything passes except the eight golden tests (`architecture|flow|state|sequence example: SVG matches the golden file`, `… geometry matches the golden file`), which are red until Task 5 and must fail only with a golden diff. If `the shipped examples are valid specs` (layout-graph.test.mjs) or `the story example validates, layout included` (stories.test.mjs) now fails the geometry lint (a wider card under an edge label), change that example's label text only — never an id, an edge, a kind or a beat (the tests pin them) — and name the change in Part C's commit body. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — everything else green: the browser suites (`check.test.mjs` runs `scripts/check.mjs` over every example: no text leaves its card; `browser.test.mjs:175` still counts 4 icon groups; `explore-browser.test.mjs` still copies `.pa-icon` into the panel). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green except `golden: body markup of the recap example is unchanged` (the figure's `--dg-w`/`--dg-h` grew; regenerated in Task 5) — any other explainer failure is a finding to report, not to paper over.
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/look.test.mjs test/render.test.mjs test/layout-graph.test.mjs test/layout-sequence.test.mjs test/lint.test.mjs test/edges.test.mjs` — expected: everything passes except the eight golden tests (`architecture|flow|state|sequence example: SVG matches the golden file`, `… geometry matches the golden file`), which are red until Task 5 and must fail only with a golden diff. If `the shipped examples are valid specs` (layout-graph.test.mjs) or `the story example validates, layout included` (stories.test.mjs) now fails the geometry lint (a wider card under an edge label), change that example's label text only — never an id, an edge, a kind or a beat (the tests pin them) — and name the change in Part C's commit body. Then `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — everything else green: the browser suites (`check.test.mjs` runs `scripts/check.mjs` over every example: no text leaves its card; `browser.test.mjs:175` still counts 4 icon groups; `explore-browser.test.mjs` still copies `.pa-icon` into the panel). Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green except `golden: body markup of the recap example is unchanged` (the figure's `--dg-w`/`--dg-h` grew; regenerated in Task 5) — any other explainer failure is a finding to report, not to paper over.
 
 - [ ] **Step 7: Commit**
 
@@ -1522,7 +1522,7 @@ test('diagramCss: lane, pill and legend rules', () => {
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/lanes.test.mjs test/legend.test.mjs test/look.test.mjs test/layout-graph.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/lanes.test.mjs test/legend.test.mjs test/look.test.mjs test/layout-graph.test.mjs`
 Expected: `lanes.test.mjs` and `legend.test.mjs` fail at import (`Cannot find module '…/scripts/lib/lanes.mjs'`, `…/legend.mjs`); `layout-graph.test.mjs` fails at import (`legend.mjs`); in `look.test.mjs` the three new tests fail: `groups:` at the `data-lane="0"` match (no lane attribute yet), `pills:` at the `groupMinSize` width (the plate's `rx` assertion already holds since Task 3 rewrote `plateSvg`; the group minimum is still measured without capitals or tracking), `diagramCss: lane, pill and legend rules` at `lane 0` (no lane rules yet).
 
 - [ ] **Step 3: Implement `lanes.mjs` and `legend.mjs`**
@@ -1752,7 +1752,7 @@ and `diagramCss` returns `[...rules, ...familyRules, ...markRules, ...toneRules,
 
 - [ ] **Step 5: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/lanes.test.mjs test/legend.test.mjs test/look.test.mjs test/layout-graph.test.mjs test/layout-sequence.test.mjs test/render.test.mjs test/lint.test.mjs test/data.test.mjs` — expected: all pass except the golden tests (still red, golden diffs only). Then `npm test` — the same picture: the browser suites green (`check.mjs`: no text leaves its card; the camera tests read boxes from the data, which now sit 30 px lower; `story-browser` hop and focus boxes come from the data too). If `check.test.mjs` reports an overflow for a node, the card sizing is wrong — fix `sizes.mjs`, never the check.
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/lanes.test.mjs test/legend.test.mjs test/look.test.mjs test/layout-graph.test.mjs test/layout-sequence.test.mjs test/render.test.mjs test/lint.test.mjs test/data.test.mjs` — expected: all pass except the golden tests (still red, golden diffs only). Then `npm test` — the same picture: the browser suites green (`check.mjs`: no text leaves its card; the camera tests read boxes from the data, which now sit 30 px lower; `story-browser` hop and focus boxes come from the data too). If `check.test.mjs` reports an overflow for a node, the card sizing is wrong — fix `sizes.mjs`, never the check.
 
 - [ ] **Step 6: Commit**
 
@@ -1954,7 +1954,7 @@ test('the canvas is a dotted grid in light and a glow with faint lines in dark; 
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/theme.test.mjs test/api.test.mjs test/build.test.mjs test/look-browser.test.mjs test/render.test.mjs test/layout-graph.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/theme.test.mjs test/api.test.mjs test/build.test.mjs test/look-browser.test.mjs test/render.test.mjs test/layout-graph.test.mjs`
 Expected: `theme.test.mjs` fails at import (`Cannot find module '…/scripts/lib/theme.mjs'`); `api.test.mjs` `theme:` passes already (paper and blueprint draw the same SVG); `build.test.mjs` `the default theme is blueprint…` fails at `--font-display:"IBM Plex Sans"` (the page has Newsreader); in `look-browser.test.mjs` the `dark:` test fails at `assert.equal(active.strokeWidth, '2.5px')` (actual `'3px'`: Task 3's light rules apply in dark too), the `light:` and `cards:` tests pass already (the 3 px edge, the matte dot and the tints are Task 3's defaults), the canvas test fails at `/radial-gradient/` (the stage's `backgroundImage` is `none`); `render.test.mjs` and `layout-graph.test.mjs` fail the `story example: … golden` tests with `ENOENT` and every other golden with a diff.
 
 - [ ] **Step 3: Implement**
@@ -2047,19 +2047,19 @@ change the `.stage` rule to `.stage { position: relative; flex: 1 1 0; min-width
 
 - [ ] **Step 4: Regenerate the goldens, once**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && PA_WRITE_GOLDEN=1 npm test` — this rewrites `test/golden/{architecture,flow,state,sequence,story}.svg` and `{architecture,flow,state,story}.layout.json` and `sequence.layout.json`. Then, with nothing else changed: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green. Open `test/golden/story.svg` and `architecture.svg` in a browser (plain `file://`) and look: tiles, type lines, pills, the lane bar on `aws`, the legend row at the top right.
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && PA_WRITE_GOLDEN=1 npm test` — this rewrites `test/golden/{architecture,flow,state,sequence,story}.svg` and `{architecture,flow,state,story}.layout.json` and `sequence.layout.json`. Then, with nothing else changed: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green. Open `test/golden/story.svg` and `architecture.svg` in a browser (plain `file://`) and look: tiles, type lines, pills, the lane bar on `aws`, the legend row at the top right.
 
-Then make-explainer: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && node --test test/golden.test.mjs` — expected: only `golden: body markup of the recap example is unchanged` fails, and only in the figure's `style="--dg-w: …; --dg-h: …"` values (the sibling SVG is emptied by the normaliser). Confirm the diff is that and nothing else, then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && UPDATE_GOLDEN=1 node --test test/golden.test.mjs`, then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green (`diagram-browser.test.mjs` 'the diagram follows the page theme toggle' sees a tinted fill change between light and dark; any failure there other than the golden is a finding to report).
+Then make-explainer: `cd <repo>/plugins/portable-artifacts/skills/make-explainer && node --test test/golden.test.mjs` — expected: only `golden: body markup of the recap example is unchanged` fails, and only in the figure's `style="--dg-w: …; --dg-h: …"` values (the sibling SVG is emptied by the normaliser). Confirm the diff is that and nothing else, then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && UPDATE_GOLDEN=1 node --test test/golden.test.mjs`, then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green (`diagram-browser.test.mjs` 'the diagram follows the page theme toggle' sees a tinted fill change between light and dark; any failure there other than the golden is a finding to report).
 
 - [ ] **Step 5: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green, `check.test.mjs` included (every example passes `scripts/check.mjs` at 1440 and 390 px: no console errors, no text outside its card, no page overflow). `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green. `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — in sync. `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js plugins/portable-artifacts/skills/make-diagram/template/viewer.html` (from the repo root) — every file under 400. The built story example stays under 400 KB (`check.test.mjs` asserts it).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green, `check.test.mjs` included (every example passes `scripts/check.mjs` at 1440 and 390 px: no console errors, no text outside its card, no page overflow). `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green. `cd <repo>/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — in sync. `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js plugins/portable-artifacts/skills/make-diagram/template/viewer.html` (from the repo root) — every file under 400. The built story example stays under 400 KB (`check.test.mjs` asserts it).
 
 - [ ] **Step 6: Look, then the design passes**
 
 Open and view `look-light.png`, `look-dark.png`, `look-light-beat.png`, `look-dark-beat.png` and `architecture-light.png`/`architecture-dark.png` from the scratch directory the browser tests print (`diagram-ui-*` under the OS temp dir). Check: the cards read as tinted cards with a tile; the type line is legible; the lane bar sits inside the group's rounded corner; the legend does not overlap the drawing; in dark the active edge and dot glow and the canvas shows the wash.
 
-Then load `redesign-existing-projects` and pass over `template/viewer.html` (the chrome: bar, chips, transport, panel) and the numeric values in `css.mjs` (`TILE_TINT`, the pill border, lane bar width, legend text). Unload it, load `emil-design-eng`, and pass over the dot (`DOT_RADIUS` in story.js, the 6 px glow) and the camera ease. Constraints: the spec's durations (600 / 1200 / 2500 + 40 per char, cap 6000) do not move; the tests pin the structure and the 10% card tint (a different tint means changing `shared/contrast.mjs TINT` and `css.mjs CARD_TINT` together and re-running Task 2's gate); every file budget holds; after each pass `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` is green and the screenshots are looked at again.
+Then load `redesign-existing-projects` and pass over `template/viewer.html` (the chrome: bar, chips, transport, panel) and the numeric values in `css.mjs` (`TILE_TINT`, the pill border, lane bar width, legend text). Unload it, load `emil-design-eng`, and pass over the dot (`DOT_RADIUS` in story.js, the 6 px glow) and the camera ease. Constraints: the spec's durations (600 / 1200 / 2500 + 40 per char, cap 6000) do not move; the tests pin the structure and the 10% card tint (a different tint means changing `shared/contrast.mjs TINT` and `css.mjs CARD_TINT` together and re-running Task 2's gate); every file budget holds; after each pass `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` is green and the screenshots are looked at again.
 
 - [ ] **Step 7: Guard proofs** (revert each edit before moving on)
 
@@ -2093,10 +2093,10 @@ test/golden/recap.body.html (the diagram figure's --dg-w/--dg-h changed).
 
 After Task 5, with everything on disk:
 
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green, with the recap golden regenerated once in Task 5.
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-dashboard && npm test` — green (it gained seven theme variables and nothing else).
-- `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green; `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — in sync.
+- `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
+- `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green, with the recap golden regenerated once in Task 5.
+- `cd <repo>/plugins/portable-artifacts/skills/make-dashboard && npm test` — green (it gained seven theme variables and nothing else).
+- `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green; `cd <repo>/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — in sync.
 - `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js plugins/portable-artifacts/skills/make-diagram/template/viewer.html` — every file under 400; the built story example under 400 KB.
 - Spec coverage this phase delivers (§3): kind colour per family driving tint, border, tile, type label, outgoing edge tint and legend swatch, with `tone` overriding border and icon; dark navy canvas with a radial glow and faint grid, dark glass cards, the active edge and the dot glowing; light off-white dotted grid, tinted cards with a stronger (thicker, matte) active edge, mono notes, coloured edges; groups as lanes (pale fill, 4 px bar cycling per top-level group, spaced-caps label, stretched to common edges when stacked); pill edge labels; legend with counts and edge styles; tokens in every theme passing the contrast gate; emoji in the system emoji stack, text in the SVG export; default theme `blueprint`; goldens regenerated once. Deferred phase-3 findings fixed (Task 1, Task 3). Left to phase 4: full screen and its fallback, the make-explainer overlay mounting the full viewer, SKILL.md / schema.md / kinds.md / README (beyond the one default-theme line), the eval run, the gallery sample.
 - Then a fresh reviewer reads the phase diff and reports every finding (the report-everything sentence from `code-review.md` goes in its prompt); CRITICAL and HIGH findings are fixed before the orchestrator commits and pushes.
