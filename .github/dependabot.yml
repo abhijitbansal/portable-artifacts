@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Workflow actions. npm security fixes come from Dependabot security updates;
+  # on-demand installs are audited weekly by audit-on-demand-deps.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

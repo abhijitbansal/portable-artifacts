@@ -1,0 +1,23 @@
+name: Feature request
+description: A new chart kind, shot, look, section or host.
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Skill
+      options: [make-dashboard, make-diagram, make-explainer, make-motion, make-scene, installer, new skill, other]
+    validations:
+      required: true
+  - type: textarea
+    id: want
+    attributes:
+      label: What you want to make
+      description: The artifact you are trying to produce, and where the current skill falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: A sketch, a link or a spec fragment, if you have one.

@@ -1,0 +1,39 @@
+name: Bug report
+description: A skill, script or generated page does the wrong thing.
+labels: [bug]
+body:
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Skill
+      options: [make-dashboard, make-diagram, make-explainer, make-motion, make-scene, installer / doctor, site, other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      description: From `plugins/portable-artifacts/.claude-plugin/plugin.json`, or `/plugin` in Claude Code.
+      placeholder: "2.1.0"
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Agent and OS
+      placeholder: "Claude Code 2.x on macOS 15 / Codex on Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you asked for, what you got, and what you expected. Paste the spec if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: The shortest decisive part of the error. `node <skill>/scripts/doctor.mjs` output helps.
+      render: text
