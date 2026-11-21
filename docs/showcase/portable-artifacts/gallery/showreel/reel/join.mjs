@@ -6,6 +6,7 @@
 // Every chapter must share size, frame rate and audio layout (make-motion's 16:9 output does).
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
@@ -22,13 +23,18 @@ function parseArgs(argv) {
     if (!arg.startsWith('--')) { opts.inputs.push(arg); continue; }
     if (!FLAGS.includes(arg)) throw new Error(`unknown flag ${arg}; accepted: ${FLAGS.join(', ')}`);
     const value = argv[i + 1];
-    if (value === undefined) throw new Error(`${arg} needs a value`);
+    if (value === undefined || value.startsWith('--')) throw new Error(`${arg} needs a value`);
     opts[arg.slice(2)] = value;
     i += 1;
   }
   if (!opts.out) throw new Error('--out <file.mp4> is required');
   if (opts.inputs.length < 2) throw new Error('give at least two chapter files');
   for (const file of opts.inputs) if (!existsSync(file)) throw new Error(`not found: ${file}`);
+  const written = [opts.out, opts.loop, opts.poster].filter(Boolean).map((file) => resolve(file));
+  if (opts.inputs.some((file) => written.includes(resolve(file)))) throw new Error('an output path is also an input');
+  for (const flag of ['loop-from', 'loop-seconds', 'poster-at']) {
+    if (opts[flag] !== undefined && !(Number(opts[flag]) >= 0)) throw new Error(`--${flag} must be a number of seconds`);
+  }
   return opts;
 }
 

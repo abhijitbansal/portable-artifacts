@@ -186,7 +186,7 @@ def test_reel_loop_is_light_and_its_chapter_specs_exist():
     chapters = sorted((DOCS / GAL / "showreel" / "reel" / "chapters").glob("*.json"))
     assert len(chapters) >= 8, chapters
     for chapter in chapters:
-        assert '"version": 2' in chapter.read_text(encoding="utf-8"), chapter
+        assert json.loads(chapter.read_text(encoding="utf-8"))["version"] == 2, chapter
 
 
 def test_title_block_revision_matches_plugin_version():

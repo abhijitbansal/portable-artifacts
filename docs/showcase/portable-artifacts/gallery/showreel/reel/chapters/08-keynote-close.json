@@ -20,7 +20,7 @@
       "id": "close",
       "show": "end",
       "title": "Write a script. Get a film.",
-      "ask": "/plugin install portable-artifacts",
+      "ask": "/plugin install portable-artifacts@portable-artifacts",
       "mark": "make-motion 2",
       "say": "Write a script. Get a film. (0.8)"
     }

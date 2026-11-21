@@ -18,7 +18,7 @@ chapter's make-motion report ended `ok: true` with no findings left.
 - 1:05 Keynote: near-white mesh, a JSON card types on, a four-step pipeline, a dashboard on a card with a push-in on
   the revenue figure.
 - 1:24 Poster: "38 BLOCKS" punched to "16 KINDS", then "NO KEYFRAMES / NO TIMELINE / NO ANIMATION CODE".
-- 1:33 Keynote end card: "Write a script. Get a film." and `/plugin install portable-artifacts`.
+- 1:33 Keynote end card: "Write a script. Get a film." and `/plugin install portable-artifacts@portable-artifacts`.
 
 ## Notes, ranked (time · where · problem → change · what stays)
 
@@ -34,8 +34,10 @@ chapter's make-motion report ended `ok: true` with no findings left.
    restraint.
 6. Open · the music bed restarts at each chapter seam (one bed per film). The 0.6 s acrossfade hides the joins on paper;
    nobody has listened.
-7. Open · two kinds are not shown: `quote` and `free` (14 of 16 appear; `timeline` and `media` were cut in note 4).
-   The narration says "sixteen kinds" as a count, not as a promise that all are on screen.
+7. Open · 12 of the 16 kinds are on screen; `quote`, `free`, `timeline` and `media` are not (the last two were cut in
+   note 4). The narration says "sixteen kinds" as a count, not as a promise that all are on screen.
+8. Fixed after the pre-push review · the chapter kickers now read "New look: <name>" (marker: "Redrawn look:
+   marker"), so no slug number contradicts a count, and the end card shows the full install command.
 
 Audio: measured only. Chapter reports printed -14.1 (pop) to -16.2 LUFS; the joined reel measured -16.0 LUFS
 integrated and -2.4 dBFS sample peak (`ffmpeg -af ebur128=peak=true`). Nobody has listened to it.

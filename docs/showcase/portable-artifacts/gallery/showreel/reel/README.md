@@ -31,7 +31,8 @@ Each label on screen is checked against the plugin's `CHANGELOG.md` and `skills/
 - **Frame zero names the product** in a viral film: CHANGELOG 2.0.0 ("A viral film's first frame names the product").
 - **Synthesised music beds** (`pulse`, `drift`, `tape`): no 1.x release note mentions a bed; inferred new in 2.0.
   Synthesised sound cues already existed in 1.x, so the reel does not call them new.
-- **The 2.2.0 test counts** in the ledger chart come from the local runs listed in the 2.2.0 pull request (#7):
+- **The 2.2.0 test counts** in the ledger chart come from the local runs listed in the test plan of the 2.2.0 pull
+  request (#7, `gh pr view 7`):
   make-motion 4,570, make-explainer 1,318, make-diagram 1,050, make-scene 716, shared 376.
 - **The planet widths** come from NASA's Planetary Fact Sheet, as in `look-cosmos.json`.
 
@@ -47,7 +48,7 @@ node join.mjs --out video.mp4 --loop ../../../../../media/reel-loop.mp4 --loop-f
   --poster poster.jpg --poster-at 0.9 out/00-poster-intro.mp4 out/01-desk.mp4 … out/08-keynote-close.mp4
 ```
 
-`<skill>` is `plugins/portable-artifacts/skills/make-motion`. The render date is stamped in the MP4 metadata, so a
+`<skill>` is the absolute path of `plugins/portable-artifacts/skills/make-motion` in your clone. The render date is stamped in the MP4 metadata, so a
 rebuild is not byte-identical.
 
 Nobody has listened to the reel yet. The make-motion reports printed -14.1 to -16.2 LUFS per chapter (pop is the

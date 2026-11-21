@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- `<repo>` = `<repo>/.claude/worktrees/New-Motion`. `P` = `plugins/portable-artifacts`, `M` = `plugins/portable-artifacts/skills/make-motion` (both relative to `<repo>`).
+- `<repo>` = the `.claude/worktrees/New-Motion` worktree of the claude-skills checkout. `P` = `plugins/portable-artifacts`, `M` = `plugins/portable-artifacts/skills/make-motion` (both relative to `<repo>`).
 - Line ranges are as of the base commit, before Task 1. Where an earlier task has already shifted a file, the step also names the symbol or test title. Find the site by that name.
 - Node 20+. The scripts must run offline after install. Exact versions only: no `^`, `~`, ranges, tags, git or URL specs.
 - Write the test first and watch it fail before you implement. Files stay under 800 lines and functions under 50.
