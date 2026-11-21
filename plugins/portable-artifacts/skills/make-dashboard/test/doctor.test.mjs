@@ -86,7 +86,7 @@ test('a build missing its vendored chart libraries prints the npm ci command', (
   fs.copyFileSync(path.join(SKILL, 'references/examples/sales-overview.json'), spec);
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/build.mjs'), spec, '--out', path.join(proj, 'out')], { encoding: 'utf8' });
   assert.notEqual(r.status, 0);
-  assert.ok((r.stdout + r.stderr).includes(`run npm ci --omit=dev --prefix ${quoteArg(fs.realpathSync(dir))}`), r.stdout + r.stderr);
+  assert.ok((r.stdout + r.stderr).includes(`run npm ci --ignore-scripts --omit=dev --prefix ${quoteArg(fs.realpathSync(dir))}`), r.stdout + r.stderr);
   assert.doesNotMatch(r.stdout + r.stderr, /\(doctor:/);
 });
 

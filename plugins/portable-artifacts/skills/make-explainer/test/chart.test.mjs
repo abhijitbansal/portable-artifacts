@@ -461,7 +461,7 @@ test('make-dashboard without its node_modules is a SiblingError with the install
   await assert.rejects(page.buildPage(doc([inline()]), { dir: root }), (e) => {
     assert.equal(e.name, 'SiblingError');
     assert.ok(e.message.includes(`make-dashboard is installed but its dependencies are missing (vega)`), e.message);
-    assert.ok(e.message.includes(`run npm ci --omit=dev --prefix ${quoteArg(dash)}`), e.message);
+    assert.ok(e.message.includes(`run npm ci --ignore-scripts --omit=dev --prefix ${quoteArg(dash)}`), e.message);
     assert.doesNotMatch(e.message, /skills add/);
     assert.match(e.message, /\(doctor: node \S*scripts\/doctor\.mjs, id make-dashboard\)$/);
     return true;
