@@ -3,7 +3,7 @@
   "subtitle": "What this branch builds, how to use it, and what it is worth, with working samples.",
   "meta": {
     "branch": "feat/visual-artifacts",
-    "repo": "claude-skills",
+    "repo": "portable-artifacts",
     "status": "PR #38"
   },
   "sections": [
