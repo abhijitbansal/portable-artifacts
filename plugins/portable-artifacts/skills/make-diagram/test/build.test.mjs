@@ -361,6 +361,25 @@ test('--format svg --json prints { ok, out } and an unknown format is a usage er
   assert.match(bad.stderr, /--format must be one of: html, svg/);
 });
 
+test('an html build with --out <name>.svg is a usage error that names --format svg and creates no directory', () => {
+  const dir = tmp();
+  const out = path.join(dir, 'x.svg');
+  const r = run([example('flow'), '--out', out]);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /--format svg/);
+  assert.ok(!fs.existsSync(out), 'no folder named x.svg was created');
+});
+
+test('an html build with --out <name>.png is a usage error naming the extension; a plain folder name still works', () => {
+  const dir = tmp();
+  const bad = run([example('flow'), '--out', path.join(dir, 'x.png')]);
+  assert.equal(bad.status, 2, bad.stderr);
+  assert.match(bad.stderr, /\.png/);
+  assert.ok(!fs.existsSync(path.join(dir, 'x.png')));
+  const ok = run([example('flow'), '--out', path.join(dir, 'folder')]);
+  assert.equal(ok.status, 0, ok.stderr);
+});
+
 test('--format svg: a spec file name with runs of hyphens cannot put "--" inside the XML comment', () => {
   const dir = tmp();
   const file = path.join(dir, 'a---b-.diagram.json');

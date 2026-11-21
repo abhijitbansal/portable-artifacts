@@ -18,8 +18,18 @@ const KB = 1024;
 
 // html: --out file.html | dir | the default folder. svg: the same with .svg; an --out ending in .html or .htm is
 // read as the same name with .svg.
+// An html build reads any other --out as a folder, so a file-looking name (x.svg, x.png) would silently become one.
+const NON_HTML_FILE_EXT = /\.(svg|png|jpe?g|gif|webp|pdf|json|md|txt|css|js|mjs)$/i;
+
 function targetFor({ out, format, title, specPath, env }) {
-  if (format === 'html') return resolveOutput({ out, title, specPath, env });
+  if (format === 'html') {
+    const ext = out && out.match(NON_HTML_FILE_EXT);
+    if (ext) {
+      const hint = ext[1].toLowerCase() === 'svg' ? '; add --format svg to write an SVG file' : '; use a .html file name or a folder';
+      throw new UsageError(`--out ${JSON.stringify(out)} ends in .${ext[1]} but the format is html${hint}`);
+    }
+    return resolveOutput({ out, title, specPath, env });
+  }
   if (out && /\.svg$/i.test(out)) return path.resolve(out);
   return resolveOutput({ out, title, specPath, env }).replace(/\.html?$/i, '.svg');
 }
