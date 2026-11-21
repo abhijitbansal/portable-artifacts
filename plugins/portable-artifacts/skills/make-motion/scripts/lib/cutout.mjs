@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from '../../shared/cli.mjs';
 import { doctorCommand, optionalInstall } from './doctor-hint.mjs';
-import { modelsDir } from './model-cache.mjs';
+import { modelDir } from './model-cache.mjs';
 import { importOptional } from './optional.mjs';
 import { fileInput } from './ffmpeg.mjs';
 import { VIDEO_EXTENSIONS, fileSha256 } from './video-probe.mjs';
@@ -24,7 +24,7 @@ export const MODEL_URL = 'https://huggingface.co/Xenova/modnet/resolve/fa2fa5460
 export const MODEL_SHA256 = '07c308cf0fc7e6e8b2065a12ed7fc07e1de8febb7dc7839d7b7f15dd66584df9';
 export const MODEL_BYTES = 25888640; // 24.7 MiB, "25 MB" in the docs
 export const MODEL_FILE = 'modnet_photographic_portrait_matting.onnx';
-export const MODEL_DIR = path.join(modelsDir(SKILL_ROOT), 'modnet'); // a per-user folder that survives a plugin update (model-cache.mjs)
+export const MODEL_DIR = modelDir('modnet', SKILL_ROOT); // a per-user folder that survives a plugin update (model-cache.mjs)
 export const CUTOUT_CACHE = path.join(SKILL_ROOT, '.cache', 'cutout'); // gitignored; the alpha frames of a clip, keyed by its hash
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];

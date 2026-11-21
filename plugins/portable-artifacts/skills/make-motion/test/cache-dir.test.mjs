@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { modelsDir } from '../scripts/lib/model-cache.mjs';
+import { modelsDir, modelDir } from '../scripts/lib/model-cache.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = () => mkdtempSync(path.join(tmpdir(), 'cd-'));
@@ -28,23 +28,33 @@ test('modelsDir: else <skill>/.cache/models (no home folder, no data folder)', (
   assert.equal(modelsDir(skillDir, { env: {}, platform: 'linux', homedir: '' }), path.join(skillDir, '.cache', 'models'));
 });
 
-test('modelsDir: an install that already downloaded the models into <skill>/.cache/models keeps using them until the stable folder has its own', () => {
+test('modelsDir: the stable folder even when a legacy <skill>/.cache/models exists (per-model lookup is modelDir)', () => {
   const skillDir = tmp();
   const home = tmp();
   const stable = path.join(home, 'Library', 'Caches', 'portable-artifacts', 'models');
-  const legacy = path.join(skillDir, '.cache', 'models');
-  const options = { env: {}, platform: 'darwin', homedir: home };
-  assert.equal(modelsDir(skillDir, options), stable, 'nothing downloaded yet: the stable folder');
-  mkdirSync(legacy, { recursive: true });
-  assert.equal(modelsDir(skillDir, options), legacy, 'models already in the skill folder are reused, not downloaded again');
-  mkdirSync(stable, { recursive: true });
-  assert.equal(modelsDir(skillDir, options), stable, 'once the stable folder exists it wins');
+  mkdirSync(path.join(skillDir, '.cache', 'models'), { recursive: true });
+  assert.equal(modelsDir(skillDir, { env: {}, platform: 'darwin', homedir: home }), stable);
 });
 
-// The version 2 voice model keeps its own folder under <skill>/.cache/models (voice-model.test.mjs); only the cut-out tool uses this one.
+test('modelDir: per model, an install that already downloaded it into <skill>/.cache/models keeps using that copy until the stable folder has its own', () => {
+  const skillDir = tmp();
+  const home = tmp();
+  const stableModels = path.join(home, 'Library', 'Caches', 'portable-artifacts', 'models');
+  const legacyModels = path.join(skillDir, '.cache', 'models');
+  const options = { env: {}, platform: 'darwin', homedir: home };
+  assert.equal(modelDir('modnet', skillDir, options), path.join(stableModels, 'modnet'), 'nothing downloaded yet: the stable folder');
+  mkdirSync(path.join(legacyModels, 'modnet'), { recursive: true });
+  assert.equal(modelDir('modnet', skillDir, options), path.join(legacyModels, 'modnet'), 'a model already in the skill folder is reused, not downloaded again');
+  mkdirSync(path.join(stableModels, 'onnx-community'), { recursive: true }); // another model (the voice) arrives in the stable folder
+  assert.equal(modelDir('modnet', skillDir, options), path.join(legacyModels, 'modnet'), 'another model in the stable folder does not hide the legacy modnet');
+  mkdirSync(path.join(stableModels, 'modnet'), { recursive: true });
+  assert.equal(modelDir('modnet', skillDir, options), path.join(stableModels, 'modnet'), 'once the stable copy exists it wins');
+});
+
+// The version 2 voice model looks itself up the same way (voiceModelDir, voice-model.test.mjs); the cut-out tool uses modelDir('modnet').
 test('cutout.mjs puts its model under that folder', () => {
   const data = tmp();
-  mkdirSync(path.join(data, 'models')); // an existing stable folder wins over a legacy <skill>/.cache/models on this machine
+  mkdirSync(path.join(data, 'models', 'modnet'), { recursive: true }); // an existing stable copy wins over a legacy <skill>/.cache/models/modnet on this machine
   const script = `const c = await import(${JSON.stringify(pathToFileURL(path.join(root, 'scripts/lib/cutout.mjs')).href)});
     process.stdout.write(JSON.stringify({ cutout: c.MODEL_DIR }));`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: { ...process.env, CLAUDE_PLUGIN_DATA: data } });
