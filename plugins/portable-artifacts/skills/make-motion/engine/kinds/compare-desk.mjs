@@ -310,19 +310,25 @@ function betweenMarks(shot, ctx, data, [a, b], turn) {
 
 // ---- bars (look data `bars: { gap, width }`, marker: gate-marker-1 ruling 6: the gap is drawn, not only stated) ----
 
-// A string value: sign, an optional currency symbol, a grouped or plain number, an optional magnitude (k, M, B, bn) or %.
-const SCALED = /^([-−+]?)([$€£¥]?)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s?(%|bn|[kmb])?$/i;
-const MAGNITUDE = { k: 1e3, m: 1e6, b: 1e9, bn: 1e9 };
+// A string value: sign, an optional currency symbol, a grouped or plain number, then any trailing text without a digit (it
+// starts with no . or , so "1,5M" is refused, not read as 1). The text is a magnitude (k, K, M, B, bn: case as written, so a
+// lone m or b is a unit) when it is one of them at the start and not the start of a longer word (km, Mb), else part of the unit.
+const SCALED = /^([-−+]?)([$€£¥]?)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*([^\d.,\s][^\d]*)?$/;
+const MAGNITUDE_SUFFIX = /^(bn|[kKMB])(?![A-Za-z])\s*([^\d]*)$/;
+const MAGNITUDE = { k: 1e3, K: 1e3, M: 1e6, B: 1e9, bn: 1e9 };
 
-// A side's value as { size, unit }: size in whole units (1.5M is 1500000), unit the currency and % that must match for two
-// sides to share a scale; null when it is negative, zero, or not plainly a number.
+// A side's value as { size, unit }: size in whole units (1.5M is 1500000), unit the currency plus whatever text follows the
+// magnitude (%, min, x, €, +): the sides share a scale only when their units are equal; null when it is negative, zero, or not
+// plainly a number.
 function scaledValue(value) {
   if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? { size: value, unit: '' } : null;
   const found = typeof value === 'string' ? SCALED.exec(value.trim()) : null;
   if (found === null || found[1] === '-' || found[1] === '−') return null;
-  const [, , currency, digits, suffix = ''] = found;
-  const size = Number(digits.replaceAll(',', '')) * (MAGNITUDE[suffix.toLowerCase()] ?? 1);
-  return size > 0 ? { size, unit: currency + (suffix === '%' ? '%' : '') } : null;
+  const [, , currency, digits, text = ''] = found;
+  const magnitude = MAGNITUDE_SUFFIX.exec(text);
+  const [scale, unit] = magnitude === null ? [1, text] : [MAGNITUDE[magnitude[1]], magnitude[2]];
+  const size = Number(digits.replaceAll(',', '')) * scale;
+  return size > 0 ? { size, unit: currency + unit.trim().replace(/\s+/g, ' ') } : null;
 }
 
 // Each side's value as a share of the larger, or null unless both sides are positive and on one scale (same unit, the
