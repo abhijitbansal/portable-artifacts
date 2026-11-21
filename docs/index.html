@@ -1253,6 +1253,13 @@
 
     <section id="whats-new" class="doc-section">
       <h2><span class="ix">14</span> What's new</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">2.1.1</h4>
+      <p style="margin-bottom:12px">20 Nov 2026 · a small fix release for make-motion 2's Ctrl+C handling, plus test and diagnostic work ported from claude-skills. The full list is in the <a href="https://github.com/abhijitbansal/portable-artifacts/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
+      <div class="inv" style="margin-bottom:24px">
+        <div class="row"><span class="nm">Ctrl+C keeps your last sheets</span><span class="dc">Stopping a <code>make-motion</code> run while Chromium is still starting no longer deletes the previous run's PNGs in <code>out/&lt;name&gt;.sheets/</code>. The run checks for the stop before it clears the folder.</span></div>
+        <div class="row"><span class="nm">New interrupt tests</span><span class="dc">Two regression tests send Ctrl+C during the browser launch and expect exit 130, the browser closed, no video and the sheets intact. The launch race proposed as a fix in claude-skills #51 (by @kbot-ships) was checked on the make and render path and is absent in make-motion 2.</span></div>
+        <div class="row"><span class="nm">make-explainer reload diagnostics</span><span class="dc">A failing plan-browser reload test now prints the page's storage keys, URL and <code>window.name</code>. Ported from claude-skills #52 by @kbot-ships; test code only.</span></div>
+      </div>
       <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">2.1.0</h4>
       <p style="margin-bottom:12px">20 Nov 2026 · portable-artifacts now lives in its own repository, with its own CI and this site. What the skills produce and the spec formats are unchanged. These things changed: the doctor's fix commands and the stale-copy check point at the new repository and recognise both marketplace names, and the hints printed when a sibling skill is not found show the new paths. The full list is in the <a href="https://github.com/abhijitbansal/portable-artifacts/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
       <div class="inv" style="margin-bottom:24px">

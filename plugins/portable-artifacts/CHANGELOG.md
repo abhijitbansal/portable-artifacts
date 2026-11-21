@@ -6,6 +6,33 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-20
+
+A small fix release for make-motion 2's Ctrl+C handling, plus test and diagnostic work ported from claude-skills.
+
+### Behaviour changes to know about
+
+- **Ctrl+C while the browser starts no longer deletes your last contact sheets.** If you stopped a `make-motion` run
+  while Chromium was still launching, the run cleared the previous run's PNGs in `out/<name>.sheets/` before it noticed
+  the stop, and left an empty folder. It now checks for the stop first, so the last good sheets stay. A stop mid-render
+  already kept them.
+
+### Tests and diagnostics
+
+- **New interrupt regression tests for make-motion 2** (`test/v2/launch-interrupt.test.mjs`). One sends Ctrl+C while a
+  stand-in browser launch is pending, one as soon as real Chromium has been spawned (usually before the launch
+  returns, not guaranteed). Both expect exit 130, the browser closed, no video left and the previous sheets intact.
+  The real-Chromium test failed in 2 of 2 local runs with `ownSignals` dropped from the browser launch.
+- **The claude-skills #51 launch race is absent in make-motion 2.** #51 (a fix proposed for make-motion 1 by
+  @kbot-ships, never merged) was an interrupt during browser launch that exited before the browser was closed. We
+  traced the browser launches on make-motion 2's make, review and render path (`scripts/v2/session.mjs` and
+  `batch.mjs`); each passes `ownSignals`, so the first signal only stops the run and its own cleanup closes the
+  browser. `cutout.mjs` launches without it and is not covered here. #51's other half, the `fast-uri` 3.1.9 refresh
+  and its stale-install doctor check, had already landed in 1.1.0 in a broader form.
+- **make-explainer reload diagnostics.** The plan-browser reload tests now print the page's storage keys, URL and
+  `window.name` when a reload assertion fails, so a CI failure names what was lost. Ported from claude-skills #52 by
+  @kbot-ships. Test code only.
+
 ## [2.1.0] - 2026-11-20
 
 portable-artifacts now lives in its own repository, `abhijitbansal/portable-artifacts`, with its own CI and its own
