@@ -121,6 +121,16 @@ test('node_modules from an aborted npm ci (a dependency folder missing) counts a
   assert.deepEqual(full, { ok: true, missing: [] });
 });
 
+test('G-WHY: the "lacks" list appears only when node_modules exists; an absent folder just says what the step installs', async () => {
+  const files = { '/s/make-diagram/package.json': JSON.stringify({ dependencies: { ajv: '8.0.0', 'fast-uri': '3.0.0' } }) };
+  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+  const absent = await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: () => false, readFile }));
+  assert.equal(absent.missing[0].why, "installs the skill's own npm packages");
+  const present = new Set(['/s/make-diagram/node_modules']);
+  const partial = await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: (p) => present.has(p), readFile }));
+  assert.match(partial.missing[0].why, /node_modules lacks ajv, fast-uri \(an interrupted npm ci leaves a partial folder\)/);
+});
+
 test('node_modules fix on an existing install says what npm ci removes and which --fix ids restore it', async () => {
   const exists = noPlaywright;
   const dev = (await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists, readFile: () => { throw new Error('x'); }, skillDir: '/s/x' })));

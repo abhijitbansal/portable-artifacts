@@ -166,7 +166,8 @@ export function nodeModules({ omitDev = true, restore = [], size } = {}) {
     why: (ctx) => {
       const stale = staleOverrides(ctx, 'own');
       if (stale.length > 0) return `installs the skill's own npm packages; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"`;
-      const lacking = lackingPackages(ctx);
+      // An absent folder lacks everything; the list only explains a partial one.
+      const lacking = ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) ? lackingPackages(ctx) : [];
       return lacking.length > 0 ? `installs the skill's own npm packages; node_modules lacks ${lacking.join(', ')} (an interrupted npm ci leaves a partial folder)` : "installs the skill's own npm packages";
     },
     required: true,
