@@ -212,7 +212,7 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
   background: rgba(10, 22, 48, 0.82); color: #fff;
   font: 600 13px/1 var(--text);
 }
-.plate-play:hover { background: var(--red); }
+.plate-play:hover { background: var(--red); color: var(--sheet); }
 .plate-play svg { width: 12px; height: 12px; }
 
 /* install: the issue stamp */
@@ -328,7 +328,7 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
   pointer-events: auto; cursor: pointer;
   transition: transform 0.3s var(--ease), background-color 0.2s, color 0.2s;
 }
-.tag.on { background: var(--red); color: #fff; transform: translate(-50%, -50%) scale(1.18); }
+.tag.on { background: var(--red); color: var(--sheet); transform: translate(-50%, -50%) scale(1.18); }
 
 /* leader line overlay */
 .leader { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 3; }
