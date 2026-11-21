@@ -41,21 +41,27 @@ function safeUrl(url) {
 }
 
 // Flanking rules, so that a literal asterisk in prose (a glob like src/*.js, "2 * 3 * 4") is not emphasis.
-// An opener must not be followed by whitespace or ".", and must not sit right after a digit, a closing bracket, a
-// path separator or another "*" (a glob like *.js or src/*.js, or 5*3*2); it may follow a letter (CJK text, foo**bar**).
-// A closer must not be preceded by whitespace or a path separator. The start of the (inner) text counts as a boundary.
+// An opener must not be followed by whitespace, and must not sit right after a digit, a closing bracket, a path
+// separator or another "*" (src/*.js, 5*3*2); it may follow a letter (CJK text, foo**bar**). A single "*" followed by
+// "." and a letter or digit (a glob like *.js) never opens. A closer must not be preceded by whitespace; a single "*"
+// closer must not follow a path separator (src/*). "**" keeps both, so **.env** and **src/** stay bold.
+// The start of the (inner) text counts as a boundary.
 const NOT_OPENER_AFTER = /[\p{N})\]}/\\*]/u;
+const GLOB_DOT = /^\.[\p{L}\p{N}]/u;
 const isSpace = (ch) => ch === undefined || /\s/.test(ch);
 const canOpen = (s, at, width) => {
-  const after = s[at + width];
-  return !isSpace(after) && after !== '.' && !(at > 0 && NOT_OPENER_AFTER.test(s[at - 1]));
+  if (isSpace(s[at + width]) || (at > 0 && NOT_OPENER_AFTER.test(s[at - 1]))) return false;
+  return width === 2 || !GLOB_DOT.test(s.slice(at + 1, at + 3));
 };
-const canClose = (s, at, from) => at > from && !isSpace(s[at - 1]) && s[at - 1] !== '/' && s[at - 1] !== '\\';
+const canClose = (s, at, from, width) => {
+  if (at <= from || isSpace(s[at - 1])) return false;
+  return width === 2 || (s[at - 1] !== '/' && s[at - 1] !== '\\');
+};
 
 // Closing '**' for a strong opened with its content starting at `from`, or -1.
 function closeStrong(s, from) {
   for (let j = s.indexOf('**', from); j !== -1; j = s.indexOf('**', j + 1)) {
-    if (canClose(s, j, from)) return j;
+    if (canClose(s, j, from, 2)) return j;
   }
   return -1;
 }
@@ -65,7 +71,7 @@ function closeItalic(s, from) {
   for (let j = from; j < s.length; j++) {
     if (s[j] === '*') {
       if (s[j + 1] === '*') j++;
-      else if (canClose(s, j, from)) return j;
+      else if (canClose(s, j, from, 1)) return j;
     }
   }
   return -1;

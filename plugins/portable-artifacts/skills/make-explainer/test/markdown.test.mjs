@@ -179,6 +179,14 @@ test('mixed globs stay literal', () => {
   assert.equal(renderMarkdown('Run *foo and src\\*'), '<p>Run *foo and src\\*</p>');
 });
 
+test('bold and italic still wrap dotfiles, folders and leading dots', () => {
+  assert.equal(renderMarkdown('**.env**'), '<p><strong>.env</strong></p>');
+  assert.equal(renderMarkdown('the **src/** folder'), '<p>the <strong>src/</strong> folder</p>');
+  assert.equal(renderMarkdown('**.github/workflows**'), '<p><strong>.github/workflows</strong></p>');
+  assert.equal(renderMarkdown('**C:\\Users\\**'), '<p><strong>C:\\Users\\</strong></p>');
+  assert.equal(renderMarkdown('*...and more*'), '<p><em>...and more</em></p>');
+});
+
 test('unsupported markup stays literal text', () => {
   assert.equal(renderMarkdown('# Heading'), '<p># Heading</p>');
   assert.equal(renderMarkdown('1. one'), '<p>1. one</p>');
