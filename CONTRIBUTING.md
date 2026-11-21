@@ -12,10 +12,24 @@ Thanks for helping. Bug reports, new chart kinds, shots, looks and host support 
 
 ## Layout
 
-- `plugins/portable-artifacts/skills/<make-*>/` holds one skill each, as its own Node package with a lockfile.
-- `plugins/portable-artifacts/shared/` holds code shared by the skills. Edit it there only, then run
-  `node plugins/portable-artifacts/bin/sync-shared.mjs`. The per-skill `shared/` folders are copies.
-- `docs/` is the site (GitHub Pages).
+```
+.claude-plugin/marketplace.json   one-plugin marketplace: portable-artifacts@portable-artifacts
+plugins/portable-artifacts/       the plugin
+  .claude-plugin/plugin.json      name, description, version
+  skills/<make-*>/                the five skills: SKILL.md, scripts, tests, own package.json and lockfile
+  shared/                         code shared by the skills; synced into each skill by bin/sync-shared.mjs
+  bin/                            cross-host installer (install.mjs), sync-shared.mjs, installer tests
+  agents/                         the optional artifact-builder agent
+  eval/                           cross-host eval harness (fake host, no LLM, in CI)
+docs/                             the GitHub Pages site: index.html, gallery.html, assets/, media/, showcase/
+docs/superpowers/                 design specs and plans (not published)
+tests/pytest/                     checks on the site pages and the CI workflow
+scripts/                          audit-on-demand-deps.sh, check_trailers.sh
+.agents/context/                  PRODUCT.md and DESIGN.md: product truth and the site's design system
+```
+
+Edit shared code in `plugins/portable-artifacts/shared/` only, then run
+`node plugins/portable-artifacts/bin/sync-shared.mjs`. The per-skill `shared/` folders are copies.
 
 ## Before you open a PR
 
@@ -39,6 +53,10 @@ Golden images and snapshots change only for an intended visual change, stated in
 
 Conventional format: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`. A bug fix comes with a test that failed
 before it.
+
+If an AI agent helped, credit it with `Co-Authored-By: Claude <noreply@anthropic.com>` (or your agent's equivalent).
+The `commit-trailers` check rejects `Claude-Session:` lines and model-named `Co-Authored-By` trailers, which some
+agents add by default; edit them out before you push.
 
 ## Security
 

@@ -24,18 +24,23 @@ sweeps, mods, machine setup, bats) was dropped.
   `node` (shared copies in sync, shared and installer tests), `node-skills` (one runner per skill, with Chromium and
   ffmpeg), `commit-trailers` and `plugin-version-guard`. `webgl-spike-macos` runs by hand only.
   `audit-on-demand-deps.yml` audits the lockfiles of the packages make-motion installs on demand, weekly and on
-  changes. `pages.yml` deploys `docs/` and is dormant until the owner enables Pages (Settings > Pages > Source:
-  GitHub Actions).
-- **Site.** `docs/` is the Pages root. `docs/index.html` is the feature page; `docs/showcase/portable-artifacts/` holds the
-  gallery, `docs/img/portable-artifacts/` the images, `docs/assets/` the stylesheet, script and fonts, vendored from
-  the claude-skills site (edit the copy here when this site needs a change; the originals are not shared). Links to
-  other claude-skills pages are absolute URLs. `docs/superpowers/` keeps design specs and plans; they quote old
-  commands on purpose, so leave their text as written.
+  changes. `pages.yml` deploys `docs/` on every push to `main` that touches `docs/` (Pages is enabled, source GitHub
+  Actions). Every action is pinned to a commit SHA with the version in a comment; Dependabot bumps them monthly.
+- **Site.** `docs/` is the Pages root, hand-written static files with no build step. `docs/index.html` is the cover
+  sheet plus one sheet per skill (a spec excerpt beside the artifact it built, with leader lines);
+  `docs/gallery.html` is the register of every output with its spec. `docs/assets/pa.css` and `pa.js` are the only
+  stylesheet and script; `docs/media/` holds the muted plate loops (under 2 MB each), posters and thumbnails;
+  `docs/showcase/portable-artifacts/gallery/` holds the outputs and their specs. The design system is recorded in
+  `.agents/context/DESIGN.md`, product truth in `.agents/context/PRODUCT.md`. Old one-page anchors are redirected by
+  the `LEGACY` table in `pa.js`. `docs/superpowers/` keeps design specs and plans; they quote old commands on purpose,
+  so leave their text as written.
 - **Copy-button contract.** On `docs/index.html`, a command block (`.code.cmds`) holds one
   `<div class="cl"><code class="ct">cmd</code><button class="copy" data-copy="cmd">copy</button></div>` per command: one
   button per command, never one button for several. A trailing `# comment` may stay in the visible `<code class="ct">`
   text but must never appear in `data-copy`. Full multi-line code samples keep a single copy-all button wrapped in
-  `.code-body`. `tests/pytest/test_portable_artifacts_page.py` checks the quick-install block.
+  `.code-body`. `tests/pytest/test_portable_artifacts_page.py` checks the quick-install block, and also pins the sheet
+  order, that every local link resolves, that each spec's `x.y KB` label matches the file, that spec lines and plate
+  tags pair up, and that the cover's Revision equals `plugin.json`.
 
 ---
 
@@ -177,9 +182,9 @@ is green and review passes.
   plain command, never inside a pipe, `&&` chain or `$(…)`. Before merging a parent PR with `--delete-branch`, retarget
   each open child PR (`gh pr edit <child> --base main`): deleting the parent's branch closes the child, and a closed
   PR's base cannot be changed.
-- **After the merge, verify the deploy.** A merge that touches `docs/**` triggers `pages.yml` once Pages is enabled. Run
+- **After the merge, verify the deploy.** A merge that touches `docs/**` triggers `pages.yml`. Run
   `gh run list --workflow pages.yml --limit 3`; poll until it is green, then fetch the live page and look for a marker
-  from the change before saying it is deployed. While Pages is off, say "not deployed: Pages is not enabled".
+  from the change before saying it is deployed.
 - **Plugin versions.** The `plugin-version-guard` job in `test.yml` fails a PR that touches `plugins/<name>/**` and
   leaves that plugin's `.claude-plugin/plugin.json` `version` unchanged. Make one bump per PR, with one
   `plugins/portable-artifacts/CHANGELOG.md` heading: one version bump per merged release, not per commit. A change that
@@ -200,22 +205,24 @@ install-command guard (`bin/test/install-commands.test.mjs`), the dependency-pin
 
 - **Version and notes.** Bump `plugins/portable-artifacts/.claude-plugin/plugin.json` once (`marketplace.json` carries no
   per-plugin version). Write the new `CHANGELOG.md` heading as user-facing release notes with behaviour changes first,
-  then copy it into the `#whats-new` block of `docs/index.html`, and update the plugin `README.md` and `USAGE.md`.
+  then set the cover's Revision in `docs/index.html` to the new version (the page test pins it), and update the plugin
+  `README.md` and `USAGE.md`.
 - **Shared code.** After editing `plugins/portable-artifacts/shared/`, run
   `node plugins/portable-artifacts/bin/sync-shared.mjs`, then `--check`. Never hand-edit the per-skill `shared/` copies.
 - **Goldens** change only for an intended visual change, stated in the commit. Never regenerate one to clear a red test.
 - **Gallery.** Rebuild each page under `docs/showcase/portable-artifacts/gallery/` that the change affects, from its
   source spec; set `SOURCE_DATE_EPOCH` so the stamped date is stable and record the value in the PR body. Run
   `check.mjs` on each rebuilt page one at a time (one browser at a time) and open the `--shots` PNGs. Hero images and
-  clips come from real files in the repo, never mock-ups. `tests/pytest/test_portable_artifacts_page.py` checks the
-  page. No script lists gallery pages that lack a source spec; check by hand.
+  clips come from real files in the repo, never mock-ups. A new output gets a `reg-item` in `docs/gallery.html` (and the
+  plate count in its header). If a rebuilt page is a home-page plate, recheck its detail-tag positions and spec excerpt.
+  `tests/pytest/test_portable_artifacts_page.py` checks both pages.
 - **A new skill** also needs its `test.yml` matrix row and `npm ci` loop entry, its doctor requirements, and an icon in
   `shared/icons.mjs`; the full list is "Adding a sibling skill" in `plugins/portable-artifacts/shared/README.md`.
 - **A release showcase** (feature clips, a promo, an explainer with the clips embedded, a guide) follows one order: read
   the `CHANGELOG.md` entry for the release; render one draft clip per capability, one at a time; render one promo in
   viral mode (with voiceover only after `doctor --for voiceover` and one ask); build the explainer in a folder where the
   relative `video` paths resolve (`sections[n].video: file not found` otherwise); write the guide from `USAGE.md`; copy
-  the results into the gallery and run the page test; add the site anchors; zip without `rm`; end the report with the
+  the results into the gallery and the register page and run the page test; zip without `rm`; end the report with the
   steps only the owner can do.
 
 ---

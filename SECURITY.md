@@ -28,8 +28,8 @@ areas:
 - **The generated pages** — their Content-Security-Policy and the rule that a
   spec cannot name a remote URL.
 
-The security model of the skills is described on the site
-(`docs/index.html`, "Security model") and in `plugins/portable-artifacts/README.md`.
+The security model of the skills is described in
+[`plugins/portable-artifacts/README.md`](plugins/portable-artifacts/README.md#security-model).
 
 ## Notes for users
 

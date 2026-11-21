@@ -6,7 +6,7 @@ Instructions for Claude when working in this repository.
 
 ## Working in this repo
 
-- The plugin is `plugins/portable-artifacts/`; the site is `docs/` (Pages root, `docs/index.html`). Read
+- The plugin is `plugins/portable-artifacts/`; the site is `docs/` (Pages root: `docs/index.html` and `docs/gallery.html`, styled by `docs/assets/pa.css`). Read
   [`AGENTS.md`](./AGENTS.md) before dispatching subagents, before committing and before opening a PR.
 - Edit shared code in `plugins/portable-artifacts/shared/` only, then run
   `node plugins/portable-artifacts/bin/sync-shared.mjs`. The per-skill `shared/` folders are copies.

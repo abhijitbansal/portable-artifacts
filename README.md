@@ -1,22 +1,27 @@
-# portable-artifacts
+<p align="center">
+  <a href="https://abhijitbansal.github.io/portable-artifacts/"><img src="docs/og.png" alt="portable-artifacts: prompt, spec, file. A make-motion film showing the JSON spec behind a chart." width="100%"></a>
+</p>
 
-**Dashboards, diagrams, explainer pages, 3D scenes and animated videos from a prompt — built locally, offline,
-from open-source parts, by any coding agent.**
+<h1 align="center">portable-artifacts</h1>
 
-Five agent skills that do what hosted "artifact" features do, without a cloud, an account or a particular model.
-The model writes one small JSON spec; deterministic Node scripts validate it and build the page or the MP4.
+<p align="center">
+  <b>Prompt &rarr; spec &rarr; file.</b><br>
+  Dashboards, diagrams, explainer pages, 3D scenes and MP4 films from one small JSON spec.<br>
+  Built on your machine, offline, by any coding agent.
+</p>
 
-| Skill | You get |
-|---|---|
-| `make-dashboard` | One self-contained HTML page of KPI tiles and charts from CSV, Parquet, JSON, DuckDB, SQLite, Postgres or MySQL. Every chart shows its SQL and refresh time. |
-| `make-diagram` | An architecture, flow, sequence or state diagram with zoom, hover tracing and a story player. |
-| `make-explainer` | A page or slide deck of typed sections: branch recap, concept explainer, test checklist, plan to answer. |
-| `make-motion` | An MP4 explainer film from a script of shots, in seven looks, silent or with a local voiceover. |
-| `make-scene` | An explorable 3D world (city, forest, galaxy, terrain) from your rows, with a camera tour. |
+<p align="center">
+  <a href="https://github.com/abhijitbansal/portable-artifacts/actions/workflows/test.yml"><img src="https://github.com/abhijitbansal/portable-artifacts/actions/workflows/test.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-1b347f" alt="MIT licence"></a>
+  <a href="plugins/portable-artifacts/CHANGELOG.md"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fabhijitbansal%2Fportable-artifacts%2Fmain%2Fplugins%2Fportable-artifacts%2F.claude-plugin%2Fplugin.json&query=%24.version&label=version&color=1b347f" alt="plugin version"></a>
+</p>
 
-**See them in action:** [abhijitbansal.github.io/portable-artifacts](https://abhijitbansal.github.io/portable-artifacts/)
-— showreel films, a gallery of real outputs with their specs, and the install guide. (The site goes live when the owner
-enables GitHub Pages; until then open `docs/index.html` from a checkout.)
+<p align="center">
+  <a href="https://abhijitbansal.github.io/portable-artifacts/"><b>Site</b></a> ·
+  <a href="https://abhijitbansal.github.io/portable-artifacts/gallery.html">Gallery</a> ·
+  <a href="plugins/portable-artifacts/USAGE.md">Usage</a> ·
+  <a href="plugins/portable-artifacts/CHANGELOG.md">Changelog</a>
+</p>
 
 ## Install
 
@@ -27,46 +32,68 @@ Claude Code:
 /plugin install portable-artifacts@portable-artifacts
 ```
 
-Other agents (Codex, Copilot, Gemini CLI and more):
+Codex, Copilot, Gemini CLI and other agents:
 
 ```
 npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene
-git clone https://github.com/abhijitbansal/portable-artifacts
-node portable-artifacts/plugins/portable-artifacts/bin/install.mjs codex
 ```
 
-Already installed from the claude-skills marketplace? `portable-artifacts@claude-skills` still works and updates from
-this repository. Install from one marketplace only, either `portable-artifacts@portable-artifacts` or
-`portable-artifacts@claude-skills`: both at once load duplicate `/make-*` skills. Installed with `npx skills add` or a
-clone of claude-skills? Reinstall with the commands above, because claude-skills no longer carries the skills. More hosts, flags and the dependency notes are in the
-[plugin README](plugins/portable-artifacts/README.md) and [USAGE](plugins/portable-artifacts/USAGE.md).
-
-## Where to read next
-
-- [`plugins/portable-artifacts/README.md`](plugins/portable-artifacts/README.md): what each skill does, how it works, the security model.
-- [`plugins/portable-artifacts/USAGE.md`](plugins/portable-artifacts/USAGE.md): install per host, prompts to try, troubleshooting.
-- [`plugins/portable-artifacts/CHANGELOG.md`](plugins/portable-artifacts/CHANGELOG.md): what changed in each release.
-- [`AGENTS.md`](AGENTS.md): how to work in this repo (branches, tests, the "Shipping a portable-artifacts change" checklist). [`CLAUDE.md`](CLAUDE.md) imports it.
-- [`SECURITY.md`](SECURITY.md): how to report a vulnerability.
-
-## Repo layout
+Then ask your agent for something:
 
 ```
-.claude-plugin/marketplace.json   one-plugin marketplace: portable-artifacts@portable-artifacts
-plugins/portable-artifacts/       the plugin
-  .claude-plugin/plugin.json      name, description, version
-  skills/<make-*>/                the five skills: SKILL.md, scripts, tests, own package.json and lockfile
-  shared/                         code shared by the skills; synced into each skill by bin/sync-shared.mjs
-  bin/                            cross-host installer (install.mjs), sync-shared.mjs, installer tests
-  agents/                         the optional artifact-builder agent
-  eval/                           cross-host eval harness (fake host, no LLM, in CI)
-docs/                             the Pages site root: index.html, showcase/ gallery, img/, assets/
-docs/superpowers/                 design specs and plans
-tests/pytest/                     checks on the site page and the CI workflow
-scripts/                          audit-on-demand-deps.sh, check_trailers.sh
-.github/workflows/                test.yml, audit-on-demand-deps.yml, pages.yml
+/make-dashboard from sales.csv
 ```
+
+## Five skills
+
+| | |
+|---|---|
+| <img src="docs/showcase/portable-artifacts/gallery/product-performance/thumb.jpg" width="320" alt="A dashboard built by make-dashboard"> | **`/make-dashboard`**<br>Charts from CSV, Parquet, JSON, DuckDB, SQLite, Postgres or MySQL. Every chart shows its SQL. |
+| <img src="docs/showcase/portable-artifacts/gallery/cloud-architecture/dusk/thumb.jpg" width="320" alt="An architecture diagram built by make-diagram"> | **`/make-diagram`**<br>Architecture, flow, sequence and state diagrams, with stories that play along the edges. |
+| <img src="docs/showcase/portable-artifacts/gallery/how-it-works/thumb.jpg" width="320" alt="An explainer page built by make-explainer"> | **`/make-explainer`**<br>Recaps, concept pages, checklists, plans you answer on the page, and slide decks. |
+| <img src="docs/media/motion-poster.jpg" width="320" alt="A frame from a film built by make-motion"> | **`/make-motion`**<br>MP4 films from a script of shots, in seven looks, with optional local voiceover and music. |
+| <img src="docs/showcase/portable-artifacts/gallery/scene-city/dusk/thumb.jpg" width="320" alt="A 3D city scene built by make-scene"> | **`/make-scene`**<br>Your rows as an explorable 3D world: a city, forest, galaxy or terrain, with a camera tour. |
+
+Every image above is a real output. The [gallery](https://abhijitbansal.github.io/portable-artifacts/gallery.html)
+shows each one next to the spec that made it.
+
+## Why it is different
+
+- **Offline by construction.** Each page is one self-contained file with a `default-src 'none'` Content-Security-Policy.
+  Specs cannot name a remote URL. No account, no cloud.
+- **Spec in, file out.** The model writes a short JSON spec. Deterministic scripts validate it, lay it out, render it
+  and check it at phone and desktop width. Same spec, same file.
+- **Any agent.** One set of skills for Claude Code, Codex, Copilot and Gemini CLI.
+- **Cheap models can drive it.** Measured on 2026-11-18: 10 of 10 films valid, with Haiku running the builds under an
+  Opus director, $4.66 for all ten
+  ([run summary](plugins/portable-artifacts/eval/results/summary-director-operator-2026-11-18.md)).
+- **Open source.** MIT, built on DuckDB, Vega-Lite, ELK and three.js. Model downloads are pinned to a commit and a
+  SHA-256.
+
+## How it works
+
+```
+prompt  ->  your agent writes spec.json  ->  validate, lay out, render, check  ->  one .html or .mp4
+```
+
+The [plugin README](plugins/portable-artifacts/README.md) covers each skill, themes, the director and operator split and
+the security model. [USAGE](plugins/portable-artifacts/USAGE.md) has per-host install steps, prompts to try and
+troubleshooting.
+
+<details>
+<summary>Installed from the old claude-skills marketplace?</summary>
+
+`portable-artifacts@claude-skills` still works and updates from this repository. Install from one marketplace only,
+either `portable-artifacts@portable-artifacts` or `portable-artifacts@claude-skills`: both at once load duplicate
+`/make-*` skills. Installed with `npx skills add` or a clone of claude-skills? Reinstall with the commands above.
+
+</details>
+
+## Contributing
+
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues privately, as
+described in [SECURITY.md](SECURITY.md).
 
 ## Licence
 
-MIT. See [`LICENSE`](LICENSE).
+MIT. See [LICENSE](LICENSE).
