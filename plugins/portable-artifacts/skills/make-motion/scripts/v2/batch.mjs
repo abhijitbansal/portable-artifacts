@@ -19,6 +19,7 @@ const CONTROL_RE = /[\u0000-\u001f\u007f]/;
 const EXIT_OK = 0;
 const EXIT_NOT_OK = 1;
 const EXIT_USAGE = 2;
+const EXIT_INTERRUPTED = 130;
 
 /** A batch the rows or the template make impossible; its message names the row or the flag. */
 export class BatchError extends Error {
@@ -145,16 +146,20 @@ export function planBatch({ specPath, batch, out }, log = () => {}) {
 
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
-// One row rendered through `runRow` (run.mjs runMake's signature) in the shared browser: its manifest entry.
+// One row rendered through `runRow` (run.mjs runMake's signature) in the shared browser: { entry, interrupted }. `entry` is
+// its manifest entry; `interrupted` is true when a stop (the signal, or a row that ended 130) cut the row short, and then
+// `entry` is null because the row did not finish. Only a file this run wrote (report.output) is hashed: a row that wrote
+// nothing (--no-render, --sheets-only, a finding before the render) has no hash, whatever sits at its path.
 async function renderRow(row, { options, io, browser }) {
   try {
     const { report, exitCode } = await io.runRow({ ...options, batch: null, out: row.file, values: row.values }, { signal: io.signal, log: io.log, browser });
-    const written = report.output ?? (exitCode !== 2 ? row.file : null);
+    if (exitCode === EXIT_INTERRUPTED) return { entry: null, interrupted: true };
     const status = report.error ? 'failed' : report.ok ? 'ok' : 'findings';
-    return { ...row, status, sha256: status === 'failed' || written === null ? null : sha256(row.file), findings: report.findings ?? [], ...(report.error ? { error: report.error.message } : {}) };
+    const written = status === 'failed' ? null : (report.output ?? null);
+    return { entry: { ...row, status, sha256: written === null ? null : sha256(written), findings: report.findings ?? [], ...(report.error ? { error: report.error.message } : {}) }, interrupted: false };
   } catch (err) {
-    if (io.signal?.aborted) throw err;
-    return { ...row, status: 'failed', sha256: null, findings: [], error: String(err?.message ?? err).split('\n')[0] };
+    if (io.signal?.aborted) return { entry: null, interrupted: true };
+    return { entry: { ...row, status: 'failed', sha256: null, findings: [], error: String(err?.message ?? err).split('\n')[0] }, interrupted: false };
   }
 }
 
@@ -171,7 +176,8 @@ function writeManifest(file, entries) {
 
 /**
  * The batch: { report: { ok, manifest, rows, errors }, exitCode } (0 every row ok, 1 a row refused before rendering or
- * not ok after, 2 a rows file that cannot be read). `io`: log, signal, and seams launch (session.mjs launchRunBrowser) and runRow
+ * not ok after, 2 a rows file that cannot be read, 130 stopped by the signal: the rows after the stop do not render and the
+ * manifest lists the rows that finished). `io`: log, signal, and seams launch (session.mjs launchRunBrowser) and runRow
  * (run.mjs runMake).
  */
 export async function runBatch(options, io) {
@@ -185,13 +191,21 @@ export async function runBatch(options, io) {
   if (plan.errors.length > 0) return { report: { ok: false, manifest: null, rows: [], errors: plan.errors }, exitCode: EXIT_NOT_OK };
   const browser = await (io.launch ?? launchRunBrowser)({ ownSignals: true });
   const entries = [];
+  let interrupted = false;
   try {
-    for (const row of plan.rows) entries.push(await renderRow(row, { options, io, browser }));
+    for (const row of plan.rows) {
+      if (io.signal?.aborted) { interrupted = true; break; }
+      const result = await renderRow(row, { options, io, browser });
+      if (result.interrupted) { interrupted = true; break; }
+      entries.push(result.entry);
+    }
   } finally {
     await browser.close();
   }
   const manifest = path.join(path.dirname(path.resolve(options.out)), 'manifest.json');
-  writeManifest(manifest, entries);
+  writeManifest(manifest, entries); // an interrupted batch still lists the rows that finished
+  const rows = entries.map(({ index, status, file, sha256: hash }) => ({ index, status, file, sha256: hash }));
+  if (interrupted) return { report: { ok: false, manifest, rows, errors: [`interrupted after ${entries.length} of ${plan.rows.length} rows`] }, exitCode: EXIT_INTERRUPTED };
   const ok = entries.every((e) => e.status === 'ok');
-  return { report: { ok, manifest, rows: entries.map(({ index, status, file, sha256: hash }) => ({ index, status, file, sha256: hash })), errors: [] }, exitCode: ok ? EXIT_OK : EXIT_NOT_OK };
+  return { report: { ok, manifest, rows, errors: [] }, exitCode: ok ? EXIT_OK : EXIT_NOT_OK };
 }
