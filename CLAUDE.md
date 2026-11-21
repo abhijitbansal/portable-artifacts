@@ -6,7 +6,7 @@ Instructions for Claude when working in this repository.
 
 ## Working in this repo
 
-- The plugin is `plugins/portable-artifacts/`; the site is `docs/` (Pages root, `docs/index.html`). Read
+- The plugin is `plugins/portable-artifacts/`; the site is `docs/` (Pages root: `docs/index.html` and `docs/gallery.html`, styled by `docs/assets/pa.css`). Read
   [`AGENTS.md`](./AGENTS.md) before dispatching subagents, before committing and before opening a PR.
 - Edit shared code in `plugins/portable-artifacts/shared/` only, then run
   `node plugins/portable-artifacts/bin/sync-shared.mjs`. The per-skill `shared/` folders are copies.
@@ -16,5 +16,9 @@ Instructions for Claude when working in this repository.
   tests of the skill you changed (`npm ci` in its folder first). The per-skill browser suites run in CI; run one locally
   only with no other headless browser live.
 - Any change under `plugins/` needs a `plugin.json` version bump and a `CHANGELOG.md` heading in the same PR.
+- `claude plugin validate .` and `claude plugin validate plugins/portable-artifacts` check both manifests locally; CI
+  also requires the two plugin descriptions to be identical.
+- Site plates on `docs/index.html` pin real spec excerpts, `x.y KB` sizes and detail-tag coordinates; after rebuilding a
+  plate's output, recheck them (the page test checks sizes and tag pairs, not positions).
 - Install commands print the repo as `abhijitbansal/portable-artifacts`; `portable-artifacts@claude-skills` appears only
   as the legacy name for installs made from the old marketplace.

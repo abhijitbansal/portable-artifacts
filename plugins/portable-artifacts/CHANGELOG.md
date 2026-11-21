@@ -6,6 +6,19 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-11-20
+
+A new site and a shorter plugin description. The skills, their spec formats and their output are unchanged.
+
+- **New site.** [abhijitbansal.github.io/portable-artifacts](https://abhijitbansal.github.io/portable-artifacts/) is
+  now a cover sheet and one sheet per skill. Each sheet shows a real spec beside the artifact it built; point at a spec
+  line and a leader line marks the part it produced. A gallery page lists all 26 outputs, each with its spec. Links to
+  the old one-page site still land on the matching sheet, the gallery or the GitHub docs.
+- **Shorter description.** `/plugin` and the marketplace listing now show one sentence instead of a paragraph of
+  internals. `plugin.json` also names the homepage, repository and licence.
+- **Repository.** `main` is protected and needs the maintainer's review. New issue forms, a pull request template,
+  CONTRIBUTING and a code of conduct. Security reports can go through GitHub's private advisory form.
+
 ## [2.1.1] - 2026-11-20
 
 A small fix release for make-motion 2's Ctrl+C handling, plus test and diagnostic work ported from claude-skills.

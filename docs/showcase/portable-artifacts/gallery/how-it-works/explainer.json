@@ -1,0 +1,73 @@
+{
+  "title": "How portable-artifacts turns a prompt into a file",
+  "subtitle": "One small JSON spec in, one offline file out, from any coding agent",
+  "preset": "concept",
+  "mode": "page",
+  "theme": "dusk",
+  "meta": {
+    "date": "2026-11-20",
+    "status": "Release 2.1.0"
+  },
+  "generatedBy": { "model": "claude-opus-5-5", "agent": "Claude Code" },
+  "sections": [
+    {
+      "type": "tldr",
+      "id": "verdict",
+      "title": "The model writes a spec; scripts build it",
+      "label": "The idea",
+      "text": "Your agent never writes HTML, CSS or video frames. It fills one JSON spec, and deterministic scripts check it and build the file.",
+      "points": [
+        "Five skills: dashboards, diagrams, explainers, 3D scenes and MP4 films.",
+        "Every page is one self-contained file that makes no network calls.",
+        "The same skills install into Claude Code, Codex, Copilot and Gemini CLI."
+      ],
+      "tone": "good"
+    },
+    {
+      "type": "kpis",
+      "title": "What the five skills cover",
+      "label": "In numbers",
+      "items": [
+        { "label": "Chart kinds", "value": 11, "note": "make-dashboard" },
+        { "label": "Shot kinds", "value": 16, "note": "make-motion, in 7 looks", "tone": "accent" },
+        { "label": "Section types", "value": 26, "note": "make-explainer" }
+      ]
+    },
+    {
+      "type": "steps",
+      "title": "Every artifact takes the same three moves",
+      "label": "The loop",
+      "items": [
+        { "title": "Ask", "text": "Type a prompt such as `/make-dashboard from sales.csv`.", "status": "done" },
+        { "title": "Spec", "text": "The agent writes a small JSON file; a validator names any bad field and its fix.", "status": "done" },
+        { "title": "Build", "text": "One command lays it out, renders it and checks it at phone and desktop width.", "status": "done" }
+      ]
+    },
+    {
+      "type": "compare",
+      "title": "A spec beats freehand output",
+      "label": "Why a spec",
+      "columns": [
+        {
+          "title": "Model writes the page",
+          "points": ["Layout drifts from page to page", "Easy to pull a font or script from a CDN", "Every page needs its own review"],
+          "tone": "warn"
+        },
+        {
+          "title": "Model writes a spec",
+          "points": ["Same components and themes every time", "Strict CSP: nothing loads from the network", "Checked before and after the build"],
+          "tone": "good"
+        }
+      ],
+      "verdict": "The spec is short enough to read and diff, and the build is the same on every machine."
+    },
+    {
+      "type": "code",
+      "title": "Install in Claude Code with two commands",
+      "label": "Install",
+      "code": "/plugin marketplace add abhijitbansal/portable-artifacts\n/plugin install portable-artifacts@portable-artifacts",
+      "language": "text",
+      "caption": "Other agents use the cross-host installer; see the README."
+    }
+  ]
+}

@@ -4,6 +4,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   # Repo-level checks: the two manifests, the site page and workflow tests under tests/pytest, and shellcheck on scripts/.
   checks:
@@ -13,7 +15,7 @@ jobs:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: validate marketplace and plugin manifests
         run: |
@@ -25,16 +27,12 @@ jobs:
           for p in mp["plugins"]:
               assert p["name"] not in names, f"duplicate plugin {p['name']}"
               names.add(p["name"])
-              # a plugin entry may point at a git source (a dict) instead of a path in this repo
-              if not isinstance(p["source"], str):
-                  continue
               pj = json.load(open(os.path.join(p["source"], ".claude-plugin", "plugin.json")))
               assert pj["name"] == p["name"], f"name mismatch in {p['source']}"
               assert pj["description"] == p["description"], f"description differs between marketplace.json and {p['source']}"
               skills = os.path.join(p["source"], "skills")
               if os.path.isdir(skills):
                   for s in os.listdir(skills):
-                      if s == "_lib": continue
                       md = os.path.join(skills, s, "SKILL.md")
                       assert os.path.isfile(md), f"missing {md}"
           print(f"OK: {len(names)} plugins valid")
@@ -49,9 +47,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3.2.4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
 
@@ -70,8 +68,8 @@ jobs:
   node:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
       - name: shared/ copies are in sync
@@ -110,8 +108,8 @@ jobs:
           - { name: make-explainer 2/2, dir: skills/make-explainer, shard: 2/2 }
           - { name: 'eval harness (fake host, no LLM)', dir: eval }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
@@ -155,8 +153,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
       - name: install ffmpeg
@@ -169,13 +167,13 @@ jobs:
           PA_REQUIRE_BROWSER: '1'
         run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs && node --test --test-concurrency=1 test/v2/cuts-browser.test.mjs test/v2/cuts-smear-browser.test.mjs test/v2/cuts-determinism-browser.test.mjs test/v2/cuts-look-browser.test.mjs test/v2/cuts-round2-browser.test.mjs test/v2/cuts-legible-browser.test.mjs test/v2/cuts-direction-browser.test.mjs
 
-  # AGENTS.md trailer rule: no Claude-Session line and no model-named
-  # Co-Authored-By in the PR's commits (the harness reminder asks for both).
+  # Trailer rule (CONTRIBUTING.md, AGENTS.md): no Claude-Session line and no model-named
+  # Co-Authored-By in the PR's commits; use "Co-Authored-By: Claude <noreply@anthropic.com>".
   commit-trailers:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: forbid harness trailers in the PR's commits
@@ -193,7 +191,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: require plugin.json version bump for changed plugins

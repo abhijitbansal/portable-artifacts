@@ -72,7 +72,7 @@ def test_cli_builds_all_four_packs_without_node_dependencies(tmp_path):
 
 @pytest.mark.parametrize("slug", EXAMPLES)
 def test_each_dashboard_card_links_to_its_source_download(slug):
-    html = (ROOT / "docs/index.html").read_text()
+    html = (ROOT / "docs/gallery.html").read_text()  # the register lists every dashboard
     assert f'href="showcase/portable-artifacts/gallery/{slug}/source.zip"' in html
 
 
