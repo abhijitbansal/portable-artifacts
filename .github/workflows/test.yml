@@ -67,8 +67,8 @@ jobs:
         run: uv tool run pytest tests/pytest/ -q
 
   # portable-artifacts skills are self-contained Node packages (own lockfile).
-  # Render tests skip themselves when no browser/ffmpeg is present, except in the make-motion step,
-  # where PA_REQUIRE_RENDER=1 (the kept tests) and PA_REQUIRE_BROWSER=1 (test/v2) turn a missing tool into a failure.
+  # Render tests skip themselves when no browser/ffmpeg is present, except where CI sets PA_REQUIRE_RENDER=1 (make-motion's
+  # kept tests) and PA_REQUIRE_BROWSER=1 (every skill's browser tests) to turn a missing tool into a failure.
   node:
     runs-on: ubuntu-latest
     steps:
@@ -130,9 +130,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       # Same glob as each package.json "test" script. A shard flag passed through
       # `npm test --` is silently ignored, so sharded runs call node directly.
-      # make-motion's render tests need ffmpeg; PA_REQUIRE_RENDER=1 and PA_REQUIRE_BROWSER=1 (make-motion only) turn a
-      # missing browser or ffmpeg into a failure instead of a skip: the first is read by the kept tests under test/, the
-      # second by the version 2 helpers under test/v2/helpers
+      # make-motion's render tests need ffmpeg; PA_REQUIRE_RENDER=1 (make-motion only) and PA_REQUIRE_BROWSER=1 (every
+      # skill) turn a missing browser or ffmpeg into a failure instead of a skip: the first is read by the kept tests under
+      # test/, the second by the version 2 helpers under test/v2/helpers and by each page skill's test/helpers/browser.mjs
       - name: install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Rebuild downloaded dashboard sources and compare gallery data
@@ -150,7 +150,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           PA_REQUIRE_RENDER: ${{ startsWith(matrix.name, 'make-motion') && '1' || '' }}
-          PA_REQUIRE_BROWSER: ${{ startsWith(matrix.name, 'make-motion') && '1' || '' }}
+          PA_REQUIRE_BROWSER: '1'
         run: node --test ${SHARD:+--test-shard=$SHARD} "test/**/*.test.mjs"
 
   # WebGL spike and the shader cuts (ripple, cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half

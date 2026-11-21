@@ -17,11 +17,18 @@ export const example = (name) => JSON.parse(fs.readFileSync(path.join(ROOT, `ref
 export { launchBrowser };
 
 let cached;
-export async function haveBrowser() {
+/**
+ * True when a browser starts (bundled Chromium, else system Chrome); false otherwise, so the test skips. With
+ * PA_REQUIRE_BROWSER=1 (CI) a browser that does not start throws instead, so a broken runner fails the suite.
+ * `launch` is a seam for the helper's own test. Memoised for the run.
+ */
+export async function haveBrowser(launch = launchBrowser) {
   if (cached === undefined) {
-    try { await (await launchBrowser()).close(); cached = true; } catch { cached = false; }
+    try { await (await launch()).close(); cached = true; } catch (e) { cached = e; }
   }
-  return cached;
+  if (cached === true) return true;
+  if (process.env.PA_REQUIRE_BROWSER === '1') throw new Error(`PA_REQUIRE_BROWSER=1 but no browser starts: ${String(cached?.message ?? cached).split('\n')[0]}`, { cause: cached });
+  return false;
 }
 
 let scratch;

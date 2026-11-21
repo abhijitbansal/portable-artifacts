@@ -18,17 +18,23 @@ export const demoRows = (labelOf = (group) => group) => GROUPS.flatMap((group, g
 const DEMO_LINKS = [{ from: 'api', to: 'web', value: 4 }, { from: 'web', to: 'db', value: 2 }];
 
 let cached;
-/** True when a browser starts (bundled Chromium, else system Chrome). Memoised for the run. */
-export async function haveBrowser() {
+/**
+ * True when a browser starts (bundled Chromium, else system Chrome); false otherwise, so the test skips. With
+ * PA_REQUIRE_BROWSER=1 (CI) a browser that does not start throws instead, so a broken runner fails the suite.
+ * `launch` is a seam for the helper's own test. Memoised for the run.
+ */
+export async function haveBrowser(launch = launchBrowser) {
   if (cached === undefined) {
     try {
-      await (await launchBrowser()).close();
+      await (await launch()).close();
       cached = true;
-    } catch {
-      cached = false;
+    } catch (e) {
+      cached = e;
     }
   }
-  return cached;
+  if (cached === true) return true;
+  if (process.env.PA_REQUIRE_BROWSER === '1') throw new Error(`PA_REQUIRE_BROWSER=1 but no browser starts: ${String(cached?.message ?? cached).split('\n')[0]}`, { cause: cached });
+  return false;
 }
 
 /** Builds a scene of `world` (pinned clock) into a fresh temp dir; returns { file, dir }. */
