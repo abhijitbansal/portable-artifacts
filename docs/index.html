@@ -72,7 +72,7 @@ leader lines; seed 149445c2.
           <span><span class="arrow" aria-hidden="true">&rarr;</span>Spec</span>
           <span><span class="arrow" aria-hidden="true">&rarr;</span>File.</span>
         </h1>
-        <p class="lede">Your coding agent writes one small JSON spec. Local scripts build the dashboard, diagram, explainer, film or 3D scene. One file, offline.</p>
+        <p class="lede">One JSON spec in, one offline file out.<br>From Claude Code, Codex, Copilot or Gemini CLI.</p>
       </div>
 
       <figure class="plate">
@@ -93,14 +93,14 @@ leader lines; seed 149445c2.
         <div class="stamp-head"><span>Issued for install</span><span>MIT</span></div>
         <section id="quick-install" aria-label="Install">
           <div class="grp">
-            <h3>Claude Code</h3>
+            <h2 class="grp-h">Claude Code</h2>
             <div class="code cmds">
               <div class="cl"><code class="ct">/plugin marketplace add abhijitbansal/portable-artifacts</code><button class="copy" type="button" data-copy="/plugin marketplace add abhijitbansal/portable-artifacts">copy</button></div>
               <div class="cl"><code class="ct">/plugin install portable-artifacts@portable-artifacts</code><button class="copy" type="button" data-copy="/plugin install portable-artifacts@portable-artifacts">copy</button></div>
             </div>
           </div>
           <div class="grp">
-            <h3>Codex, Copilot, Gemini CLI and others</h3>
+            <h2 class="grp-h">Codex, Copilot, Gemini CLI and others</h2>
             <div class="code cmds">
               <div class="cl"><code class="ct">npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene</code><button class="copy" type="button" data-copy="npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene">copy</button></div>
             </div>
@@ -113,10 +113,10 @@ leader lines; seed 149445c2.
     <dl class="tblock">
       <div><dt>Project</dt><dd>portable-artifacts</dd></div>
       <div><dt>Revision</dt><dd>2.1.1</dd></div>
-      <div><dt>Network at view time</dt><dd><span class="z">0</span> requests</dd></div>
+      <div><dt>Artifact network calls</dt><dd><span class="z">0</span> at view time</dd></div>
       <div><dt>Licence</dt><dd>MIT</dd></div>
-      <div class="wide"><dt>Drawn by</dt><dd>Claude Code · Codex · Copilot · Gemini CLI</dd></div>
-      <div><dt>Checked</dt><dd>390 + 1280 px, light + dark</dd></div>
+      <div class="wide"><dt>Drawn by your agent</dt><dd>Claude Code · Codex · Copilot · Gemini CLI</dd></div>
+      <div><dt>Each build checked at</dt><dd>390 + 1280 px, light + dark</dd></div>
       <div><dt>Tests</dt><dd>&asymp;500 files</dd></div>
     </dl>
   </section>
@@ -135,14 +135,14 @@ leader lines; seed 149445c2.
         <div class="spec-head"><span>dashboard.json · 3.1 KB</span><a href="showcase/portable-artifacts/gallery/product-performance/dashboard.json">full spec</a></div>
         <ol aria-label="Excerpt of dashboard.json. Lines with a number point at the dashboard.">
           <li>{</li>
-          <li tabindex="0" data-tag="1" aria-label="title: Product performance, the page title">  <span class="k">"title"</span>: <span class="s">"Product performance"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title: Product performance, the page title">  <span class="k">"title"</span>: <span class="s">"Product performance"</span>,</li>
           <li>  <span class="k">"sources"</span>: { <span class="k">"sales"</span>: { <span class="k">"type"</span>: <span class="s">"csv"</span>, … } },</li>
-          <li tabindex="0" data-tag="2" aria-label="query rev_by_product_region, shown under its chart">  <span class="k">"queries"</span>: { <span class="k">"rev_by_product_region"</span>:</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="query rev_by_product_region, shown under its chart">  <span class="k">"queries"</span>: { <span class="k">"rev_by_product_region"</span>:</li>
           <li>    <span class="s">"SELECT product, region, SUM(amount) …"</span> },</li>
           <li>  <span class="k">"kpis"</span>: [</li>
-          <li tabindex="0" data-tag="3" aria-label="KPI Revenue, formatted as currency">    { <span class="k">"title"</span>: <span class="s">"Revenue"</span>, <span class="k">"format"</span>: <span class="s">"currency"</span> }, … ],</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="KPI Revenue, formatted as currency">    { <span class="k">"title"</span>: <span class="s">"Revenue"</span>, <span class="k">"format"</span>: <span class="s">"currency"</span> }, … ],</li>
           <li>  <span class="k">"charts"</span>: [{</li>
-          <li tabindex="0" data-tag="4" aria-label="chart Revenue by product and region">    <span class="k">"title"</span>: <span class="s">"Revenue by product and region"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="chart Revenue by product and region">    <span class="k">"title"</span>: <span class="s">"Revenue by product and region"</span>,</li>
           <li>    <span class="k">"vegaLite"</span>: { <span class="k">"mark"</span>: <span class="s">"bar"</span>, … } }]</li>
           <li>}</li>
         </ol>
@@ -159,7 +159,7 @@ leader lines; seed 149445c2.
             <span class="tag" data-tag="4" style="left:32.5%;top:38.5%">4</span>
           </div>
         </div>
-        <figcaption><span>Plate 01 · Product performance</span><a href="showcase/portable-artifacts/gallery/product-performance/index.html">Open the live page</a></figcaption>
+        <figcaption><span>Plate 01 · Product performance, sample data</span><a href="showcase/portable-artifacts/gallery/product-performance/index.html">Open the live page</a></figcaption>
       </figure>
     </div>
     <dl class="tblock sk-facts">
@@ -182,15 +182,15 @@ leader lines; seed 149445c2.
         <div class="spec-head"><span>diagram.json · 3.2 KB</span><a href="showcase/portable-artifacts/gallery/cloud-architecture/diagram.json">full spec</a></div>
         <ol aria-label="Excerpt of diagram.json. Lines with a number point at the diagram.">
           <li>{</li>
-          <li tabindex="0" data-tag="1" aria-label="title: Orders across two clouds">  <span class="k">"title"</span>: <span class="s">"Orders across two clouds"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title: Orders across two clouds">  <span class="k">"title"</span>: <span class="s">"Orders across two clouds"</span>,</li>
           <li>  <span class="k">"type"</span>: <span class="s">"architecture"</span>,</li>
           <li>  <span class="k">"groups"</span>: [ …,</li>
-          <li tabindex="0" data-tag="2" aria-label="group Google Cloud">    { <span class="k">"id"</span>: <span class="s">"gcp"</span>, <span class="k">"label"</span>: <span class="s">"Google Cloud"</span> } ],</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="group Google Cloud">    { <span class="k">"id"</span>: <span class="s">"gcp"</span>, <span class="k">"label"</span>: <span class="s">"Google Cloud"</span> } ],</li>
           <li>  <span class="k">"nodes"</span>: [ …,</li>
-          <li tabindex="0" data-tag="3" aria-label="node Invoice queue, a queue">    { <span class="k">"label"</span>: <span class="s">"Invoice queue"</span>, <span class="k">"kind"</span>: <span class="s">"queue"</span> },</li>
-          <li tabindex="0" data-tag="4" aria-label="node Invoice service on Google Cloud">    { <span class="k">"label"</span>: <span class="s">"Invoice service"</span>, <span class="k">"group"</span>: <span class="s">"gcp"</span> } ],</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="node Invoice queue, a queue">    { <span class="k">"label"</span>: <span class="s">"Invoice queue"</span>, <span class="k">"kind"</span>: <span class="s">"queue"</span> },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="node Invoice service on Google Cloud">    { <span class="k">"label"</span>: <span class="s">"Invoice service"</span>, <span class="k">"group"</span>: <span class="s">"gcp"</span> } ],</li>
           <li>  <span class="k">"stories"</span>: [ … <span class="k">"beats"</span>: [ …,</li>
-          <li tabindex="0" data-tag="5" aria-label="story beat The queue hands over">    { <span class="k">"title"</span>: <span class="s">"The queue hands over"</span> } ]</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="5" aria-label="story beat The queue hands over">    { <span class="k">"title"</span>: <span class="s">"The queue hands over"</span> } ]</li>
           <li>}</li>
         </ol>
         <p class="spec-note">No coordinates: ELK lays it out.</p>
@@ -230,13 +230,13 @@ leader lines; seed 149445c2.
         <div class="spec-head"><span>explainer.json · 2.9 KB</span><a href="showcase/portable-artifacts/gallery/how-it-works/explainer.json">full spec</a></div>
         <ol aria-label="Excerpt of explainer.json. Lines with a number point at the page.">
           <li>{</li>
-          <li tabindex="0" data-tag="1" aria-label="title of the page">  <span class="k">"title"</span>: <span class="s">"How portable-artifacts turns …"</span>,</li>
-          <li tabindex="0" data-tag="2" aria-label="theme dusk, which draws the title art">  <span class="k">"theme"</span>: <span class="s">"dusk"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title of the page">  <span class="k">"title"</span>: <span class="s">"How portable-artifacts turns …"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="theme dusk, which draws the title art">  <span class="k">"theme"</span>: <span class="s">"dusk"</span>,</li>
           <li>  <span class="k">"meta"</span>: {</li>
-          <li tabindex="0" data-tag="3" aria-label="meta date and status chips">    <span class="k">"date"</span>: <span class="s">"2026-11-20"</span>, <span class="k">"status"</span>: <span class="s">"Release 2.1.0"</span> },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="meta date and status chips">    <span class="k">"date"</span>: <span class="s">"2026-11-20"</span>, <span class="k">"status"</span>: <span class="s">"Release 2.1.0"</span> },</li>
           <li>  <span class="k">"sections"</span>: [{</li>
-          <li tabindex="0" data-tag="4" aria-label="a tldr section labelled The idea">    <span class="k">"type"</span>: <span class="s">"tldr"</span>, <span class="k">"label"</span>: <span class="s">"The idea"</span>,</li>
-          <li tabindex="0" data-tag="5" aria-label="the section's supporting points">    <span class="k">"points"</span>: [ <span class="s">"Five skills: dashboards, …"</span>, … ]</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="a tldr section labelled The idea">    <span class="k">"type"</span>: <span class="s">"tldr"</span>, <span class="k">"label"</span>: <span class="s">"The idea"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="5" aria-label="the section's supporting points">    <span class="k">"points"</span>: [ <span class="s">"Five skills: dashboards, …"</span>, … ]</li>
           <li>  }, … ]</li>
           <li>}</li>
         </ol>
@@ -278,10 +278,10 @@ leader lines; seed 149445c2.
         <ol aria-label="Excerpt of film.json. Lines with a number jump the film to that shot.">
           <li>{ <span class="k">"version"</span>: 2, <span class="k">"look"</span>: <span class="s">"poster"</span>, <span class="k">"format"</span>: <span class="s">"16:9"</span>,</li>
           <li>  <span class="k">"shots"</span>: [</li>
-          <li tabindex="0" data-tag="1" data-t="0.4" aria-label="shot idea, a statement; jumps the film to 0 seconds">    { <span class="k">"id"</span>: <span class="s">"idea"</span>, <span class="k">"show"</span>: <span class="s">"statement"</span> },</li>
-          <li tabindex="0" data-tag="2" data-t="3.8" aria-label="shot flow, a diagram; jumps to 4 seconds">    { <span class="k">"id"</span>: <span class="s">"flow"</span>, <span class="k">"show"</span>: <span class="s">"diagram"</span> },</li>
-          <li tabindex="0" data-tag="3" data-t="8.4" aria-label="shot shot, a code card; jumps to 8 seconds">    { <span class="k">"id"</span>: <span class="s">"shot"</span>, <span class="k">"show"</span>: <span class="s">"code"</span> },</li>
-          <li tabindex="0" data-tag="4" data-t="12.4" aria-label="shot close, the end card; jumps to 12 seconds">    { <span class="k">"id"</span>: <span class="s">"close"</span>, <span class="k">"show"</span>: <span class="s">"end"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" data-t="0.4" aria-label="shot idea, a statement; jumps the film to 0 seconds">    { <span class="k">"id"</span>: <span class="s">"idea"</span>, <span class="k">"show"</span>: <span class="s">"statement"</span> },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" data-t="3.8" aria-label="shot flow, a diagram; jumps to 4 seconds">    { <span class="k">"id"</span>: <span class="s">"flow"</span>, <span class="k">"show"</span>: <span class="s">"diagram"</span> },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" data-t="8.4" aria-label="shot shot, a code card; jumps to 8 seconds">    { <span class="k">"id"</span>: <span class="s">"shot"</span>, <span class="k">"show"</span>: <span class="s">"code"</span> },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" data-t="12.4" aria-label="shot close, the end card; jumps to 12 seconds">    { <span class="k">"id"</span>: <span class="s">"close"</span>, <span class="k">"show"</span>: <span class="s">"end"</span>,</li>
           <li>      <span class="k">"say"</span>: <span class="s">"Your first film is one file away."</span> }</li>
           <li>  ]</li>
           <li>}</li>
@@ -326,11 +326,11 @@ leader lines; seed 149445c2.
         <ol aria-label="Excerpt of scene.json. Lines with a number point at the scene.">
           <li>{</li>
           <li>  <span class="k">"title"</span>: <span class="s">"Commits per folder, last 6 weeks"</span>,</li>
-          <li tabindex="0" data-tag="1" aria-label="world: city, one tower per row">  <span class="k">"world"</span>: <span class="s">"city"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="world: city, one tower per row">  <span class="k">"world"</span>: <span class="s">"city"</span>,</li>
           <li>  <span class="k">"data"</span>: { <span class="k">"rows"</span>: [ …,</li>
-          <li tabindex="0" data-tag="2" aria-label="a row: group web, week 32, 22 commits">    { <span class="k">"group"</span>: <span class="s">"web"</span>, <span class="k">"t"</span>: <span class="s">"2026-W32"</span>, <span class="k">"value"</span>: 22 },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="a row: group web, week 32, 22 commits">    { <span class="k">"group"</span>: <span class="s">"web"</span>, <span class="k">"t"</span>: <span class="s">"2026-W32"</span>, <span class="k">"value"</span>: 22 },</li>
           <li>    … ] },</li>
-          <li tabindex="0" data-tag="3" aria-label="the camera tour">  <span class="k">"tour"</span>: [</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="the camera tour">  <span class="k">"tour"</span>: [</li>
           <li>    { <span class="k">"title"</span>: <span class="s">"Web spikes in week 32"</span>, <span class="k">"focus"</span>: [<span class="s">"web"</span>] }</li>
           <li>  ]</li>
           <li>}</li>
@@ -368,7 +368,7 @@ leader lines; seed 149445c2.
       <ol>
         <li><b>Offline by construction</b><span>Every page carries <code>default-src 'none'</code>. Specs cannot name a remote URL.</span></li>
         <li><b>Spec in, file out</b><span>The model writes the spec. Scripts validate, lay out, render and check it.</span></li>
-        <li><b>Any agent</b><span>Claude Code, Codex, Copilot and Gemini CLI, from one installer.</span></li>
+        <li><b>Any agent</b><span>One set of skills for Claude Code, Codex, Copilot and Gemini CLI.</span></li>
         <li><b>Checked, not guessed</b><span>Builds are opened at phone and desktop width, light and dark, before you see them.</span></li>
         <li><b>Open source</b><span>MIT, built on DuckDB, Vega-Lite, ELK and three.js. <a href="https://github.com/abhijitbansal/portable-artifacts/blob/main/plugins/portable-artifacts/README.md#security-model">Security model</a>.</span></li>
       </ol>
@@ -379,12 +379,13 @@ leader lines; seed 149445c2.
   <section class="sheet" id="gallery" aria-labelledby="h-reg">
     <span class="sheet-no">Register</span>
     <div class="reg-intro">
-      <h2 class="title" id="h-reg" style="font-size:clamp(40px,6vw,84px)">The register</h2>
+      <h2 class="title reg-title" id="h-reg">The register</h2>
       <p>Every output on this site is real, built by the skills, and sits next to the spec that made it. <a href="gallery.html">Open the register</a>.</p>
     </div>
-    <div class="reg" style="margin-top:28px">
+    <div class="reg reg-band">
       <figure class="reg-item"><a class="thumb" href="gallery.html#dashboards"><img src="showcase/portable-artifacts/gallery/support-ops/thumb.jpg" width="1280" height="720" loading="lazy" alt="Support operations dashboard"></a><figcaption><span class="no">R-01</span><b>Dashboards</b></figcaption></figure>
       <figure class="reg-item"><a class="thumb" href="gallery.html#diagrams"><img src="showcase/portable-artifacts/gallery/oauth-sequence/dusk/thumb.jpg" width="1280" height="720" loading="lazy" alt="Sign in with OAuth sequence diagram"></a><figcaption><span class="no">R-02</span><b>Diagrams</b></figcaption></figure>
+      <figure class="reg-item"><a class="thumb" href="gallery.html#explainers"><img src="showcase/portable-artifacts/gallery/plan-page/thumb.jpg" width="1280" height="720" loading="lazy" alt="A plan page reviewers answer on the page"></a><figcaption><span class="no">R-03</span><b>Explainers</b></figcaption></figure>
       <figure class="reg-item"><a class="thumb" href="gallery.html#films"><img src="media/thumbs/looks-marker.jpg" width="640" height="360" loading="lazy" alt="Film in the hand-drawn marker look"></a><figcaption><span class="no">R-04</span><b>Films</b></figcaption></figure>
       <figure class="reg-item"><a class="thumb" href="gallery.html#scenes"><img src="showcase/portable-artifacts/gallery/scene-galaxy/dusk/thumb.jpg" width="1280" height="720" loading="lazy" alt="Galaxy 3D scene"></a><figcaption><span class="no">R-05</span><b>3D scenes</b></figcaption></figure>
     </div>

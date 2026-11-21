@@ -154,7 +154,7 @@ def test_spec_lines_and_plate_tags_pair_up_on_every_sheet():
     for skill in SKILLS:
         sheet = _section(page, skill)
         assert "data-leader" in re.search(r'<section\b[^>]*\bid="%s"[^>]*>' % skill, page).group(0)
-        spec = sorted(re.findall(r'<li tabindex="0" data-tag="(\d+)"', sheet))
+        spec = sorted(re.findall(r'<li tabindex="0" role="button" aria-pressed="false" data-tag="(\d+)"', sheet))
         tags = sorted(re.findall(r'<span class="tag" data-tag="(\d+)"', sheet))
         assert spec and spec == tags, f"{skill}: spec lines {spec} vs plate tags {tags}"
 

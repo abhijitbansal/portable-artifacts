@@ -175,7 +175,10 @@
     const clear = () => { svg.style.visibility = "hidden"; };
     const set = (n, animate = true) => {
       active = n;
-      lines.forEach((l) => l.classList.toggle("on", l.dataset.tag === n));
+      lines.forEach((l) => {
+        l.classList.toggle("on", l.dataset.tag === n);
+        l.setAttribute("aria-pressed", String(pinned != null && l.dataset.tag === pinned));
+      });
       tags.forEach((t) => t.classList.toggle("on", t.dataset.tag === n));
       if (n == null) { clear(); return; }
       draw(n, animate);

@@ -159,13 +159,13 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
 /* ---------- cover ---------- */
 .cover { padding-top: clamp(44px, 7vw, 88px); }
 .cover-grid {
-  display: grid; gap: clamp(28px, 4vw, 56px);
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  display: grid; gap: clamp(28px, 4vw, 48px);
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
   align-items: start;
 }
 .title {
   margin: 0;
-  font: 800 clamp(52px, 9.2vw, 132px)/0.86 var(--display);
+  font: 800 clamp(48px, 7.2vw, 100px)/0.88 var(--display);
   font-stretch: 68%;
   letter-spacing: -0.02em;
   text-transform: uppercase;
@@ -199,7 +199,7 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
   content: ""; position: absolute; left: 0; right: 0; top: 5px; height: 12px;
   border-left: var(--rule) solid var(--line-strong); border-right: var(--rule) solid var(--line-strong);
 }
-.dim span { position: relative; z-index: 1; display: table; margin: 0 auto; padding: 0 8px; background: var(--field); }
+.dim span { position: relative; z-index: 1; display: table; margin: 0 auto; padding: 0 8px; background: color-mix(in srgb, var(--sheet) 70%, var(--field)); }
 .plate figcaption {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px;
   margin-top: 10px; font-size: 13px; color: var(--ink-3);
@@ -236,7 +236,7 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
   font: 700 12px/1.2 var(--display); font-stretch: 85%; letter-spacing: 0.08em; text-transform: uppercase;
 }
 .stamp-head span:last-child { color: var(--red); }
-.stamp h3 { margin: 0; padding: 12px 12px 0; font: 600 13px/1 var(--text); color: var(--ink-2); }
+.stamp .grp-h { margin: 0; padding: 12px 12px 0; font: 600 13px/1 var(--text); color: var(--ink-2); }
 .code.cmds { padding: 8px 12px 12px; }
 .cl {
   display: flex; align-items: center; gap: 10px;
@@ -356,6 +356,8 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
 .reg-intro { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px 32px; }
 .reg-intro h1 { margin: 0; font: 800 clamp(48px, 8vw, 112px)/0.88 var(--display); font-stretch: 68%; text-transform: uppercase; letter-spacing: -0.02em; }
 .reg-intro p { margin: 0; max-width: 40ch; color: var(--ink-2); }
+.reg-title { font-size: clamp(40px, 6vw, 84px); }
+.reg-band { margin-top: 28px; }
 .reg-group { margin-top: clamp(36px, 5vw, 64px); }
 .reg-group h2 {
   display: flex; align-items: baseline; gap: 14px; margin: 0 0 16px; padding-bottom: 10px;
@@ -389,8 +391,10 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
   .sk-grid .plate { order: -1; }
   .tblock, .sk-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .foot .tblock { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .sheets { display: none; }
+  .strip { flex-wrap: wrap; height: auto; padding-top: 10px; row-gap: 4px; }
   .tools { margin-left: auto; }
+  .sheets { order: 3; width: 100%; margin: 0 0 6px; }
+  html { scroll-padding-top: 104px; }
 }
 @media (max-width: 560px) {
   body { font-size: 16px; }
