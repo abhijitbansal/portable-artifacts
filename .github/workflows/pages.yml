@@ -1,8 +1,8 @@
 name: pages
 
 # Deploys docs/ (the feature page, its gallery under showcase/, images and shared assets) to GitHub Pages.
-# DORMANT until the owner enables Pages (Settings > Pages > Source: GitHub Actions); until then a run fails
-# at the configure-pages step. docs/ is the site root, with index.html at the top and every link relative or
+# Pages is enabled with GitHub Actions as the source; a push to main that touches docs/ deploys the site.
+# docs/ is the site root, with index.html at the top and every link relative or
 # absolute. It is staged into _site first, leaving out docs/superpowers/ (plans and specs) and docs/*.md
 # (decisions-pending.md and other notes), so only the site is published.
 # Triggers on a push to main that touches docs/, on a published release, or manually.
@@ -32,12 +32,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - name: Stage the site
         run: rsync -a --exclude='superpowers/' --exclude='/*.md' docs/ _site/
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
