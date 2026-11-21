@@ -11,7 +11,7 @@ import { isSlides } from './slides.mjs';
 import { flavorFor, CLASSIC } from './flavor.mjs';
 import { specTheme } from './default-theme.mjs';
 import { fetchHeroImage, heroPrompt, parseEndpoint, requireKey, ImageHookError, KEY_ENV } from './image-hook.mjs';
-import { checklistMarkdown, hasChecklist } from './checklist-md.mjs';
+import { twinFile, isBuildTwin, hasChecklist } from './checklist-md.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
 
 const fail = (errors) => ({ ok: false, errors });
@@ -34,6 +34,9 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
   if (!checked.ok) return fail(checked.errors);
   if (md && !hasChecklist(spec)) return fail([{ path: 'sections', message: MD_NEEDS_CHECKLIST }]);
   const target = resolveOutput({ out, title: spec.title, specPath: file, env });
+  const twin = md ? mdPath(target) : null;
+  const twinClash = twin === null ? null : twinConflict(twin, spec);
+  if (twinClash) return fail([twinClash]);
   if (imageApi !== undefined) checkImageApi(spec, imageApi, env);
   const assetsDir = assetsFolder(target);
   let conflicts = [];
@@ -55,11 +58,13 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
   // Before anything is written: a file in the folder that no build wrote is never overwritten.
   conflicts = assetConflicts(assetsDir, built.assets);
   if (conflicts.length > 0) return fail(conflicts);
-  // Assets and their manifest first, then the page (atomically), then the tidy-up of files this build no longer
-  // writes (see assets.mjs): a failure anywhere names its path and leaves the previous page and files in place.
-  syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir), publish: () => writePage(target, built.html) });
-  const twin = md ? mdPath(target) : null;
-  if (twin) writeFile(twin, checklistMarkdown(spec));
+  // Assets and their manifest first, then the twin and the page (each atomically), then the tidy-up of files this
+  // build no longer writes (see assets.mjs): a failure anywhere names its path and leaves the previous page in place.
+  const publish = () => {
+    if (twin) writeAtomic(twin, twinFile(spec));
+    writeAtomic(target, built.html);
+  };
+  syncAssets(assetsDir, built.assets, { protect: specInputs(spec, dir), publish });
   return { ok: true, out: target, md: twin, theme: specTheme(spec), assets: built.assets.map((a) => a.to), bytes: Buffer.byteLength(built.html), warnings: checked.warnings };
 }
 
@@ -80,17 +85,29 @@ async function requestHeroImage(spec, imageApi, { fetchImpl, env }) {
   return fetchHeroImage({ prompt: heroPrompt(spec), endpoint: imageApi, key, fetchImpl });
 }
 
-function writeFile(target, text) {
+// The twin is only ever written over a file an earlier --md build wrote (see isBuildTwin): -> an error for the
+// caller to return, or null when the path is free or ours.
+function twinConflict(twin, spec) {
+  let stat;
   try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, text);
-  } catch (e) {
-    throw new WriteError(target, e);
+    stat = fs.statSync(twin);
+  } catch {
+    return null; // no twin yet
   }
+  const name = path.basename(twin);
+  const clash = (problem) => ({ path: 'md', message: `${name} ${problem}; move it, or build to another path` });
+  if (!stat.isFile()) return clash('is not a file');
+  let existing;
+  try {
+    existing = fs.readFileSync(twin, 'utf8');
+  } catch (e) {
+    throw new WriteError(twin, e);
+  }
+  return isBuildTwin(existing, spec) ? null : clash('already exists and no --md build wrote it');
 }
 
-// Temp file + rename, so an interrupted build leaves the old page or the new one. A symlinked page is written through.
-function writePage(target, html) {
+// Temp file + rename, so an interrupted build leaves the old file or the new one. A symlinked target is written through.
+function writeAtomic(target, text) {
   const folder = path.dirname(target);
   try {
     fs.mkdirSync(folder, { recursive: true });
@@ -105,7 +122,7 @@ function writePage(target, html) {
   }
   const tmp = `${dest}.tmp`;
   try {
-    fs.writeFileSync(tmp, html);
+    fs.writeFileSync(tmp, text);
   } catch (e) {
     fs.rmSync(tmp, { force: true });
     throw new WriteError(tmp, e);
