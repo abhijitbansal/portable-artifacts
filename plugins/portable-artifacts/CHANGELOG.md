@@ -26,7 +26,8 @@ Fixes from a deep review of the committed code: 2 high and 25 medium findings, e
   again. A model already in the old `<skill>/.cache/models` folder is still used.
 - **make-motion: compare bars and numbers.** Compare bars are drawn only when both sides are positive and in the same
   unit (`1.5M` vs `800k` now scales correctly, `12 min` vs `40 min` still draws; a negative value or mixed units draw
-  no bars). The number kind keeps the value's own
+  no bars). Magnitudes are `k`, `M`, `B` and `bn` as written: a lowercase `m` or `b` is a unit, so `$1.5m` vs `$800k`
+  draws no bars. The number kind keeps the value's own
   decimals by default, so `0.4` no longer shows as `0`.
 - **make-explainer: `*` in a path or glob is literal.** `src/*.js and lib/*.js` and `*.md or x*.txt` no longer turn
   into italics. A `*` after a digit, a closing bracket, `/` or `\` never opens emphasis; `**bold**` in CJK text and

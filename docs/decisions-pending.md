@@ -361,3 +361,8 @@ From `.scratch/review/deep-review-2026-11-20.md` (local only). Each is shipped o
   still say claude-skills; the env-name rule passes secrets like `SLACK_WEBHOOK_URL`; generated-column detection is a
   text match on the table SQL; `--format svg --out x.png` still makes a folder; cutout's own probe ignores rotation;
   number kind has no shows-as-zero refusal; no guard test for `npm ci` without `--ignore-scripts`. **Default: defer.**
+- **Repair-commit review LOWs not fixed:** a letter-adjacent `*` can still italicise word-internal globs
+  (`foo*bar and baz*qux`); `***x***` renders unbalanced (from before this branch); a hand-written `.md` whose first line
+  matches the page title counts as an older twin; a concurrent install of the same skill can lose its stage folder to
+  the leftover sweep; a failed restore rename does not name the backup path; "folder exists" stands in for "model
+  complete" in the model cache. **Default: defer.**
