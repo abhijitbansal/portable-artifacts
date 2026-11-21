@@ -129,7 +129,8 @@ test('a failing make run is still read: an error-prefixed result, array content 
 });
 
 // A REAL stream: the Task 9 pilot (statement-hook, Claude Code 2.1.327, claude-director). Image bytes and long text are
-// trimmed, every event and field is kept. Expected values are read from that stream by hand, not from the parser.
+// trimmed, every event and field is kept. The home path, session id, temp folder and plugin names are replaced with
+// placeholders (2026-11-21) so the public file carries no machine details. Expected values are read from that stream by hand, not from the parser.
 test('the real pilot stream: agent as listed, subagent steps attributed by parent id, both models, cost, no hooks', () => {
   const text = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'helpers', 'real-stream-pilot-2026-11-18.jsonl'), 'utf8');
   const s = parseSession(text, { specName: SPEC_NAME });
@@ -140,7 +141,7 @@ test('the real pilot stream: agent as listed, subagent steps attributed by paren
   assert.equal(s.delegated, true);
   assert.equal(s.agent, 'artifact-builder');
   assert.equal(s.requestedModel, null);
-  assert.deepEqual(s.plugins, ['cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']);
+  assert.deepEqual(s.plugins, ['example-plugin-1', 'example-plugin-2', 'example-plugin-3', 'example-plugin-4']);
   assert.deepEqual(s.hooksFired, []);
   assert.equal(s.settingSources, null, 'this version does not list setting sources in the init event');
   assert.deepEqual(s.steps.map((x) => [x.what, x.by, x.ok]), [
