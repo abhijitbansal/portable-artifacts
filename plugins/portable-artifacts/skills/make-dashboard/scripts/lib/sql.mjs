@@ -62,17 +62,21 @@ export function makeScrubber(secrets = [], { heuristics = true } = {}) {
 
 // Attached DuckDB files may hold views and macros that run with the lockdown
 // but outside the SQL guard (e.g. a view calling sqlite_scan), so only plain
-// tables are accepted. Throws an error carrying `.errors`.
+// tables are accepted. Generated columns are refused too: their expression
+// runs at SELECT time and never passes the guard's scalar denylist. DuckDB
+// writes every generated column as `GENERATED ALWAYS AS` in the stored table
+// SQL, whichever form it was declared in. Throws an error carrying `.errors`.
 async function refuseViewsAndMacros(conn, name) {
   const db = sqlLiteral(name);
   const names = async (sql) => (await conn.runAndReadAll(sql)).getRowObjectsJS().map((r) => r.n);
+  const refuse = (message) => { throw Object.assign(new Error(message), { errors: [{ path: `sources.${name}`, message }] }); };
   const found = [
     ...await names(`SELECT view_name AS n FROM duckdb_views() WHERE database_name = ${db} AND NOT internal ORDER BY 1`),
     ...await names(`SELECT DISTINCT function_name AS n FROM duckdb_functions() WHERE database_name = ${db} AND NOT internal AND function_type IN ('macro', 'table_macro') ORDER BY 1`),
   ];
-  if (!found.length) return;
-  const message = `attached DuckDB file defines views/macros (${found.join(', ')}), which could bypass the lockdown; export plain tables instead`;
-  throw Object.assign(new Error(message), { errors: [{ path: `sources.${name}`, message }] });
+  if (found.length) refuse(`attached DuckDB file defines views/macros (${found.join(', ')}), which could bypass the lockdown; export plain tables instead`);
+  const generated = await names(`SELECT table_name AS n FROM duckdb_tables() WHERE database_name = ${db} AND NOT internal AND sql ILIKE '%GENERATED ALWAYS AS%' ORDER BY 1`);
+  if (generated.length) refuse(`attached DuckDB file has tables with generated columns (${generated.join(', ')}), which could bypass the lockdown; export plain tables instead`);
 }
 
 // Where extensions are cached; the env var lets an offline machine point at a

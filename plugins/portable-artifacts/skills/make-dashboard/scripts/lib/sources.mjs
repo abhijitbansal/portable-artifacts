@@ -40,12 +40,23 @@ export function sourceStatement(name, src, resolved) {
   return `ATTACH ${sqlLiteral(target)} AS ${id} (${ATTACH_TYPE[src.type]}READ_ONLY)`;
 }
 
+// The spec is model-written, so `env` may only name a connection-string
+// variable by convention (DATABASE_URL, WAREHOUSE_DSN, PA_SHOP), never an
+// arbitrary secret such as ANTHROPIC_API_KEY or HOME.
+const ENV_NAME = /^(?:[A-Z_][A-Z0-9_]*_(?:URL|DSN)|PA_[A-Z0-9_]+)$/;
+const envNameError = (name) => (ENV_NAME.test(String(name)) ? null
+  : `environment variable name ${JSON.stringify(name)} is not allowed; it must end in _URL or _DSN, or start with PA_ (for example DATABASE_URL)`);
+
 // path-vs-env rules the JSON Schema cannot express. env comes first so a csv
 // with only `env` reports both problems in a stable order.
 export function sourceShapeErrors(name, src) {
   const errors = [];
   const at = (field) => `sources.${name}.${field}`;
   const byUrl = URL_TYPES.includes(src.type);
+  if (byUrl && src.env !== undefined) {
+    const nameError = envNameError(src.env);
+    if (nameError) errors.push({ path: at('env'), message: nameError });
+  }
   if (byUrl && src.path !== undefined) errors.push({ path: at('path'), message: `not allowed for type ${JSON.stringify(src.type)}; use env` });
   if (byUrl && src.env === undefined) {
     errors.push({ path: at('env'), message: `required for type ${JSON.stringify(src.type)} (the name of an environment variable holding the connection string)` });
@@ -55,8 +66,11 @@ export function sourceShapeErrors(name, src) {
   return errors.sort((a, b) => (a.path.endsWith('.env') ? -1 : 1) - (b.path.endsWith('.env') ? -1 : 1));
 }
 
-// -> { url } from the environment, or { error }. The value is never echoed.
+// -> { url } from the environment, or { error }. The value is never echoed, and
+// a name outside the convention is refused before the environment is read.
 export function envUrl(src) {
+  const nameError = envNameError(src.env);
+  if (nameError) return { error: nameError };
   const url = process.env[src.env];
   return url ? { url } : { error: `environment variable ${src.env} is not set` };
 }

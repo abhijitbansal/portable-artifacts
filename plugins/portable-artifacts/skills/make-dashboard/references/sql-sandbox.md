@@ -17,7 +17,7 @@ the page's `default-src 'none'` CSP are. In make-motion the equivalents are its 
 | Replacement scan, `FROM '/etc/hosts'` | A bare file path is read as a table | `replacement scan of a file` |
 | Table function hidden deeper in the tree | Nested subquery, `IN (SELECT …)`, `UNION` branch, `LATERAL`, or a table-function argument | `table function in a nested subquery`, `system view in an IN-subquery`, `system view in a UNION branch`, `table function in a lateral join`, `table function inside a table function argument` |
 | A second statement (`SELECT 1; DROP TABLE x`, `COPY … TO`) | Anything that is not one SELECT | `validate.test.mjs` "non-SELECT SQL is rejected"; `sources.test.mjs` "runOne refuses a string that holds more than one statement" (setup statements); `inspect.test.mjs` "--spec validates the whole spec first: an injected source type writes nothing and exits 1" (`COPY` injected through a source type) |
-| `SHOW TABLES` and friends | Lists catalogs without a table reference | `SHOW TABLES` |
+| `SHOW TABLES` and friends | Lists catalogs without a table reference. `SHOW TABLES FROM <declared attached catalog>` is allowed (it names a catalog the query may read anyway) | `SHOW TABLES`, `SHOW TABLES FROM an undeclared catalog`, `SHOW of a bare source name`; accepted: `SHOW TABLES FROM a declared attached catalog` |
 
 ## Bridge extensions
 
@@ -26,6 +26,7 @@ the page's `default-src 'none'` CSP are. In make-motion the equivalents are its 
 | `sqlite_scan`, `postgres_scan`, `postgres_query`, `mysql_query` | The extensions open files and connections themselves and ignore `enable_external_access=false`, so the lockdown does not stop them | `sources.test.mjs` "extension-bridge functions are rejected by name"; `sqlite_scan on a declared file`, `postgres_query`; `sources.test.mjs` "sqlite source: end-to-end build, confined, and still locked down" |
 | Extension auto-install or autoload | A build would download code | `sources.test.mjs` "missing extension fails with the setup command, no silent download" |
 | A view or macro inside an attached DuckDB file | Runs with the lockdown but outside the guard (a view calling `sqlite_scan`) | "attached DuckDB file with a view or macro is refused" in `guard.test.mjs` |
+| A generated column inside an attached DuckDB file | Its expression (`current_setting('allowed_paths')`) runs at SELECT time and never meets the scalar denylist | "attached DuckDB file with a generated column is refused" in `guard.test.mjs` |
 
 ## System catalogs as tables
 

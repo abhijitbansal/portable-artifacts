@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { validateSpec } from '../scripts/lib/spec.mjs';
-import { sourceStatement, extensionsFor } from '../scripts/lib/sources.mjs';
+import { sourceStatement, extensionsFor, envUrl } from '../scripts/lib/sources.mjs';
 import { checkSelect, openDb, openLockedDb, runOne, makeScrubber } from '../scripts/lib/sql.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -153,6 +153,38 @@ test('source shape errors name the field', async () => {
   assert.match(r.errors[0].message, /pattern/);
 });
 
+const ENV_NAME_MESSAGE = (name) => `environment variable name ${JSON.stringify(name)} is not allowed; it must end in _URL or _DSN, or start with PA_ (for example DATABASE_URL)`;
+
+test('sources.<n>.env may only name a *_URL, *_DSN or PA_* variable', async () => {
+  const q = { q: 'SELECT 1 AS n' };
+  for (const env of ['ANTHROPIC_API_KEY', 'HOME', 'GITHUB_TOKEN', 'PATH', 'URL', 'MY_URL_EXTRA', 'PAX_DB']) {
+    for (const type of ['postgres', 'mysql']) {
+      const r = await validateSpec({ title: 't', queries: q, kpis: ONE_KPI, sources: { db: { type, env } } }, { dir: FIXTURES });
+      assert.deepEqual(r.errors, [{ path: 'sources.db.env', message: ENV_NAME_MESSAGE(env) }], `${type} ${env}`);
+    }
+  }
+});
+
+test('conforming env names pass the name check (and then fail only on being unset)', async () => {
+  for (const env of ['DATABASE_URL', 'PG_URL', 'MY_URL', 'WAREHOUSE_DSN', 'PA_SHOP', '_X_URL', 'PA_DB_2']) {
+    const r = await validateSpec({ title: 't', queries: { q: 'SELECT 1 AS n' }, kpis: ONE_KPI, sources: { db: { type: 'postgres', env } } }, { dir: FIXTURES });
+    assert.deepEqual(r.errors, [{ path: 'sources.db.env', message: `environment variable ${env} is not set` }], env);
+  }
+});
+
+test('envUrl refuses a non-conforming name without reading the environment', () => {
+  const saved = process.env.DASH_TEST_SECRET;
+  process.env.DASH_TEST_SECRET = 'top-secret-value';
+  try {
+    assert.deepEqual(envUrl({ type: 'postgres', env: 'DASH_TEST_SECRET' }), { error: ENV_NAME_MESSAGE('DASH_TEST_SECRET') });
+    process.env.DASH_TEST_OK_URL = 'host=h';
+    assert.deepEqual(envUrl({ type: 'postgres', env: 'DASH_TEST_OK_URL' }), { url: 'host=h' });
+  } finally {
+    delete process.env.DASH_TEST_OK_URL;
+    if (saved === undefined) delete process.env.DASH_TEST_SECRET; else process.env.DASH_TEST_SECRET = saved;
+  }
+});
+
 test('unset env var is an error at validate and at build', async () => {
   const spec = { title: 't', queries: { q: 'SELECT 1 AS n' }, kpis: ONE_KPI, sources: { db: { type: 'postgres', env: 'DASH_TEST_UNSET_PG_URL' } } };
   const r = await validateSpec(spec, { dir: FIXTURES });
@@ -264,11 +296,11 @@ for (const [type, skip, conn] of [
 ]) {
   test(`${type} connection string never reaches output (${conn.split(' ')[0].slice(0, 12)}…)`, { skip }, () => {
     const dir = tmp();
-    const spec = { title: 't', queries: { q: 'SELECT * FROM db.t' }, sources: { db: { type, env: 'DASH_TEST_CONN' } } };
+    const spec = { title: 't', queries: { q: 'SELECT * FROM db.t' }, sources: { db: { type, env: 'DASH_TEST_CONN_URL' } } };
     fs.writeFileSync(path.join(dir, 'd.json'), JSON.stringify(spec));
     const log = path.join(dir, 'eval.log');
     for (const script of [VALIDATE, BUILD]) {
-      const out = run(script, [path.join(dir, 'd.json')], { DASH_TEST_CONN: conn, EVAL_LOG: log });
+      const out = run(script, [path.join(dir, 'd.json')], { DASH_TEST_CONN_URL: conn, EVAL_LOG: log });
       assert.equal(out.status, 1, `${script}\n${out.stdout}${out.stderr}`);
       assert.match(out.stdout, /^sources\.db: /m);
       assert.doesNotMatch(out.stdout + out.stderr, /SECRET|CRET|with space/, script);
