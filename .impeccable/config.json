@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "codex-grid-background",
+        "value": "*",
+        "files": [
+          "docs/assets/pa.css"
+        ],
+        "createdAt": "2026-11-21T02:49:30.161Z",
+        "reason": "The site is a blueprint drawing set; the 24px graph grid is the measurement surface the rule exempts (owner approved 2026-11-20)"
+      }
+    ]
+  }
+}

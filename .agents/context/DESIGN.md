@@ -22,12 +22,17 @@ colors:
   hairline-strong-dark: "rgba(214, 228, 255, 0.6)"
   grid-dark: "rgba(214, 228, 255, 0.05)"
   redline-wash-dark: "rgba(255, 143, 115, 0.16)"
+  media-black: "#000"
+  scrim: "rgba(10, 22, 48, 0.82)"
+  on-scrim: "#fff"
+  tag-shadow: "rgba(0, 0, 0, 0.35)"
+  thumb-placeholder: "#0003"
 typography:
   display:
     fontFamily: "Archivo, Arial Narrow, system-ui, sans-serif"
-    fontSize: "clamp(52px, 9.2vw, 132px)"
+    fontSize: "clamp(48px, 7.2vw, 100px)"
     fontWeight: 800
-    lineHeight: 0.86
+    lineHeight: 0.88
     letterSpacing: "-0.02em"
     fontVariation: "'wdth' 68"
   headline:
@@ -73,6 +78,32 @@ typography:
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.75
+  register-title:
+    fontFamily: "Archivo, Arial Narrow, system-ui, sans-serif"
+    fontSize: "clamp(40px, 6vw, 84px)"
+    fontWeight: 800
+    lineHeight: 0.88
+  note:
+    fontFamily: "Archivo, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "15.5px"
+    fontWeight: 400
+    lineHeight: 1.5
+  caption:
+    fontFamily: "Archivo, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.4
+  body-small:
+    fontFamily: "Archivo, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: 1.55
+  micro:
+    fontFamily: "Archivo, Arial Narrow, system-ui, sans-serif"
+    fontSize: "10px"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "0.1em"
 rounded:
   none: "0"
   full: "50%"
@@ -205,7 +236,7 @@ Grids are fractional and unequal on purpose: cover 5fr / 7fr (lettering left, pl
 
 Rhythm uses a handful of recurring steps: 6, 8, 12 and 20px for inner spacing, `clamp()` for everything between sections. Density is moderate: generous around the display lettering, tight inside spec panels and title blocks.
 
-Responsive: at 960px every two-column grid becomes one column, the plate moves above its spec, the sheet index in the top strip is hidden (the theme and source buttons remain), and title blocks drop to 2 or 3 columns. At 560px body drops to 16px, sheet padding tightens, tags shrink from 24px to 20px, and the video button loses its text label. The top strip is sticky at 56px with a blurred field-colour background; `scroll-padding-top` is 72px.
+Responsive: at 960px every two-column grid becomes one column, the plate moves above its spec, the sheet index in the top strip moves to a second, horizontally scrolling row, and title blocks drop to 2 or 3 columns. At 560px body drops to 16px, sheet padding tightens, tags shrink from 24px to 20px, and the video button loses its text label. The top strip is sticky at 56px with a blurred field-colour background; `scroll-padding-top` is 72px.
 
 ## Elevation & Depth
 
@@ -247,7 +278,7 @@ The one 2px-bordered object. Header row in label type ("Issued for install" left
 A definition grid of bordered cells, `dt` in label type at ink-3, `dd` in mono; a `wide` cell spans two columns. Used on the cover, under each skill sheet, and in the footer. The place for facts that are checkable in code.
 
 ### Navigation
-Sticky 56px strip: the mark (a small drawing-sheet glyph plus "portable-artifacts" in Archivo 700 at width 85%), a sheet index of `00 Cover`, `01 Dashboard` and so on (sheet number in mono, the current sheet's number turns redline, set by scroll position), and the tool buttons. Links at rest are ink-2; hover or current adds a 1px hairline border. Hidden under 960px.
+Sticky 56px strip: the mark (a small drawing-sheet glyph plus "portable-artifacts" in Archivo 700 at width 85%), a sheet index of `00 Cover`, `01 Film`, `02 Explainer` and so on (sheet number in mono, the current sheet's number turns redline, set by scroll position), and the tool buttons. Links at rest are ink-2; hover or current adds a 1px hairline border. Under 960px the index wraps to its own scrolling row.
 
 ### Register Item
 Thumbnail in a 6px mat with a 1px hairline-strong border; hover shifts it up 2px and turns the border redline. Caption: mono redline register number (`R-01.2`), bold title, and quiet links to page, spec and prompt.
