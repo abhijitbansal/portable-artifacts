@@ -83,6 +83,7 @@ export async function writeSheets({ specPath, dir, session, signal }) {
   const own = session === undefined;
   const open = own ? await openSession(loadFilm(specPath)) : session;
   try {
+    signal?.throwIfAborted(); // an interrupt that came during the launch must not delete the last run's sheets
     clearOwnSheets(dir);
     const [w, h] = canvasSize(open.film);
     const files = [];

@@ -127,6 +127,8 @@ def test_every_local_src_href_and_poster_resolves():
         for tag, attrs in _tags(path):
             for key in ("src", "href", "poster", "data-full-film", "data-poster"):
                 rel = _local(attrs.get(key))
+                if rel and rel.endswith("/source.zip"):
+                    continue  # built into _site at deploy by scripts/build_dashboard_gallery.py
                 if rel and not (path.parent / rel).resolve().exists():
                     missing.append(f"{path.name}: <{tag} {key}={rel}>")
     assert not missing, "\n".join(missing)

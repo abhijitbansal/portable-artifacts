@@ -5,12 +5,17 @@ name: pages
 # docs/ is the site root, with index.html at the top and every link relative or
 # absolute. It is staged into _site first, leaving out docs/superpowers/ (plans and specs) and docs/*.md
 # (decisions-pending.md and other notes), so only the site is published.
-# Triggers on a push to main that touches docs/, on a published release, or manually.
+# The dashboard gallery's "source + data" ZIPs are built into _site after staging (scripts/build_dashboard_gallery.py),
+# so a push that changes that script, the CSV fixtures it packs, or LICENSE also redeploys.
+# Triggers on a push to main that touches docs/ or those inputs, on a published release, or manually.
 on:
   push:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'scripts/build_dashboard_gallery.py'
+      - 'plugins/portable-artifacts/eval/fixtures/data/**'
+      - 'LICENSE'
   release:
     types: [published]
   workflow_dispatch:
@@ -36,6 +41,8 @@ jobs:
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - name: Stage the site
         run: rsync -a --exclude='superpowers/' --exclude='/*.md' docs/ _site/
+      - name: Build dashboard gallery downloads
+        run: python3 scripts/build_dashboard_gallery.py --out _site/showcase/portable-artifacts/gallery
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: _site
