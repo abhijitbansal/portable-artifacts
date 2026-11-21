@@ -6,7 +6,7 @@
   "theme": "paper",
   "meta": {
     "branch": "feat/visual-artifacts",
-    "repo": "abhijitbansal/claude-skills",
+    "repo": "abhijitbansal/portable-artifacts",
     "status": "Ready to test"
   },
   "sections": [
@@ -21,7 +21,7 @@
         {
           "title": "Install paths",
           "items": [
-            { "text": "`npx skills add abhijitbansal/claude-skills --skill make-explainer` installs the skill and both sibling skills it needs", "tag": "device", "note": "run it on a machine that has none of the three" },
+            { "text": "`npx skills add abhijitbansal/portable-artifacts --skill make-explainer` installs the skill and both sibling skills it needs", "tag": "device", "note": "run it on a machine that has none of the three" },
             { "text": "Installing `make-diagram` alone leaves `make-explainer` absent, and `make-explainer` names the exact install command", "tag": "manual" },
             { "text": "`/make-explainer` appears in a new Claude Code session after installing", "tag": "device" },
             { "text": "Removing the skill from `~/.claude/skills` leaves no stray files behind", "tag": "manual" }
@@ -82,7 +82,7 @@
           ]
         }
       ],
-      "onFail": "- Leave the box unticked and write down the step, what you saw and what you expected.\n- Check the [open issues](https://github.com/abhijitbansal/claude-skills/issues) for the same symptom before filing a new one.\n- After the fix, re-run the failed item and every **Regression** item in its group."
+      "onFail": "- Leave the box unticked and write down the step, what you saw and what you expected.\n- Check the [open issues](https://github.com/abhijitbansal/portable-artifacts/issues) for the same symptom before filing a new one.\n- After the fix, re-run the failed item and every **Regression** item in its group."
     }
   ]
 }
