@@ -105,7 +105,8 @@ def test_cover_then_five_sheets_then_notes_and_register_in_order():
         assert match, f"missing <section id={sheet_id}>"
         offsets.append(match.start())
     assert offsets == sorted(offsets), "sheets are out of order"
-    first = re.search(r'<main id="main">\s*(?:<!--.*?-->\s*)*<section\b[^>]*\bid="(\w[\w-]*)"', page, re.S)
+    main_at = page.index('<main id="main">')
+    first = re.compile(r'<section\b[^>]*\bid="([\w-]+)"').search(page, main_at)
     assert first and first.group(1) == "films", "the cover must be the first section in <main>"
 
 
