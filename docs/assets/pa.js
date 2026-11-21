@@ -18,6 +18,11 @@
     "gallery-motion-1-4": "gallery.html#films",
     "gallery-scene": "gallery.html#scenes",
     inventory: "gallery.html",
+    "film-whats-new": "gallery.html#films",
+    "film-pro": "gallery.html#films",
+    "film-viral": "gallery.html#films",
+    "featured-diagram": "#make-diagram",
+    "whats-new-0-8-0": REPO + "plugins/portable-artifacts/CHANGELOG.md",
     "showcase-motion": "#make-motion",
     "showcase-dashboard": "#make-dashboard",
     overview: "#showcase",
@@ -31,10 +36,15 @@
     security: REPO + "plugins/portable-artifacts/README.md#security-model",
     licences: REPO + "plugins/portable-artifacts/README.md#licences",
   };
-  const legacy = LEGACY[location.hash.slice(1)];
-  if (legacy && !document.getElementById(location.hash.slice(1))) {
-    if (legacy.startsWith("#")) history.replaceState(null, "", legacy);
-    else location.replace(legacy);
+  const oldId = location.hash.slice(1);
+  const legacy = LEGACY[oldId] || (oldId.startsWith("clip-") ? "gallery.html#films" : null);
+  if (legacy && !document.getElementById(oldId)) {
+    if (legacy.startsWith("#")) {
+      history.replaceState(null, "", legacy);
+      document.getElementById(legacy.slice(1))?.scrollIntoView();
+    } else {
+      location.replace(legacy);
+    }
   }
 
   // ---- theme: auto -> light -> dark ----
@@ -59,7 +69,9 @@
   live.setAttribute("aria-live", "polite");
   document.body.append(live);
   const copyText = async (text) => {
-    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+    if (navigator.clipboard?.writeText) {
+      try { return await navigator.clipboard.writeText(text); } catch { /* fall through to execCommand */ }
+    }
     const ta = Object.assign(document.createElement("textarea"), { value: text });
     ta.setAttribute("readonly", "");
     ta.style.cssText = "position:fixed;opacity:0";
@@ -118,8 +130,10 @@
       v.poster = btn.dataset.poster || v.poster;
       v.loop = false; v.muted = false; v.controls = true;
       v.setAttribute("aria-label", btn.dataset.label || "Full film");
+      v.closest(".plate-frame").classList.add("full");
       v.play().catch(() => {});
       btn.remove();
+      v.focus();
     });
   });
 

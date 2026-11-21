@@ -64,8 +64,8 @@ shows each one next to the spec that made it.
 - **Spec in, file out.** The model writes a short JSON spec. Deterministic scripts validate it, lay it out, render it
   and check it at phone and desktop width. Same spec, same file.
 - **Any agent.** One set of skills for Claude Code, Codex, Copilot and Gemini CLI.
-- **Cheap models can drive it.** Measured on 2026-11-18: 10 of 10 films valid, with Haiku running the builds under an
-  Opus director, $4.66 for all ten
+- **A cheap model runs the builds.** Measured on 2026-11-18: an Opus director wrote the specs and a Haiku operator ran
+  the build command; 10 of 10 films were valid, $4.66 for all ten
   ([run summary](plugins/portable-artifacts/eval/results/summary-director-operator-2026-11-18.md)).
 - **Open source.** MIT, built on DuckDB, Vega-Lite, ELK and three.js. Model downloads are pinned to a commit and a
   SHA-256.

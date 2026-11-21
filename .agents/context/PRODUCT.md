@@ -50,8 +50,9 @@ copy an install command, and try one prompt. The site is static (GitHub Pages, `
 
 ## Evidence on Hand
 
-Real outputs in `docs/` (showreel GIFs, dashboard renders, a diagram story GIF, gallery pages with their source specs
-and prompts, an MP4 with poster). No testimonials, user counts, stars or benchmarks exist; do not invent them.
+Real outputs in `docs/showcase/portable-artifacts/gallery/` (dashboards, diagrams, explainers, films, 3D scenes), each
+beside its source spec. One measured eval run: `plugins/portable-artifacts/eval/results/summary-director-operator-2026-11-18.md`
+(10 of 10 films valid, $4.66). No testimonials, user counts, stars or third-party benchmarks exist; do not invent them.
 
 ## Product Principles
 

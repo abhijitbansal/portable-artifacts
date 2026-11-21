@@ -2,8 +2,9 @@
 docs/gallery.html (the register). Stdlib only.
 
 What these pin: the sheet order, the install copy-button contract in AGENTS.md, that every
-local file the pages point at exists, that every number printed next to a spec is true,
-that spec lines and plate tags pair up, and that the old one-page anchors still land.
+local file the pages point at exists, that each spec's KB label and the register's plate count
+are true, that spec lines and plate tags pair up, and that the old one-page anchors still land.
+The capability counts on the sheets (chart kinds, shot kinds and so on) are not checked here.
 """
 import json
 import re
@@ -44,7 +45,8 @@ OLD_IDS = (
     "showcase-motion", "showcase-dashboard", "gallery", "gallery-motion-1-4", "why",
     "install", "requirements", "usability", "security", "licences", "inventory",
     "gallery-dashboard", "gallery-motion", "gallery-explainer", "gallery-diagram",
-    "gallery-scene",
+    "gallery-scene", "film-whats-new", "film-pro", "film-viral", "featured-diagram", "whats-new-0-8-0",
+    "clip-beats", "clip-promo", "clip-showcase-features",
 )
 
 
@@ -186,13 +188,38 @@ def test_og_image_is_a_1200_by_630_png():
     assert 'content="https://abhijitbansal.github.io/portable-artifacts/og.png"' in _text(PAGE)
 
 
-def test_old_anchors_still_land():
-    page = _text(PAGE)
+def _legacy_table():
     script = (DOCS / "assets" / "pa.js").read_text(encoding="utf-8")
     table = re.search(r"const LEGACY = \{(.*?)\n  \};", script, re.S).group(1)
-    legacy = set(re.findall(r'^\s*"?([\w-]+)"?:\s', table, re.M))
+    pairs = re.findall(r'^\s*"?([\w-]+)"?:\s*(?:REPO \+ )?"([^"]+)"', table, re.M)
+    return script, dict(pairs)
+
+
+def test_old_anchors_still_land():
+    page = _text(PAGE)
+    script, legacy = _legacy_table()
+    prefix_rule = 'startsWith("clip-")' in script
     for old in OLD_IDS:
-        assert f'id="{old}"' in page or old in legacy, f"#{old} lands nowhere"
+        landed = f'id="{old}"' in page or old in legacy or (prefix_rule and old.startswith("clip-"))
+        assert landed, f"#{old} lands nowhere"
+
+
+def test_legacy_redirect_targets_exist():
+    pages = {"": _text(PAGE), "gallery.html": _text(GALLERY)}
+    _, legacy = _legacy_table()
+    for old, target in legacy.items():
+        if target.startswith(("http", "plugins/")):
+            continue
+        name, _, frag = target.partition("#")
+        assert name in pages, f"#{old} -> {target}: unknown page"
+        if frag:
+            assert f'id="{frag}"' in pages[name], f"#{old} -> {target}: no such id"
+
+
+def test_same_page_redirect_scrolls_to_its_target():
+    script, _ = _legacy_table()
+    # history.replaceState alone never scrolls; the redirect must move the view itself.
+    assert re.search(r"replaceState\([^)]*\);\s*\n?\s*[^\n]*scrollIntoView", script), "same-page redirect does not scroll"
 
 
 def test_register_groups_link_a_page_and_a_spec_for_every_plate():
@@ -211,3 +238,42 @@ def test_register_groups_link_a_page_and_a_spec_for_every_plate():
 def test_gallery_film_files_match_the_examples(folder, source):
     copy = DOCS / folder / "film.json"
     assert copy.read_bytes() == (EXAMPLES / source).read_bytes(), f"{copy} drifted from {source}"
+
+
+# Gallery outputs themselves (kept from the one-page site's tests).
+SIMPLE_EXPLAINERS = (
+    "explainer-page/index.html", "explainer-page/press/index.html", "explainer-page/poster/index.html",
+    "explainer-deck/index.html", "explainer-deck-press/index.html", "explainer-deck-poster/index.html",
+    "features-explainer/index.html", "features-explainer/press/index.html",
+    "features-explainer/poster/index.html",
+    "plan-page/index.html", "plan-page/brief/index.html",
+)
+VOICED_FILMS = ("showreel/pro", "showreel/viral", "looks/poster")
+
+
+def test_each_gallery_explainer_has_the_simple_english_toggle():
+    for name in SIMPLE_EXPLAINERS:
+        built = DOCS / GAL / name
+        assert built.is_file(), name
+        assert "data-simple-toggle" in built.read_text(encoding="utf-8"), name
+
+
+def test_gallery_films_stay_under_the_repo_size_warning():
+    for video in (DOCS / GAL).glob("*/*/video.mp4"):
+        assert video.stat().st_size <= 30 * 1024 * 1024, f"{video}: {video.stat().st_size} bytes"
+
+
+def test_full_films_linked_with_sound_have_an_audio_stream():
+    import shutil
+    import subprocess
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        pytest.skip("ffprobe is not on PATH")
+    for film in VOICED_FILMS:
+        video = DOCS / GAL / film / "video.mp4"
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "a", "-show_entries",
+             "stream=codec_name", "-of", "csv=p=0", str(video)],
+            capture_output=True, text=True, check=True,
+        ).stdout.split()
+        assert out, f"no audio stream in {video}"

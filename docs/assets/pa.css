@@ -311,12 +311,14 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
   border: var(--rule) solid var(--red); color: var(--red);
   font: 600 10px/15px var(--mono); text-align: center;
 }
-.spec [data-tag].on, .spec [data-tag]:focus-visible { background-size: 100% 100%; outline: none; }
+.spec [data-tag].on, .spec [data-tag]:focus-visible { background-size: 100% 100%; }
+.spec [data-tag]:focus-visible { outline: 2px solid var(--red); outline-offset: -2px; }
 .spec [data-tag].on::after { background: var(--red); color: var(--sheet); }
 .spec-note { margin: 0; padding: 8px 12px 10px; border-top: var(--rule) solid var(--line); font-size: 12.5px; color: var(--ink-3); }
 
 /* detail tags on the plate */
 .tags { position: absolute; inset: 8px; pointer-events: none; }
+.plate-frame.full .tags { display: none; }
 .tag {
   position: absolute; transform: translate(-50%, -50%);
   width: 24px; height: 24px; border-radius: 50%;
