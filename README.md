@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Prompt &rarr; spec &rarr; file.</b><br>
-  Dashboards, diagrams, explainer pages, 3D scenes and MP4 films from one small JSON spec.<br>
+  MP4 films, explainer pages, diagrams, dashboards and 3D scenes from one small JSON spec.<br>
   Built on your machine, offline, by any coding agent.
 </p>
 
@@ -48,10 +48,10 @@ Then ask your agent for something:
 
 | | |
 |---|---|
-| <img src="docs/showcase/portable-artifacts/gallery/product-performance/thumb.jpg" width="320" alt="A dashboard built by make-dashboard"> | **`/make-dashboard`**<br>Charts from CSV, Parquet, JSON, DuckDB, SQLite, Postgres or MySQL. Every chart shows its SQL. |
-| <img src="docs/showcase/portable-artifacts/gallery/cloud-architecture/dusk/thumb.jpg" width="320" alt="An architecture diagram built by make-diagram"> | **`/make-diagram`**<br>Architecture, flow, sequence and state diagrams, with stories that play along the edges. |
-| <img src="docs/showcase/portable-artifacts/gallery/how-it-works/thumb.jpg" width="320" alt="An explainer page built by make-explainer"> | **`/make-explainer`**<br>Recaps, concept pages, checklists, plans you answer on the page, and slide decks. |
 | <img src="docs/media/motion-poster.jpg" width="320" alt="A frame from a film built by make-motion"> | **`/make-motion`**<br>MP4 films from a script of shots, in seven looks, with optional local voiceover and music. |
+| <img src="docs/showcase/portable-artifacts/gallery/how-it-works/thumb.jpg" width="320" alt="An explainer page built by make-explainer"> | **`/make-explainer`**<br>Recaps, concept pages, checklists, plans you answer on the page, and slide decks. |
+| <img src="docs/showcase/portable-artifacts/gallery/cloud-architecture/dusk/thumb.jpg" width="320" alt="An architecture diagram built by make-diagram"> | **`/make-diagram`**<br>Architecture, flow, sequence and state diagrams, with stories that play along the edges. |
+| <img src="docs/showcase/portable-artifacts/gallery/product-performance/thumb.jpg" width="320" alt="A dashboard built by make-dashboard"> | **`/make-dashboard`**<br>Charts from CSV, Parquet, JSON, DuckDB, SQLite, Postgres or MySQL. Every chart shows its SQL. |
 | <img src="docs/showcase/portable-artifacts/gallery/scene-city/dusk/thumb.jpg" width="320" alt="A 3D city scene built by make-scene"> | **`/make-scene`**<br>Your rows as an explorable 3D world: a city, forest, galaxy or terrain, with a camera tour. |
 
 Every image above is a real output. The [gallery](https://abhijitbansal.github.io/portable-artifacts/gallery.html)
