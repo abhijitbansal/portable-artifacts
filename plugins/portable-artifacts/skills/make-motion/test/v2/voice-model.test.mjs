@@ -71,11 +71,32 @@ test('VOICE_MODEL is frozen all the way down', () => {
   for (const file of VOICE_MODEL.files) assert.ok(Object.isFrozen(file), file.path);
 });
 
-test('voiceModelDir keeps the model in its own cache folder, apart from the version 1 model', () => {
-  const dir = voiceModelDir('/skill');
-  assert.equal(dir, path.join('/skill', '.cache', 'models', VOICE_MODEL.id));
-  assert.notEqual(dir, path.join('/skill', '.cache', 'models', 'onnx-community/Kokoro-82M-v1.0-ONNX'));
-  assert.equal(voiceModelDir(), path.join(SKILL_ROOT, '.cache', 'models', VOICE_MODEL.id));
+test('voiceModelDir keeps the model in the per-user cache folder that outlives a plugin update, apart from the version 1 model', () => {
+  const dir = voiceModelDir('/skill', { env: {}, platform: 'darwin', homedir: '/Users/x' });
+  assert.equal(dir, path.join('/Users/x/Library/Caches/portable-artifacts', 'models', VOICE_MODEL.id), 'not inside the versioned skill folder');
+  assert.notEqual(dir, path.join('/Users/x/Library/Caches/portable-artifacts', 'models', 'onnx-community/Kokoro-82M-v1.0-ONNX'));
+  assert.equal(voiceModelDir('/skill', { env: { CLAUDE_PLUGIN_DATA: '/data/plugin' }, platform: 'darwin', homedir: '/Users/x' }), path.join('/data/plugin', 'models', VOICE_MODEL.id), '$CLAUDE_PLUGIN_DATA wins');
+  assert.equal(voiceModelDir('/skill', { env: {}, platform: 'linux', homedir: '' }), path.join('/skill', '.cache', 'models', VOICE_MODEL.id), 'no home folder: the skill folder, as before');
+  assert.ok(voiceModelDir().endsWith(path.join('models', VOICE_MODEL.id)));
+});
+
+test('voiceModelDir reuses a model already downloaded into <skill>/.cache/models until the stable folder has its own', () => {
+  const skill = scratch();
+  const data = scratch();
+  try {
+    const options = { env: { CLAUDE_PLUGIN_DATA: data }, platform: 'linux', homedir: '/home/x' };
+    const stable = path.join(data, 'models', VOICE_MODEL.id);
+    const legacy = path.join(skill, '.cache', 'models', VOICE_MODEL.id);
+    mkdirSync(path.join(skill, '.cache', 'models', 'modnet'), { recursive: true });
+    assert.equal(voiceModelDir(skill, options), stable, 'only the cutout model is in the skill folder: the voice goes to the stable folder');
+    mkdirSync(legacy, { recursive: true });
+    assert.equal(voiceModelDir(skill, options), legacy, 'the old download is used, not fetched again');
+    mkdirSync(stable, { recursive: true });
+    assert.equal(voiceModelDir(skill, options), stable, 'once the stable folder has the model it wins');
+  } finally {
+    rmSync(skill, { recursive: true, force: true });
+    rmSync(data, { recursive: true, force: true });
+  }
 });
 
 test('ensureVoiceModel downloads every missing file, verifies it and returns the folder', async () => {
