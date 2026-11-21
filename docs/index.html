@@ -45,10 +45,10 @@ leader lines; seed 149445c2.
   </a>
   <nav class="sheets" aria-label="Sheets">
     <a href="#films"><b>00</b>Cover</a>
-    <a href="#make-dashboard"><b>01</b>Dashboard</a>
-    <a href="#make-diagram"><b>02</b>Diagram</a>
-    <a href="#make-explainer"><b>03</b>Explainer</a>
-    <a href="#make-motion"><b>04</b>Film</a>
+    <a href="#make-motion"><b>01</b>Film</a>
+    <a href="#make-explainer"><b>02</b>Explainer</a>
+    <a href="#make-diagram"><b>03</b>Diagram</a>
+    <a href="#make-dashboard"><b>04</b>Dashboard</a>
     <a href="#make-scene"><b>05</b>Scene</a>
     <a href="gallery.html"><b>R</b>Register</a>
   </nav>
@@ -123,156 +123,14 @@ leader lines; seed 149445c2.
 
   <div id="showcase">
 
-  <!-- ===== SHEET 01: DASHBOARD ===== -->
-  <section class="sheet" id="make-dashboard" data-leader aria-labelledby="h-dash">
-    <span class="sheet-no">Sheet <b>01</b> / 05 · make-dashboard</span>
-    <header class="sk-head">
-      <h2 id="h-dash"><i>/</i>make-dashboard</h2>
-      <p>Charts from your data files. Every chart shows its SQL.</p>
-    </header>
-    <div class="sk-grid">
-      <div class="spec">
-        <div class="spec-head"><span>dashboard.json · 3.1 KB</span><a href="showcase/portable-artifacts/gallery/product-performance/dashboard.json">full spec</a></div>
-        <ol aria-label="Excerpt of dashboard.json. Lines with a number point at the dashboard.">
-          <li>{</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title: Product performance, the page title">  <span class="k">"title"</span>: <span class="s">"Product performance"</span>,</li>
-          <li>  <span class="k">"sources"</span>: { <span class="k">"sales"</span>: { <span class="k">"type"</span>: <span class="s">"csv"</span>, … } },</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="query rev_by_product_region, shown under its chart">  <span class="k">"queries"</span>: { <span class="k">"rev_by_product_region"</span>:</li>
-          <li>    <span class="s">"SELECT product, region, SUM(amount) …"</span> },</li>
-          <li>  <span class="k">"kpis"</span>: [</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="KPI Revenue, formatted as currency">    { <span class="k">"title"</span>: <span class="s">"Revenue"</span>, <span class="k">"format"</span>: <span class="s">"currency"</span> }, … ],</li>
-          <li>  <span class="k">"charts"</span>: [{</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="chart Revenue by product and region">    <span class="k">"title"</span>: <span class="s">"Revenue by product and region"</span>,</li>
-          <li>    <span class="k">"vegaLite"</span>: { <span class="k">"mark"</span>: <span class="s">"bar"</span>, … } }]</li>
-          <li>}</li>
-        </ol>
-        <p class="spec-note">Excerpt, shortened with &hellip;. Hover or focus a numbered line.</p>
-      </div>
-      <figure class="plate">
-        <div class="dim" aria-hidden="true"><span>1 HTML file · 1.0 MB · works offline</span></div>
-        <div class="plate-frame">
-          <img src="showcase/portable-artifacts/gallery/product-performance/thumb.jpg" width="1280" height="720" loading="lazy" alt="The built dashboard: Product performance, three KPI tiles, a grouped bar chart of revenue by product and region, and a share chart, each with a Query disclosure.">
-          <div class="tags" aria-hidden="true">
-            <span class="tag" data-tag="1" style="left:35.5%;top:6.5%">1</span>
-            <span class="tag" data-tag="2" style="left:28%;top:86.5%">2</span>
-            <span class="tag" data-tag="3" style="left:14.5%;top:19%">3</span>
-            <span class="tag" data-tag="4" style="left:32.5%;top:38.5%">4</span>
-          </div>
-        </div>
-        <figcaption><span>Plate 01 · Product performance, sample data</span><a href="showcase/portable-artifacts/gallery/product-performance/index.html">Open the live page</a></figcaption>
-      </figure>
-    </div>
-    <dl class="tblock sk-facts">
-      <div class="wide"><dt>Input</dt><dd>CSV · Parquet · JSON · DuckDB · SQLite · Postgres · MySQL</dd></div>
-      <div><dt>Chart kinds</dt><dd>11</dd></div>
-      <div><dt>Themes</dt><dd>9, light + dark</dd></div>
-      <div><dt>SQL</dt><dd>allowlisted</dd></div>
-    </dl>
-  </section>
-
-  <!-- ===== SHEET 02: DIAGRAM ===== -->
-  <section class="sheet" id="make-diagram" data-leader aria-labelledby="h-diag">
-    <span class="sheet-no">Sheet <b>02</b> / 05 · make-diagram</span>
-    <header class="sk-head">
-      <h2 id="h-diag"><i>/</i>make-diagram</h2>
-      <p>Architecture, flow, sequence and state. Stories play along the edges.</p>
-    </header>
-    <div class="sk-grid flip">
-      <div class="spec">
-        <div class="spec-head"><span>diagram.json · 3.2 KB</span><a href="showcase/portable-artifacts/gallery/cloud-architecture/diagram.json">full spec</a></div>
-        <ol aria-label="Excerpt of diagram.json. Lines with a number point at the diagram.">
-          <li>{</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title: Orders across two clouds">  <span class="k">"title"</span>: <span class="s">"Orders across two clouds"</span>,</li>
-          <li>  <span class="k">"type"</span>: <span class="s">"architecture"</span>,</li>
-          <li>  <span class="k">"groups"</span>: [ …,</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="group Google Cloud">    { <span class="k">"id"</span>: <span class="s">"gcp"</span>, <span class="k">"label"</span>: <span class="s">"Google Cloud"</span> } ],</li>
-          <li>  <span class="k">"nodes"</span>: [ …,</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="node Invoice queue, a queue">    { <span class="k">"label"</span>: <span class="s">"Invoice queue"</span>, <span class="k">"kind"</span>: <span class="s">"queue"</span> },</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="node Invoice service on Google Cloud">    { <span class="k">"label"</span>: <span class="s">"Invoice service"</span>, <span class="k">"group"</span>: <span class="s">"gcp"</span> } ],</li>
-          <li>  <span class="k">"stories"</span>: [ … <span class="k">"beats"</span>: [ …,</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="5" aria-label="story beat The queue hands over">    { <span class="k">"title"</span>: <span class="s">"The queue hands over"</span> } ]</li>
-          <li>}</li>
-        </ol>
-        <p class="spec-note">No coordinates: ELK lays it out.</p>
-      </div>
-      <figure class="plate">
-        <div class="dim" aria-hidden="true"><span>1 HTML file · story player · SVG + PNG export</span></div>
-        <div class="plate-frame">
-          <img src="showcase/portable-artifacts/gallery/cloud-architecture/dusk/thumb.jpg" width="1280" height="720" loading="lazy" alt="The built diagram: Orders across two clouds, with the story player on beat 6 of 7 as the invoice queue hands an order to the invoice service on Google Cloud.">
-          <div class="tags" aria-hidden="true">
-            <span class="tag" data-tag="1" style="left:23%;top:3.4%">1</span>
-            <span class="tag" data-tag="2" style="left:69.5%;top:45%">2</span>
-            <span class="tag" data-tag="3" style="left:25.6%;top:48.5%">3</span>
-            <span class="tag" data-tag="4" style="left:75.5%;top:48.5%">4</span>
-            <span class="tag" data-tag="5" style="left:85.5%;top:86.5%">5</span>
-          </div>
-        </div>
-        <figcaption><span>Plate 02 · Orders across two clouds</span><a href="showcase/portable-artifacts/gallery/cloud-architecture/dusk/index.html">Open the live page</a></figcaption>
-      </figure>
-    </div>
-    <dl class="tblock sk-facts">
-      <div class="wide"><dt>Types</dt><dd>architecture · flow · sequence · state</dd></div>
-      <div><dt>Node kinds</dt><dd>27</dd></div>
-      <div><dt>Icons</dt><dd>503</dd></div>
-      <div><dt>Stories</dt><dd>8 chapters</dd></div>
-    </dl>
-  </section>
-
-  <!-- ===== SHEET 03: EXPLAINER ===== -->
-  <section class="sheet" id="make-explainer" data-leader aria-labelledby="h-expl">
-    <span class="sheet-no">Sheet <b>03</b> / 05 · make-explainer</span>
-    <header class="sk-head">
-      <h2 id="h-expl"><i>/</i>make-explainer</h2>
-      <p>Recaps, concepts, checklists, plans and slide decks. One page.</p>
-    </header>
-    <div class="sk-grid">
-      <div class="spec">
-        <div class="spec-head"><span>explainer.json · 2.9 KB</span><a href="showcase/portable-artifacts/gallery/how-it-works/explainer.json">full spec</a></div>
-        <ol aria-label="Excerpt of explainer.json. Lines with a number point at the page.">
-          <li>{</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title of the page">  <span class="k">"title"</span>: <span class="s">"How portable-artifacts turns …"</span>,</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="theme dusk, which draws the title art">  <span class="k">"theme"</span>: <span class="s">"dusk"</span>,</li>
-          <li>  <span class="k">"meta"</span>: {</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="meta date and status chips">    <span class="k">"date"</span>: <span class="s">"2026-11-20"</span>, <span class="k">"status"</span>: <span class="s">"Release 2.1.0"</span> },</li>
-          <li>  <span class="k">"sections"</span>: [{</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="a tldr section labelled The idea">    <span class="k">"type"</span>: <span class="s">"tldr"</span>, <span class="k">"label"</span>: <span class="s">"The idea"</span>,</li>
-          <li tabindex="0" role="button" aria-pressed="false" data-tag="5" aria-label="the section's supporting points">    <span class="k">"points"</span>: [ <span class="s">"Five skills: dashboards, …"</span>, … ]</li>
-          <li>  }, … ]</li>
-          <li>}</li>
-        </ol>
-        <p class="spec-note">The model never writes HTML. A linter rejects filler prose before the build.</p>
-      </div>
-      <figure class="plate">
-        <div class="dim" aria-hidden="true"><span>1 HTML file · page or slides · works offline</span></div>
-        <div class="plate-frame">
-          <img src="showcase/portable-artifacts/gallery/how-it-works/thumb.jpg" width="1280" height="720" loading="lazy" alt="The built explainer page: How portable-artifacts turns a prompt into a file, with dusk title art, date and status chips, and a coral summary card.">
-          <div class="tags" aria-hidden="true">
-            <span class="tag" data-tag="1" style="left:45.5%;top:12.5%">1</span>
-            <span class="tag" data-tag="2" style="left:58%;top:10%">2</span>
-            <span class="tag" data-tag="3" style="left:31.5%;top:52.5%">3</span>
-            <span class="tag" data-tag="4" style="left:15%;top:67%">4</span>
-            <span class="tag" data-tag="5" style="left:51.5%;top:71%">5</span>
-          </div>
-        </div>
-        <figcaption><span>Plate 03 · How it works</span><a href="showcase/portable-artifacts/gallery/how-it-works/index.html">Open the live page</a></figcaption>
-      </figure>
-    </div>
-    <dl class="tblock sk-facts">
-      <div><dt>Section types</dt><dd>26</dd></div>
-      <div><dt>Modes</dt><dd>page · slides</dd></div>
-      <div><dt>Presets</dt><dd>5</dd></div>
-      <div class="wide"><dt>Embeds</dt><dd>diagrams · charts · 3D scenes · films</dd></div>
-    </dl>
-  </section>
-
-  <!-- ===== SHEET 04: MOTION ===== -->
+  <!-- ===== SHEET 01: MOTION ===== -->
   <section class="sheet" id="make-motion" data-leader aria-labelledby="h-mot">
-    <span class="sheet-no">Sheet <b>04</b> / 05 · make-motion</span>
+    <span class="sheet-no">Sheet <b>01</b> / 05 · make-motion</span>
     <header class="sk-head">
       <h2 id="h-mot"><i>/</i>make-motion</h2>
       <p>MP4 films from a script of shots. Voice, music and cues made locally.</p>
     </header>
-    <div class="sk-grid flip">
+    <div class="sk-grid">
       <div class="spec">
         <div class="spec-head"><span>film.json · 1.6 KB</span><a href="showcase/portable-artifacts/gallery/looks/poster/film.json">full spec</a></div>
         <ol aria-label="Excerpt of film.json. Lines with a number jump the film to that shot.">
@@ -302,7 +160,7 @@ leader lines; seed 149445c2.
             <span class="tag" data-tag="4" style="left:85%;top:100%">4</span>
           </div>
         </div>
-        <figcaption><span>Plate 04 · poster look, 1 of 7</span><a href="gallery.html#films">All looks</a></figcaption>
+        <figcaption><span>Plate 01 · poster look, 1 of 7</span><a href="gallery.html#films">All looks</a></figcaption>
       </figure>
     </div>
     <dl class="tblock sk-facts">
@@ -310,6 +168,148 @@ leader lines; seed 149445c2.
       <div><dt>Looks</dt><dd>7</dd></div>
       <div class="wide"><dt>Formats</dt><dd>16:9 · 9:16 · 1:1 · 4:5</dd></div>
       <div><dt>Voice</dt><dd>local, opt-in</dd></div>
+    </dl>
+  </section>
+
+  <!-- ===== SHEET 02: EXPLAINER ===== -->
+  <section class="sheet" id="make-explainer" data-leader aria-labelledby="h-expl">
+    <span class="sheet-no">Sheet <b>02</b> / 05 · make-explainer</span>
+    <header class="sk-head">
+      <h2 id="h-expl"><i>/</i>make-explainer</h2>
+      <p>Recaps, concepts, checklists, plans and slide decks. One page.</p>
+    </header>
+    <div class="sk-grid flip">
+      <div class="spec">
+        <div class="spec-head"><span>explainer.json · 2.9 KB</span><a href="showcase/portable-artifacts/gallery/how-it-works/explainer.json">full spec</a></div>
+        <ol aria-label="Excerpt of explainer.json. Lines with a number point at the page.">
+          <li>{</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title of the page">  <span class="k">"title"</span>: <span class="s">"How portable-artifacts turns …"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="theme dusk, which draws the title art">  <span class="k">"theme"</span>: <span class="s">"dusk"</span>,</li>
+          <li>  <span class="k">"meta"</span>: {</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="meta date and status chips">    <span class="k">"date"</span>: <span class="s">"2026-11-20"</span>, <span class="k">"status"</span>: <span class="s">"Release 2.1.0"</span> },</li>
+          <li>  <span class="k">"sections"</span>: [{</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="a tldr section labelled The idea">    <span class="k">"type"</span>: <span class="s">"tldr"</span>, <span class="k">"label"</span>: <span class="s">"The idea"</span>,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="5" aria-label="the section's supporting points">    <span class="k">"points"</span>: [ <span class="s">"Five skills: dashboards, …"</span>, … ]</li>
+          <li>  }, … ]</li>
+          <li>}</li>
+        </ol>
+        <p class="spec-note">The model never writes HTML. A linter rejects filler prose before the build.</p>
+      </div>
+      <figure class="plate">
+        <div class="dim" aria-hidden="true"><span>1 HTML file · page or slides · works offline</span></div>
+        <div class="plate-frame">
+          <img src="showcase/portable-artifacts/gallery/how-it-works/thumb.jpg" width="1280" height="720" loading="lazy" alt="The built explainer page: How portable-artifacts turns a prompt into a file, with dusk title art, date and status chips, and a coral summary card.">
+          <div class="tags" aria-hidden="true">
+            <span class="tag" data-tag="1" style="left:45.5%;top:12.5%">1</span>
+            <span class="tag" data-tag="2" style="left:58%;top:10%">2</span>
+            <span class="tag" data-tag="3" style="left:31.5%;top:52.5%">3</span>
+            <span class="tag" data-tag="4" style="left:15%;top:67%">4</span>
+            <span class="tag" data-tag="5" style="left:51.5%;top:71%">5</span>
+          </div>
+        </div>
+        <figcaption><span>Plate 02 · How it works</span><a href="showcase/portable-artifacts/gallery/how-it-works/index.html">Open the live page</a></figcaption>
+      </figure>
+    </div>
+    <dl class="tblock sk-facts">
+      <div><dt>Section types</dt><dd>26</dd></div>
+      <div><dt>Modes</dt><dd>page · slides</dd></div>
+      <div><dt>Presets</dt><dd>5</dd></div>
+      <div class="wide"><dt>Embeds</dt><dd>diagrams · charts · 3D scenes · films</dd></div>
+    </dl>
+  </section>
+
+  <!-- ===== SHEET 03: DIAGRAM ===== -->
+  <section class="sheet" id="make-diagram" data-leader aria-labelledby="h-diag">
+    <span class="sheet-no">Sheet <b>03</b> / 05 · make-diagram</span>
+    <header class="sk-head">
+      <h2 id="h-diag"><i>/</i>make-diagram</h2>
+      <p>Architecture, flow, sequence and state. Stories play along the edges.</p>
+    </header>
+    <div class="sk-grid">
+      <div class="spec">
+        <div class="spec-head"><span>diagram.json · 3.2 KB</span><a href="showcase/portable-artifacts/gallery/cloud-architecture/diagram.json">full spec</a></div>
+        <ol aria-label="Excerpt of diagram.json. Lines with a number point at the diagram.">
+          <li>{</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title: Orders across two clouds">  <span class="k">"title"</span>: <span class="s">"Orders across two clouds"</span>,</li>
+          <li>  <span class="k">"type"</span>: <span class="s">"architecture"</span>,</li>
+          <li>  <span class="k">"groups"</span>: [ …,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="group Google Cloud">    { <span class="k">"id"</span>: <span class="s">"gcp"</span>, <span class="k">"label"</span>: <span class="s">"Google Cloud"</span> } ],</li>
+          <li>  <span class="k">"nodes"</span>: [ …,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="node Invoice queue, a queue">    { <span class="k">"label"</span>: <span class="s">"Invoice queue"</span>, <span class="k">"kind"</span>: <span class="s">"queue"</span> },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="node Invoice service on Google Cloud">    { <span class="k">"label"</span>: <span class="s">"Invoice service"</span>, <span class="k">"group"</span>: <span class="s">"gcp"</span> } ],</li>
+          <li>  <span class="k">"stories"</span>: [ … <span class="k">"beats"</span>: [ …,</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="5" aria-label="story beat The queue hands over">    { <span class="k">"title"</span>: <span class="s">"The queue hands over"</span> } ]</li>
+          <li>}</li>
+        </ol>
+        <p class="spec-note">No coordinates: ELK lays it out.</p>
+      </div>
+      <figure class="plate">
+        <div class="dim" aria-hidden="true"><span>1 HTML file · story player · SVG + PNG export</span></div>
+        <div class="plate-frame">
+          <img src="showcase/portable-artifacts/gallery/cloud-architecture/dusk/thumb.jpg" width="1280" height="720" loading="lazy" alt="The built diagram: Orders across two clouds, with the story player on beat 6 of 7 as the invoice queue hands an order to the invoice service on Google Cloud.">
+          <div class="tags" aria-hidden="true">
+            <span class="tag" data-tag="1" style="left:23%;top:3.4%">1</span>
+            <span class="tag" data-tag="2" style="left:69.5%;top:45%">2</span>
+            <span class="tag" data-tag="3" style="left:25.6%;top:48.5%">3</span>
+            <span class="tag" data-tag="4" style="left:75.5%;top:48.5%">4</span>
+            <span class="tag" data-tag="5" style="left:85.5%;top:86.5%">5</span>
+          </div>
+        </div>
+        <figcaption><span>Plate 03 · Orders across two clouds</span><a href="showcase/portable-artifacts/gallery/cloud-architecture/dusk/index.html">Open the live page</a></figcaption>
+      </figure>
+    </div>
+    <dl class="tblock sk-facts">
+      <div class="wide"><dt>Types</dt><dd>architecture · flow · sequence · state</dd></div>
+      <div><dt>Node kinds</dt><dd>27</dd></div>
+      <div><dt>Icons</dt><dd>503</dd></div>
+      <div><dt>Stories</dt><dd>8 chapters</dd></div>
+    </dl>
+  </section>
+
+  <!-- ===== SHEET 04: DASHBOARD ===== -->
+  <section class="sheet" id="make-dashboard" data-leader aria-labelledby="h-dash">
+    <span class="sheet-no">Sheet <b>04</b> / 05 · make-dashboard</span>
+    <header class="sk-head">
+      <h2 id="h-dash"><i>/</i>make-dashboard</h2>
+      <p>Charts from your data files. Every chart shows its SQL.</p>
+    </header>
+    <div class="sk-grid flip">
+      <div class="spec">
+        <div class="spec-head"><span>dashboard.json · 3.1 KB</span><a href="showcase/portable-artifacts/gallery/product-performance/dashboard.json">full spec</a></div>
+        <ol aria-label="Excerpt of dashboard.json. Lines with a number point at the dashboard.">
+          <li>{</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="1" aria-label="title: Product performance, the page title">  <span class="k">"title"</span>: <span class="s">"Product performance"</span>,</li>
+          <li>  <span class="k">"sources"</span>: { <span class="k">"sales"</span>: { <span class="k">"type"</span>: <span class="s">"csv"</span>, … } },</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="2" aria-label="query rev_by_product_region, shown under its chart">  <span class="k">"queries"</span>: { <span class="k">"rev_by_product_region"</span>:</li>
+          <li>    <span class="s">"SELECT product, region, SUM(amount) …"</span> },</li>
+          <li>  <span class="k">"kpis"</span>: [</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="3" aria-label="KPI Revenue, formatted as currency">    { <span class="k">"title"</span>: <span class="s">"Revenue"</span>, <span class="k">"format"</span>: <span class="s">"currency"</span> }, … ],</li>
+          <li>  <span class="k">"charts"</span>: [{</li>
+          <li tabindex="0" role="button" aria-pressed="false" data-tag="4" aria-label="chart Revenue by product and region">    <span class="k">"title"</span>: <span class="s">"Revenue by product and region"</span>,</li>
+          <li>    <span class="k">"vegaLite"</span>: { <span class="k">"mark"</span>: <span class="s">"bar"</span>, … } }]</li>
+          <li>}</li>
+        </ol>
+        <p class="spec-note">Excerpt, shortened with &hellip;. Hover or focus a numbered line.</p>
+      </div>
+      <figure class="plate">
+        <div class="dim" aria-hidden="true"><span>1 HTML file · 1.0 MB · works offline</span></div>
+        <div class="plate-frame">
+          <img src="showcase/portable-artifacts/gallery/product-performance/thumb.jpg" width="1280" height="720" loading="lazy" alt="The built dashboard: Product performance, three KPI tiles, a grouped bar chart of revenue by product and region, and a share chart, each with a Query disclosure.">
+          <div class="tags" aria-hidden="true">
+            <span class="tag" data-tag="1" style="left:35.5%;top:6.5%">1</span>
+            <span class="tag" data-tag="2" style="left:28%;top:86.5%">2</span>
+            <span class="tag" data-tag="3" style="left:14.5%;top:19%">3</span>
+            <span class="tag" data-tag="4" style="left:32.5%;top:38.5%">4</span>
+          </div>
+        </div>
+        <figcaption><span>Plate 04 · Product performance, sample data</span><a href="showcase/portable-artifacts/gallery/product-performance/index.html">Open the live page</a></figcaption>
+      </figure>
+    </div>
+    <dl class="tblock sk-facts">
+      <div class="wide"><dt>Input</dt><dd>CSV · Parquet · JSON · DuckDB · SQLite · Postgres · MySQL</dd></div>
+      <div><dt>Chart kinds</dt><dd>11</dd></div>
+      <div><dt>Themes</dt><dd>9, light + dark</dd></div>
+      <div><dt>SQL</dt><dd>allowlisted</dd></div>
     </dl>
   </section>
 
@@ -383,10 +383,10 @@ leader lines; seed 149445c2.
       <p>Every output shown here is real, built by the skills, and sits next to the spec that made it. <a href="gallery.html">Open the register</a>.</p>
     </div>
     <div class="reg reg-band">
-      <figure class="reg-item"><a class="thumb" href="gallery.html#dashboards"><img src="showcase/portable-artifacts/gallery/support-ops/thumb.jpg" width="1280" height="720" loading="lazy" alt="Support operations dashboard"></a><figcaption><span class="no">R-01</span><b>Dashboards</b></figcaption></figure>
-      <figure class="reg-item"><a class="thumb" href="gallery.html#diagrams"><img src="showcase/portable-artifacts/gallery/oauth-sequence/dusk/thumb.jpg" width="1280" height="720" loading="lazy" alt="Sign in with OAuth sequence diagram"></a><figcaption><span class="no">R-02</span><b>Diagrams</b></figcaption></figure>
-      <figure class="reg-item"><a class="thumb" href="gallery.html#explainers"><img src="showcase/portable-artifacts/gallery/plan-page/thumb.jpg" width="1280" height="720" loading="lazy" alt="A plan page reviewers answer on the page"></a><figcaption><span class="no">R-03</span><b>Explainers</b></figcaption></figure>
-      <figure class="reg-item"><a class="thumb" href="gallery.html#films"><img src="media/thumbs/looks-marker.jpg" width="640" height="360" loading="lazy" alt="Film in the hand-drawn marker look"></a><figcaption><span class="no">R-04</span><b>Films</b></figcaption></figure>
+      <figure class="reg-item"><a class="thumb" href="gallery.html#films"><img src="media/thumbs/looks-marker.jpg" width="640" height="360" loading="lazy" alt="Film in the hand-drawn marker look"></a><figcaption><span class="no">R-01</span><b>Films</b></figcaption></figure>
+      <figure class="reg-item"><a class="thumb" href="gallery.html#explainers"><img src="showcase/portable-artifacts/gallery/plan-page/thumb.jpg" width="1280" height="720" loading="lazy" alt="A plan page reviewers answer on the page"></a><figcaption><span class="no">R-02</span><b>Explainers</b></figcaption></figure>
+      <figure class="reg-item"><a class="thumb" href="gallery.html#diagrams"><img src="showcase/portable-artifacts/gallery/oauth-sequence/dusk/thumb.jpg" width="1280" height="720" loading="lazy" alt="Sign in with OAuth sequence diagram"></a><figcaption><span class="no">R-03</span><b>Diagrams</b></figcaption></figure>
+      <figure class="reg-item"><a class="thumb" href="gallery.html#dashboards"><img src="showcase/portable-artifacts/gallery/support-ops/thumb.jpg" width="1280" height="720" loading="lazy" alt="Support operations dashboard"></a><figcaption><span class="no">R-04</span><b>Dashboards</b></figcaption></figure>
       <figure class="reg-item"><a class="thumb" href="gallery.html#scenes"><img src="showcase/portable-artifacts/gallery/scene-galaxy/dusk/thumb.jpg" width="1280" height="720" loading="lazy" alt="Galaxy 3D scene"></a><figcaption><span class="no">R-05</span><b>3D scenes</b></figcaption></figure>
     </div>
   </section>

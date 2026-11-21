@@ -21,7 +21,7 @@ PAGE = DOCS / "index.html"
 GALLERY = DOCS / "gallery.html"
 PAGES = (PAGE, GALLERY)
 PLUGIN_JSON = ROOT / "plugins" / "portable-artifacts" / ".claude-plugin" / "plugin.json"
-SKILLS = ("make-dashboard", "make-diagram", "make-explainer", "make-motion", "make-scene")
+SKILLS = ("make-motion", "make-explainer", "make-diagram", "make-dashboard", "make-scene")  # page order
 SHEET_ORDER = ("films",) + SKILLS + ("notes", "gallery")
 EXAMPLES = (
     ROOT / "plugins" / "portable-artifacts" / "skills" / "make-motion"
