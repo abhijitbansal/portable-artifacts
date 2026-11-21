@@ -95,15 +95,17 @@ function twinConflict(twin, spec) {
     return null; // no twin yet
   }
   const name = path.basename(twin);
-  const clash = (problem) => ({ path: 'md', message: `${name} ${problem}; move it, or build to another path` });
-  if (!stat.isFile()) return clash('is not a file');
+  const clash = (message) => ({ path: 'md', message });
+  if (!stat.isFile()) return clash(`${name} is not a file; move it, or build to another path`);
   let existing;
   try {
     existing = fs.readFileSync(twin, 'utf8');
   } catch (e) {
     throw new WriteError(twin, e);
   }
-  return isBuildTwin(existing, spec) ? null : clash('already exists and no --md build wrote it');
+  return isBuildTwin(existing, spec)
+    ? null
+    : clash(`${name} was not written by a make-explainer --md build (or by an older version); delete or rename it to regenerate`);
 }
 
 // Temp file + rename, so an interrupted build leaves the old file or the new one. A symlinked target is written through.

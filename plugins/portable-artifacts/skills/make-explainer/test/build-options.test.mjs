@@ -111,7 +111,7 @@ test('build --md refuses to overwrite a .md that no --md build wrote, and writes
     const mine = write(path.join(dir, 'pages', 'device.md'), '# My hand-written notes\n');
     const r = run('build', [spec, '--out', out, '--md'], { home });
     assert.equal(r.status, 1, r.stdout + r.stderr);
-    assert.match(r.stdout, /device\.md already exists and no --md build wrote it/);
+    assert.match(r.stdout, /device\.md was not written by a make-explainer --md build \(or by an older version\); delete or rename it to regenerate/);
     assert.equal(fs.readFileSync(mine, 'utf8'), '# My hand-written notes\n', 'the user file is untouched');
     assert.ok(!fs.existsSync(out), 'no page is written either');
   } finally { done(); }
@@ -148,6 +148,25 @@ test('build --md rebuilds its own twin, replaces it atomically (no .tmp left) an
     const legacy = fs.readFileSync(twin, 'utf8').split('\n').slice(1).join('\n');
     fs.writeFileSync(twin, legacy);
     assert.equal(run('build', [spec, '--out', out, '--md'], { home }).status, 0);
+  } finally { done(); }
+});
+
+test('build --md accepts a marker-less twin whose first line is the spec title, even after the spec changed', () => {
+  const { dir, home, done } = sandbox();
+  try {
+    const spec = write(path.join(dir, 'device.explainer.json'), checklistSpec());
+    const out = path.join(dir, 'pages', 'device.html');
+    const twin = path.join(dir, 'pages', 'device.md');
+    assert.equal(run('build', [spec, '--out', out, '--md'], { home }).status, 0);
+    // An older twin: no marker, and its body differs from what the spec would write now (the spec changed since).
+    fs.writeFileSync(twin, '# Device run\n\nan older body that no longer matches the spec\n');
+    const again = run('build', [spec, '--out', out, '--md'], { home });
+    assert.equal(again.status, 0, again.stdout + again.stderr);
+    assert.ok(fs.readFileSync(twin, 'utf8').startsWith('<!-- written by make-explainer build --md'));
+    // A different title is someone else's file.
+    fs.writeFileSync(twin, '# Another document\n\nnot ours\n');
+    assert.equal(run('build', [spec, '--out', out, '--md'], { home }).status, 1);
+    assert.equal(fs.readFileSync(twin, 'utf8'), '# Another document\n\nnot ours\n');
   } finally { done(); }
 });
 

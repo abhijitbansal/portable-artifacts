@@ -46,7 +46,9 @@ const TWIN_MARKER = `${TWIN_MARKER_PREFIX}; rebuilt on every build, so edit the 
 export const twinFile = (spec) => `${TWIN_MARKER}\n${checklistMarkdown(spec)}`;
 
 /**
- * Did a build write `existing` (the text of the .md already there)? It carries the marker, or it is exactly what this
- * spec's twin would be without it (a twin from before the marker, rebuilt from the same spec).
+ * Did a build write `existing` (the text of the .md already there)? It carries the marker, or it is a twin from
+ * before the marker: its first line is "# <spec title>", the shape checklistMarkdown writes, even if the spec's
+ * sections have changed since.
  */
-export const isBuildTwin = (existing, spec) => existing.startsWith(TWIN_MARKER_PREFIX) || existing === checklistMarkdown(spec);
+export const isBuildTwin = (existing, spec) =>
+  existing.startsWith(TWIN_MARKER_PREFIX) || existing.split(/\r?\n/, 1)[0] === `# ${spec.title}`;
