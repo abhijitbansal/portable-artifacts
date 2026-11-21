@@ -1,353 +1,213 @@
-"""Structure checks for docs/index.html, the site's feature page (stdlib only).
+"""Structure checks for the site: docs/index.html (cover plus five skill sheets) and
+docs/gallery.html (the register). Stdlib only.
 
-The page order is a product decision: showcase films, quick install, one line
-per skill, then the details. The install block follows the per-line
-copy-button contract in AGENTS.md.
+What these pin: the sheet order, the install copy-button contract in AGENTS.md, that every
+local file the pages point at exists, that every number printed next to a spec is true,
+that spec lines and plate tags pair up, and that the old one-page anchors still land.
 """
-import html
+import json
 import re
-import shutil
-import subprocess
+import struct
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlsplit, unquote
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGE = ROOT / "docs" / "index.html"
-FILM_DIR = "showcase/portable-artifacts/gallery/showreel"
-FILMS = ("whats-new", "pro", "viral")
-# Set False if the showreel films ship by the silent fallback (no voiceover).
-VOICED = True
-LOOKS_DIR = "showcase/portable-artifacts/gallery/looks"
-LOOKS = ("cosmos", "ledger", "poster", "keynote", "marker")
+DOCS = ROOT / "docs"
+PAGE = DOCS / "index.html"
+GALLERY = DOCS / "gallery.html"
+PAGES = (PAGE, GALLERY)
+PLUGIN_JSON = ROOT / "plugins" / "portable-artifacts" / ".claude-plugin" / "plugin.json"
+SKILLS = ("make-dashboard", "make-diagram", "make-explainer", "make-motion", "make-scene")
+SHEET_ORDER = ("films",) + SKILLS + ("notes", "gallery")
 EXAMPLES = (
     ROOT / "plugins" / "portable-artifacts" / "skills" / "make-motion"
     / "references" / "examples" / "v2"
 )
+GAL = "showcase/portable-artifacts/gallery"
 # Each film folder under gallery/ keeps a copy of the film file it was rendered from.
 FILM_SOURCES = {
-    FILM_DIR + "/pro": "showreel-pro.json",
-    FILM_DIR + "/viral": "showreel-viral.json",
-    FILM_DIR + "/whats-new": "whats-new.json",
-    LOOKS_DIR + "/cosmos": "look-cosmos.json",
-    LOOKS_DIR + "/ledger": "gate-ledger.json",
-    LOOKS_DIR + "/poster": "look-poster.json",
-    LOOKS_DIR + "/keynote": "gate-keynote.json",
-    LOOKS_DIR + "/marker": "gate-marker.json",
+    GAL + "/showreel/pro": "showreel-pro.json",
+    GAL + "/showreel/viral": "showreel-viral.json",
+    GAL + "/showreel/whats-new": "whats-new.json",
+    GAL + "/looks/cosmos": "look-cosmos.json",
+    GAL + "/looks/ledger": "gate-ledger.json",
+    GAL + "/looks/poster": "look-poster.json",
+    GAL + "/looks/keynote": "gate-keynote.json",
+    GAL + "/looks/marker": "gate-marker.json",
 }
-SKILLS = ("make-dashboard", "make-diagram", "make-explainer", "make-motion", "make-scene")
-TOP_ORDER = ("films", "quick-install", "skills", "details")
-KEPT_IDS = (
-    "whats-new", "overview", "showcase", "showcase-motion", "showcase-dashboard",
-    "gallery", "gallery-motion-1-4", "why", "install", "requirements",
-    "usability", "security", "licences", "inventory",
+# Ids the previous one-page site had; links to them must still land somewhere.
+OLD_IDS = (
+    "films", "quick-install", "skills", "details", "whats-new", "overview", "showcase",
+    "showcase-motion", "showcase-dashboard", "gallery", "gallery-motion-1-4", "why",
+    "install", "requirements", "usability", "security", "licences", "inventory",
+    "gallery-dashboard", "gallery-motion", "gallery-explainer", "gallery-diagram",
+    "gallery-scene",
 )
 
 
-def _page():
-    return PAGE.read_text(encoding="utf-8")
+class _Collect(HTMLParser):
+    """Collects start tags as (tag, attrs dict) in document order."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tags = []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    handle_startendtag = handle_starttag
+
+
+def _tags(path):
+    parser = _Collect()
+    parser.feed(path.read_text(encoding="utf-8"))
+    return parser.tags
+
+
+def _text(path):
+    return path.read_text(encoding="utf-8")
 
 
 def _section(page, section_id):
-    """Return the markup of the <section id=...> block, or '' if absent."""
+    """Markup of the <section ... id="section_id" ...> block (non-greedy), or ''."""
     match = re.search(
-        r'<section id="%s"[^>]*>(.*?)</section>' % re.escape(section_id), page, re.S
+        r'<section\b[^>]*\bid="%s"[^>]*>(.*?)</section>' % re.escape(section_id), page, re.S
     )
     return match.group(1) if match else ""
 
 
-def _position(page, element_id):
-    """Offset of the element (any tag) that carries this id, or -1."""
-    match = re.search(r'<[a-z0-9]+ id="%s"' % re.escape(element_id), page)
-    return match.start() if match else -1
+def _local(ref):
+    """The docs-relative path a src/href points at, or None for remote, anchor or data refs."""
+    if not ref or ref.startswith(("#", "data:", "mailto:", "javascript:")):
+        return None
+    parts = urlsplit(ref)
+    if parts.scheme or parts.netloc:
+        return None
+    return unquote(parts.path) or None
 
 
-def test_portable_artifacts_page_order():
-    page = _page()
-    positions = [_position(page, sid) for sid in TOP_ORDER]
-    assert all(p >= 0 for p in positions), dict(zip(TOP_ORDER, positions))
-    assert positions == sorted(positions), dict(zip(TOP_ORDER, positions))
-    # The hero comes before all of them, and the old detail sections after "details".
-    assert page.find('<h1>portable-artifacts</h1>') < positions[0]
-    for sid in KEPT_IDS:
-        assert 'id="%s"' % sid in page, "lost id: " + sid
-        assert page.find('id="%s"' % sid) > positions[3], sid + " should sit in the details"
+def test_both_pages_exist_with_one_h1():
+    for path in PAGES:
+        assert path.is_file(), path
+        assert len(re.findall(r"<h1\b", _text(path))) == 1, path.name
+
+
+def test_cover_then_five_sheets_then_notes_and_register_in_order():
+    page = _text(PAGE)
+    offsets = []
+    for sheet_id in SHEET_ORDER:
+        match = re.search(r'<section\b[^>]*\bid="%s"' % re.escape(sheet_id), page)
+        assert match, f"missing <section id={sheet_id}>"
+        offsets.append(match.start())
+    assert offsets == sorted(offsets), "sheets are out of order"
+    first = re.search(r'<main id="main">\s*(?:<!--.*?-->\s*)*<section\b[^>]*\bid="(\w[\w-]*)"', page, re.S)
+    assert first and first.group(1) == "films", "the cover must be the first section in <main>"
 
 
 def test_quick_install_copy_buttons_hold_one_command_without_comment():
-    block = _section(_page(), "quick-install")
-    buttons = re.findall(r'<button class="copy" data-copy="([^"]*)"', block)
-    assert len(buttons) >= 2
-    for raw in buttons:
-        command = html.unescape(raw)
-        assert "\n" not in command and "#" not in command, command
-        assert command == command.strip() and command
-    # one button per visible command line, as the CLAUDE.md contract says
-    assert block.count('<div class="cl">') == len(buttons)
-    # nothing invented, nothing repeated: known command forms only, and the
-    # install details keep just the variants
-    known = ("/plugin marketplace add ", "/plugin install ", "npx skills add ")
-    details_install = _section(_page(), "install")
-    for raw in buttons:
-        assert html.unescape(raw).startswith(known), raw
-        assert 'data-copy="%s"' % raw not in details_install, "repeated: " + raw
+    block = _section(_text(PAGE), "quick-install")
+    buttons = re.findall(r'<button class="copy" type="button" data-copy="([^"]*)">', block)
+    assert len(buttons) >= 3
+    assert block.count('<div class="cl">') == len(buttons), "one .cl row per copy button"
+    for cmd in buttons:
+        assert "\n" not in cmd and "#" not in cmd, cmd
+        assert cmd.startswith(("/plugin marketplace add ", "/plugin install ", "npx skills add ")), cmd
+        assert "abhijitbansal/portable-artifacts" in cmd or cmd.startswith("/plugin install portable-artifacts@"), cmd
 
 
-def test_both_films_are_referenced_with_poster_and_exist():
-    block = _section(_page(), "films")
-    for film in FILMS:
-        video = "%s/%s/video.mp4" % (FILM_DIR, film)
-        poster = "%s/%s/poster.jpg" % (FILM_DIR, film)
-        assert 'src="%s"' % video in block, video
-        assert 'poster="%s"' % poster in block, poster
-        assert (PAGE.parent / video).is_file(), video
-        assert (PAGE.parent / poster).is_file(), poster
-    videos = re.findall(r"<video\b[^>]*>", block)
-    assert len(videos) == len(FILMS)
-    for tag in videos:
-        assert "controls" in tag and 'preload="none"' in tag, tag
-        assert "autoplay" not in tag, tag
-        assert 'aria-label="' in tag, tag
+def test_every_local_src_href_and_poster_resolves():
+    missing = []
+    for path in PAGES:
+        for tag, attrs in _tags(path):
+            for key in ("src", "href", "poster", "data-full-film", "data-poster"):
+                rel = _local(attrs.get(key))
+                if rel and not (path.parent / rel).resolve().exists():
+                    missing.append(f"{path.name}: <{tag} {key}={rel}>")
+    assert not missing, "\n".join(missing)
 
 
-def test_films_meta_matches_the_voice_path():
-    block = _section(_page(), "films").lower()
-    metas = re.findall(r'<p class="gal-meta"[^>]*>([^<]*)</p>', block)
-    assert len(metas) == len(FILMS), metas
-    if VOICED:
-        assert all("voiceover" in meta for meta in metas), metas
-    else:
-        assert all("no voiceover" in meta for meta in metas), metas
-        assert block.count("voiceover") == len(FILMS), "voiceover named outside the meta lines"
-    # the bed and the cues play on both paths
-    assert "music" in block
-    assert "no music" not in block
-    assert "silent" not in block
+def test_videos_are_muted_loops_with_poster_and_label_and_never_autoplay():
+    videos = [a for t, a in _tags(PAGE) + _tags(GALLERY) if t == "video"]
+    assert len(videos) == 2
+    for attrs in videos:
+        assert "autoplay" not in attrs, "pa.js plays loops in view; never autoplay in markup"
+        for key in ("muted", "playsinline", "poster", "aria-label"):
+            assert key in attrs, key
+        assert attrs.get("preload") in ("none", "metadata")
+        assert (DOCS / attrs["src"]).stat().st_size < 2_000_000, "plate loops stay under 2 MB"
 
 
-def _duration(video):
-    ffprobe = shutil.which("ffprobe")
-    if ffprobe is None:
-        pytest.skip("ffprobe is not on PATH")
-    return float(subprocess.run(
-        [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip())
+def test_scripts_and_styles_load_only_from_assets():
+    for path in PAGES:
+        for tag, attrs in _tags(path):
+            if tag == "script" and "src" in attrs:
+                assert attrs["src"].startswith("assets/"), attrs["src"]
+            if tag == "link" and attrs.get("rel") == "stylesheet":
+                assert attrs["href"].startswith("assets/"), attrs["href"]
 
 
-def test_whats_new_card_is_the_first_card_of_the_films_section():
-    block = _section(_page(), "films")
-    cards = re.findall(r'<div class="gal-card"\s+id="(film-[^"]+)"', block)
-    assert cards[0] == "film-whats-new", cards
-    assert block.index('id="film-whats-new"') < block.index('id="film-pro"')
-    card = block[block.index('id="film-whats-new"'):block.index('id="film-pro"')]
-    assert "What's new" in card, card
-    assert 'href="%s/whats-new/film.json"' % FILM_DIR in card
-    assert 'href="%s/whats-new/video.mp4" download' % FILM_DIR in card
-
-
-def test_whats_new_meta_says_voiceover_and_its_seconds_match_the_video():
-    block = _section(_page(), "films")
-    card = block[block.index('id="film-whats-new"'):block.index('id="film-pro"')]
-    meta = re.search(r'<p class="gal-meta"[^>]*>([^<]*)</p>', card).group(1)
-    assert "voiceover" in meta, meta
-    seconds = float(re.search(r"([0-9]+\.[0-9]) s", meta).group(1))
-    video = PAGE.parent / FILM_DIR / "whats-new" / "video.mp4"
-    assert seconds == round(_duration(video), 1), (meta, _duration(video))
-    # the build report is a working file (gitignored): when it is present it must agree too
-    report = ROOT / ".scratch" / "pa2-release" / "whats-new" / "report.json"
-    if report.is_file():
-        import json
-        assert seconds == round(json.loads(report.read_text())["frames"] / 30, 1)
-
-
-def test_whats_new_video_stays_under_the_repo_size_warning():
-    video = PAGE.parent / FILM_DIR / "whats-new" / "video.mp4"
-    assert video.is_file()
-    assert video.stat().st_size <= 30 * 1024 * 1024, video.stat().st_size
-
-
-def test_both_films_have_an_audio_stream():
-    ffprobe = shutil.which("ffprobe")
-    if ffprobe is None:
-        pytest.skip("ffprobe is not on PATH")
-    for film in FILMS:
-        video = PAGE.parent / FILM_DIR / film / "video.mp4"
-        out = subprocess.run(
-            [ffprobe, "-v", "error", "-select_streams", "a", "-show_entries",
-             "stream=codec_name", "-of", "csv=p=0", str(video)],
-            capture_output=True, text=True, check=True,
-        ).stdout.split()
-        assert out, "no audio stream in " + str(video)
-
-
-def test_gallery_film_files_match_the_examples():
-    for folder, name in FILM_SOURCES.items():
-        copy = PAGE.parent / folder / "film.json"
-        source = EXAMPLES / name
-        assert copy.is_file(), str(copy)
-        assert source.is_file(), str(source)
-        assert copy.read_bytes() == source.read_bytes(), folder
-
-
-def test_motion_gallery_has_one_card_per_look():
-    page = _page()
-    block = page[page.index('id="gallery-motion"'):page.index('id="gallery-motion-1-4"')]
-    assert "make-motion 1.x" not in block
-    for look in LOOKS:
-        video = "%s/%s/video.mp4" % (LOOKS_DIR, look)
-        poster = "%s/%s/poster.jpg" % (LOOKS_DIR, look)
-        assert re.search(r'<video\b[^>]*>\s*<source src="%s"' % re.escape(video), block), video
-        assert (PAGE.parent / video).is_file(), video
-        assert (PAGE.parent / poster).is_file(), poster
-    assert len(re.findall(r"<video\b", block)) == len(LOOKS)
-
-
-def test_archive_links_the_motion_showcase_films_labelled_1x():
-    page = _page()
-    block = page[page.index('id="gallery-motion-1-4"'):page.index('id="gallery-explainer"')]
-    for film in ("features", "hand-drawn"):
-        folder = "showcase/portable-artifacts/gallery/motion-showcase/%s" % film
-        for name in ("video.mp4", "poster.jpg", "motion.json"):
-            assert (PAGE.parent / folder / name).is_file(), folder + "/" + name
-        assert re.search(r'<video\b[^>]*poster="%s/poster\.jpg"[^>]*>\s*<source src="%s/video\.mp4"' % (re.escape(folder), re.escape(folder)), block), film
-        card = block[block.index(folder + "/video.mp4"):]
-        card = card[:card.index("</div>")]
-        assert 'href="%s/motion.json"' % folder in card, film
-        assert "make-motion 1.x" in card, film
-
-
-def test_films_open_the_page_and_do_not_depend_on_scripts_or_gallery_css():
-    page = _page()
-    main_start = page.index('<main id="main"')
-    first_section = re.search(r"<section\b[^>]*id=\"([^\"]+)\"", page[main_start:]).group(1)
-    assert first_section == "films"
-    # no stat band between the hero and the films
-    films_at = _position(page, "films")
-    assert "statband" not in page[:films_at]
-    # film cards are visible with JS off: no .reveal on them
-    cards = re.findall(r'<div class="[^"]*"\s+id="film-[^"]+"', page)
-    assert len(cards) == len(FILMS)
-    assert all("reveal" not in card for card in cards), cards
-    # the .gal-* rules that style them live in <head>, not inside the gallery
-    head = page[: page.index("</head>")]
-    assert ".gal-media{" in head and ".gal-card{" in head
-    assert ".gal-media{" not in _section(page, "gallery")
-
-
-GALLERY_DIR = "showcase/portable-artifacts/gallery"
-# Page order, which is also the order of both link lists.
-GALLERY_ANCHORS = (
-    "gallery-dashboard", "gallery-motion", "gallery-explainer", "gallery-diagram", "gallery-scene",
-)
-GALLERY_LABELS = ("Dashboards", "Motion", "Explainers", "Diagrams", "3D scenes")
-CLOUD_DIR = GALLERY_DIR + "/cloud-architecture"
-
-
-def _toc(page):
-    match = re.search(r'<aside class="toc"[^>]*>(.*?)</aside>', page, re.S)
-    return match.group(1) if match else ""
-
-
-def test_each_skill_has_one_gallery_anchor_on_its_own_heading():
-    page = _page()
-    gallery = _section(page, "gallery")
-    for anchor in GALLERY_ANCHORS:
-        assert page.count('id="%s"' % anchor) == 1, anchor
-        assert re.search(r'<h3 class="gal-h3" id="%s">' % anchor, gallery), anchor
-    assert [page.find("id=\"%s\"" % a) for a in GALLERY_ANCHORS] == sorted(
-        page.find("id=\"%s\"" % a) for a in GALLERY_ANCHORS
-    )
-    # the mixed heading is split: no heading names two skills
-    assert "Explainers and diagrams" not in page
-
-
-def test_old_gallery_anchors_still_resolve():
-    page = _page()
-    for anchor in ("gallery", "gallery-motion-1-4"):
-        assert page.count('id="%s"' % anchor) == 1, anchor
-    assert 'href="#gallery-motion-1-4"' in page  # the 1.1.0 what's-new link
-
-
-def test_left_menu_lists_the_gallery_anchors_under_gallery():
-    toc = _toc(_page())
-    links = re.findall(r'<a ([^>]*)>([^<]*)</a>', toc)
-    hrefs = [re.search(r'href="([^"]+)"', attrs).group(1) for attrs, _ in links]
-    assert "#gallery" in hrefs
-    start = hrefs.index("#gallery")
-    quick = links[start + 1:start + 1 + len(GALLERY_ANCHORS)]
-    assert [re.search(r'href="#([^"]+)"', a).group(1) for a, _ in quick] == list(GALLERY_ANCHORS)
-    assert [label for _, label in quick] == list(GALLERY_LABELS)
-    assert all('class="sub"' in attrs for attrs, _ in quick)
-    assert hrefs[start + 1 + len(GALLERY_ANCHORS)] == "#why"
-
-
-def test_top_section_has_one_gallery_by_skill_row_with_the_same_links():
-    block = _section(_page(), "films")
-    assert block.count("Gallery by skill") == 1
-    row = re.search(r'<p[^>]*>[^<]*Gallery by skill.*?</p>', block, re.S)
-    assert row, "no Gallery by skill row"
-    hrefs = re.findall(r'href="#([^"]+)"', row.group(0))
-    for anchor in GALLERY_ANCHORS:
-        assert anchor in hrefs, anchor
-    # replaces, not repeats, the old "More outputs" line
-    assert "More outputs" not in block
-    assert block.count('href="#gallery"') == 0
-
-
-def test_cloud_architecture_gallery_files_exist_and_are_linked_without_autoplay():
-    for name in ("diagram.json", "dusk/index.html", "dusk/thumb.jpg",
-                 "press/index.html", "press/thumb.jpg", "poster/index.html", "poster/thumb.jpg"):
-        assert (PAGE.parent / CLOUD_DIR / name).is_file(), name
-    page = _page()
-    # one card in the diagrams part, one smaller preview directly under the films
-    gallery = _section(page, "gallery")
-    diagrams = gallery[gallery.index('id="gallery-diagram"'):gallery.index('id="gallery-scene"')]
-    assert CLOUD_DIR + "/dusk/index.html" in diagrams
-    assert CLOUD_DIR + "/diagram.json" in diagrams
-    assert "cloud:" in diagrams
-    films = _section(page, "films")
-    assert CLOUD_DIR + "/dusk/thumb.jpg" in films
-    assert films.index('id="film-viral"') < films.index(CLOUD_DIR + "/dusk/thumb.jpg")
-    assert len(re.findall(r"<video\b", films)) == len(FILMS)  # the preview is an image
-
-
-# Every make-explainer page in the gallery that has a source spec, in each theme copy.
-SIMPLE_EXPLAINERS = (
-    "explainer-page/index.html", "explainer-page/press/index.html", "explainer-page/poster/index.html",
-    "explainer-deck/index.html", "explainer-deck-press/index.html", "explainer-deck-poster/index.html",
-    "features-explainer/index.html", "features-explainer/press/index.html",
-    "features-explainer/poster/index.html",
-    "plan-page/index.html", "plan-page/brief/index.html",
-)
-
-
-def test_each_rebuilt_gallery_explainer_has_the_simple_english_toggle():
-    for name in SIMPLE_EXPLAINERS:
-        built = PAGE.parent / GALLERY_DIR / name
-        assert built.is_file(), name
-        assert "data-simple-toggle" in built.read_text(encoding="utf-8"), name
-
-
-def test_explainers_heading_says_the_pages_have_a_simple_english_toggle():
-    page = _page()
-    start = page.index('id="gallery-explainer"')
-    note = page[start:page.index('<div class="gal-grid">', start)]
-    assert "Simple English" in note, note
-
-
-def test_plan_mode_follows_the_explainers_it_belongs_to():
-    page = _page()
-    plan = page.index('<h3 class="gal-h3">Plan mode</h3>')
-    assert page.index('id="gallery-explainer"') < plan < page.index('id="gallery-diagram"')
-
-
-def test_every_skill_has_one_line_that_links_to_existing_details():
-    page = _page()
-    block = _section(page, "skills")
-    details_start = _position(page, "details")
+def test_spec_lines_and_plate_tags_pair_up_on_every_sheet():
+    page = _text(PAGE)
     for skill in SKILLS:
-        target = re.search(r'<a href="#(%s)"' % re.escape(skill), block)
-        assert target, "no one-liner link for " + skill
-        marker = page.find('id="%s"' % skill)
-        assert marker > details_start, skill + " details anchor missing"
+        sheet = _section(page, skill)
+        assert "data-leader" in re.search(r'<section\b[^>]*\bid="%s"[^>]*>' % skill, page).group(0)
+        spec = sorted(re.findall(r'<li tabindex="0" data-tag="(\d+)"', sheet))
+        tags = sorted(re.findall(r'<span class="tag" data-tag="(\d+)"', sheet))
+        assert spec and spec == tags, f"{skill}: spec lines {spec} vs plate tags {tags}"
+
+
+def test_spec_size_labels_match_the_linked_spec_files():
+    page = _text(PAGE)
+    for skill in SKILLS:
+        head = re.search(
+            r'<div class="spec-head"><span>([\w.]+) · ([\d.]+) KB</span><a href="([^"]+)">',
+            _section(page, skill),
+        )
+        assert head, f"{skill}: no spec head"
+        name, label, href = head.groups()
+        spec = DOCS / href
+        assert spec.name == name, f"{skill}: label says {name}, link is {spec.name}"
+        assert label == f"{spec.stat().st_size / 1000:.1f}", f"{skill}: {label} KB vs {spec.stat().st_size} bytes"
+
+
+def test_title_block_revision_matches_plugin_version():
+    version = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))["version"]
+    assert f"<dt>Revision</dt><dd>{version}</dd>" in _text(PAGE)
+
+
+def test_og_image_is_a_1200_by_630_png():
+    data = (DOCS / "og.png").read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", data[16:24])
+    assert (width, height) == (1200, 630)
+    assert 'content="https://abhijitbansal.github.io/portable-artifacts/og.png"' in _text(PAGE)
+
+
+def test_old_anchors_still_land():
+    page = _text(PAGE)
+    script = (DOCS / "assets" / "pa.js").read_text(encoding="utf-8")
+    table = re.search(r"const LEGACY = \{(.*?)\n  \};", script, re.S).group(1)
+    legacy = set(re.findall(r'^\s*"?([\w-]+)"?:\s', table, re.M))
+    for old in OLD_IDS:
+        assert f'id="{old}"' in page or old in legacy, f"#{old} lands nowhere"
+
+
+def test_register_groups_link_a_page_and_a_spec_for_every_plate():
+    gallery = _text(GALLERY)
+    for group in ("dashboards", "diagrams", "explainers", "films", "scenes"):
+        block = _section(gallery, group)
+        items = re.findall(r'<figure class="reg-item[^"]*">(.*?)</figure>', block, re.S)
+        assert items, group
+        for item in items:
+            assert re.search(r'>spec</a>', item), f"{group}: a plate without its spec"
+    count = len(re.findall(r'<figure class="reg-item', gallery))
+    assert f"Register · {count} plates" in gallery
+
+
+@pytest.mark.parametrize("folder,source", sorted(FILM_SOURCES.items()))
+def test_gallery_film_files_match_the_examples(folder, source):
+    copy = DOCS / folder / "film.json"
+    assert copy.read_bytes() == (EXAMPLES / source).read_bytes(), f"{copy} drifted from {source}"
