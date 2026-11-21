@@ -301,9 +301,10 @@ Each skill folder also has its own README.
   row limit and a timeout, against a DuckDB connection locked to the exact
   declared files (`allowed_paths`, external access off, configuration locked).
   Sources must live under the spec's folder unless you pass `--allow-outside`.
-  Attached DuckDB files with views or macros are refused. For Postgres and
+  Attached DuckDB files with views, macros or generated columns are refused. For Postgres and
   MySQL, `READ_ONLY` only limits DuckDB: **use a read-only database role**.
-  Credentials come only from environment variables and are scrubbed from
+  Credentials come only from environment variables whose names end in `_URL`
+  or `_DSN` or start with `PA_`, and are scrubbed from
   errors and result cells (defence in depth: the SQL allowlist is the control).
 - **Built pages embed the query results.** Publishing `index.html` publishes
   the data.

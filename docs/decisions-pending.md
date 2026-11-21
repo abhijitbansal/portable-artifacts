@@ -338,7 +338,21 @@ Found by the whole-repo review (`.scratch/review/repo-review.md`, local only). E
   wait. **Default: wait** (publishing is the owner's call).
 - **Branch protection `strict`** (require branches to be up to date). **Default: off**, to avoid rebase churn with 13
   required checks.
-- **`checklist.explainer.json` example** still prints `npx skills add abhijitbansal/claude-skills`; fixing it means
-  regenerating its golden. **Default: not changed** in this branch.
+- ~~**`checklist.explainer.json` example** still prints `npx skills add abhijitbansal/claude-skills`.~~ Fixed on
+  `fix/deep-review` (2.2.0).
 - **Narrow-screen sheet index** on the site was not re-checked visually below 531 px (the Chrome window will not go
   narrower). **Default: ship**; check on a phone.
+
+## Deep review fixes (branch fix/deep-review, 2026-11-21)
+
+From `.scratch/review/deep-review-2026-11-20.md` (local only). Each is shipped on its default; change it if you disagree.
+
+- **Dashboard env-name rule.** `sources.<n>.env` must end in `_URL`/`_DSN` or start with `PA_`. Options: this rule; an
+  explicit `--allow-env NAME` flag; no rule. **Default: the rule** (breaking for specs using other names; in the
+  CHANGELOG).
+- **Dashboard credential scrubbing per token.** The verifier's hint to also scrub each token of a multi-word env value
+  was not done. **Default: not done** (the name rule closes the main path).
+- **Intraword emphasis in make-explainer markdown is now literal** (`un*believ*able`), stricter than CommonMark, so that
+  `src/*.js` stays literal. **Default: keep.**
+- **Interrupted `--batch` manifest** lists only finished rows; the interrupted row is left out. **Default: keep.**
+- **125 LOW findings** (87 confirmed, 38 plausible) were not fixed. **Default: defer**; pick from the report's index.
