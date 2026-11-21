@@ -166,6 +166,19 @@ test('asterisks that are not emphasis (globs, multiplication) stay literal; real
   assert.equal(renderMarkdown('**a *b* c**'), '<p><strong>a <em>b</em> c</strong></p>');
 });
 
+test('emphasis opens after a letter (CJK, intraword) but not at a glob', () => {
+  assert.equal(renderMarkdown('这是**重要**的'), '<p>这是<strong>重要</strong>的</p>');
+  assert.equal(renderMarkdown('这是*重要*的'), '<p>这是<em>重要</em>的</p>');
+  assert.equal(renderMarkdown('foo**bar**'), '<p>foo<strong>bar</strong></p>');
+});
+
+test('mixed globs stay literal', () => {
+  assert.equal(renderMarkdown('Match *.js and lib/*.ts files'), '<p>Match *.js and lib/*.ts files</p>');
+  assert.equal(renderMarkdown('Use *.md or x*.txt'), '<p>Use *.md or x*.txt</p>');
+  assert.equal(renderMarkdown('Run *foo and src/*'), '<p>Run *foo and src/*</p>');
+  assert.equal(renderMarkdown('Run *foo and src\\*'), '<p>Run *foo and src\\*</p>');
+});
+
 test('unsupported markup stays literal text', () => {
   assert.equal(renderMarkdown('# Heading'), '<p># Heading</p>');
   assert.equal(renderMarkdown('1. one'), '<p>1. one</p>');

@@ -41,13 +41,16 @@ function safeUrl(url) {
 }
 
 // Flanking rules, so that a literal asterisk in prose (a glob like src/*.js, "2 * 3 * 4") is not emphasis.
-// An opener must not be followed by whitespace, and must not sit right after a word character, a closing
-// bracket, a path separator or another "*" (an intraword or glob "*"); a closer must not be preceded by whitespace.
-// The start of the (inner) text counts as a boundary.
-const NOT_OPENER_AFTER = /[\p{L}\p{N})\]}/\\*]/u;
+// An opener must not be followed by whitespace or ".", and must not sit right after a digit, a closing bracket, a
+// path separator or another "*" (a glob like *.js or src/*.js, or 5*3*2); it may follow a letter (CJK text, foo**bar**).
+// A closer must not be preceded by whitespace or a path separator. The start of the (inner) text counts as a boundary.
+const NOT_OPENER_AFTER = /[\p{N})\]}/\\*]/u;
 const isSpace = (ch) => ch === undefined || /\s/.test(ch);
-const canOpen = (s, at, width) => !isSpace(s[at + width]) && !(at > 0 && NOT_OPENER_AFTER.test(s[at - 1]));
-const canClose = (s, at, from) => at > from && !isSpace(s[at - 1]);
+const canOpen = (s, at, width) => {
+  const after = s[at + width];
+  return !isSpace(after) && after !== '.' && !(at > 0 && NOT_OPENER_AFTER.test(s[at - 1]));
+};
+const canClose = (s, at, from) => at > from && !isSpace(s[at - 1]) && s[at - 1] !== '/' && s[at - 1] !== '\\';
 
 // Closing '**' for a strong opened with its content starting at `from`, or -1.
 function closeStrong(s, from) {
