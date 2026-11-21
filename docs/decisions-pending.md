@@ -319,3 +319,26 @@ The what's new film (`plugins/portable-artifacts/skills/make-motion/references/e
 - **Holds and marker:** the hook holds about 0.8-1.0 s and redrawn-dashboard about 1.0 s, under the 1.6 s and 1.2 s rulings; "New" still has several treatments (slug tag, "NEW:" prefix, window title), and the slug numbers start at 02.
 - **Other tools:** keep-warm and session-compass carry "12 ALSO" and "13 ALSO" in the release numbering; only the hook says they are separate. The compass shot never shows the band or says what session-compass is; it is the fourth text-only shot in a row.
 - **Picture:** redrawn-diagram is a thin strip with unreadable nodes; the scene sticker covers the bars and the explainer sticker the verdict; map, diagram and look-tile text is unreadable at phone size; the local voice, the bed and pro against viral are barely shown in picture; LOW: "VS" frames Director and operator as opponents, the ask names no command, the ledger tile shows a fictional "Source:" line, and the v1/v2 counts can read as fewer features.
+
+## Open-repo cleanup left for the owner (branch chore/repo-hardening-site-redesign, 2026-11-20)
+
+Found by the whole-repo review (`.scratch/review/repo-review.md`, local only). Each is parked with its default.
+
+- **make-motion 1.x archive in `docs/showcase/portable-artifacts/gallery/`** (`motion-1-4/`, `motion-showcase/`,
+  `launch-announcement/`, `sql-guard-explainer/`, `quarterly-highlights-square/`, `relay-teaser/`, the root
+  `prompt-to-dashboard*`, `press/`, `poster/`, `voice/`). The new site no longer links them and their v1 specs no
+  longer build. Options: delete; move to a release asset or an `archive` branch; keep. **Default: keep** (another
+  session has a `feat/gallery-source-downloads` worktree that may touch these).
+- **`eval/test/helpers/real-stream-pilot-2026-11-18.jsonl`** is a real session capture with the owner's home path, a
+  session id and harness plugin names. Options: scrub (fake home path and id, drop unread keys, rerun eval tests); keep.
+  **Default: keep.** Recommended: scrub.
+- **`docs/superpowers/` (8 plans carry `/Users/` paths) and this file** are public on GitHub. Options: move to
+  `.github/plans/`; scrub paths; keep. **Default: keep** (AGENTS.md says leave plan text as written).
+- **Release.** No tags or releases exist. Options: cut `v2.1.1` with the CHANGELOG entry and the 1080p films attached;
+  wait. **Default: wait** (publishing is the owner's call).
+- **Branch protection `strict`** (require branches to be up to date). **Default: off**, to avoid rebase churn with 13
+  required checks.
+- **`checklist.explainer.json` example** still prints `npx skills add abhijitbansal/claude-skills`; fixing it means
+  regenerating its golden. **Default: not changed** in this branch.
+- **Narrow-screen sheet index** on the site was not re-checked visually below 531 px (the Chrome window will not go
+  narrower). **Default: ship**; check on a phone.
