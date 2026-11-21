@@ -53,7 +53,7 @@ test('errors in an embedded spec are re-pathed under sections[i].diagram', async
 
   const semantic = await errorsOf(doc([section(flow('T', { edges: [{ from: 'a', to: 'zz' }] }))]), dir);
   assert.deepEqual(semantic.map((e) => e.path), ['sections[0].diagram.edges[0].to']);
-  assert.match(semantic[0].message, /"zz" not found; did you mean "a"\?/);
+  assert.match(semantic[0].message, /"zz" not found; available: a, b/);
 });
 
 test('a diagram missing a required field is reported at the field', async () => {
