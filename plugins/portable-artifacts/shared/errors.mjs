@@ -19,6 +19,8 @@ export function levenshtein(a, b) {
   return d[a.length][b.length];
 }
 
+const SHORT_WORD = 2;
+
 // Closest candidate, or null when nothing is close enough to be a typo.
 export function didYouMean(word, candidates) {
   const w = String(word).toLowerCase();
@@ -29,7 +31,8 @@ export function didYouMean(word, candidates) {
     if (d < bestDist) { best = c; bestDist = d; }
   }
   if (best === null) return null;
-  const limit = Math.max(2, Math.floor(w.length / 3));
+  // A 1-2 character word is within two edits of almost any short key, so only one edit counts as a typo there.
+  const limit = w.length <= SHORT_WORD ? 1 : Math.max(2, Math.floor(w.length / 3));
   if (bestDist <= limit) return best;
   const prefix = candidates.find((c) => {
     const lc = String(c).toLowerCase();
