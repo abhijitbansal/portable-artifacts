@@ -394,3 +394,8 @@ and its place (a band above the cover). Judgment calls taken while building it, 
   `fix/deep-review`, `fix/port-claude-skills-pr51-52`, `feat/gallery-source-downloads`) were not deleted: the
   bash-guard hook blocks `git branch -D` for agents. Their tips equal the merged PR heads; the one remote left
   (`chore/standalone-plugin`) is deleted.
+- **Docs review, one finding left** (`.scratch/review/docs-review-2026-11-21.md`, local only, #9): make-explainer's
+  `references/examples/slides.explainer.json` still shows `clip.mp4`, a make-motion 1 render (cut-over F15(a)).
+  Default: re-render it with make-motion 2 the next time the explainer examples change. The make-motion SKILL.md byte
+  budget went from 20,900 to 21,150 for this review's fixes (`bin/test/skill-budget.test.mjs`); trim SKILL.md instead if
+  you prefer.

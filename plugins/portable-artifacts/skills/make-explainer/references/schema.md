@@ -12,7 +12,7 @@ Every section type and its fields: [sections.md](sections.md). Banned phrases: [
 | `key` | string | The plan's name for its saved and exported answers: `^[a-z0-9][a-z0-9._-]*$`, at most 80 characters. Required with `preset: "plan"` and whenever the spec has a `decision`, `approval` or `question`; optional otherwise. `scaffold.mjs plan` sets it from the title. |
 | `mode` | `page` `slides` | Default `page`; `preset: "slides"` implies slides. `preset: "slides"` with `mode: "page"` is an error. |
 | `theme` | `dusk` `press` `poster` `paper` `blueprint` `ink` `editorial` `mono` `brief` | Default `dusk` (`mono` for `preset: "plan"`). `SKILL.md` ("Choosing a theme", "Plan mode") says which to pick. Each has light and dark variants; the page follows the reader's setting and has a Theme toggle. |
-| `generatedBy` | object | Keys `model`, `effort`, `agent`; each 1-60 characters of letters, digits, spaces and `. _ : / ( ) + -`. Shown in the page footer and a `<meta name="generator">` tag; a missing field reads "not reported". The `--model`, `--effort` and `--agent` flags of `build.mjs` override it. |
+| `generatedBy` | object | Keys `model`, `effort`, `agent`; each 1-60 characters of letters, digits, spaces and `. _ : / ( ) + [ ] -`. Shown in the page footer and a `<meta name="generator">` tag; a missing field reads "not reported". The `--model`, `--effort` and `--agent` flags of `build.mjs` override it. |
 | `meta` | object | Keys `date`, `branch`, `repo`, `author`, `version`, `status`; each value at most 60 characters. Shown as chips under the title. |
 | `sections` | array, required | 1 to 40 sections, see below. |
 
@@ -65,7 +65,7 @@ A page with simple text gets a Simple English toggle. The page opens in normal t
 
 ## Output
 
-`build.mjs` writes `${PA_OUTPUT_DIR:-~/.agent/diagrams}/<slug>.html`, where `<slug>` comes from the title; `--out <file.html|dir>` overrides it. A section that needs files (a video, an interactive chart's dashboard) writes `<slug>.assets/` beside the page.
+`build.mjs` writes `<slug>.html`, where `<slug>` comes from the title. The folder is, in order: `--out <file.html|dir>`, `$PA_OUTPUT_DIR`, `<git root>/.scratch` for a spec inside a git repository, else `~/.agent/diagrams`. A section that needs files (a video, an interactive chart's dashboard) writes `<slug>.assets/` beside the page.
 
 The page carries a strict content security policy: no network, inline script and style only, `data:` images and fonts. A page with a `motion` section also allows media from `self`, `file:` and `blob:`.
 

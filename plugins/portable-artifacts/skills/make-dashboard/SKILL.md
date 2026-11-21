@@ -96,7 +96,7 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
   sqlite/postgres/mysql need a one-time `node <skill-dir>/scripts/setup.mjs dashboard.json` (online; builds stay offline).
 - `queries`: one SELECT each, names `[a-z][a-z0-9_]*`. Alias every aggregate (`AS revenue`); chart fields are those aliases.
 - `kpis[].format`: `number | currency | percent | compact` (percent expects a fraction).
-  Optional `kpis[].trend`: `{ "query": "by_month", "field": "revenue" }` names a declared query (never SQL) and draws a small line of that column under the tile's value, in query order.
+  Optional `kpis[].trend`: `{ "query": "by_month", "field": "revenue" }` names a declared query (never SQL) and draws a small line of that column under the tile's value, at the right beside the Query line, in query order.
 - `charts[].width`: `full` (default) or `half`. Each chart has exactly one of `kind` or `vegaLite`.
 - `kind`: `bar | stacked-bar | grouped-bar | line | area | scatter | bubble | heatmap | histogram | boxplot | donut`.
   Name columns by role (`x`, `y`, `color`, `size`, `value`); the build makes the chart, tooltips, alternate views, a sortable Table view and PNG/SVG/CSV export.
@@ -125,7 +125,7 @@ allowlist runs over its syntax tree (nesting, CTEs, subqueries and string consta
 it may read only the declared sources (`name`, `source.table`, `source.schema.table`) and its own CTEs, and the
 only table functions allowed are `range`, `generate_series` and `unnest`. System catalogs (`pg_catalog`,
 `information_schema`, `duckdb_*` views) and functions that read settings, the environment or files are rejected.
-It then runs in DuckDB locked to the declared files. Attached DuckDB files that define views or macros are refused.
+It then runs in DuckDB locked to the declared files. Attached DuckDB files that define views or macros, or have generated columns, are refused.
 Titles, SQL and data are escaped in the page. Keep credentials out of specs and data paths.
 Do not point `path` at files the user did not mention. Charts can never load URLs
 (`url`, `data`, `usermeta` are rejected anywhere in `vegaLite`) and the page ships a strict CSP.

@@ -18,7 +18,7 @@ Every line of narration names what is on screen while it is said. If a line has 
 
 ## Storylines first
 
-For a film over 15 seconds, when a person is there to answer, offer three storylines before you write shots: a few lines each, each a different angle on the same facts. The user picks one. When nobody can answer (`claude -p`, `codex exec`, an eval), pick the first and say so in the report.
+For a film over 20 seconds, sketch three storylines before you write shots: a few lines each, each a different angle on the same facts. Do not ask the user to pick: the intake round in `SKILL.md` is the only question round, and the storyboard step is where a person answers a plan. Take the storyline that best fits the ask and say which one in the report.
 
 ## Narration
 
