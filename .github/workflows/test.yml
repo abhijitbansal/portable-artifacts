@@ -6,6 +6,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A newer push to a pull request cancels the run it replaces; pushes to main always finish.
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # Repo-level checks: the two manifests, the site page and workflow tests under tests/pytest, and shellcheck on scripts/.
   checks:
@@ -100,7 +104,11 @@ jobs:
       matrix:
         include:
           - { name: make-dashboard, dir: skills/make-dashboard }
-          - { name: make-motion, dir: skills/make-motion }
+          # make-motion is the longest suite (about 2,300 s of tests); four shards keep it near the other jobs.
+          - { name: make-motion 1/4, dir: skills/make-motion, shard: 1/4 }
+          - { name: make-motion 2/4, dir: skills/make-motion, shard: 2/4 }
+          - { name: make-motion 3/4, dir: skills/make-motion, shard: 3/4 }
+          - { name: make-motion 4/4, dir: skills/make-motion, shard: 4/4 }
           - { name: make-diagram, dir: skills/make-diagram }
           - { name: make-scene 1/2, dir: skills/make-scene, shard: 1/2 }
           - { name: make-scene 2/2, dir: skills/make-scene, shard: 2/2 }
@@ -141,8 +149,8 @@ jobs:
         working-directory: plugins/portable-artifacts/${{ matrix.dir }}
         env:
           SHARD: ${{ matrix.shard }}
-          PA_REQUIRE_RENDER: ${{ matrix.name == 'make-motion' && '1' || '' }}
-          PA_REQUIRE_BROWSER: ${{ matrix.name == 'make-motion' && '1' || '' }}
+          PA_REQUIRE_RENDER: ${{ startsWith(matrix.name, 'make-motion') && '1' || '' }}
+          PA_REQUIRE_BROWSER: ${{ startsWith(matrix.name, 'make-motion') && '1' || '' }}
         run: node --test ${SHARD:+--test-shard=$SHARD} "test/**/*.test.mjs"
 
   # WebGL spike and the shader cuts (ripple, cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half

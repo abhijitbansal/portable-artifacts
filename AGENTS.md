@@ -21,7 +21,7 @@ sweeps, mods, machine setup, bats) was dropped.
   `tests/pytest/`. Each skill is a self-contained Node package with its own lockfile: run `npm ci` in the skill folder
   before its tests.
 - **CI** (`.github/workflows/test.yml`) runs on every PR: `checks` (manifests, pytest, shellcheck on macOS and Ubuntu),
-  `node` (shared copies in sync, shared and installer tests), `node-skills` (one runner per skill, with Chromium and
+  `node` (shared copies in sync, shared and installer tests), `node-skills` (one runner per skill, make-motion split into 4 shards and make-scene and make-explainer into 2, with Chromium and
   ffmpeg), `commit-trailers` and `plugin-version-guard`. `webgl-spike-macos` runs by hand only.
   `audit-on-demand-deps.yml` audits the lockfiles of the packages make-motion installs on demand, weekly and on
   changes. `pages.yml` deploys `docs/` on every push to `main` that touches `docs/` (Pages is enabled, source GitHub
