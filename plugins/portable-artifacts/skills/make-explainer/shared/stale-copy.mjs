@@ -42,7 +42,7 @@ export function staleCopyWarning({ scriptPath, home = os.homedir(), readFile = f
   const skill = at >= 0 && segments[at + 1] ? segments[at + 1] : DEFAULT_SKILL;
   const skillDir = path.join(installs[0], 'skills', skill);
   const doctor = path.join(skillDir, 'scripts', 'doctor.mjs');
-  return `warning: this script runs from ${running}, not the installed copy ${installs[0]}; run npm ci in ${skillDir} (or node ${doctor} --fix node_modules), then use that copy`;
+  return `warning: this script runs from ${running}, not the installed copy ${installs[0]}; run npm ci --ignore-scripts in ${skillDir} (or node ${doctor} --fix node_modules), then use that copy`;
 }
 
 // Never throws and never changes an exit code: a diagnostic must not break a build.

@@ -4,7 +4,7 @@ Shape encodes kind, so colour is never the only signal. Most kinds have a defaul
 
 ## Colour families
 
-Each kind belongs to one family; the family's hue (a theme token, `--k-<family>`) tints the card, its border, the icon tile, the small-caps kind label, the node's outgoing edges and its legend swatch. `tone` overrides only the border and icon. Bare shapes (flow `start`, `end`; state `start`, `end`) keep the neutral card.
+Each kind belongs to one family; the family's hue (a theme token, `--k-<family>`) colours the icon tile, the icon, the small-caps kind label and the legend mark. Cards, borders and edges stay neutral. `tone` overrides only the border and icon. Bare shapes (flow `start`, `end`; state `start`, `end`) keep the neutral card.
 
 | family | kinds | reads as |
 |---|---|---|
@@ -69,7 +69,7 @@ For a dot or a choice the label sits beside the shape.
 | `queue` | stacked rectangle | `lucide:layers` |
 | `external` | dashed rounded rectangle | `lucide:cloud` |
 
-Message kinds: `sync` (solid, filled arrow), `async` (solid, open arrow), `reply` (dashed, open arrow), `self` (a loop on one participant).
+Message kinds: `sync` (solid, filled arrow), `async` (dotted, open arrow), `reply` (dashed, open arrow), `self` (a loop on one participant).
 
 ## Icons
 

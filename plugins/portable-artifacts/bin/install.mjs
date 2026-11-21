@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Install the portable-artifacts skills into another agent host's skill dir.
+// Install the portable-artifacts skills into another agent host's skill dir (--help prints the usage).
 //   node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps]
 //   node bin/install.mjs <host> [--project <dir>] --agents-only [--force]   (agent file only: no skills, no preflight, no npm)
 // claude, codex, copilot and agents also get the cheap-model artifact-builder agent file (kept if present unless --force).
@@ -10,9 +10,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { agentFile, writeAgentFile } from '../shared/agents.mjs';
+import { parseCli, UsageError, exitUsage } from '../shared/cli.mjs';
+import { cmdLine } from '../shared/doctor.mjs';
 
 const SKILLS_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../skills');
 const SKIP = new Set(['node_modules', 'test', 'dist', 'out', '.cache']);
@@ -50,7 +51,17 @@ export function agentTargetsFor(host, scope, { home, proj }) {
   return (Object.hasOwn(AGENT_HOSTS, host) ? AGENT_HOSTS[host] : []).map((h) => ({ host: h, dir: path.join(base, AGENT_DIRS[h][scope]) }));
 }
 
-export class UsageError extends Error {}
+export { UsageError };
+
+const USAGE = 'node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps] [--agents-only]';
+const OPTIONS = {
+  project: { type: 'string' },
+  skills: { type: 'string' },
+  link: { type: 'boolean', default: false },
+  force: { type: 'boolean', default: false },
+  'no-deps': { type: 'boolean', default: false },
+  'agents-only': { type: 'boolean', default: false },
+};
 
 const SKILL_NAME = /^[a-z][a-z0-9-]*$/;
 
@@ -108,35 +119,101 @@ function geminiCommand(skill, description) {
   ].join('\n');
 }
 
+// How to spawn npm. On win32 npm is a .cmd shim and Node (CVE-2024-27980 fix, 18.20.2 and later) refuses to spawn one
+// without a shell, so the line goes through cmd.exe, quoted as shared/doctor.mjs quotes its own fix commands.
+export function npmCommand(args, platform = process.platform) {
+  return platform === 'win32' ? { cmd: cmdLine(['npm', ...args]), args: [], shell: true } : { cmd: 'npm', args, shell: false };
+}
+
+// Put the skill at `at`: a symlink to the source, or a copy without node_modules, tests and build output.
+function placeSkill(src, at, link) {
+  if (link) {
+    fs.symlinkSync(src, at, 'dir');
+    return;
+  }
+  fs.cpSync(src, at, {
+    recursive: true,
+    filter: (p) => !path.relative(src, p).split(path.sep).some((seg) => SKIP.has(seg)),
+  });
+}
+
+// npm ci for the skill placed at `at`; a message when it failed, otherwise null.
+function installDeps(src, at, link) {
+  // A linked install runs inside the source checkout: --omit=dev there would delete the developer's dev deps.
+  const args = ['ci', '--ignore-scripts', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
+  const npm = npmCommand(args);
+  const r = spawnSync(npm.cmd, npm.args, { cwd: link ? src : at, stdio: 'inherit', shell: npm.shell });
+  if (r.status === 0) return null;
+  return r.error ? ` (${r.error.message})` : '';
+}
+
+// Move the finished install into place. An existing install is renamed aside first and put back if the rename fails.
+// Once the swap has happened the install is done: a backup that will not delete (a locked file, a permission) is a
+// warning naming the leftover path, never a failed install. `rm` and `warn` are test seams.
+export function swapIn(stage, dst, existing, { rm = fs.rmSync, warn = warnStderr } = {}) {
+  if (!existing) {
+    fs.renameSync(stage, dst);
+    return;
+  }
+  const backup = path.join(path.dirname(dst), `.${path.basename(dst)}.old-${process.pid}`);
+  fs.renameSync(dst, backup);
+  try {
+    fs.renameSync(stage, dst);
+  } catch (e) {
+    fs.renameSync(backup, dst);
+    throw e;
+  }
+  try {
+    rm(backup, { recursive: true, force: true }); // a link is removed, never its target
+  } catch (e) {
+    warn(`the new install is in place at ${dst}, but the old copy could not be removed (${e.message}); delete ${backup} yourself`);
+  }
+}
+
+function warnStderr(message) {
+  process.stderr.write(`install: warning: ${message}\n`);
+}
+
+// Folders an earlier run left beside the destination. A `.new-*` stage never held anything but a half-built copy, so
+// it goes. A `.old-*` backup may be the only copy of a user's install (a run that died between its two renames), so it
+// stays and the user is told.
+function clearLeftovers(dstRoot, skill) {
+  const stagePrefix = `.${skill}.new-`;
+  const backupPrefix = `.${skill}.old-`;
+  for (const name of fs.readdirSync(dstRoot)) {
+    const at = path.join(dstRoot, name);
+    if (name.startsWith(stagePrefix)) {
+      fs.rmSync(at, { recursive: true, force: true }); // a link is removed, never its target
+    } else if (name.startsWith(backupPrefix)) {
+      warnStderr(`${at} was left by an earlier install of ${skill} and may hold a previous copy; check it, then delete it`);
+    }
+  }
+}
+
+// The new install is built beside the destination (a dot folder in the same skills dir) and swapped in once npm ci has
+// passed, so a failed upgrade under --force (offline, registry error) leaves the working install where it was.
 function installSkill(skill, dstRoot, { link, force, deps }) {
   const src = path.join(SKILLS_SRC, skill);
   const dst = path.join(dstRoot, skill);
   if (fs.existsSync(dst) && fs.realpathSync(dst) === fs.realpathSync(src)) {
     throw new Error(`${dst} is the source skill itself (the host dir points into this checkout); refusing to replace it`);
   }
-  if (fs.existsSync(dst) || isSymlink(dst)) {
-    if (!force) throw new Error(`${dst} already exists; pass --force to replace it`);
-    fs.rmSync(dst, { recursive: true, force: true });
-  }
+  const existing = fs.existsSync(dst) || isSymlink(dst);
+  if (existing && !force) throw new Error(`${dst} already exists; pass --force to replace it`);
   fs.mkdirSync(dstRoot, { recursive: true });
-  if (link) {
-    fs.symlinkSync(src, dst, 'dir');
-  } else {
-    fs.cpSync(src, dst, {
-      recursive: true,
-      filter: (p) => !path.relative(src, p).split(path.sep).some((seg) => SKIP.has(seg)),
-    });
-  }
-  if (deps) {
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const where = link ? src : dst;
-    // A linked install runs inside the source checkout: --omit=dev there would delete the developer's dev deps.
-    const args = ['ci', '--ignore-scripts', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
-    const r = spawnSync(npm, args, { cwd: where, stdio: 'inherit' });
-    if (r.status !== 0) {
-      fs.rmSync(dst, { recursive: true, force: true }); // a link is removed, never its target
-      throw new Error(`npm ci failed in ${where}${r.error ? ` (${r.error.message})` : ''}; removed the partial install at ${dst}`);
+  const stage = path.join(dstRoot, `.${skill}.new-${process.pid}`);
+  clearLeftovers(dstRoot, skill);
+  try {
+    placeSkill(src, stage, link);
+    const failure = deps ? installDeps(src, stage, link) : null;
+    if (failure !== null) {
+      const outcome = existing ? `discarded the new copy; the existing install at ${dst} is unchanged` : `nothing was installed at ${dst}`;
+      throw new Error(`npm ci failed in ${link ? src : stage}${failure}; ${outcome}`);
     }
+    swapIn(stage, dst, existing);
+  } catch (e) {
+    fs.rmSync(stage, { recursive: true, force: true }); // a link is removed, never its target
+    throw e;
   }
   return dst;
 }
@@ -146,23 +223,8 @@ function isSymlink(p) {
 }
 
 function parse(argv) {
-  let parsed;
-  try {
-    parsed = parseArgs({
-      args: argv,
-      allowPositionals: true,
-      options: {
-        project: { type: 'string' },
-        skills: { type: 'string' },
-        link: { type: 'boolean', default: false },
-        force: { type: 'boolean', default: false },
-        'no-deps': { type: 'boolean', default: false },
-        'agents-only': { type: 'boolean', default: false },
-      },
-    });
-  } catch (e) {
-    throw new UsageError(e.message);
-  }
+  // parseCli: --help/-h throw a help request, and an unknown flag names itself, the nearest real flag and the usage line.
+  const parsed = parseCli(argv, OPTIONS, USAGE);
   const [host] = parsed.positionals;
   if (!Object.hasOwn(HOSTS, host)) throw new UsageError(`unknown host "${host ?? ''}"; use one of: ${Object.keys(HOSTS).join(', ')}`);
   const all = fs.readdirSync(SKILLS_SRC).filter((d) => fs.existsSync(path.join(SKILLS_SRC, d, 'SKILL.md')));
@@ -256,8 +318,11 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   try {
     main();
   } catch (e) {
-    process.stderr.write(`install: ${e.message}\n`);
     // exitCode, not process.exit(): exiting right after a pipe write can SIGSEGV on Node 24.7
-    process.exitCode = e instanceof UsageError ? 2 : 1;
+    if (e.help === true) exitUsage(e); // --help: usage on stdout, exit 0
+    else {
+      process.stderr.write(`install: ${e.message}\n`);
+      process.exitCode = e instanceof UsageError ? 2 : 1;
+    }
   }
 }

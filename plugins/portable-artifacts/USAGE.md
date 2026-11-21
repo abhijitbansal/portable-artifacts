@@ -236,8 +236,9 @@ recipe from `make-dashboard/references/refresh.md`.
   offline.
 - Query attached tables as `shop.orders` or `wh.public.orders`.
 - Put the connection string in the environment (`export
-  WAREHOUSE_URL=postgres://readonly@host/db`). Use a **read-only** database
-  role. Sources attach `READ_ONLY` either way.
+  WAREHOUSE_URL=postgres://readonly@host/db`). The variable's name must end
+  in `_URL` or `_DSN` or start with `PA_`; other names are refused. Use a
+  **read-only** database role. Sources attach `READ_ONLY` either way.
 
 **Data outside the project folder:** sources must live under the spec's
 folder. Move or copy the data in, or, if you mean it, add `--allow-outside`

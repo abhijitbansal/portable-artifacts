@@ -63,18 +63,33 @@ async function tools() {
 const lastLine = (text) => text.trim().split('\n').at(-1) ?? '';
 
 /**
+ * The turn a video stream is shown at (ffprobe's JSON of one stream): 0, 90, 180 or 270 degrees, from its display matrix
+ * (side data `rotation`), else its `rotate` tag. ffmpeg applies it when it decodes, so a quarter turn swaps the frame's
+ * sides. Anything that is not a quarter turn counts as 0.
+ */
+export function streamRotation(stream) {
+  const fromMatrix = (stream?.side_data_list ?? []).find((d) => d?.rotation !== undefined)?.rotation;
+  const degrees = Math.round(Number(fromMatrix ?? stream?.tags?.rotate ?? 0));
+  const turn = ((degrees % 360) + 360) % 360;
+  return turn % 90 === 0 ? turn : 0;
+}
+
+/**
  * What ffprobe reads of a clip: { format, duration, width, height, codec, audio, audioCodec, streams: [{ type, codec,
  * index, attachedPic }], videoIndex }, or { format: null, error } when it does not open (a format off the list, a file that
  * is not a clip), with `codecRefused` when ffprobe stopped at a stream whose decoder is not on the list.
  */
 export async function probeClip({ file, ffprobe, signal }) {
   const binary = ffprobe ?? (await tools()).ffprobe;
-  const args = ['-v', 'error', '-show_entries', 'format=format_name,duration:stream=index,codec_type,codec_name,width,height:stream_disposition=attached_pic', '-of', 'json', ...clipInput(file)];
+  const args = ['-v', 'error', '-show_entries', 'format=format_name,duration:stream=index,codec_type,codec_name,width,height:stream_side_data=rotation:stream_tags=rotate:stream_disposition=attached_pic', '-of', 'json', ...clipInput(file)];
   const result = await run(binary, args, { signal, timeout: PROBE_TIMEOUT_MS });
   if (result.killed) throw Object.assign(new Error(`ffprobe did not finish reading ${path.basename(file)}`), { hint: FFMPEG_HINT });
   if (result.code !== 0) return { format: null, error: lastLine(result.stderr).replace(`${file}: `, '') || `ffprobe exited ${result.code}`, codecRefused: WHITELIST_REFUSAL.test(result.stderr) };
   const parsed = JSON.parse(result.stdout);
-  const streams = (parsed.streams ?? []).map((s) => ({ index: s.index, type: s.codec_type, codec: s.codec_name, width: s.width, height: s.height, attachedPic: s.disposition?.attached_pic === 1 }));
+  const streams = (parsed.streams ?? []).map((s) => {
+    const quarter = s.codec_type === 'video' && streamRotation(s) % 180 === 90; // decoded frames are turned: their sides swap
+    return { index: s.index, type: s.codec_type, codec: s.codec_name, width: quarter ? s.height : s.width, height: quarter ? s.width : s.height, attachedPic: s.disposition?.attached_pic === 1 };
+  });
   const video = streams.find((s) => s.type === 'video' && !s.attachedPic);
   const audio = streams.find((s) => s.type === 'audio');
   return { format: parsed.format?.format_name ?? null, duration: Number(parsed.format?.duration), width: video?.width, height: video?.height, codec: video?.codec, audio: audio !== undefined, audioCodec: audio?.codec, streams, videoIndex: video?.index };
@@ -179,8 +194,29 @@ function readDone(dir, key) {
 
 const folderBytes = (dir) => readdirSync(dir).reduce((sum, f) => sum + statSync(path.join(dir, f)).size, 0);
 
+const PARTIAL_RE = /^\.partial-[0-9a-f]+-(\d+)$/; // the decode folder of cachedDecode: .partial-<key>-<pid>
+
+// Whether a process with this pid runs (EPERM: it does, under another user).
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+// Removes the decode folders that a killed run left behind: the .partial folders whose process is gone.
+function sweepPartials(cacheDir) {
+  for (const name of readdirSync(cacheDir)) {
+    const match = PARTIAL_RE.exec(name);
+    if (match !== null && !pidAlive(Number(match[1]))) rmSync(path.join(cacheDir, name), { recursive: true, force: true });
+  }
+}
+
 // Keeps the cache under `maxBytes`: the entries least recently used go first, never the one in use.
 function pruneCache(cacheDir, keep, maxBytes) {
+  sweepPartials(cacheDir);
   const entries = readdirSync(cacheDir).filter((f) => !f.startsWith('.')).map((name) => {
     const dir = path.join(cacheDir, name);
     return { name, dir, bytes: folderBytes(dir), used: statSync(dir).mtimeMs };
@@ -209,10 +245,15 @@ async function cachedDecode({ ffmpeg, version, file, stream, from, to, fps, size
   }
   const tmp = path.join(cacheDir, `.partial-${key}-${process.pid}`);
   rmSync(tmp, { recursive: true, force: true });
-  const count = await decode({ ffmpeg, file, stream, from, to, fps, size, dir: tmp, signal });
-  writeFileSync(path.join(tmp, DONE), JSON.stringify({ key, count }));
-  rmSync(dir, { recursive: true, force: true });
-  renameSync(tmp, dir);
+  let count;
+  try { // a failed or stopped decode leaves no half-written folder (a killed process leaves one: pruneCache sweeps it)
+    count = await decode({ ffmpeg, file, stream, from, to, fps, size, dir: tmp, signal });
+    writeFileSync(path.join(tmp, DONE), JSON.stringify({ key, count }));
+    rmSync(dir, { recursive: true, force: true });
+    renameSync(tmp, dir);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true }); // nothing left after the rename
+  }
   pruneCache(cacheDir, key, maxBytes);
   return { dir, count, cached: false };
 }

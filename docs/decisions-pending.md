@@ -338,7 +338,31 @@ Found by the whole-repo review (`.scratch/review/repo-review.md`, local only). E
   wait. **Default: wait** (publishing is the owner's call).
 - **Branch protection `strict`** (require branches to be up to date). **Default: off**, to avoid rebase churn with 13
   required checks.
-- **`checklist.explainer.json` example** still prints `npx skills add abhijitbansal/claude-skills`; fixing it means
-  regenerating its golden. **Default: not changed** in this branch.
+- ~~**`checklist.explainer.json` example** still prints `npx skills add abhijitbansal/claude-skills`.~~ Fixed on
+  `fix/deep-review` (2.2.0).
 - **Narrow-screen sheet index** on the site was not re-checked visually below 531 px (the Chrome window will not go
   narrower). **Default: ship**; check on a phone.
+
+## Deep review fixes (branch fix/deep-review, 2026-11-21)
+
+From `.scratch/review/deep-review-2026-11-20.md` (local only). Each is shipped on its default; change it if you disagree.
+
+- **Dashboard env-name rule.** `sources.<n>.env` must end in `_URL`/`_DSN` or start with `PA_`. Options: this rule; an
+  explicit `--allow-env NAME` flag; no rule. **Default: the rule** (breaking for specs using other names; in the
+  CHANGELOG).
+- **Dashboard credential scrubbing per token.** The verifier's hint to also scrub each token of a multi-word env value
+  was not done. **Default: not done** (the name rule closes the main path).
+- **make-explainer `*` rule** is stricter than CommonMark: a `*` after a digit, `)`/`]`/`}`, `/` or `\` never opens,
+  one followed by `.` never opens, one after `/` or `\` never closes. Keeps globs literal. **Default: keep.**
+- **Interrupted `--batch` manifest** lists only finished rows; the interrupted row is left out. **Default: keep.**
+- **125 LOW findings** (87 confirmed, 38 plausible) were not fixed. **Default: defer**; pick from the report's index.
+- **Pre-push review LOWs not fixed** (`.scratch/review/gate.json`): theme variants of the rebuilt gallery pages
+  (`plan-page/brief`, `explainer-page/press|poster`, `explainer-deck-press|poster`) and the recap/plan/slides examples
+  still say claude-skills; the env-name rule passes secrets like `SLACK_WEBHOOK_URL`; generated-column detection is a
+  text match on the table SQL; `--format svg --out x.png` still makes a folder; cutout's own probe ignores rotation;
+  number kind has no shows-as-zero refusal; no guard test for `npm ci` without `--ignore-scripts`. **Default: defer.**
+- **Repair-commit review LOWs not fixed:** a letter-adjacent `*` can still italicise word-internal globs
+  (`foo*bar and baz*qux`); `***x***` renders unbalanced (from before this branch); a hand-written `.md` whose first line
+  matches the page title counts as an older twin; a concurrent install of the same skill can lose its stage folder to
+  the leftover sweep; a failed restore rename does not name the backup path; "folder exists" stands in for "model
+  complete" in the model cache. **Default: defer.**

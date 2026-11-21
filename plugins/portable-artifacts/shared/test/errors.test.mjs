@@ -80,6 +80,20 @@ test('levenshtein and didYouMean still catch typos and swaps', () => {
   assert.equal(didYouMean('zzzzzz', ['title', 'text']), null);
 });
 
+test('didYouMean: a 1-2 character word gets a suggestion only within one edit', () => {
+  assert.equal(didYouMean('id', ['to', 'from', 'label']), null, '"id" is two edits from "to"');
+  assert.equal(didYouMean('x', ['to']), null);
+  assert.equal(didYouMean('ab', ['to']), null);
+  assert.equal(didYouMean('ti', ['to', 'from']), 'to', 'one edit is still a typo');
+  assert.equal(didYouMean('ot', ['to']), 'to', 'a swap is one edit');
+  assert.equal(didYouMean('titel', ['title', 'text']), 'title', 'longer words keep their limit');
+});
+
+test('an unknown 2-letter key with no near neighbour lists the allowed keys and renames nothing', () => {
+  const [out] = format(extra('/edges/0', 'id', { from: {}, to: {}, label: {} }));
+  assert.equal(out.message, 'unknown property; allowed: from, to, label');
+});
+
 test('unknown key with a close name keeps the did-you-mean wording', () => {
   assert.deepEqual(format(extra('/sections/0', 'tex', { type: {}, text: {} })), [{ path: 'sections[0].tex', message: 'unknown property; did you mean "text"?' }]);
 });

@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 import { CURRENT_MARKER } from './agents.mjs';
+import { missingPackages } from './missing-packages.mjs';
 
 const REPO = 'abhijitbansal/portable-artifacts';
 const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
@@ -144,6 +145,9 @@ export function nodeVersion(min = 20) {
   };
 }
 
+// package.json "dependencies" with no folder in the skill's node_modules (the same judgement as preflight.mjs).
+const lackingPackages = (ctx) => missingPackages(ctx.skillDir, ctx.exists, ctx.readFile, pp(ctx).join);
+
 // What `npm ci` removes from a node_modules that already exists, and the --fix ids that put it back.
 // restore: the --fix ids this skill has for that (dev_deps); omitDev: the reinstall drops dev packages.
 // The optional voice and cutout installs live in <skill>/optional/, so npm ci in the skill folder never touches them.
@@ -161,12 +165,16 @@ export function nodeModules({ omitDev = true, restore = [], size } = {}) {
     rank: RANK.nodeModules,
     why: (ctx) => {
       const stale = staleOverrides(ctx, 'own');
-      return stale.length > 0 ? `installs the skill's own npm packages; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : "installs the skill's own npm packages";
+      if (stale.length > 0) return `installs the skill's own npm packages; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"`;
+      // An absent folder lacks everything; the list only explains a partial one.
+      const lacking = ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) ? lackingPackages(ctx) : [];
+      return lacking.length > 0 ? `installs the skill's own npm packages; node_modules lacks ${lacking.join(', ')} (an interrupted npm ci leaves a partial folder)` : "installs the skill's own npm packages";
     },
     required: true,
     size: size ?? ((ctx) => installSize(pp(ctx).basename(ctx.skillDir))),
-    // An install made before a security pin landed keeps the vulnerable version until npm ci reruns.
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && staleOverrides(ctx, 'own').length === 0,
+    // An install made before a security pin landed keeps the vulnerable version until npm ci reruns, and an aborted
+    // npm ci leaves a node_modules without some dependency: preflight.mjs judges the folder the same way.
+    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && lackingPackages(ctx).length === 0 && staleOverrides(ctx, 'own').length === 0,
     fix: (ctx) => {
       const modules = pp(ctx).join(ctx.skillDir, 'node_modules');
       const installed = ctx.exists(modules);
@@ -640,11 +648,14 @@ export async function diagnose(requirements, ctx) {
 
 const defaultRun = (cmd, args, opts) => spawnSync(cmd, args, opts);
 
+// The child's own stdout goes to stderr under --json, so stdout stays the one JSON document.
+const STDIO_JSON = ['inherit', 2, 'inherit'];
+
 // One step: win32 gets a single cmd.exe-quoted line through a shell (npm/npx are
 // .cmd shims); elsewhere argv goes straight to the program, no shell.
-function runStep(step, ctx, run) {
+function runStep(step, ctx, run, json) {
   const argv = argvOf(step);
-  const opts = { stdio: 'inherit', shell: ctx.platform === 'win32' };
+  const opts = { stdio: json ? STDIO_JSON : 'inherit', shell: ctx.platform === 'win32' };
   if (!Array.isArray(step) && step.cwd !== undefined) opts.cwd = step.cwd;
   return ctx.platform === 'win32' ? run(cmdLine(argv), [], opts) : run(argv[0], argv.slice(1), opts);
 }
@@ -665,7 +676,7 @@ const spawnError = (r) => {
 
 // Requested ids run by rank (node, node_modules, dev_deps, sisters, ffmpeg, chromium, kokoro, others),
 // deduped. A failed node_modules skips the requirements that need it.
-export async function runFixes(ids, requirements, ctx, run = defaultRun) {
+export async function runFixes(ids, requirements, ctx, run = defaultRun, { json = false } = {}) {
   const wanted = new Set(ids);
   const ordered = requirements
     .map((req, index) => ({ req, index }))
@@ -680,7 +691,7 @@ export async function runFixes(ids, requirements, ctx, run = defaultRun) {
       results.push({ id: req.id, ok: false, skipped: 'needs node_modules' });
       continue;
     }
-    const result = await fixOne(req, ctx, run);
+    const result = await fixOne(req, ctx, run, json);
     if (req.id === 'node_modules' && !result.ok) nodeModulesFailed = true;
     results.push(result);
   }
@@ -689,16 +700,16 @@ export async function runFixes(ids, requirements, ctx, run = defaultRun) {
   return results;
 }
 
-async function fixOne(req, ctx, run) {
+async function fixOne(req, ctx, run, json) {
   const id = req.id;
   try {
-    return await fixSteps(req, ctx, run);
+    return await fixSteps(req, ctx, run, json);
   } catch (e) {
     return { id, ok: false, error: firstLine(e) };
   }
 }
 
-async function fixSteps(req, ctx, run) {
+async function fixSteps(req, ctx, run, json) {
   const id = req.id;
   const fix = req.fix(ctx);
   const manual = fix.manual[ctx.platform] ?? fix.manual.linux;
@@ -707,7 +718,7 @@ async function fixSteps(req, ctx, run) {
   const done = [];
   for (const step of fix.auto) {
     done.push(step);
-    const r = runStep(step, ctx, run);
+    const r = runStep(step, ctx, run, json);
     if (r.status !== 0) {
       const failed = { id, ok: false, ran: render(done, ctx.platform), manual: fix.failManual ?? manual };
       const error = spawnError(r);
@@ -863,7 +874,7 @@ export async function doctorMain(argv, { skill, skillDir, targets = ['check'], r
 async function fixMain(raw, { ctx, json, requirementsFor, spec, run }) {
   const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
   if (ids.length === 0) throw new UsageError(`--fix needs at least one id; usage: ${USAGE}`);
-  const results = await runFixes(ids, requirementsFor(spec ?? ALL), ctx, run);
+  const results = await runFixes(ids, requirementsFor(spec ?? ALL), ctx, run, { json });
   if (json) process.stdout.write(`${JSON.stringify(results)}\n`);
   else for (const r of results) printFixResult(r, ctx.platform);
   if (results.some((r) => !r.ok)) process.exitCode = 1;

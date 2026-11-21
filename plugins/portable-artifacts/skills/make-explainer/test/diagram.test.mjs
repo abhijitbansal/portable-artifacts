@@ -53,7 +53,7 @@ test('errors in an embedded spec are re-pathed under sections[i].diagram', async
 
   const semantic = await errorsOf(doc([section(flow('T', { edges: [{ from: 'a', to: 'zz' }] }))]), dir);
   assert.deepEqual(semantic.map((e) => e.path), ['sections[0].diagram.edges[0].to']);
-  assert.match(semantic[0].message, /"zz" not found; did you mean "a"\?/);
+  assert.match(semantic[0].message, /"zz" not found; available: a, b/);
 });
 
 test('a diagram missing a required field is reported at the field', async () => {
@@ -268,7 +268,7 @@ test('the check loads make-diagram through api.mjs alone, and a make-diagram wit
   assert.equal(errors.length, 1);
   assert.equal(errors[0].path, 'sections[0].diagram');
   assert.match(errors[0].message, /make-diagram is too old \(no validateSpec in api\.mjs\)/);
-  assert.match(errors[0].message, /reinstall with npx --yes skills@1\.7\.2 add abhijitbansal\/portable-artifacts --skill make-diagram -y, then run npm ci --omit=dev --prefix /);
+  assert.match(errors[0].message, /reinstall with npx --yes skills@1\.7\.2 add abhijitbansal\/portable-artifacts --skill make-diagram -y, then run npm ci --ignore-scripts --omit=dev --prefix /);
   assert.doesNotMatch(errors[0].message, /doctor/);
 });
 

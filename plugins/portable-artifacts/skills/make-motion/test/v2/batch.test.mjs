@@ -92,7 +92,7 @@ test('an unknown column is ignored with one warning per column, and the rows sti
       rendered.push(options);
       mkdirSync(path.dirname(options.out), { recursive: true });
       writeFileSync(options.out, `video of ${options.values.name}`);
-      return { report: { ok: true, findings: [] }, exitCode: 0 };
+      return { report: { ok: true, output: options.out, findings: [] }, exitCode: 0 };
     },
   };
   const rows = write('cols.json', [{ name: 'A', colour: 'red' }, { name: 'B', colour: 'blue', size: 2 }]);
@@ -106,4 +106,68 @@ test('an unknown column is ignored with one warning per column, and the rows sti
   assert.match(manifest.rows[0].sha256, /^[0-9a-f]{64}$/);
   assert.equal(report.manifest, path.join(dir, 'w', 'manifest.json'));
   assert.ok(existsSync(manifest.rows[1].file));
+});
+
+// ---- MOTS-1 / MOTS-2 (deep review): what a row that wrote nothing records, and what an interrupt does to a batch ----
+
+const batchOf = (name, rows, outName) => ({ specPath: write(`film-${name}.json`, FILM), batch: write(`rows-${name}.json`, rows), out: path.join(dir, outName, '{name}.mp4') });
+const manifestOf = (outName) => JSON.parse(readFileSync(path.join(dir, outName, 'manifest.json'), 'utf8'));
+
+test('a row that wrote nothing (--no-render) is ok with no hash, and a stale file at its path is never hashed', async () => {
+  const options = batchOf('norender', [{ name: 'A' }, { name: 'B' }], 'nr');
+  mkdirSync(path.join(dir, 'nr'), { recursive: true });
+  writeFileSync(path.join(dir, 'nr', 'B.mp4'), 'a stale video from an earlier batch');
+  const io = { log: () => {}, launch: async () => ({ close: async () => {} }), runRow: async () => ({ report: { ok: true, output: null, findings: [] }, exitCode: 0 }) };
+  const { report, exitCode } = await runBatch({ ...options, noRender: true }, io);
+  assert.equal(exitCode, 0, JSON.stringify(report));
+  const manifest = manifestOf('nr');
+  assert.deepEqual(manifest.rows.map((r) => [r.status, r.sha256, r.error]), [['ok', null, undefined], ['ok', null, undefined]]);
+});
+
+test('a row that ends in a finding with no video keeps its finding instead of an ENOENT failure', async () => {
+  const options = batchOf('finding', [{ name: 'A' }], 'fd');
+  const finding = { kind: 'mechanical', message: 'page: boom' };
+  const io = { log: () => {}, launch: async () => ({ close: async () => {} }), runRow: async () => ({ report: { ok: false, output: null, findings: [finding] }, exitCode: 1 }) };
+  const { exitCode } = await runBatch(options, io);
+  assert.equal(exitCode, 1);
+  const [row] = manifestOf('fd').rows;
+  assert.equal(row.status, 'findings');
+  assert.equal(row.sha256, null);
+  assert.deepEqual(row.findings, [finding]);
+  assert.equal(row.error, undefined);
+});
+
+test('an interrupted row stops the batch: no later row renders, the exit is 130, the manifest lists the rows that finished', async () => {
+  const options = batchOf('abort', [{ name: 'A' }, { name: 'B' }, { name: 'C' }], 'ab');
+  const controller = new AbortController();
+  const calls = [];
+  const io = {
+    log: () => {},
+    signal: controller.signal,
+    launch: async () => ({ close: async () => {} }),
+    runRow: async (rowOptions) => {
+      calls.push(rowOptions.values.name);
+      if (rowOptions.values.name === 'B') {
+        controller.abort();
+        return { report: { ok: false, output: null, findings: [], error: { message: 'interrupted', hint: '' } }, exitCode: 130 };
+      }
+      mkdirSync(path.dirname(rowOptions.out), { recursive: true });
+      writeFileSync(rowOptions.out, 'video');
+      return { report: { ok: true, output: rowOptions.out, findings: [] }, exitCode: 0 };
+    },
+  };
+  const { report, exitCode } = await runBatch(options, io);
+  assert.deepEqual(calls, ['A', 'B'], 'row C never starts');
+  assert.equal(exitCode, 130);
+  assert.equal(report.ok, false);
+  assert.deepEqual(manifestOf('ab').rows.map((r) => [r.index, r.status]), [[1, 'ok']]);
+});
+
+test('an exit 130 row without an aborted signal still stops the batch', async () => {
+  const options = batchOf('exit130', [{ name: 'A' }, { name: 'B' }], 'e1');
+  const calls = [];
+  const io = { log: () => {}, launch: async () => ({ close: async () => {} }), runRow: async (o) => { calls.push(o.values.name); return { report: { ok: false, output: null, findings: [], error: { message: 'interrupted', hint: '' } }, exitCode: 130 }; } };
+  const { exitCode } = await runBatch(options, io);
+  assert.deepEqual(calls, ['A']);
+  assert.equal(exitCode, 130);
 });

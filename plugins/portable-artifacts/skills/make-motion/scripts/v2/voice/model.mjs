@@ -1,8 +1,10 @@
 // The pinned timestamped Kokoro model (Apache-2.0) that version 2 narrates with, and its verified download.
 // Version 1 read a different model (its scripts/lib/voice.mjs, deleted at cut-over) from the folder scripts/lib/model-cache.mjs names.
 // Every file is fetched through ensurePinnedFile at one commit, with its byte count and SHA-256; nothing here calls the network itself.
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stableCacheDir } from '../../../shared/doctor.mjs';
 import { ensurePinnedFile } from '../../lib/pinned-file.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -26,8 +28,17 @@ export const VOICE_MODEL = Object.freeze({
   files: Object.freeze(PINNED_FILES.map((file) => Object.freeze(file))),
 });
 
-/** The cache folder of the model under `root` (the skill folder by default). */
-export const voiceModelDir = (root = SKILL_ROOT) => path.join(root, ...CACHE_PARTS, VOICE_MODEL.id);
+/**
+ * The cache folder of the model for the skill at `root` (the skill folder by default): the per-user folder that outlives a
+ * plugin update, like the cutout model's (scripts/lib/model-cache.mjs; $CLAUDE_PLUGIN_DATA, else the OS cache folder). A copy
+ * already downloaded into <root>/.cache/models keeps being used until the stable folder has its own, so no one downloads
+ * the 93 MB again. `options` (env, platform, homedir) are for tests.
+ */
+export function voiceModelDir(root = SKILL_ROOT, options = {}) {
+  const stable = path.join(stableCacheDir({ skillDir: root, ...options }), 'models', VOICE_MODEL.id);
+  const legacy = path.join(root, ...CACHE_PARTS, VOICE_MODEL.id);
+  return existsSync(stable) || !existsSync(legacy) ? stable : legacy;
+}
 
 /**
  * Test seam, not part of the API: downloads and verifies the files of any table. Only tests call it with a table other than

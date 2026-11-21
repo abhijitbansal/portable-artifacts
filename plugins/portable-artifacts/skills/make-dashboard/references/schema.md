@@ -58,7 +58,9 @@ A query with zero rows shows "No rows returned" and still offers the Table view.
 - `postgres`, `mysql`: `"env": "PG_URL"` names an environment variable that holds the connection string
   (`postgres://user:pass@host:5432/db`, or `host=… user=… password=… dbname=…`; MySQL uses `host=… user=… password=… database=…`).
   It is attached read-only under the source name; query `name.table`, or `name.schema.table` for postgres.
-  `env` must match `^[A-Z_][A-Z0-9_]*$`. Credentials never go in the spec. An unset or empty variable is an error
+  `env` must be a variable name that ends in `_URL` or `_DSN`, or starts with `PA_` (`DATABASE_URL`, `PG_URL`,
+  `WAREHOUSE_DSN`, `PA_SHOP`), upper case only; any other name (`HOME`, `ANTHROPIC_API_KEY`) is refused at validation
+  without reading the environment, so a spec cannot point a source at an unrelated secret. Credentials never go in the spec. An unset or empty variable is an error
   at validate and at build (`sources.db.env: environment variable PG_URL is not set`).
   The connection string is scrubbed from every error message, and it never reaches the page, the SQL shown or EVAL_LOG.
 
@@ -75,8 +77,9 @@ and connections outside that lockdown, so the SQL allowlist rejects them (see "S
 Postgres and MySQL are attached before the lock; they were not run against a live server in the tests.
 **For postgres and mysql, use a read-only database role.** `READ_ONLY` on the ATTACH limits what DuckDB itself does; it is not
 a guarantee about what the server executes for the statements DuckDB passes through.
-An attached `duckdb` file may not define views or macros (they would run outside the allowlist); the source is refused
-with their names. Export plain tables instead.
+An attached `duckdb` file may not define views or macros (they would run outside the allowlist), and none of its tables may
+have a generated column (`GENERATED ALWAYS AS (...)`: the expression runs at SELECT time, outside the scalar denylist);
+the source is refused with their names. Export plain tables instead. `DEFAULT` values are fine.
 
 ## vegaLite (raw charts)
 

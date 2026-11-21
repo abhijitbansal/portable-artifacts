@@ -1,5 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { roundTrip } from './helpers/cmdsim.mjs';
 import { nodeVersion, nodeModules, devDeps, sisterSkill, builderAgent, ffmpeg, browser, kokoro, cutout, OPTIONAL, optionalInstallArgv, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
 
@@ -102,6 +107,28 @@ test('node_modules installed before an overrides pin existed counts as missing u
   assert.equal(stale.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-motion');
   files['/s/make-motion/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
   assert.deepEqual(await diagnose([nodeModules()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+});
+
+test('node_modules from an aborted npm ci (a dependency folder missing) counts as missing, as preflight judges it', async () => {
+  const files = { '/s/make-diagram/package.json': JSON.stringify({ dependencies: { ajv: '8.0.0', 'fast-uri': '3.0.0' } }) };
+  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+  const present = new Set(['/s/make-diagram/node_modules', '/s/make-diagram/node_modules/ajv/package.json']);
+  const partial = await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: (p) => present.has(p), readFile }));
+  assert.equal(partial.ok, false, 'fast-uri has no folder: the install is partial');
+  assert.equal(partial.missing[0].id, 'node_modules');
+  present.add('/s/make-diagram/node_modules/fast-uri/package.json');
+  const full = await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: (p) => present.has(p), readFile }));
+  assert.deepEqual(full, { ok: true, missing: [] });
+});
+
+test('G-WHY: the "lacks" list appears only when node_modules exists; an absent folder just says what the step installs', async () => {
+  const files = { '/s/make-diagram/package.json': JSON.stringify({ dependencies: { ajv: '8.0.0', 'fast-uri': '3.0.0' } }) };
+  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+  const absent = await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: () => false, readFile }));
+  assert.equal(absent.missing[0].why, "installs the skill's own npm packages");
+  const present = new Set(['/s/make-diagram/node_modules']);
+  const partial = await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: (p) => present.has(p), readFile }));
+  assert.match(partial.missing[0].why, /node_modules lacks ajv, fast-uri \(an interrupted npm ci leaves a partial folder\)/);
 });
 
 test('node_modules fix on an existing install says what npm ci removes and which --fix ids restore it', async () => {
@@ -282,6 +309,33 @@ test('doctorMain: --fix refuses an unknown id with exit 1', async () => {
   const r = await runMain(['--fix', 'nope'], mainOpts());
   assert.equal(r.code, 1);
   assert.match(r.out + r.err, /unknown id/);
+});
+
+test('doctorMain: --fix --json sends the fix command\'s stdout to stderr, plain --fix leaves it inherited', async () => {
+  const stdios = [];
+  const run = (c, a, o) => { stdios.push(o.stdio); return { status: 0 }; };
+  const opts = mainOpts({ requirementsFor: () => [nodeModules()] });
+  await runMain(['--fix', 'node_modules', '--json'], opts, { run });
+  await runMain(['--fix', 'node_modules'], opts, { run });
+  assert.deepEqual(stdios, [['inherit', 2, 'inherit'], 'inherit']);
+});
+
+test('doctor --fix --json run for real: stdout is one JSON document, the command\'s own output lands on stderr', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-fix-json-'));
+  const script = path.join(dir, 'run.mjs');
+  fs.writeFileSync(script, [
+    `import { doctorMain } from ${JSON.stringify(pathToFileURL(path.resolve(import.meta.dirname, '../doctor.mjs')).href)};`,
+    "const req = { id: 'noisy', rank: 1, why: 'x', required: true, size: '-', needsSudo: () => false, check: () => true,",
+    "  fix: () => ({ auto: [[process.execPath, '-e', 'console.log(\"npm-style progress line\")']], manual: { darwin: 'x', linux: 'x', win32: 'x' } }) };",
+    "await doctorMain(['--fix', 'noisy', '--json'], { skill: 's', skillDir: process.cwd(), requirementsFor: () => [req] });",
+    '',
+  ].join('\n'));
+  const r = spawnSync(process.execPath, [script], { cwd: dir, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const lines = r.stdout.trim().split('\n');
+  assert.equal(lines.length, 1, `stdout must be one line, got: ${r.stdout}`);
+  assert.deepEqual(JSON.parse(lines[0]).map((x) => [x.id, x.ok]), [['noisy', true]]);
+  assert.match(r.stderr, /npm-style progress line/);
 });
 
 // --- fix round 1 ---

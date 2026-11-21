@@ -60,6 +60,9 @@ export function stub(dir, stage, { body = { ok: true, errors: [] }, status = 0, 
   return file;
 }
 
+// The doctor's fix.manual: one command per platform.
+const manualAll = (cmd) => ({ darwin: cmd, linux: cmd, win32: cmd });
+
 const recorded = (file) => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 
 /**
@@ -162,7 +165,7 @@ export function defineMakeSuite(cfg) {
       await hermetic(),
       await hermetic({ stubs: { validate: { status: 1, body: { ok: false, errors: [{ path: 'a', message: 'bad' }] } } } }),
       await hermetic({ args: ['--bogus'] }),
-      await hermetic({ stubs: { doctor: { status: 1, body: { ok: false, missing: [{ id: 'node_modules', required: true, why: 'needs npm', fix: { manual: 'run npm ci' } }] } } } }),
+      await hermetic({ stubs: { doctor: { status: 1, body: { ok: false, missing: [{ id: 'node_modules', required: true, why: 'needs npm', fix: { auto: 'npm ci', manual: manualAll('run npm ci') } }] } } } }),
     ];
     assert.deepEqual(cases.map((c) => c.status), [0, 1, 2, 2]);
     for (const c of cases) assert.ok('ok' in c.report && 'output' in c.report && 'stages' in c.report && 'findings' in c.report);
@@ -248,11 +251,14 @@ export function defineMakeSuite(cfg) {
   });
 
   test(`${cfg.skill}: a doctor that reports a required item missing is exit 2 with error, and nothing else runs`, async () => {
-    const missing = [{ id: 'node_modules', required: true, why: "this skill's npm packages are not installed", fix: { manual: 'run npm ci --prefix /x' } }];
+    // the real doctor's shape: fix.auto is the rendered command, fix.manual is one command per platform
+    const manual = { darwin: 'run npm ci --prefix /x (mac)', linux: 'run npm ci --prefix /x (linux)', win32: 'run npm ci --prefix C:\\x (win)' };
+    const missing = [{ id: 'node_modules', required: true, why: "this skill's npm packages are not installed", fix: { auto: 'npm ci --prefix /x', manual } }];
     const { status, report, calls } = await hermetic({ stubs: { doctor: { status: 1, body: { ok: false, missing } } } });
     assert.equal(status, 2);
     assert.match(report.error.message, /needs node_modules/);
-    assert.equal(report.error.hint, 'run npm ci --prefix /x');
+    assert.equal(typeof report.error.hint, 'string');
+    assert.equal(report.error.hint, manual[process.platform] ?? manual.linux);
     assert.deepEqual(report.stages.map((s) => [s.name, s.ok]), [['doctor', false]]);
     assert.deepEqual(calls.map((c) => c.stage), ['doctor']);
   });

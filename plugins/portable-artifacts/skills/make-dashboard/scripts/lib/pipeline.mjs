@@ -27,7 +27,7 @@ function readVendor() {
     try {
       out[key] = fs.readFileSync(path.join(SKILL, rel), 'utf8');
     } catch {
-      throw new UsageError(`missing ${rel}; run npm ci --omit=dev --prefix ${quoteArg(SKILL)}`);
+      throw new UsageError(`missing ${rel}; run npm ci --ignore-scripts --omit=dev --prefix ${quoteArg(SKILL)}`);
     }
   }
   return out;

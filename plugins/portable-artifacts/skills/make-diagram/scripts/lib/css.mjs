@@ -41,7 +41,7 @@ const rules = [
   '.pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}',
   '.pa-edge-plate{fill:var(--surface);stroke:none}', // a plate: surface fill (the export and make-explainer draw on the surface), no border
   `.pa-edge-text{fill:var(--text-2);font-size:${EDGE_LABEL_SIZE}px;font-weight:400}`,
-  // nodes: a card tinted by its kind family (familyRules below); the shape still encodes the kind
+  // nodes: a neutral card whose icon tile and type line take the kind family hue (familyRules below); the shape still encodes the kind
   '.pa-node{outline:none}',
   '.pa-shape{fill:var(--surface);stroke:var(--line);stroke-width:1.5}',
   '.pa-decor{fill:none;stroke:var(--line);stroke-width:1}',

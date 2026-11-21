@@ -11,7 +11,7 @@ const warn = (scriptPath, body) => staleCopyWarning({ scriptPath, home, readFile
 
 test('a script under the plugin cache but outside the installed copy draws one line naming both and the fix', () => {
   const line = warn(script(path.join(cache, '0.8.0')), installed(path.join(cache, '1.0.0')));
-  assert.equal(line, `warning: this script runs from ${path.join(cache, '0.8.0')}, not the installed copy ${path.join(cache, '1.0.0')}; run npm ci in ${path.join(cache, '1.0.0', 'skills', 'make-explainer')} (or node ${path.join(cache, '1.0.0', 'skills', 'make-explainer', 'scripts', 'doctor.mjs')} --fix node_modules), then use that copy`);
+  assert.equal(line, `warning: this script runs from ${path.join(cache, '0.8.0')}, not the installed copy ${path.join(cache, '1.0.0')}; run npm ci --ignore-scripts in ${path.join(cache, '1.0.0', 'skills', 'make-explainer')} (or node ${path.join(cache, '1.0.0', 'skills', 'make-explainer', 'scripts', 'doctor.mjs')} --fix node_modules), then use that copy`);
   assert.equal(line.includes('\n'), false);
 });
 

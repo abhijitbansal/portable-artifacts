@@ -125,7 +125,14 @@ async function doctorStage(ctx) {
   const required = body.missing.filter((m) => m.required);
   const first = required[0] ?? body.missing[0];
   const message = `${ctx.skill} needs ${required.map((m) => m.id).join(', ')}${first?.why ? `: ${first.why}` : ''}`;
-  return { ok: false, error: { message, hint: first?.fix?.manual ?? `run node ${path.join('scripts', 'doctor.mjs')}` } };
+  return { ok: false, error: { message, hint: manualHint(first?.fix?.manual) ?? `run node ${path.join('scripts', 'doctor.mjs')}` } };
+}
+
+/** The doctor's fix.manual is an object keyed by platform ({ darwin, linux, win32 }); the hint is the string for this one. */
+function manualHint(manual) {
+  if (typeof manual === 'string') return manual;
+  const own = manual?.[process.platform] ?? manual?.linux;
+  return typeof own === 'string' ? own : undefined;
 }
 
 async function scriptStage(ctx, stage, args) {

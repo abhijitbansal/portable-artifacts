@@ -6,6 +6,56 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-21
+
+Fixes from a deep review of the committed code: 2 high and 25 medium findings, each confirmed by a separate verifier.
+
+### Behaviour changes to know about
+
+- **make-dashboard: database env names are restricted.** `sources.<n>.env` must name a variable ending in `_URL` or
+  `_DSN`, or starting with `PA_` (for example `DATABASE_URL`, `PA_SHOP`). Other names, such as `GITHUB_TOKEN`, are
+  refused at validation, before the environment is read. Rename the variable if your spec used another name.
+- **make-dashboard: attached DuckDB files with generated columns are refused**, like views and macros. A generated
+  column could evaluate functions the SQL allowlist blocks (for example `current_setting`) and put the result in the
+  page.
+- **make-motion: portrait phone clips are no longer stretched.** Clip probing now reads the rotation metadata and swaps
+  width and height for 90° and 270° clips.
+- **make-motion: Ctrl+C during `--batch` stops the batch** with exit 130. The manifest lists only the rows that
+  finished. Rows that wrote nothing (`--no-render`) are no longer hashed from a stale file.
+- **make-motion: the voice model is cached in the per-user cache folder**, so a plugin update no longer downloads it
+  again. A model already in the old `<skill>/.cache/models` folder is still used.
+- **make-motion: compare bars and numbers.** Compare bars are drawn only when both sides are positive and in the same
+  unit (`1.5M` vs `800k` now scales correctly, `12 min` vs `40 min` still draws; a negative value or mixed units draw
+  no bars). Magnitudes are `k`, `M`, `B` and `bn` as written: a lowercase `m` or `b` is a unit, so `$1.5m` vs `$800k`
+  draws no bars. The number kind keeps the value's own
+  decimals by default, so `0.4` no longer shows as `0`.
+- **make-explainer: `*` in a path or glob is literal.** `src/*.js and lib/*.js` and `*.md or x*.txt` no longer turn
+  into italics. A `*` after a digit, a closing bracket, `/` or `\` never opens emphasis; `**bold**` in CJK text and
+  inside words still renders.
+- **make-explainer: the markdown twin is protected.** A build refuses to overwrite a `<name>.md` it did not write. A
+  twin from an older version is still accepted when its first line is the spec's title.
+- **make-diagram: `--out x.svg` without `--format svg` is a usage error** instead of a folder named `x.svg`.
+- **Installer.** `install.mjs --force` builds the new copy beside the old one and swaps it in only after `npm ci`
+  succeeds, so a failed install keeps your working skill. On Windows, `npm.cmd` is now run through a shell (recent
+  Node refuses it otherwise). `--help` prints usage, and an unknown flag lists the accepted ones.
+
+### Diagnostics
+
+- `make.mjs` shows the doctor's fix for your platform instead of `[object Object]`.
+- `doctor --fix --json` keeps its stdout pure JSON. npm output goes to stderr.
+- The doctor's `node_modules` check finds missing packages, as preflight does.
+- An unknown one- or two-letter spec key or flag no longer gets a "did you mean" rename to an unrelated name.
+- The stale-copy warning and the missing-dependency hints in make-dashboard, make-explainer and make-scene now say
+  `npm ci --ignore-scripts`, like the doctor.
+
+### Tests and docs
+
+- CI sets `PA_REQUIRE_BROWSER=1` for every skill, so a browser that fails to start fails the run instead of skipping
+  dozens of tests.
+- New regression tests for each fix above.
+- make-diagram docs now match the code: async messages are dotted, which parts a kind colour tints, and byte-identical
+  output only with `SOURCE_DATE_EPOCH` set. The checklist example now points at `abhijitbansal/portable-artifacts`.
+
 ## [2.1.2] - 2026-11-20
 
 A new site and a shorter plugin description. The skills, their spec formats and their output are unchanged.

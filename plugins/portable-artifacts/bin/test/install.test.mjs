@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { targetsFor, agentTargetsFor, HOSTS, expandRequires, UsageError } from '../install.mjs';
+import { targetsFor, agentTargetsFor, HOSTS, expandRequires, npmCommand, swapIn, UsageError } from '../install.mjs';
 import { agentFile } from '../../shared/agents.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -109,14 +109,20 @@ test('duplicate --skills entries install once', () => {
   assert.equal((r.stdout.match(/installed make-motion/g) || []).length, 1);
 });
 
+// install.mjs imports the plugin's shared/*.mjs (agents, cli, doctor and what they import): a sandbox carries them all.
+function copyShared(root) {
+  const from = path.join(here, '../../shared');
+  fs.mkdirSync(path.join(root, 'shared'));
+  for (const f of fs.readdirSync(from).filter((n) => n.endsWith('.mjs'))) fs.copyFileSync(path.join(from, f), path.join(root, 'shared', f));
+}
+
 // Sandbox: a copy of install.mjs next to a fake skills/ tree, so a regression
 // here can only ever delete throwaway files, never the real skills.
 function sandbox() {
   const root = tmp();
   fs.mkdirSync(path.join(root, 'bin'));
   fs.copyFileSync(installer, path.join(root, 'bin/install.mjs'));
-  fs.mkdirSync(path.join(root, 'shared'));
-  fs.copyFileSync(path.join(here, '../../shared/agents.mjs'), path.join(root, 'shared/agents.mjs'));
+  copyShared(root);
   fs.mkdirSync(path.join(root, 'skills/make-motion'), { recursive: true });
   fs.writeFileSync(path.join(root, 'skills/make-motion/SKILL.md'), '---\nname: make-motion\ndescription: fake\n---\n');
   return root;
@@ -143,8 +149,125 @@ test('a failed npm ci removes the half-installed copy and says so', () => {
     encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /npm ci failed.*removed/);
+  assert.match(r.stderr, /npm ci failed in \S*\.make-motion\.new-\d+.*nothing was installed at \S*make-motion/);
   assert.equal(fs.existsSync(path.join(home, '.claude/skills/make-motion')), false);
+});
+
+test('a failed npm ci under --force names the staged folder and says the existing install is unchanged', () => {
+  const { r, dst } = failingNpmInstall();
+  assert.match(r.stderr, /npm ci failed in \S*\.make-motion\.new-\d+.*the existing install at \S*make-motion is unchanged/);
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), 'the working install');
+});
+
+test('swapIn: a backup that cannot be removed after the swap is a warning naming the leftover path, not a failed install', () => {
+  const root = tmp();
+  const dst = path.join(root, 'skill');
+  const stage = path.join(root, '.skill.new-1');
+  fs.mkdirSync(dst);
+  fs.writeFileSync(path.join(dst, 'SKILL.md'), 'old');
+  fs.mkdirSync(stage);
+  fs.writeFileSync(path.join(stage, 'SKILL.md'), 'new');
+  const warnings = [];
+  const rm = () => { throw new Error('EBUSY: locked'); };
+  swapIn(stage, dst, true, { rm, warn: (m) => warnings.push(m) });
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), 'new', 'the new install is in place');
+  const backup = path.join(root, `.skill.old-${process.pid}`);
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0].includes(backup), warnings[0]);
+  assert.match(warnings[0], /EBUSY/);
+});
+
+test('an install removes .<skill>.new-* folders left by dead runs, keeps other skills\' folders, and warns about .old-* backups without deleting them', () => {
+  const home = tmp();
+  const skills = path.join(home, '.claude/skills');
+  const deadStage = path.join(skills, '.make-motion.new-99999');
+  const otherStage = path.join(skills, '.make-diagram.new-99999');
+  const oldBackup = path.join(skills, '.make-motion.old-99999');
+  for (const d of [deadStage, otherStage, oldBackup]) { fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, 'f.txt'), 'x'); }
+  const r = runInstall(['claude', '--skills', 'make-motion'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(deadStage), false, 'the dead run\'s stage folder is gone');
+  assert.ok(fs.existsSync(otherStage), 'another skill\'s stage folder is not ours to remove');
+  assert.ok(fs.existsSync(path.join(oldBackup, 'f.txt')), 'a backup may hold a user\'s copy and stays');
+  assert.ok(r.stderr.includes(oldBackup), r.stderr);
+  assert.match(r.stderr, /warning/i);
+});
+
+const NPM_CI_ARGS = ['ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'];
+
+test('npmCommand on win32 goes through cmd.exe with one quoted line (Node refuses to spawn npm.cmd directly)', () => {
+  assert.deepEqual(npmCommand(NPM_CI_ARGS, 'win32'), { cmd: 'npm ci --ignore-scripts --omit=dev --no-audit --no-fund', args: [], shell: true });
+  assert.deepEqual(npmCommand(['ci', 'a b'], 'win32'), { cmd: 'npm ci "a b"', args: [], shell: true }, 'an argument with a space stays one token');
+});
+
+test('npmCommand elsewhere runs npm directly, no shell', () => {
+  for (const platform of ['darwin', 'linux']) assert.deepEqual(npmCommand(NPM_CI_ARGS, platform), { cmd: 'npm', args: NPM_CI_ARGS, shell: false });
+});
+
+// A fake npm that fails, and a home that already holds a working make-motion.
+function failingNpmInstall(extraArgs = []) {
+  const home = tmp();
+  const bin = tmp();
+  fs.writeFileSync(path.join(bin, 'npm'), '#!/bin/sh\necho boom >&2\nexit 1\n', { mode: 0o755 });
+  const skills = path.join(home, '.claude/skills');
+  const dst = path.join(skills, 'make-motion');
+  fs.mkdirSync(path.join(dst, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(dst, 'SKILL.md'), 'the working install');
+  const r = spawnSync(process.execPath, [installer, 'claude', '--skills', 'make-motion', '--force', ...extraArgs], {
+    encoding: 'utf8', env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+  });
+  return { r, skills, dst };
+}
+
+test('--force with a failing npm ci leaves the working install untouched and no staging folder behind', () => {
+  const { r, skills, dst } = failingNpmInstall();
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /npm ci failed/);
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), 'the working install');
+  assert.ok(fs.existsSync(path.join(dst, 'node_modules')));
+  assert.deepEqual(fs.readdirSync(skills), ['make-motion'], 'no staged or backup folder is left in the skills dir');
+});
+
+test('--force --link with a failing npm ci also keeps the working install', () => {
+  const { r, skills, dst } = failingNpmInstall(['--link']);
+  assert.equal(r.status, 1);
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), 'the working install');
+  assert.deepEqual(fs.readdirSync(skills), ['make-motion']);
+});
+
+test('--force replaces a working install with the new copy and leaves no staging or backup folder', () => {
+  const home = tmp();
+  const skills = path.join(home, '.claude/skills');
+  const dst = path.join(skills, 'make-motion');
+  fs.mkdirSync(dst, { recursive: true });
+  fs.writeFileSync(path.join(dst, 'old.txt'), 'old');
+  const r = runInstall(['claude', '--skills', 'make-motion', '--force'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(path.join(dst, 'old.txt')), false);
+  assert.ok(fs.existsSync(path.join(dst, 'SKILL.md')));
+  assert.deepEqual(fs.readdirSync(skills), ['make-motion']);
+});
+
+test('--help prints the usage with every accepted flag and exits 0', () => {
+  for (const flag of ['--help', '-h']) {
+    const r = runInstall([flag], tmp());
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /^usage: .*install\.mjs <claude\|codex\|copilot\|gemini\|agents>/);
+    for (const accepted of ['--project', '--skills', '--link', '--force', '--no-deps', '--agents-only']) assert.ok(r.stdout.includes(accepted), `${accepted} in: ${r.stdout}`);
+  }
+});
+
+test('an unknown flag exits 2 with a one-line error that lists the accepted flags, not Node\'s "--" advice', () => {
+  const r = runInstall(['claude', '--bogus'], tmp());
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /^install: Unknown option '--bogus'/);
+  assert.doesNotMatch(r.stderr, /place it at the end/);
+  for (const accepted of ['--project', '--skills', '--link', '--force', '--no-deps', '--agents-only']) assert.ok(r.stderr.includes(accepted), `${accepted} in: ${r.stderr}`);
+  assert.equal(r.stderr.trim().split('\n').length, 1);
+});
+
+test('a misspelt flag near a real one is corrected', () => {
+  assert.match(runInstall(['claude', '--forse'], tmp()).stderr, /did you mean '--force'/);
 });
 
 // Fake npm that records its argv, so the exact `npm ci` flags can be pinned.
@@ -239,8 +362,7 @@ function sandboxWith(spec) {
   const root = tmp();
   fs.mkdirSync(path.join(root, 'bin'));
   fs.copyFileSync(installer, path.join(root, 'bin/install.mjs'));
-  fs.mkdirSync(path.join(root, 'shared'));
-  fs.copyFileSync(path.join(here, '../../shared/agents.mjs'), path.join(root, 'shared/agents.mjs'));
+  copyShared(root);
   const skills = fakeSkills(spec);
   fs.renameSync(skills, path.join(root, 'skills'));
   return path.join(root, 'bin/install.mjs');

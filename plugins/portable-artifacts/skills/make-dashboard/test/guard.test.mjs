@@ -47,6 +47,8 @@ const REJECTED = {
   'table function inside a table function argument': 'SELECT * FROM range((SELECT count(*) FROM duckdb_settings()))',
   'which_secret': "SELECT * FROM which_secret('s3://x', 's3')",
   'SHOW TABLES': 'SHOW TABLES',
+  'SHOW TABLES FROM an undeclared catalog': 'SHOW TABLES FROM other',
+  'SHOW of a bare source name': 'SHOW shop',
   'an undeclared table': 'SELECT * FROM nope',
   'a CTE name used outside its scope': 'SELECT * FROM (WITH pg_settings AS (SELECT 1) SELECT 1) a, pg_settings',
   'sqlite_scan on a declared file': "SELECT * FROM sqlite_scan('/x.db', 't')",
@@ -117,6 +119,8 @@ const ACCEPTED = {
   'a lateral join over range': 'SELECT * FROM range(2) t(i), LATERAL (SELECT * FROM range(i)) u',
   'VALUES': 'SELECT * FROM (VALUES (1), (2)) v(n)',
   'DESCRIBE of a query': 'DESCRIBE SELECT * FROM sales',
+  // pins current behaviour: the guard lets SHOW TABLES list a declared attached catalog
+  'SHOW TABLES FROM a declared attached catalog': 'SHOW TABLES FROM shop',
   'a trailing semicolon': 'SELECT 1;',
   'a source, schema-qualified with main': 'SELECT * FROM main.sales',
   'a CTE referenced in a different case': 'WITH Totals AS (SELECT region, SUM(amount) AS t FROM sales GROUP BY 1) SELECT * FROM totals',
@@ -193,6 +197,29 @@ test('attached DuckDB file with a view or macro is refused', async () => {
     path: 'sources.ext',
     message: 'attached DuckDB file defines views/macros (v1, m2), which could bypass the lockdown; export plain tables instead',
   }]);
+});
+
+// A generated column evaluates its expression at SELECT time inside the locked
+// connection, outside the guard's scalar denylist (current_setting, getenv, ...).
+test('attached DuckDB file with a generated column is refused', async () => {
+  for (const column of [
+    `s VARCHAR GENERATED ALWAYS AS (current_setting('allowed_paths')::VARCHAR) VIRTUAL`,
+    `s VARCHAR AS (current_setting('allowed_paths')::VARCHAR)`,
+  ]) {
+    const dir = tmp();
+    const file = await duckdbFile(dir, [`CREATE TABLE w.items(a INT, ${column})`, 'CREATE TABLE w.plain(a INT)']);
+    const r = await validateSpec(specFor(file), { dir });
+    assert.deepEqual(r.errors, [{
+      path: 'sources.ext',
+      message: 'attached DuckDB file has tables with generated columns (items), which could bypass the lockdown; export plain tables instead',
+    }], column);
+  }
+});
+
+test('a plain DEFAULT value is not a generated column', async () => {
+  const dir = tmp();
+  const file = await duckdbFile(dir, ['CREATE TABLE w.items(a INT DEFAULT 5, b VARCHAR DEFAULT current_setting(\'threads\'))']);
+  assert.deepEqual((await validateSpec(specFor(file), { dir })).errors, []);
 });
 
 test('attached DuckDB file with plain tables is accepted and readable', async () => {

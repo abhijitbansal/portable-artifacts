@@ -36,3 +36,19 @@ export function checklistMarkdown(spec) {
   const body = spec.sections.filter((s) => s.type === 'checklist').map(section);
   return `${[...head, ...body].join('\n\n')}\n`;
 }
+
+// First line of every twin the build writes (an HTML comment, invisible when rendered). A rebuild may replace a
+// .md that starts with it; any other .md was written by someone else and is never overwritten.
+const TWIN_MARKER_PREFIX = '<!-- written by make-explainer build --md';
+const TWIN_MARKER = `${TWIN_MARKER_PREFIX}; rebuilt on every build, so edit the spec, not this file -->`;
+
+/** What `build --md` writes: the marker line, then the twin. */
+export const twinFile = (spec) => `${TWIN_MARKER}\n${checklistMarkdown(spec)}`;
+
+/**
+ * Did a build write `existing` (the text of the .md already there)? It carries the marker, or it is a twin from
+ * before the marker: its first line is "# <spec title>", the shape checklistMarkdown writes, even if the spec's
+ * sections have changed since.
+ */
+export const isBuildTwin = (existing, spec) =>
+  existing.startsWith(TWIN_MARKER_PREFIX) || existing.split(/\r?\n/, 1)[0] === `# ${spec.title}`;

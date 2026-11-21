@@ -20,10 +20,16 @@ def test_make_motion_runs_as_four_shards_that_cover_every_file():
     assert all(r[0] == f"make-motion {r[2]}/{r[3]}" for r in rows), "the check name carries the shard"
 
 
-def test_every_make_motion_shard_turns_a_missing_browser_or_ffmpeg_into_a_failure():
-    for flag in ("PA_REQUIRE_RENDER", "PA_REQUIRE_BROWSER"):
-        line = re.search(rf"^\s+{flag}: (.+)$", WORKFLOW, re.M).group(1)
-        assert "startsWith(matrix.name, 'make-motion')" in line, f"{flag} must apply to every make-motion shard: {line}"
+def test_every_make_motion_shard_turns_a_missing_render_tool_into_a_failure():
+    line = re.search(r"^\s+PA_REQUIRE_RENDER: (.+)$", WORKFLOW, re.M).group(1)
+    assert "startsWith(matrix.name, 'make-motion')" in line, f"PA_REQUIRE_RENDER must apply to every make-motion shard: {line}"
+
+
+def test_every_node_skills_row_turns_a_missing_browser_into_a_failure():
+    """The page skills' haveBrowser() helpers skip when Chromium will not start; PA_REQUIRE_BROWSER=1 makes them fail, so
+    a broken runner cannot go green by skipping. It is set for the whole matrix, not only for make-motion."""
+    test_step = re.search(r"^      - name: test\n(?:        .+\n)+", WORKFLOW, re.M).group(0)
+    assert re.search(r"^\s+PA_REQUIRE_BROWSER: '1'$", test_step, re.M), f"the node-skills test step must set PA_REQUIRE_BROWSER: '1' for every row:\n{test_step}"
 
 
 def test_a_newer_push_to_a_pull_request_cancels_the_run_it_replaces():

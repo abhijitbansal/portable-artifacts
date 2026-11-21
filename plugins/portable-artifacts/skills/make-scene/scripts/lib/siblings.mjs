@@ -50,6 +50,6 @@ export async function loadSibling(name, relModule, { root } = {}) {
     // The folder is there but its npm dependencies are not: say so, with the fix, instead of a raw module error.
     const missing = e?.code === 'ERR_MODULE_NOT_FOUND' ? /Cannot find package '([^']+)' imported from (.+)$/.exec(e.message) : null;
     if (!missing || !path.resolve(missing[2]).startsWith(`${dir}${path.sep}`)) throw e;
-    throw new SiblingError(`${name} is installed but its dependencies are missing (${missing[1]}); run npm ci --omit=dev --prefix ${quoteArg(dir)} ${doctorHint(name)}`, installCommand([name]));
+    throw new SiblingError(`${name} is installed but its dependencies are missing (${missing[1]}); run npm ci --ignore-scripts --omit=dev --prefix ${quoteArg(dir)} ${doctorHint(name)}`, installCommand([name]));
   }
 }

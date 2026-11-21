@@ -13,23 +13,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { exitUsage } from './cli.mjs';
 import { quoteArg } from './doctor.mjs';
+import { missingPackages } from './missing-packages.mjs';
 import { warnIfStaleCopy } from './stale-copy.mjs';
 
 /** The command that installs this skill's npm packages, quoted for this platform. */
 export function doctorCommand(skillRoot) {
   return `node ${quoteArg(path.join(skillRoot, 'scripts', 'doctor.mjs'))} --fix node_modules`;
-}
-
-// The names under "dependencies" in the skill's package.json that have no folder with a package.json in its node_modules.
-// A skill whose package.json cannot be read lists none: the folder check alone is what remains.
-function missingPackages(skillRoot, exists) {
-  let names;
-  try {
-    names = Object.keys(JSON.parse(fs.readFileSync(path.join(skillRoot, 'package.json'), 'utf8')).dependencies ?? {});
-  } catch {
-    return [];
-  }
-  return names.filter((name) => !exists(path.join(skillRoot, 'node_modules', name, 'package.json')));
 }
 
 /**

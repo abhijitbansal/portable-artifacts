@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import '../../scripts/v2/list.mjs';
 import { validateFilm, SpecError } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { isClipSrc, probeClip, clipProblem, prepareClips, clipAudioTracks, clipFrameIndex } from '../../scripts/v2/clips.mjs';
+import { isClipSrc, probeClip, clipProblem, prepareClips, clipAudioTracks, clipFrameIndex, streamRotation } from '../../scripts/v2/clips.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLIP = path.resolve(HERE, '../../references/examples/v2/media-clip.mp4');
@@ -58,6 +58,32 @@ test('the frames are cached beside the voice cache: a second run reuses them, ne
   assert.deepEqual(readdirSync(cacheDir).filter((f) => !f.startsWith('.')), [path.basename(bounded.dir)], 'only the entry in use is kept over the bound');
 });
 
+const partialsOf = (cacheDir) => readdirSync(cacheDir).filter((f) => f.startsWith('.partial-'));
+
+test('a decode that is stopped leaves no .partial folder behind', { skip: !hasFfmpeg }, async () => {
+  const cacheDir = mkdtempSync(path.join(work, 'abort-'));
+  const controller = new AbortController();
+  const poll = setInterval(() => { if (partialsOf(cacheDir).length > 0) controller.abort(); }, 1); // the decode folder exists: stop it mid-decode
+  try {
+    await assert.rejects(prepared(filmOf(shotOf({ in: 0, out: 4 })), 'x', { cacheDir, signal: controller.signal }), (err) => err.name === 'AbortError');
+  } finally { clearInterval(poll); }
+  assert.deepEqual(partialsOf(cacheDir), []);
+});
+
+test('pruning the cache sweeps the .partial folders of dead processes and keeps a live one\'s', { skip: !hasFfmpeg }, async () => {
+  const cacheDir = mkdtempSync(path.join(work, 'sweep-'));
+  const deadPid = spawnSync(process.execPath, ['-e', '0']).pid; // finished: nobody holds this pid now
+  const key = 'a'.repeat(64);
+  const dead = `.partial-${key}-${deadPid}`;
+  const live = `.partial-${key}-${process.pid}`;
+  for (const name of [dead, live]) {
+    mkdirSync(path.join(cacheDir, name));
+    writeFileSync(path.join(cacheDir, name, '00001.png'), 'frame');
+  }
+  await prepared(filmOf(shotOf({ in: 0.5, out: 1.5 })), 'x', { cacheDir });
+  assert.deepEqual(partialsOf(cacheDir), [live]);
+});
+
 test('a clip src is one of the clip containers by its extension', () => {
   assert.deepEqual(['a.mp4', 'b.MOV', 'c.webm', 'd.mkv', 'e.m4v', 'f.png', 'g.avi'].map(isClipSrc), [true, true, true, true, true, false, false]);
 });
@@ -79,6 +105,37 @@ test('probe: an H.264 clip with one audio stream passes; audio, a concat script 
   copyFileSync(path.join(dir, 'tone.wav'), path.join(dir, 'tone.mp4'));
   assert.match(clipProblem(await probeClip({ file: path.join(dir, 'tone.mp4') })), /not on the list|no video stream/);
   assert.match(clipProblem(await probeClip({ file: path.join(dir, 'concat.mp4') })), /not on the list|cannot be read/);
+});
+
+test('streamRotation: the display matrix or the rotate tag, as a turn of 0, 90, 180 or 270 degrees', () => {
+  assert.equal(streamRotation({}), 0);
+  assert.equal(streamRotation({ side_data_list: [{ side_data_type: 'Display Matrix', rotation: 90 }] }), 90);
+  assert.equal(streamRotation({ side_data_list: [{ rotation: -90 }] }), 270);
+  assert.equal(streamRotation({ side_data_list: [{ rotation: 180 }] }), 180);
+  assert.equal(streamRotation({ side_data_list: [{ rotation: -180 }] }), 180);
+  assert.equal(streamRotation({ side_data_list: [{ side_data_type: 'Other' }, { rotation: 90.4 }] }), 90);
+  assert.equal(streamRotation({ tags: { rotate: '270' } }), 270);
+  assert.equal(streamRotation({ tags: { rotate: '-90' } }), 270);
+  assert.equal(streamRotation({ tags: { rotate: 'nonsense' } }), 0);
+  assert.equal(streamRotation({ side_data_list: [{ rotation: 'x' }] }), 0);
+  assert.equal(streamRotation({ side_data_list: [{ rotation: 45 }] }), 0, 'only quarter turns count');
+});
+
+test('a rotated clip is probed and decoded at the size it is shown at, not stretched', { skip: !hasFfmpeg }, async () => {
+  const turned = (degrees) => {
+    const file = path.join(dir, `turned-${degrees}.mp4`);
+    const made = spawnSync('ffmpeg', ['-v', 'error', '-y', '-display_rotation', String(degrees), '-i', path.join(dir, 'mute.mp4'), '-c', 'copy', file]);
+    assert.equal(made.status, 0, String(made.stderr));
+    return file;
+  };
+  const side = await probeClip({ file: turned(90) });
+  assert.deepEqual([side.width, side.height], [180, 320], 'coded 320x180, shown 180x320');
+  const upright = await probeClip({ file: turned(180) });
+  assert.deepEqual([upright.width, upright.height], [320, 180], 'a half turn keeps the sides');
+  const [clip] = await prepared(filmOf(shotOf({ src: 'turned-90.mp4', out: 1 })), 'rot');
+  assert.deepEqual([clip.width, clip.height], [180, 320]);
+  const png = readFileSync(path.join(clip.dir, readdirSync(clip.dir).filter((f) => f.endsWith('.png')).sort()[0]));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [180, 320], 'the frames on disk are the shown size');
 });
 
 test('a clip outside the film\'s folder, or a link that leads out, is refused at its src', { skip: !hasFfmpeg }, async () => {

@@ -74,6 +74,7 @@ test('build --md writes the markdown twin next to the page and reports it', () =
     const twin = path.join(dir, 'pages', 'device.md');
     assert.match(r.stdout, new RegExp(`wrote ${twin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n`));
     assert.equal(fs.readFileSync(twin, 'utf8'), [
+      '<!-- written by make-explainer build --md; rebuilt on every build, so edit the spec, not this file -->',
       '# Device run',
       '',
       'What the tests could not cover',
@@ -99,6 +100,73 @@ test('build --md writes the markdown twin next to the page and reports it', () =
     ].join('\n'));
     const json = JSON.parse(run('build', [spec, '--out', out, '--md', '--json'], { home }).stdout);
     assert.equal(json.md, twin);
+  } finally { done(); }
+});
+
+test('build --md refuses to overwrite a .md that no --md build wrote, and writes nothing', () => {
+  const { dir, home, done } = sandbox();
+  try {
+    const spec = write(path.join(dir, 'device.explainer.json'), checklistSpec());
+    const out = path.join(dir, 'pages', 'device.html');
+    const mine = write(path.join(dir, 'pages', 'device.md'), '# My hand-written notes\n');
+    const r = run('build', [spec, '--out', out, '--md'], { home });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /device\.md was not written by a make-explainer --md build \(or by an older version\); delete or rename it to regenerate/);
+    assert.equal(fs.readFileSync(mine, 'utf8'), '# My hand-written notes\n', 'the user file is untouched');
+    assert.ok(!fs.existsSync(out), 'no page is written either');
+  } finally { done(); }
+});
+
+test('build --md refuses a twin path that is a folder, and writes nothing', () => {
+  const { dir, home, done } = sandbox();
+  try {
+    const spec = write(path.join(dir, 'device.explainer.json'), checklistSpec());
+    const out = path.join(dir, 'pages', 'device.html');
+    fs.mkdirSync(path.join(dir, 'pages', 'device.md'), { recursive: true });
+    const r = run('build', [spec, '--out', out, '--md'], { home });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /device\.md/);
+    assert.ok(!fs.existsSync(out), 'no page is written');
+  } finally { done(); }
+});
+
+test('build --md rebuilds its own twin, replaces it atomically (no .tmp left) and accepts a twin from before the marker', () => {
+  const { dir, home, done } = sandbox();
+  try {
+    const spec = write(path.join(dir, 'device.explainer.json'), checklistSpec());
+    const out = path.join(dir, 'pages', 'device.html');
+    const twin = path.join(dir, 'pages', 'device.md');
+    assert.equal(run('build', [spec, '--out', out, '--md'], { home }).status, 0);
+    assert.ok(fs.readFileSync(twin, 'utf8').startsWith('<!-- written by make-explainer build --md'), 'the twin carries its marker');
+    const changed = { ...checklistSpec(), title: 'Device run two' };
+    write(spec, changed);
+    const again = run('build', [spec, '--out', out, '--md'], { home });
+    assert.equal(again.status, 0, again.stdout + again.stderr);
+    assert.match(fs.readFileSync(twin, 'utf8'), /^# Device run two$/m);
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'pages')).filter((n) => n.endsWith('.tmp')), []);
+    // A twin written by an earlier version has no marker but is exactly what the build writes: still ours.
+    const legacy = fs.readFileSync(twin, 'utf8').split('\n').slice(1).join('\n');
+    fs.writeFileSync(twin, legacy);
+    assert.equal(run('build', [spec, '--out', out, '--md'], { home }).status, 0);
+  } finally { done(); }
+});
+
+test('build --md accepts a marker-less twin whose first line is the spec title, even after the spec changed', () => {
+  const { dir, home, done } = sandbox();
+  try {
+    const spec = write(path.join(dir, 'device.explainer.json'), checklistSpec());
+    const out = path.join(dir, 'pages', 'device.html');
+    const twin = path.join(dir, 'pages', 'device.md');
+    assert.equal(run('build', [spec, '--out', out, '--md'], { home }).status, 0);
+    // An older twin: no marker, and its body differs from what the spec would write now (the spec changed since).
+    fs.writeFileSync(twin, '# Device run\n\nan older body that no longer matches the spec\n');
+    const again = run('build', [spec, '--out', out, '--md'], { home });
+    assert.equal(again.status, 0, again.stdout + again.stderr);
+    assert.ok(fs.readFileSync(twin, 'utf8').startsWith('<!-- written by make-explainer build --md'));
+    // A different title is someone else's file.
+    fs.writeFileSync(twin, '# Another document\n\nnot ours\n');
+    assert.equal(run('build', [spec, '--out', out, '--md'], { home }).status, 1);
+    assert.equal(fs.readFileSync(twin, 'utf8'), '# Another document\n\nnot ours\n');
   } finally { done(); }
 });
 

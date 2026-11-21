@@ -92,7 +92,7 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
 ```
 
 - `sources.type`: `csv | parquet | json` (a table named after the key), `duckdb | sqlite` (attached; query `name.table`, `path`),
-  `postgres | mysql` (attached; `"env": "PG_URL"` names the variable holding the connection string, never put it in the spec).
+  `postgres | mysql` (attached; `"env": "PG_URL"` names the variable holding the connection string, never put it in the spec; the name must end in `_URL` or `_DSN`, or start with `PA_`).
   sqlite/postgres/mysql need a one-time `node <skill-dir>/scripts/setup.mjs dashboard.json` (online; builds stay offline).
 - `queries`: one SELECT each, names `[a-z][a-z0-9_]*`. Alias every aggregate (`AS revenue`); chart fields are those aliases.
 - `kpis[].format`: `number | currency | percent | compact` (percent expects a fraction).

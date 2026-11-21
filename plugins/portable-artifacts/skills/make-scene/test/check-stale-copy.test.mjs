@@ -40,7 +40,7 @@ const runCheck = ({ home, copy, page }) => spawnSync(process.execPath, [path.joi
 test('the browser check run from an old plugin-cache copy warns on stderr and still exits 0 (skipped)', () => {
   const r = runCheck(cachedCopy({ installed: 'newer' }));
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stderr, /^warning: this script runs from .*1\.0\.0, not the installed copy .*1\.1\.0; run npm ci in /m);
+  assert.match(r.stderr, /^warning: this script runs from .*1\.0\.0, not the installed copy .*1\.1\.0; run npm ci --ignore-scripts in /m);
   assert.match(r.stdout, /^check: skipped \(no browser: PA_NO_BROWSER=1;/);
 });
 

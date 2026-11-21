@@ -49,7 +49,7 @@ test('a build run from a stale cache copy warns on stderr, exits 0 and writes th
   assert.equal(r.status, 0, r.stderr + r.stdout);
   assert.ok(fs.existsSync(out));
   assert.ok(r.stdout.includes('wrote '), r.stdout);
-  assert.equal(r.stderr.trim(), `warning: this script runs from ${path.join(cache, '0.8.0')}, not the installed copy ${path.join(cache, '1.0.0')}; run npm ci in ${path.join(cache, '1.0.0', 'skills', 'make-explainer')} (or node ${path.join(cache, '1.0.0', 'skills', 'make-explainer', 'scripts', 'doctor.mjs')} --fix node_modules), then use that copy`);
+  assert.equal(r.stderr.trim(), `warning: this script runs from ${path.join(cache, '0.8.0')}, not the installed copy ${path.join(cache, '1.0.0')}; run npm ci --ignore-scripts in ${path.join(cache, '1.0.0', 'skills', 'make-explainer')} (or node ${path.join(cache, '1.0.0', 'skills', 'make-explainer', 'scripts', 'doctor.mjs')} --fix node_modules), then use that copy`);
 });
 
 test('the same build from the installed copy is silent', (t) => {
