@@ -22,7 +22,7 @@ GALLERY = DOCS / "gallery.html"
 PAGES = (PAGE, GALLERY)
 PLUGIN_JSON = ROOT / "plugins" / "portable-artifacts" / ".claude-plugin" / "plugin.json"
 SKILLS = ("make-motion", "make-explainer", "make-diagram", "make-dashboard", "make-scene")  # page order
-SHEET_ORDER = ("films",) + SKILLS + ("notes", "gallery")
+SHEET_ORDER = ("reel", "films") + SKILLS + ("notes", "gallery")
 EXAMPLES = (
     ROOT / "plugins" / "portable-artifacts" / "skills" / "make-motion"
     / "references" / "examples" / "v2"
@@ -97,7 +97,7 @@ def test_both_pages_exist_with_one_h1():
         assert len(re.findall(r"<h1\b", _text(path))) == 1, path.name
 
 
-def test_cover_then_five_sheets_then_notes_and_register_in_order():
+def test_reel_then_cover_then_five_sheets_then_notes_and_register_in_order():
     page = _text(PAGE)
     offsets = []
     for sheet_id in SHEET_ORDER:
@@ -107,7 +107,7 @@ def test_cover_then_five_sheets_then_notes_and_register_in_order():
     assert offsets == sorted(offsets), "sheets are out of order"
     main_at = page.index('<main id="main">')
     first = re.compile(r'<section\b[^>]*\bid="([\w-]+)"').search(page, main_at)
-    assert first and first.group(1) == "films", "the cover must be the first section in <main>"
+    assert first and first.group(1) == "reel", "the reel band must be the first section in <main>"
 
 
 def test_quick_install_copy_buttons_hold_one_command_without_comment():
@@ -136,7 +136,7 @@ def test_every_local_src_href_and_poster_resolves():
 
 def test_videos_are_muted_loops_with_poster_and_label_and_never_autoplay():
     videos = [a for t, a in _tags(PAGE) + _tags(GALLERY) if t == "video"]
-    assert len(videos) == 2
+    assert len(videos) == 3  # the reel, the cover plate, the make-motion plate
     for attrs in videos:
         assert "autoplay" not in attrs, "pa.js plays loops in view; never autoplay in markup"
         for key in ("muted", "playsinline", "poster", "aria-label"):
@@ -176,6 +176,17 @@ def test_spec_size_labels_match_the_linked_spec_files():
         spec = DOCS / href
         assert spec.name == name, f"{skill}: label says {name}, link is {spec.name}"
         assert label == f"{spec.stat().st_size / 1000:.1f}", f"{skill}: {label} KB vs {spec.stat().st_size} bytes"
+
+
+def test_reel_loop_is_light_and_its_chapter_specs_exist():
+    loop = DOCS / "media" / "reel-loop.mp4"
+    assert loop.stat().st_size <= 2 * 1024 * 1024, f"{loop}: {loop.stat().st_size} bytes"
+    reel = _section(_text(PAGE), "reel")
+    assert 'data-full-film="showcase/portable-artifacts/gallery/showreel/reel/video.mp4"' in reel
+    chapters = sorted((DOCS / GAL / "showreel" / "reel" / "chapters").glob("*.json"))
+    assert len(chapters) >= 8, chapters
+    for chapter in chapters:
+        assert '"version": 2' in chapter.read_text(encoding="utf-8"), chapter
 
 
 def test_title_block_revision_matches_plugin_version():
@@ -251,7 +262,7 @@ SIMPLE_EXPLAINERS = (
     "features-explainer/poster/index.html",
     "plan-page/index.html", "plan-page/brief/index.html",
 )
-VOICED_FILMS = ("showreel/pro", "showreel/viral", "looks/poster")
+VOICED_FILMS = ("showreel/pro", "showreel/viral", "showreel/reel", "looks/poster")
 
 
 def test_each_gallery_explainer_has_the_simple_english_toggle():

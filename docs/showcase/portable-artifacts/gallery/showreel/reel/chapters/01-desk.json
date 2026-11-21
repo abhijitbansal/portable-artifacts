@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "desk",
+  "format": "16:9",
+  "seed": 12,
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "tape"
+  },
+  "sound": "on",
+  "generatedBy": {
+    "model": "claude-opus-5-5",
+    "agent": "Claude Code"
+  },
+  "shots": [
+    {
+      "id": "desk",
+      "show": "statement",
+      "kicker": "New look 1 of 7",
+      "say": "Desk. Warm paper, a serif, and a *highlighter*."
+    },
+    {
+      "id": "clip",
+      "show": "clipping",
+      "cut": "page-curl",
+      "src": "assets/dashboard-hd.png",
+      "kicker": "New cut: page curl",
+      "caption": "A real dashboard",
+      "regions": {
+        "east": [
+          0.085,
+          0.52,
+          0.1,
+          0.3
+        ]
+      },
+      "say": "Name a part of a screenshot, and a hand *circles* it. East earns the most.",
+      "on": [
+        {
+          "at": "word:circles",
+          "do": "circle",
+          "target": "region:east"
+        }
+      ]
+    }
+  ]
+}

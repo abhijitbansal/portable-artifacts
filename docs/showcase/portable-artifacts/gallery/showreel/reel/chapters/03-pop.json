@@ -1,0 +1,61 @@
+{
+  "version": 2,
+  "mode": "viral",
+  "look": "pop",
+  "format": "16:9",
+  "seed": 16,
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "pulse",
+    "bpm": 124
+  },
+  "generatedBy": {
+    "model": "claude-opus-5-5",
+    "agent": "Claude Code"
+  },
+  "shots": [
+    {
+      "id": "pop",
+      "show": "statement",
+      "kicker": "New look 3 of 7",
+      "say": "Pop. Built for *short form*."
+    },
+    {
+      "id": "thread",
+      "show": "feed",
+      "cut": "glitch-memories",
+      "style": "chat",
+      "title": "Launch day",
+      "say": "Is the reel done? Rendering now. Send it. Sent.",
+      "items": [
+        {
+          "from": "them",
+          "text": "Is the reel done?"
+        },
+        {
+          "from": "me",
+          "text": "Rendering now."
+        },
+        {
+          "from": "them",
+          "text": "Send it."
+        },
+        {
+          "from": "me",
+          "text": "Sent."
+        }
+      ]
+    },
+    {
+      "id": "cuts",
+      "show": "number",
+      "cut": "polka-dots",
+      "kicker": "New in 2",
+      "value": 10,
+      "label": "new WebGL cuts",
+      "say": "*Ten* new WebGL cuts. Glitch, polka dots, pixelize, water drop."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "keynote",
+  "format": "16:9",
+  "seed": 18,
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "drift"
+  },
+  "sound": "on",
+  "generatedBy": {
+    "model": "claude-opus-5-5",
+    "agent": "Claude Code"
+  },
+  "shots": [
+    {
+      "id": "close",
+      "show": "end",
+      "title": "Write a script. Get a film.",
+      "ask": "/plugin install portable-artifacts",
+      "mark": "make-motion 2",
+      "say": "Write a script. Get a film. (0.8)"
+    }
+  ]
+}

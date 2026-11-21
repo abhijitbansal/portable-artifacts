@@ -156,6 +156,27 @@ code, pre, kbd { font-family: var(--mono); font-size: 0.86em; }
 }
 .sheet-no b { color: var(--red); font-weight: 600; }
 
+/* ---------- reel: a full-width film plate above the cover ---------- */
+.reel { padding-top: clamp(52px, 6vw, 72px); }
+.reel-head {
+  display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between;
+  gap: 12px clamp(24px, 4vw, 56px); margin-bottom: clamp(16px, 2.5vw, 28px);
+}
+.reel-title {
+  margin: 0;
+  font: 800 clamp(34px, 4.6vw, 64px)/0.9 var(--display);
+  font-stretch: 68%; letter-spacing: -0.02em; text-transform: uppercase;
+}
+.reel-title .lc { text-transform: none; }
+.reel-head p { max-width: 52ch; margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.reel-head code { font: 500 0.92em var(--mono); }
+/* keep the whole film inside one viewport on short screens */
+.plate.reel-plate { max-width: min(100%, calc((100svh - 260px) * 16 / 9)); margin-inline: auto; }
+.reel-new { margin-top: clamp(20px, 3vw, 32px); }
+@media (max-width: 960px) {
+  .reel-new { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* ---------- cover ---------- */
 .cover { padding-top: clamp(44px, 7vw, 88px); }
 .cover-grid {

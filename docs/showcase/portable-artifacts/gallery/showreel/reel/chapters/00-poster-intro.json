@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "poster",
+  "format": "16:9",
+  "seed": 10,
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "pulse",
+    "bpm": 112
+  },
+  "sound": "on",
+  "generatedBy": {
+    "model": "claude-opus-5-5",
+    "agent": "Claude Code"
+  },
+  "shots": [
+    {
+      "id": "hello",
+      "show": "statement",
+      "kicker": "New in 2",
+      "say": "make-motion *two*."
+    },
+    {
+      "id": "looks",
+      "show": "statement",
+      "cut": "punch",
+      "say": "Seven *looks*."
+    },
+    {
+      "id": "kinds",
+      "show": "statement",
+      "cut": {
+        "type": "cover",
+        "direction": "up"
+      },
+      "say": "Sixteen *kinds* of shot."
+    },
+    {
+      "id": "cuts",
+      "show": "statement",
+      "cut": {
+        "type": "iris",
+        "direction": "in"
+      },
+      "say": "Ten new *cuts*."
+    },
+    {
+      "id": "one",
+      "show": "statement",
+      "cut": "punch",
+      "say": "One *script*."
+    }
+  ]
+}
