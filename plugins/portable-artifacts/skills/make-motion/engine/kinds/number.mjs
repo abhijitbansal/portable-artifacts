@@ -25,7 +25,7 @@ import { slugNodes } from './slug.mjs';
 import { skyParts } from './number-sky.mjs';
 import { hasSun } from '../devices/sun.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
-import { VALUE_SCHEMA } from './values.mjs';
+import { VALUE_SCHEMA, shownDecimals } from './values.mjs';
 import { unmarked } from './shared.mjs';
 
 const AFFIX_MAX = 8;
@@ -33,6 +33,8 @@ const LABEL_MAX = 60;
 const DELTA_MAX = 24;
 const KICKER_MAX = 40;
 const DECIMALS_MAX = 3;
+// The decimals the figure shows: the shot's own, else the value's (0.4 shows 0.4, not 0), up to DECIMALS_MAX.
+const decimalsOf = (shot) => shot.decimals ?? shownDecimals(shot.value, DECIMALS_MAX);
 const FIGURE_STEP = 5;
 const BESIDE_ROOM = 4; // the label beside the figure needs a quarter of the span
 const ALL_DIGITS = '0123456789'; // every glyph a count shows, for the figure's tallest ink
@@ -103,7 +105,7 @@ export function countLanding(timing, value, decimals) {
 // very start still runs for MIN_COUNT seconds, so it is seen counting (look review 2), unless that would leave the label
 // under LABEL_ROOM seconds to land and hold before the shot ends.
 function landingOf(shot, timing) {
-  const spoken = countLanding(timing, shot.value, shot.decimals ?? 0);
+  const spoken = countLanding(timing, shot.value, decimalsOf(shot));
   return Math.max(spoken, Math.min(MIN_COUNT, timing.duration - LABEL_ROOM));
 }
 
@@ -474,7 +476,7 @@ function expandNumber(given, ctx) {
   const start = Math.max(0, land - Math.max(look.moves.count.dur, MIN_COUNT));
   // The count changes at the look's own rhythm: a hand look (desk) on its 12 fps step, a crisp one (pop) every frame.
   const rate = look.moves.draw.step ?? fps;
-  const counted = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease) });
+  const counted = countSteps({ value: shot.value, decimals: decimalsOf(shot), start, land, rate, curve: ease(look.moves.count.ease) });
   const steps = look.kinds?.number?.fromFirst ? fromFirstStep(counted, start) : counted;
   const times = { land, start, matched: arrivesMatched(shot, ctx), entered: arrivesMatched(shot, ctx) || arrivesOnWindow(shot, ctx) };
   const parts = isEditorial(look) ? deskParts(shot, ctx, steps, times) : popParts(shot, ctx, steps, times);

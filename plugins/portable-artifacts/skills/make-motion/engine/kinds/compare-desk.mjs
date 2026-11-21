@@ -310,14 +310,28 @@ function betweenMarks(shot, ctx, data, [a, b], turn) {
 
 // ---- bars (look data `bars: { gap, width }`, marker: gate-marker-1 ruling 6: the gap is drawn, not only stated) ----
 
-const NUMBER_IN = /\d[\d,]*(?:\.\d+)?/;
+// A string value: sign, an optional currency symbol, a grouped or plain number, an optional magnitude (k, M, B, bn) or %.
+const SCALED = /^([-−+]?)([$€£¥]?)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s?(%|bn|[kmb])?$/i;
+const MAGNITUDE = { k: 1e3, m: 1e6, b: 1e9, bn: 1e9 };
 
-// Each side's value as a share of the larger, or null unless both sides' values are positive numbers.
+// A side's value as { size, unit }: size in whole units (1.5M is 1500000), unit the currency and % that must match for two
+// sides to share a scale; null when it is negative, zero, or not plainly a number.
+function scaledValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? { size: value, unit: '' } : null;
+  const found = typeof value === 'string' ? SCALED.exec(value.trim()) : null;
+  if (found === null || found[1] === '-' || found[1] === '−') return null;
+  const [, , currency, digits, suffix = ''] = found;
+  const size = Number(digits.replaceAll(',', '')) * (MAGNITUDE[suffix.toLowerCase()] ?? 1);
+  return size > 0 ? { size, unit: currency + (suffix === '%' ? '%' : '') } : null;
+}
+
+// Each side's value as a share of the larger, or null unless both sides are positive and on one scale (same unit, the
+// magnitudes read out): a wrong scale is worse than no bar.
 function barShares(shot) {
-  const values = SIDES.map((k) => Number(String(shot[k].value).match(NUMBER_IN)?.[0].replace(/,/g, '')));
-  if (!values.every((v) => Number.isFinite(v) && v > 0)) return null;
-  const most = Math.max(...values);
-  return values.map((v) => v / most);
+  const sides = SIDES.map((k) => scaledValue(shot[k].value));
+  if (sides.some((s) => s === null) || sides[0].unit !== sides[1].unit) return null;
+  const most = Math.max(...sides.map((s) => s.size));
+  return sides.map((s) => s.size / most);
 }
 
 // One side's bar in its card's centred space: a stroke along the card's foot from the content's left edge, as long as the
