@@ -25,11 +25,14 @@ Fixes from a deep review of the committed code: 2 high and 25 medium findings, e
 - **make-motion: the voice model is cached in the per-user cache folder**, so a plugin update no longer downloads it
   again. A model already in the old `<skill>/.cache/models` folder is still used.
 - **make-motion: compare bars and numbers.** Compare bars are drawn only when both sides are positive and in the same
-  unit (`1.5M` vs `800k` now scales correctly; a negative value draws no bars). The number kind keeps the value's own
+  unit (`1.5M` vs `800k` now scales correctly, `12 min` vs `40 min` still draws; a negative value or mixed units draw
+  no bars). The number kind keeps the value's own
   decimals by default, so `0.4` no longer shows as `0`.
-- **make-explainer: `*` next to a word is literal.** `src/*.js and lib/*.js` no longer turns into italics. Emphasis
-  inside a word (`un*believ*able`) is now literal too.
-- **make-explainer: the markdown twin is protected.** A build refuses to overwrite a `<name>.md` it did not write.
+- **make-explainer: `*` in a path or glob is literal.** `src/*.js and lib/*.js` and `*.md or x*.txt` no longer turn
+  into italics. A `*` after a digit, a closing bracket, `/` or `\` never opens emphasis; `**bold**` in CJK text and
+  inside words still renders.
+- **make-explainer: the markdown twin is protected.** A build refuses to overwrite a `<name>.md` it did not write. A
+  twin from an older version is still accepted when its first line is the spec's title.
 - **make-diagram: `--out x.svg` without `--format svg` is a usage error** instead of a folder named `x.svg`.
 - **Installer.** `install.mjs --force` builds the new copy beside the old one and swaps it in only after `npm ci`
   succeeds, so a failed install keeps your working skill. On Windows, `npm.cmd` is now run through a shell (recent
@@ -40,8 +43,9 @@ Fixes from a deep review of the committed code: 2 high and 25 medium findings, e
 - `make.mjs` shows the doctor's fix for your platform instead of `[object Object]`.
 - `doctor --fix --json` keeps its stdout pure JSON. npm output goes to stderr.
 - The doctor's `node_modules` check finds missing packages, as preflight does.
-- "Did you mean" no longer suggests a random flag for one- and two-letter typos.
-- Every "dependencies are missing" hint now says `npm ci --ignore-scripts`.
+- An unknown one- or two-letter spec key or flag no longer gets a "did you mean" rename to an unrelated name.
+- The stale-copy warning and the missing-dependency hints in make-dashboard, make-explainer and make-scene now say
+  `npm ci --ignore-scripts`, like the doctor.
 
 ### Tests and docs
 

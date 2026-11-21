@@ -352,7 +352,12 @@ From `.scratch/review/deep-review-2026-11-20.md` (local only). Each is shipped o
   CHANGELOG).
 - **Dashboard credential scrubbing per token.** The verifier's hint to also scrub each token of a multi-word env value
   was not done. **Default: not done** (the name rule closes the main path).
-- **Intraword emphasis in make-explainer markdown is now literal** (`un*believ*able`), stricter than CommonMark, so that
-  `src/*.js` stays literal. **Default: keep.**
+- **make-explainer `*` rule** is stricter than CommonMark: a `*` after a digit, `)`/`]`/`}`, `/` or `\` never opens,
+  one followed by `.` never opens, one after `/` or `\` never closes. Keeps globs literal. **Default: keep.**
 - **Interrupted `--batch` manifest** lists only finished rows; the interrupted row is left out. **Default: keep.**
 - **125 LOW findings** (87 confirmed, 38 plausible) were not fixed. **Default: defer**; pick from the report's index.
+- **Pre-push review LOWs not fixed** (`.scratch/review/gate.json`): theme variants of the rebuilt gallery pages
+  (`plan-page/brief`, `explainer-page/press|poster`, `explainer-deck-press|poster`) and the recap/plan/slides examples
+  still say claude-skills; the env-name rule passes secrets like `SLACK_WEBHOOK_URL`; generated-column detection is a
+  text match on the table SQL; `--format svg --out x.png` still makes a folder; cutout's own probe ignores rotation;
+  number kind has no shows-as-zero refusal; no guard test for `npm ci` without `--ignore-scripts`. **Default: defer.**
