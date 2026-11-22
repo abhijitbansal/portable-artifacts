@@ -22,12 +22,12 @@ Suits a science explainer.
 
 ## ledger
 - A chart of eight or more marks with no highlight, so the grid is all the eye finds; works when the claim is the pattern as a whole and the marks stay readable.
-- The signal red on more than one mark; works when the red marks the two ends of a gap the claim compares.
+- The `highlight` red on a mark the line never names, so it points at nothing the viewer hears; works when a later line in the same shot names that mark.
 
 Suits data.
 
 ## poster
-- A new ground colour on every shot with no reason; works when each colour is a section of the film and a change of colour is the section break.
+- Every shot a `statement` in the heavy capitals, so the film is a row of type and nothing is drawn; works when the film is a spoken manifesto of short lines.
 - A sentence of ten or more words in the heavy capitals, which shrinks the type until it stops being loud; works when the line is a quote the film holds on screen to be read.
 
 Suits a loud claim.

@@ -24,7 +24,7 @@ The user has a table, a metric or a result and wants it understood, not only sho
 
 ## Check
 
-- Each chart has a `highlight`, a title that states the claim and a `source`.
+- Each chart has a `highlight` (leave it out only when the claim is the pattern as a whole), a title that states the claim and a `source`.
 - No chart has more marks than the claim needs; the kind itself caps them.
 - Every number spoken is in the user's data, and is written as it is said.
 - The film ends on what to do with the finding, in one ask.

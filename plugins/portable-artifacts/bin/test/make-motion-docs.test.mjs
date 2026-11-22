@@ -158,7 +158,7 @@ test('[R2] the shape of a short, honest hooks, tells with their condition, the c
   for (const phrase of ['who the short is for', 'one ask']) assert.ok(section(vertical, 'Shape').includes(phrase), phrase);
   assert.ok(section(vertical, 'Check').includes('on screen in the first shot'));
   assert.ok(section(story, 'Claims').includes('the brief did not give'));
-  for (const look of registries.looks.names()) assert.ok(section(tells, look).split('\n').filter((l) => l.startsWith('- ') && /works when|never/.test(l)).length >= 2, look);
+  for (const look of registries.looks.names()) assert.ok(section(tells, look).split('\n').filter((l) => l.startsWith('- ') && /(works when|never)[^.]*\.?$/.test(l)).length >= 2, look);
   assert.ok(section(story, 'Three storylines').includes('not a pace, a look or a shot order to copy'));
   for (const phrase of ['not printed as a caption', 'made-up, realistic data']) assert.ok(section(story, 'Write for the picture').includes(phrase), phrase);
   assert.ok(section(story, 'Narration').includes('not just'));

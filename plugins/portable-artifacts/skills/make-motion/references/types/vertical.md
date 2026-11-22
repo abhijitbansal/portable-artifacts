@@ -30,5 +30,5 @@ The film is meant for a feed, often watched with the sound off, by someone who h
 - What the hook names is on screen in the first shot.
 - A promise the film does not pay off is cut from the hook, and no number, result or deadline appears that the brief did not give.
 - A "wrong way, then right way" film shows the right way.
-- At most two hook devices in one opening.
+- At most two hook devices in one opening (a counted promise, a question, a `number` that lands, a `punch` or `slide` cut).
 - Captions are recommended (`"captions": true`), and no picture sits still for more than 3 seconds.

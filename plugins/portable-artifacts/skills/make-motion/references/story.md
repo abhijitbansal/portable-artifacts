@@ -51,11 +51,11 @@ Fill these five lines in before you write the shots. If one will not fill, the f
 These make a film look generated. Each look also has tells of its own, and the content it suits, in `references/tells.md`.
 
 - A bullet list read aloud word for word. Use `list` with one sentence for each item, or cut to the point; it is right when the list is the thing being read, such as a checklist the viewer follows.
-- A chart with no highlighted mark, so nothing says what to see.
-- Every shot a `statement`. Mix the kinds: a figure, a picture, a comparison.
-- The same cut on every shot. Let a cut mean something: `match` carries a shared node across, `slide` moves on, a plain `cut` is a change of subject.
-- A closing shot that repeats the opening. End on the ask.
-- Starred words in every line.
+- A chart with no highlighted mark, so nothing says what to see. A highlight is the default; leave it out only when the claim is the pattern as a whole.
+- Every shot a `statement`. Mix the kinds: a figure, a picture, a comparison; it is right for a spoken manifesto of short lines.
+- The same cut on every shot. Let a cut mean something: `match` carries a shared node across, `slide` moves on, a plain `cut` is a change of subject; one cut throughout is right for a quick run of like items.
+- A closing shot that repeats the opening. End on the ask; a repeat is right when it is the ask itself.
+- Starred words in every line; it is right only in a film of two or three lines with one star each.
 
 ## What the review tells you
 

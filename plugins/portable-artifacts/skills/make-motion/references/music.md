@@ -1,6 +1,6 @@
 # Cutting to the user's music
 
-Read this when the tempo `beats.mjs` prints is not the one you hear.
+Read this when `beats.mjs` exits 1 (`no steady beat found`) or the tempo it prints is not the one you hear.
 
 Check the `bpm` it prints against the track: it can be half, double or 2/3 of the tempo you hear. `--bpm 128` forces the grid at an exact tempo; for a tempo you know only roughly, give `--min-bpm` and `--max-bpm` from about 0.8 to 1.25 times it.
 
