@@ -14,7 +14,7 @@ import { applyAccent, gridX, lookForFormat } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
 import { resolveAnchor } from '../script/anchors.mjs';
-import { captionsOn, shotCaptions, kindContext } from '../captions/index.mjs';
+import { captionsOn, captionWordsOf, shotCaptions, kindContext } from '../captions/index.mjs';
 import { sampleGraph } from './sample.mjs';
 import { handLayer } from '../hand/index.mjs';
 import { hasGrounds, shotLook, groundSheet } from '../looks/grounds.mjs';
@@ -118,6 +118,8 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     unit: unitOf(canvas),
     gridX: (column) => gridX(look, canvas, column),
     timing,
+    // the words heard while this shot is on screen, whichever shot speaks them (the shot's own words with no J or L cut)
+    captionWords: captionWordsOf(timeline, index),
     at: (ref) => resolveAnchor(ref, timing),
     measure,
     seed: film.seed ?? DEFAULT_SEED,
@@ -176,7 +178,7 @@ function heroBox(n, rest) {
 // is the shot's camera, for where its marks stand on the frame (the captions keep off them).
 function withCaptions(out, shot, kind, ctx, film, cam) {
   if (!captionsOn(film, ctx.mode)) return out.nodes;
-  const captions = shotCaptions(shot, ctx, { kind, hero: out.hero ?? null, filmStart: ctx.timing.start, nodes: out.nodes, camera: cam });
+  const captions = shotCaptions(shot, ctx, { kind, hero: out.hero ?? null, filmStart: ctx.timing.start, nodes: out.nodes, camera: cam, words: ctx.captionWords });
   return captions.length === 0 ? out.nodes : [...out.nodes, ...captions];
 }
 

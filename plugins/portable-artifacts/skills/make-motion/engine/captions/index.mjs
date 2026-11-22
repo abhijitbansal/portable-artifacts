@@ -26,7 +26,7 @@ import { lower } from './lower.mjs';
 import { stack } from './stack.mjs';
 import { pill } from './pill.mjs';
 
-export { CAPTION_HOLD, captionGroups, groupTimes } from './groups.mjs';
+export { CAPTION_HOLD, captionGroups, captionWordsOf, groupTimes } from './groups.mjs';
 
 /** The devices whose event marks a region or a text: a caption keeps off what they mark while they are on screen. */
 export const MARK_DEVICES = Object.freeze(['highlight', 'circle', 'underline', 'bracket', 'focus']);
@@ -86,7 +86,11 @@ export function pinnedCards(nodes, duration) {
  *  when it has a caption). */
 export const showsWordsOf = (kind, shot) => (typeof kind.showsWords === 'function' ? kind.showsWords(shot) === true : kind.showsWords === true);
 
-const captioned = (kind, ctx, shot) => !showsWordsOf(kind, shot) && ctx.timing.words.length > 0;
+// The words a shot's captions draw: all of those heard while it is on screen (captionWordsOf), but for a kind that shows
+// its own words only the ones heard over it from another shot (those carry `from`), which it does not show.
+const wordsToCaption = (kind, shot, words) => (showsWordsOf(kind, shot) ? words.filter((w) => w.from !== undefined) : words);
+
+const captioned = (kind, ctx, shot, words = ctx.captionWords ?? ctx.timing.words) => wordsToCaption(kind, shot, words).length > 0;
 
 /**
  * The ctx a shot's kind composes in. A captioned shot whose look composes inside the platform safe zone (compositionRect
@@ -107,15 +111,17 @@ export function kindContext(film, kind, ctx) {
 /**
  * The caption nodes of one shot (none when its kind shows its own words or it has no narration), from the look's style.
  * @param {object} shot @param {object} ctx the shot's ctx (shotContext)
- * @param {{ kind: object, hero: string | null, filmStart: number, nodes: object[], camera?: Function }} p nodes: the
- *   kind's nodes; camera: the shot's camera, (t) => { x, y, zoom, rotate } (graph/film.mjs), for where its marks stand
+ * @param {{ kind: object, hero: string | null, filmStart: number, nodes: object[], camera?: Function, words?: object[] }} p
+ *   nodes: the kind's nodes; camera: the shot's camera, (t) => { x, y, zoom, rotate } (graph/film.mjs), for where its marks
+ *   stand; words: the words heard while the shot is on screen (captionWordsOf), the shot's own when not given. A kind that
+ *   shows its own words captions only those heard over it from another shot (they carry `from`).
  */
-export function shotCaptions(shot, ctx, { kind, hero, filmStart, nodes, camera }) {
-  if (!captioned(kind, ctx, shot)) return [];
+export function shotCaptions(shot, ctx, { kind, hero, filmStart, nodes, camera, words = ctx.timing.words }) {
+  if (!captioned(kind, ctx, shot, words)) return [];
   const style = registries.captions.get(ctx.look.captions);
   const ids = markIds(shot);
   const marks = marksOver(nodes, camera, ctx.canvas, ctx.timing.duration, ids);
-  return style.compose(ctx.timing.words, { ...ctx, captionId: `${shot.id}.captions`, hero, filmStart, avoid: pinnedCards(nodes, ctx.timing.duration), markIds: ids, marks });
+  return style.compose(wordsToCaption(kind, shot, words), { ...ctx, captionId: `${shot.id}.captions`, hero, filmStart, avoid: pinnedCards(nodes, ctx.timing.duration), markIds: ids, marks });
 }
 
 // ---- registration ----
