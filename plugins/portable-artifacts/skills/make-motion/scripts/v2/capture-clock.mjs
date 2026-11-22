@@ -28,6 +28,7 @@ export function stallError({ stage, frame, frames, cause, tail }) {
  * @param {{ frames: number, stallMs?: number, tail?: () => string[], now?: () => number,
  *   timers?: { setTimeout: Function, clearTimeout: Function } }} opts `tail` gives the page and console errors so far
  *   (session.errors); `now` is the clock in milliseconds; `timers` are the stall timers' source (tests inject their own).
+ *   The handle `timers.setTimeout` returns must have an `unref()` method (Node's does; a browser's number does not).
  * @returns {{ time<T>(stage: string, frame: number, fn: (control: { beat: () => void, signal: AbortSignal }) => Promise<T>): Promise<T>,
  *   totals(): Record<string, number> }}
  *   On the parallel path `totals()` sums the stage times of every page, so it can exceed the wall time.

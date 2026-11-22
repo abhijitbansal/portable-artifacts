@@ -6,6 +6,7 @@ import { createStageClock, stallError } from '../../scripts/v2/capture-clock.mjs
 import { describeError, formatText } from '../../scripts/v2/report.mjs';
 import { heldFlags, shootFrame } from '../../scripts/v2/render.mjs';
 import { captureParallel } from '../../scripts/v2/workers.mjs';
+import { fakeTimers } from './helpers/fake-timers.mjs';
 
 // A page that seeks and screenshots without a browser: `seek` and `shot` are what each call does.
 const fakePage = ({ seek = async () => {}, shot = async () => Buffer.from('jpeg') } = {}) => ({ evaluate: (fn, arg) => { globalThis.window = { __seek: seek, __heldFlags: (a, b) => Array.from({ length: b - a + 1 }, () => false) }; return fn(arg); }, screenshot: shot });
@@ -50,16 +51,6 @@ test('a stall with no page message says none, and an unknown stage is refused', 
   await assert.rejects(createStageClock({ frames: 1 }).time('paint', 0, async () => {}), /stage must be one of draw, capture, encode, check/);
 });
 
-// Timers that record what the clock does with them: each handle says whether it was cleared and whether it was unref'd.
-function fakeTimers() {
-  const handles = [];
-  return {
-    handles,
-    setTimeout: (fn, ms) => { const handle = { fn, ms, cleared: false, unrefd: false, unref() { this.unrefd = true; return this; } }; handles.push(handle); return handle; },
-    clearTimeout: (handle) => { handle.cleared = true; },
-  };
-}
-
 test('the stall timer is unref\'d and cleared when the stage settles, and re-armed by a heartbeat but never after it settled', async () => {
   const timers = fakeTimers();
   const clock = createStageClock({ frames: 3, stallMs: 500, timers });
@@ -73,20 +64,19 @@ test('the stall timer is unref\'d and cleared when the stage settles, and re-arm
 });
 
 test('a heartbeat restarts the stall limit, and a stall aborts the signal the stage was given, with the stall as its reason', async () => {
-  const release = keepAlive();
-  try {
-    const clock = createStageClock({ frames: 5, stallMs: 40 });
-    await clock.time('check', 4, async ({ beat, signal }) => {
-      for (let k = 0; k < 4; k++) { await new Promise((resolve) => setTimeout(resolve, 20)); beat(); } // 80 ms in all, 20 ms between beats
-      assert.equal(signal.aborted, false);
-    });
-    let seen;
-    await assert.rejects(clock.time('check', 4, ({ signal }) => new Promise(() => { seen = signal; })), /^Error: render stalled in the check stage at frame 5 of 5/);
-    assert.equal(seen.aborted, true);
-    assert.match(seen.reason.message, /^render stalled in the check stage/);
-  } finally {
-    release();
-  }
+  const timers = fakeTimers();
+  const clock = createStageClock({ frames: 5, stallMs: 60_000, timers });
+  let control;
+  const stage = clock.time('check', 4, (given) => { control = given; return new Promise(() => {}); });
+  const settled = assert.rejects(stage, /^Error: render stalled in the check stage at frame 5 of 5: no answer in 60 s/);
+  control.beat();
+  control.beat();
+  assert.deepEqual(timers.handles.map((h) => [h.ms, h.cleared]), [[60_000, true], [60_000, true], [60_000, false]], 'each beat replaces the timer with a whole new limit');
+  assert.equal(control.signal.aborted, false);
+  timers.handles[2].fn(); // the live timer runs out
+  assert.equal(control.signal.aborted, true, 'the stall aborts the stage\'s signal');
+  await settled;
+  assert.match(control.signal.reason.message, /^render stalled in the check stage/);
 });
 
 test('a late failure of a stalled stage is not unhandled', async () => {

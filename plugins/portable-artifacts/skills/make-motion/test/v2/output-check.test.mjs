@@ -2,13 +2,14 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { EventEmitter } from 'node:events';
+import { EventEmitter, getEventListeners } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ffmpegOrNull } from './helpers/session.mjs';
 import { createStageClock } from '../../scripts/v2/capture-clock.mjs';
-import { BLANK_STD, CHECK_HEIGHT, CHECK_WIDTH, checkArgs, checkOutput, outputProblem } from '../../scripts/v2/output-check.mjs';
+import { BLANK_STD, CHECK_HEIGHT, CHECK_WIDTH, checkArgs, checkOutput, outputProblem, versionOf } from '../../scripts/v2/output-check.mjs';
+import { fakeTimers } from './helpers/fake-timers.mjs';
 
 let dir;
 let ffmpeg = null;
@@ -74,44 +75,114 @@ test('a film of one frame is legal, and a file ffmpeg cannot read fails with its
   return undefined;
 });
 
-// A decoder that is not ffmpeg: a child that writes one gray frame every `everyMs` for `count` frames, then either ends
-// (`ends`) or goes silent for good. kill() stops it and ends it as a killed process does.
+// A decoder that is not ffmpeg, driven by hand so no test waits on the wall clock: frame() writes one gray frame, end()
+// ends the process, and kill() ends it as a killed process does (its close comes at once, which is the hard case).
 const FRAME = Buffer.from(Array.from({ length: CHECK_WIDTH * CHECK_HEIGHT }, (_, i) => i % 256));
-function fakeDecoder({ count, everyMs, ends }) {
+function fakeDecoder() {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.killed = false;
-  let sent = 0;
-  const timer = setInterval(() => {
-    if (sent < count) { sent++; child.stdout.emit('data', FRAME); return; }
-    if (!ends) return; // silent: never emits again, never ends
-    clearInterval(timer);
-    child.emit('close', 0);
-  }, everyMs);
-  child.kill = () => { child.killed = true; clearInterval(timer); child.emit('close', null); };
+  child.frame = () => child.stdout.emit('data', FRAME);
+  child.end = (code = 0) => child.emit('close', code);
+  child.kill = () => { child.killed = true; child.emit('close', null); };
   return child;
 }
-const checking = ({ clock, frames, child, frame = frames - 1 }) => clock.time('check', frame, ({ beat, signal }) => checkOutput({ ffmpeg: 'fake', file: 'f.mp4', frames, beat, stalled: signal, spawn: () => child }));
+const abortListeners = (signal) => getEventListeners(signal, 'abort').length;
+// The check as render runs it: inside the clock, with the clock's heartbeat and stall signal, and the run's own signal.
+function checking({ frames, signal, stallMs = 60_000 }) {
+  const timers = fakeTimers();
+  const child = fakeDecoder();
+  const clock = createStageClock({ frames, stallMs, timers });
+  let stalled;
+  const run = clock.time('check', frames - 1, (control) => {
+    stalled = control.signal;
+    return checkOutput({ ffmpeg: 'fake', file: 'f.mp4', frames, signal, stalled, beat: control.beat, version: null, spawn: () => child });
+  });
+  return { run, child, timers, stalled };
+}
 
-test('a decode slower than the stall limit in total passes while every frame arrives within it (the heartbeat)', async () => {
-  const child = fakeDecoder({ count: 10, everyMs: 15, ends: true }); // 150 ms in all, 15 ms a frame, against a 60 ms limit
-  const clock = createStageClock({ frames: 10, stallMs: 60 });
-  assert.deepEqual(await checking({ clock, frames: 10, child }), { decoded: 10 });
+test('every decoded frame restarts the stall limit, and a finished decode leaves no timer or listener behind', async () => {
+  const run = new AbortController();
+  const { run: checked, child, timers, stalled } = checking({ frames: 3, signal: run.signal });
+  child.frame();
+  child.frame();
+  child.frame();
+  assert.deepEqual(timers.handles.map((h) => h.cleared), [true, true, true, false], 'one timer to start, one new one per frame');
+  child.end();
+  assert.deepEqual(await checked, { decoded: 3 });
   assert.equal(child.killed, false);
+  assert.ok(timers.handles.every((h) => h.cleared && h.unrefd));
+  assert.deepEqual([abortListeners(run.signal), abortListeners(stalled)], [0, 0]);
 });
 
 test('a decoder that stops emitting stalls the check stage and has its ffmpeg killed', async () => {
-  const child = fakeDecoder({ count: 2, everyMs: 10, ends: false });
-  const clock = createStageClock({ frames: 10, stallMs: 80 });
-  await assert.rejects(checking({ clock, frames: 10, child }), /^Error: render stalled in the check stage at frame 10 of 10: no answer in 0\.08 s/);
+  const { run, child, timers } = checking({ frames: 10 });
+  child.frame();
+  child.frame();
+  const stalled = assert.rejects(run, /^Error: render stalled in the check stage at frame 10 of 10: no answer in 60 s/);
+  timers.handles.at(-1).fn(); // no frame for the whole limit: the live timer runs out
+  await stalled;
   assert.equal(child.killed, true);
+});
+
+test('a run abort in the middle of the decode rejects with its reason, not a stall, kills ffmpeg and leaves no listener behind', async () => {
+  const run = new AbortController();
+  const { run: checked, child, timers, stalled } = checking({ frames: 10, signal: run.signal });
+  child.frame();
+  const reason = new Error('stopped by the user');
+  const rejected = assert.rejects(checked, (err) => err === reason);
+  run.abort(reason);
+  await rejected;
+  assert.equal(child.killed, true);
+  assert.ok(timers.handles.every((h) => h.cleared), 'the stage is over: no stall timer is left');
+  assert.deepEqual([abortListeners(run.signal), abortListeners(stalled)], [0, 0]);
 });
 
 test('checkOutput gives one heartbeat per decoded frame', async () => {
   let beats = 0;
-  await checkOutput({ ffmpeg: 'fake', file: 'f.mp4', frames: 4, beat: () => { beats++; }, spawn: () => fakeDecoder({ count: 4, everyMs: 1, ends: true }) });
+  const child = fakeDecoder();
+  const checked = checkOutput({ ffmpeg: 'fake', file: 'f.mp4', frames: 4, beat: () => { beats++; }, version: null, spawn: () => child });
+  for (let k = 0; k < 4; k++) child.frame();
+  child.end();
+  await checked;
   assert.equal(beats, 4);
+});
+
+test('the version of ffmpeg is read from its first line, and a build with no number is unknown', () => {
+  assert.deepEqual(versionOf('ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers'), { major: 4, minor: 4 });
+  assert.deepEqual(versionOf('ffmpeg version n6.1.1 Copyright'), { major: 6, minor: 1 });
+  assert.deepEqual(versionOf('ffmpeg version 8.1.1 Copyright (c) 2000-2026 the FFmpeg developers'), { major: 8, minor: 1 });
+  assert.deepEqual(versionOf('ffmpeg version 7.0-static https://johnvansickle.com/ffmpeg/'), { major: 7, minor: 0 });
+  assert.equal(versionOf('ffmpeg version N-117000-gabcdef Copyright'), null);
+  assert.equal(versionOf(''), null);
+});
+
+test('ffmpeg before 5.1 gets -vsync passthrough, which it knows; 5.1 and later (and an unknown build) get -fps_mode passthrough', () => {
+  const pace = (version) => {
+    const args = checkArgs('/x/film.mp4', { version });
+    return [args.includes('-vsync') ? args.slice(args.indexOf('-vsync'), args.indexOf('-vsync') + 2) : null, args.includes('-fps_mode') ? args.slice(args.indexOf('-fps_mode'), args.indexOf('-fps_mode') + 2) : null];
+  };
+  const VSYNC = [['-vsync', 'passthrough'], null];
+  const FPS_MODE = [null, ['-fps_mode', 'passthrough']];
+  assert.deepEqual(pace({ major: 4, minor: 4 }), VSYNC);
+  assert.deepEqual(pace({ major: 5, minor: 0 }), VSYNC);
+  assert.deepEqual(pace({ major: 5, minor: 1 }), FPS_MODE);
+  assert.deepEqual(pace({ major: 8, minor: 1 }), FPS_MODE);
+  assert.deepEqual(pace(null), FPS_MODE);
+  assert.deepEqual(pace(undefined), FPS_MODE);
+});
+
+test('checkOutput decodes with the flag its ffmpeg knows', async () => {
+  const spawned = [];
+  for (const version of [{ major: 4, minor: 4 }, { major: 6, minor: 1 }]) {
+    const child = fakeDecoder();
+    const checked = checkOutput({ ffmpeg: 'fake', file: 'f.mp4', frames: 1, version, spawn: (_, args) => { spawned.push(args); return child; } });
+    child.frame();
+    child.end();
+    await checked;
+  }
+  assert.deepEqual(spawned.map((args) => [args.includes('-vsync'), args.includes('-fps_mode')]), [[true, false], [false, true]]);
 });
 
 test('an abort stops the check and rejects with the signal\'s reason', async (t) => {
