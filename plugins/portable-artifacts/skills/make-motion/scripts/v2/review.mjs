@@ -407,7 +407,7 @@ const COMPOSITION_RULE_IDS = new Set(COMPOSITION_RULES);
 
 /**
  * At most `cap` composition findings (dead-space, scale-contrast) a film: the ones with the largest `measure` stay, the
- * smallest of those says how many shots were dropped. Findings of any other rule pass through; the order is unchanged.
+ * smallest of those says how many findings were dropped. Findings of any other rule pass through; the order is unchanged.
  */
 export function capComposition(findings, cap = COMPOSITION_CAP) {
   const composition = findings.filter((f) => COMPOSITION_RULE_IDS.has(f.rule));

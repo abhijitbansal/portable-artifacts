@@ -21,7 +21,8 @@ const FPS = 30;
 // titleHeightTall hold both, so they now come back with none)
 // - free: the example is one 80-unit bar on an empty page (a minimal demonstration of the kind's nodes); dead-space
 //   rightly says the frame leaves 45% (16:9) and 78% (9:16) of its height empty;
-// - diagram 16:9 (three small boxes in a row, 38% bare above) and timeline 16:9 (36% bare above);
+// - diagram 16:9 (three small boxes in a row, 38% bare above; cosmos's frame not viewed, only the same example in keynote's)
+//   and timeline 16:9 (36% bare above; viewed, a strip in the middle: reads sparse);
 const KNOWN = Object.freeze({
   'free 16:9': ['creative dead-space shots[0]'],
   'free 9:16': ['creative dead-space shots[0]'],

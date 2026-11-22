@@ -839,7 +839,7 @@ test('reviewFilm caps the composition findings of a film at three and says how m
   assert.match(composition.find((x) => /more composition/.test(x.message)).message, /\(5 more composition findings are left out; fix the worst first\)/);
 });
 
-test('reviewFilm judges composition on a resting frame only: a film whose frames all hold a full block has none', async () => {
+test('reviewFilm gives a film whose every frame holds a full block no composition finding (a smoke test; resting-frame-only is pinned by the frameContext and review-composition tests)', async () => {
   const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 2, show: 'free' }]);
   const found = await reviewFilm({ session: stubSession(f, [bar('block', [96, 96, 1728, 800])]) });
   assert.deepEqual(found.filter((x) => x.rule === 'dead-space' || x.rule === 'scale-contrast'), []);

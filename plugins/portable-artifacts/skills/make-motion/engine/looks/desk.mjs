@@ -66,6 +66,10 @@ export const desk = {
   cutMotion: { irisAt: [0.8, 0.5] },
   // a cover's sheet shows its leading edge on identical paper: a hairline and a soft shadow cast on the sheet below
   coverEdge: { line: { color: 'ink2', width: 2, alpha: 0.35 }, shadow: { color: 'ink', width: 28, alpha: 0.16, steps: 7 } },
+  // the review's composition thresholds (engine/looks/fill.mjs DEFAULT_FILL, band 0.35): desk's flush-left statements and lists
+  // leave 35 to 39% of the width (or the top) bare beside the pinned slug and read filled (viewed: gate-desk problem, how and
+  // close, the desk list), so dead-space fires from 0.40 here
+  fill: { band: 0.4 },
   keyline: 8,
   shadow: { dx: 10, dy: 14, blur: 18, alpha: 0.25, color: '#000000' },
   // Styling for the devices this look draws. Colours are palette keys (or #rrggbb), sizes are units.

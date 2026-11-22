@@ -539,9 +539,10 @@ test('a look\'s fill is a band and a hero share, each above 0 and at most 1; any
   for (const name of registries.looks.names.all()) assert.doesNotThrow(() => validateLook({ ...registries.looks.get(name), name }), `${name} is valid`);
 });
 
-test('ledger lowers the hero bar to 0.45 and keeps the default band', () => {
-  assert.deepEqual(registries.looks.get('ledger').fill, { hero: 0.45 });
-  for (const name of registries.looks.names()) if (name !== 'ledger') assert.equal(registries.looks.get(name).fill, undefined, `${name} takes the default fill`);
+test('desk and ledger take a wider bare column (band 0.40), ledger a lower hero bar too (0.45); every other look takes the default fill', () => {
+  assert.deepEqual(registries.looks.get('desk').fill, { band: 0.4 });
+  assert.deepEqual(registries.looks.get('ledger').fill, { band: 0.4, hero: 0.45 });
+  for (const name of ['pop', 'cosmos', 'poster', 'keynote', 'marker']) assert.equal(registries.looks.get(name).fill, undefined, `${name} takes the default fill`);
 });
 
 test('a look may leave kinds out; when it has kinds, each entry must be an object', () => {

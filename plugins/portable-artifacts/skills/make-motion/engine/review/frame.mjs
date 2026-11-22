@@ -626,7 +626,10 @@ export const fillOf = (look) => ({ ...DEFAULT_FILL, ...Object.fromEntries(Object
 
 // The safe rectangle less the room the caption layout reserves: a zone in the lower half takes the safe rectangle's bottom
 // up to its top, one in the upper half takes the top down to its bottom. A zone that is not a box, or that would leave no
-// room, changes nothing.
+// room, changes nothing. Only a look that composes in the platform safe zone (pop on 9:16) reserves the zone in its layout
+// (captions/index.mjs kindContext captionRoom); for desk, cosmos and pop on 16:9 the layout is the same with captions on or
+// off, so there the cut only keeps the strip the caption is drawn over out of the measure, and a bare band above scores
+// higher against the shorter side.
 function safeLessCaptions(safe, zone) {
   if (!isBox(zone)) return safe;
   const [, y, , h] = zone, middle = (safe.top + safe.bottom) / 2;

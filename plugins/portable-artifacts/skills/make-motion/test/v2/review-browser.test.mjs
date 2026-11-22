@@ -56,19 +56,17 @@ const exampleFor = (entry, look) => ({
 });
 
 // The composition findings (W2 Task 3) an example gets, by "<kind> <look> <format>", as "<kind> <rule> <path>". The examples
-// are shared by every look, so their copy stays; each line below is a frame that is sparse by design of the example:
-// - free: one 80-unit bar on an empty page (45% of the height bare on 16:9, 71 to 74% on 9:16);
-// - diagram 16:9: three small boxes in one row (40 to 41% bare above or below); number 16:9 (40%) and 9:16 (62%): a figure and
-//   its label with the top bare; desk timeline 16:9 (39% bare above) and 9:16 (a column hugging the left rule, 53% of the
-//   width bare); pop list 9:16: a stack of items with 44% of the height bare below;
-// - desk statement 16:9 (36% of the width bare on the right) and desk list 16:9 (36% of the height bare at the top): left-flush
-//   layouts at the edge of the 0.35 band; Task 5 fills the short statements.
+// are shared by every look, so their copy stays; each line below is a frame that is sparse by design of the example (frames
+// viewed in this round's review, .scratch/motion-steals-w2/t3/png-ex-*; desk has band 0.40, so its left-flush statement,
+// list and timeline on 16:9, 36 to 39% bare, are not findings):
+// - free: one 80-unit bar on an empty page (45% of the height bare on 16:9, 71 to 74% on 9:16; read from the spec);
+// - diagram 16:9: three small boxes in one row (40 to 41% bare above or below; viewed in keynote's frame of the same example,
+//   pop's not viewed); number 16:9 (40%) and 9:16 (62%): a figure and its label with the top bare (viewed, read empty);
+//   desk timeline 9:16 (viewed): a column hugging the left rule, 53% of the width bare; pop list 9:16 (viewed, reads empty): a
+//   single step card with 44% of the height bare below.
 const KNOWN = Object.freeze({
   'free desk 16:9': ['creative dead-space shots[0]'],
-  'statement desk 16:9': ['creative dead-space shots[0]'],
   'number desk 16:9': ['creative dead-space shots[0]'],
-  'list desk 16:9': ['creative dead-space shots[0]'],
-  'timeline desk 16:9': ['creative dead-space shots[0]'],
   'diagram desk 16:9': ['creative dead-space shots[0]'],
   'free desk 9:16': ['creative dead-space shots[0]'],
   'number desk 9:16': ['creative dead-space shots[0]'],

@@ -78,15 +78,16 @@ before(() => {
 after(() => rmSync(exampleDir, { recursive: true, force: true }));
 
 // The composition findings (W2 Task 3) an example gets, by "<kind> <look> <format>", as "<kind> <rule>": the same sparse frames
-// review-browser.test.mjs names. The caption zone the layout reserves is left out of what is measured (ctx.captionZone), so
-// captions on add none: the timeline and the screen that were flagged only with captions on (their layouts clear the zone)
-// have no finding here.
+// review-browser.test.mjs names, plus one. The zone the caption layout puts its captions in is left out of what is measured
+// (ctx.captionZone), which removed the screen pop 16:9 entry that was flagged only with captions on. The desk timeline 16:9
+// still fires with captions on (45% of the height bare once the zone is out; 39% without captions, under desk's band 0.40),
+// so it stays listed: the shorter side makes a bare band at the top score higher (frame.mjs safeLessCaptions).
 const SPARSE = ['creative dead-space'];
 const KNOWN = Object.freeze({
-  'free desk 16:9': SPARSE, 'number desk 16:9': SPARSE, 'diagram desk 16:9': SPARSE, 'free desk 9:16': SPARSE,
+  // (desk diagram 16:9 is a finding without captions, at 40%, and not with them: it sits on the edge of desk's band)
+  'free desk 16:9': SPARSE, 'number desk 16:9': SPARSE, 'free desk 9:16': SPARSE,
   'number desk 9:16': SPARSE, 'timeline desk 9:16': SPARSE, 'free pop 16:9': SPARSE, 'diagram pop 16:9': SPARSE,
   'free pop 9:16': SPARSE, 'list pop 9:16': SPARSE,
-  'statement desk 16:9': SPARSE, 'list desk 16:9': SPARSE, // left-flush: 36% of the width bare on the right, 36% of the height at the top
   'timeline desk 16:9': SPARSE,
 });
 
@@ -106,10 +107,10 @@ for (const [mode, look, format] of EXAMPLE_COMBOS) {
 }
 
 // The composition findings of the gate films, as "<kind> <rule> <shot>" (frames viewed, .scratch/motion-steals-w2/t3/png-gate-*):
-// desk `problem`, `how` and `close` are left-flush statements with the right 35 to 36% bare (they read well filled: edge cases
-// of the 0.35 band); pop `hook` and `local` are a three-line block with 39% of the height bare below it (top-heavy, they read sparse).
+// gate-desk has none (its left-flush statements leave 35 to 36% of the width bare and read filled; desk's band is 0.40); pop
+// `hook` and `local` are a three-line block with 39% of the height bare below it (top-heavy, they read sparse).
 const GATE_KNOWN = Object.freeze({
-  'gate-desk': ['creative dead-space problem', 'creative dead-space how', 'creative dead-space close'],
+  'gate-desk': [],
   'gate-pop': ['creative dead-space hook', 'creative dead-space local'],
 });
 

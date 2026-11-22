@@ -33,6 +33,14 @@ test('a block across the safe width and most of its height fires neither', () =>
 test('the calibrated defaults: an empty band of 35% of a side, a hero under 50% of it', () => {
   assert.deepEqual({ ...DEFAULT_FILL }, { band: 0.35, hero: 0.5 });
 });
+test('desk and ledger read the band from their look data: a bare column of 37% fires under the default fill and not in desk or ledger', () => {
+  assert.deepEqual(fillOf(registries.looks.get('desk')), { band: 0.4, hero: 0.5 });
+  assert.deepEqual(fillOf(registries.looks.get('ledger')), { band: 0.4, hero: 0.45 });
+  const tree = [box('text', [96, 96, 1089, 888])]; // 1089 of 1728: 37% of the width bare on the right
+  assert.deepEqual(rules(compositionFindings(tree, ctx({ look: registries.looks.get('pop') }))), ['dead-space']);
+  assert.deepEqual(compositionFindings(tree, ctx()), []); // desk
+  assert.deepEqual(compositionFindings(tree, ctx({ look: registries.looks.get('ledger') })), []);
+});
 test('the percent in a message is rounded down, so a hero at 54.6% never reads as 55% against a bar it is under', () => {
   const [found] = compositionFindings([box('hero', [100, 100, 0.496 * 1728, 300])], ctx(), { band: 1, hero: 0.5 });
   assert.match(found.message, /^the hero, "hero", reaches 49% of the frame/);

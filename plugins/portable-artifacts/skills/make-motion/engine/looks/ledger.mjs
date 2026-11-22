@@ -89,9 +89,10 @@ export const ledger = {
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'match', 'fade', 'wipe'],
   cutStyle: {},
-  // the review's composition thresholds (engine/looks/fill.mjs DEFAULT_FILL; band stays the default): ledger's ruled
-  // layouts fill well with a hero down to 0.466 of the frame (the calibration's `year` shot), under the default 0.55
-  fill: { hero: 0.45 },
+  // the review's composition thresholds (engine/looks/fill.mjs DEFAULT_FILL, band 0.35 and hero 0.50): ledger's ruled
+  // layouts fill well with a hero down to 0.466 of the frame (the calibration's `year` shot), under the default 0.50; and a
+  // left-flush statement leaves 35 to 39% of the width bare on the right and reads filled (viewed: ledger statement 16:9)
+  fill: { band: 0.4, hero: 0.45 },
   keyline: 4,
   // nothing in ledger casts a shadow (the card is plain); a cut-out keeps a faint contact edge
   shadow: { dx: 0, dy: 4, blur: 8, alpha: 0.12, color: '#16181d' },

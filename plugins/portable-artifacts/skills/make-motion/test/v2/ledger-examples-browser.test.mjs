@@ -27,16 +27,14 @@ const exampleOf = (kind) => listEntries('kinds').find((e) => e.name === kind)?.e
 // - diagram 16:9: three small boxes in one row, 43% of the height bare above and below (the same frame as keynote's, which
 //   was viewed): dead-space is right;
 // - timeline 9:16: viewed (.scratch/motion-steals-w2/t3/png-ledger/history.png), three years in a column hugging the
-//   left rule, the right 48% of the width bare: dead-space is right;
-// - timeline 16:9 (36% of the height bare above) and statement 16:9 (a left-flush statement, 39% of the width bare on the
-//   right, the shape of the calibration's `lede`): sparse at the 0.35 band.
+//   left rule, the right 48% of the width bare: dead-space is right.
+// (Ledger's band is 0.40: its timeline 16:9 at 36% bare above, not viewed, and its left-flush statement 16:9 with 39% of the
+// width bare, viewed and read filled, are not findings.)
 const KNOWN = Object.freeze({
   'free 16:9': ['creative dead-space shots[0]'],
   'free 9:16': ['creative dead-space shots[0]'],
   'diagram 16:9': ['creative dead-space shots[0]'],
   'timeline 9:16': ['creative dead-space shots[0]'],
-  'timeline 16:9': ['creative dead-space shots[0]'],
-  'statement 16:9': ['creative dead-space shots[0]'],
 });
 
 // A striped PNG, built by hand so a browser can decode it: a stand-in screenshot.
