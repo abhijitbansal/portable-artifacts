@@ -28,7 +28,7 @@ An unknown root field is an error. Only `shots` and `version` are required.
 | `look` | a look name | Default: the mode's own look (`desk` for `pro`, `pop` for `viral`). A look serves the modes it names (`--list looks`) |
 | `format` | `"16:9"`, `"9:16"`, `"1:1"` or `"4:5"` | Default: the mode's own format |
 | `fps` | 24, 25, 30 or 60 | Default 30 |
-| `seed` | integer, 0 to 7918 | Default 1. Looks draw their random marks from it, so one seed gives the same frames on the same machine, browser build and fonts. Which words animate letter by letter is decided by how the browser draws them, so it can differ between systems |
+| `seed` | integer, 0 to 7918 | Default 1. Looks draw their random marks from it, so one seed gives the same frames |
 | `accent` | `"#rrggbb"` | Replaces the look's accent colour |
 | `cut` | a cut | The default cut of every shot after the first (see Cuts) |
 | `voice` | `{ "name": "af_heart" }` or `{ "src": "vo.wav", "words": "vo.json" }` | Narration. The first shape is made on this machine. The second is a recording of your own with its word times. See Sound |
@@ -195,6 +195,10 @@ Three render errors come from the checks the render makes on itself, and each le
 | 1 | The film is invalid, or a mechanical finding exists (the MP4 is still written when the film validated) |
 | 2 | A usage error, or trouble with the machine. `error` says which and how to fix it |
 | 130 | Stopped by SIGINT or SIGTERM. The report keeps what was done |
+
+## Reproducibility
+
+Two renders of one film give the same frames on the same machine, browser build and fonts. The browser draws the text, so how it draws some words (kerning, ligatures, right-to-left scripts) and which of them are drawn letter by letter can differ between systems.
 
 ## Limits
 

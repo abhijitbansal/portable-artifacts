@@ -4,7 +4,8 @@
 // (the picture before the post pass) with the whole-word path, then with window.__setGlyphPath(true), which sends every word
 // of every text through the glyph path with identity values. "The same picture" is no channel differing by more than
 // SAME_PICTURE (8 of 255): a glyph drawn alone sits a float's hair off the whole run's place, and above about 256 px, where
-// the browser draws glyphs as paths, that moves a handful of edge pixels by a few levels (4 measured). A ligature, a kern or
+// the browser draws glyphs as paths, that moves a handful of edge pixels by a few levels (largest seen: 5 of 255, macOS, the pop
+// and poster plain sets). A ligature, a kern or
 // a mark that moves a glyph changes pixels by 100 or more.
 // A word the glyph path cannot draw faithfully (a ligature or contextual form, a right-to-left word) is drawn whole even
 // then, so it is the same by being drawn whole. The word sets hold each case: plain (kerned pairs, figures, a
@@ -38,6 +39,9 @@ const WORD_SETS = Object.freeze({
 // run some words letter by letter and the rest as one block; Task 4 gives marker `letters: null`. It stays in the table,
 // reported.
 const LETTER_LOOKS = ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote'];
+// DISTINCT words of the plain set (5: Typography, AVATAR, fjord, L'été, 10,000) each look sends through the glyph path, as measured
+// on macOS: all five in every asserted look. A check that wrongly rejects some words fails here, not only one that rejects all.
+const PLAIN_WORDS_BY_GLYPH = Object.freeze({ desk: 5, pop: 5, cosmos: 5, ledger: 5, poster: 5, keynote: 5 });
 // sha256 of the poster statement's last frame (16:9, seed 3, WORDS) with the seam off, taken at the base commit (before this
 // task) on darwin. Font rasterisation differs between platforms, so other platforms only print theirs.
 const BASE_SOURCE_SHA256 = { darwin: '15ced09e237d9768d67ac49bfd7e1a3580127556053b95945557abc2da262b1d' };
@@ -82,7 +86,7 @@ for (const look of registries.looks.names()) {
         counts.set(`${look} / ${set}`, stats);
         assert.deepEqual(session.errors, []);
         if (LETTER_LOOKS.includes(look)) assert.ok(max <= SAME_PICTURE, `no channel differs by more than ${SAME_PICTURE} (it differs by ${max}, on ${differing} channels)`);
-        if (LETTER_LOOKS.includes(look) && set === 'plain') assert.ok(stats.glyph >= 1, `${look}: no plain word took the glyph path (${stats.glyph} did, ${stats.rejected} were drawn whole)`);
+        if (LETTER_LOOKS.includes(look) && set === 'plain') assert.ok(stats.glyph >= PLAIN_WORDS_BY_GLYPH[look], `${look}: ${stats.glyph} distinct plain words took the glyph path, at least ${PLAIN_WORDS_BY_GLYPH[look]} should (drawn whole: ${stats.rejectedWords.join(', ')})`);
       } finally {
         await session.close();
       }

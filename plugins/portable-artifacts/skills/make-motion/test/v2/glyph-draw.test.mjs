@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { drawFrame } from '../../engine/page/draw.mjs';
-import { graphemesOf, placementOf, setGlyphPath } from '../../engine/page/glyph-draw.mjs';
+import { faithfulOf, glyphRollup, graphemesOf, setGlyphPath } from '../../engine/page/glyph-draw.mjs';
 
 const ADVANCE = 10;
 const KERN = { AV: 2 };
@@ -19,10 +19,12 @@ const widthOf = (text) => {
 
 // The shapes a fillText leaves, as [shape, x]: a word drawn whole is one shape per glyph at the whole word's own places,
 // except a ligature, which is one shape.
+let failPhase = null; // when set, a whole word drawn at this quarter pixel leaves one more shape than its letters apart
 function shapesOf(text, x) {
   if (text === 'fi') return [['LIG', x]];
   const chars = graphemesOf(text);
-  return chars.map((char, k) => [char, x + widthOf(chars.slice(0, k + 1).join('')) - widthOf(char)]);
+  const odd = failPhase !== null && chars.length > 1 && Math.abs(((x % 1) + 1) % 1 - failPhase) < 1e-9 ? [['PHASE', x]] : [];
+  return [...odd, ...chars.map((char, k) => [char, x + widthOf(chars.slice(0, k + 1).join('')) - widthOf(char)])];
 }
 
 function fakeContext() {
@@ -45,7 +47,8 @@ function fakeContext() {
     translate(x, y) { const [e, f] = at(x, y); state = { ...state, m: [state.m[0], 0, 0, state.m[3], e, f] }; },
     scale(sx, sy) { state = { ...state, m: [state.m[0] * sx, 0, 0, state.m[3] * sy, state.m[4], state.m[5]] }; },
     measureText(text) {
-      const width = widthOf(text);
+      // the width carries the letter spacing after every glyph, as the browser's does
+      const width = widthOf(text) + (Number.parseFloat(ctx.letterSpacing) || 0) * graphemesOf(text).length;
       return { width, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width };
     },
     fillText(text, x, y) { const [px, py] = at(x, y); log.push({ op: 'fillText', text, x: px, y: py, scale: state.m[0], alpha: state.alpha }); },
@@ -77,12 +80,12 @@ const GLOW = { color: '#ffd24a', alpha: 0.8, radius: 12 };
 const ID = { opacity: 1, x: 0, y: 0, scale: 1 };
 
 // One word on one line at (0, 0), centred on the origin (its left is -width / 2), drawn through drawFrame.
-function drawWord(text, wordTracks, { glow, shift = 0 } = {}) {
+function drawWord(text, wordTracks, { glow, shift = 0, font = FONT } = {}) {
   const ctx = fakeContext();
   const width = widthOf(text);
   const node = {
     type: 'text', id: 't', x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, reveal: 1, blur: 0, children: [],
-    props: { font: FONT, layout: { lines: [{ x: 0, y: 0, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }] }, ...(glow ? { glow } : {}) },
+    props: { font, layout: { lines: [{ x: 0, y: 0, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }] }, ...(glow ? { glow } : {}) },
     words: [wordTracks],
   };
   drawFrame(ctx, [node], { canvas: { w: 1000, h: 400 } });
@@ -233,29 +236,65 @@ test('the test seam can set the glyph values every word is drawn with: a rejecte
   }
 });
 
-test('the faithfulness check runs at the word\'s own sub-pixel x, in quarter pixels, and decides again for another quarter', () => {
+// Canvases a faithfulness check drew on (the measuring probe draws nothing): one per word checked.
+const checks = () => scratches.filter((c) => c.drawn.length > 0).length;
+
+test('a word moved by sub-pixel offsets from frame to frame keeps one verdict: it is checked once, and drawn by letter every frame', () => {
   const glyphs = [{ ...ID, opacity: 0.5 }, ID, ID];
-  const before = scratches.length;
-  drawWord('PQR', word({ glyphs }), { shift: 0.3 });
-  assert.equal(scratches.length, before + 1);
-  assert.equal(scratches.at(-1).drawn[0].x % 1, 0.25, 'the whole-word draw sits a quarter pixel off the pixel grid');
-  drawWord('PQR', word({ glyphs }), { shift: 0.3 });
-  assert.equal(scratches.length, before + 1, 'the same quarter is not checked again');
-  drawWord('PQR', word({ glyphs }), { shift: 0.55 });
-  assert.equal(scratches.length, before + 2, 'another quarter is');
-  assert.equal(scratches.at(-1).drawn[0].x % 1, 0.5);
+  const before = checks();
+  const drawn = [0, 0.3, 0.55, 0.8, 1.1].map((shift) => drawWord('PQR', word({ glyphs }), { shift }).fills.map((f) => f.text));
+  assert.deepEqual(drawn, Array(5).fill(['P', 'Q', 'R']), 'letters drawn one by one at every offset, never the word whole');
+  assert.equal(checks(), before + 1, 'one check for the word, whatever the offsets');
 });
 
-test('the check is cached on the canvas settings that change shaping, not on the font alone', () => {
-  const ctx = fakeContext();
-  ctx.font = 'bold 40px "Fake"';
+test('a word that differs at one quarter pixel only is drawn whole at every offset; one that passes was checked at all four', () => {
+  const phasesOf = (word, since) => scratches.slice(since).flatMap((c) => c.drawn.filter((d) => d.text === word).map((d) => d.x % 1));
+  const glyphs = [{ ...ID, opacity: 0.5 }, ID, ID];
+  const offsets = [0, 0.3, 0.55, 0.8];
   const before = scratches.length;
-  placementOf(ctx, 'STU', 0);
-  placementOf(ctx, 'STU', 0);
-  assert.equal(scratches.length, before + 1);
-  for (const [setting, value] of [['fontKerning', 'none'], ['fontVariantCaps', 'small-caps'], ['textRendering', 'optimizeSpeed'], ['wordSpacing', '3px'], ['letterSpacing', '2px']]) {
-    ctx[setting] = value;
-    placementOf(ctx, 'STU', 0);
-    assert.equal(scratches.length, before + 2 + ['fontKerning', 'fontVariantCaps', 'textRendering', 'wordSpacing', 'letterSpacing'].indexOf(setting), setting);
+  const passing = offsets.map((shift) => drawWord('MNO', word({ glyphs }), { shift }).fills.length);
+  assert.deepEqual(passing, [3, 3, 3, 3]);
+  assert.deepEqual([...new Set(phasesOf('MNO', before))].sort(), [0, 0.25, 0.5, 0.75], 'the whole word was drawn at all four quarters');
+  failPhase = 0.5;
+  try {
+    const failing = offsets.map((shift) => drawWord('JKL', word({ glyphs }), { shift }).fills.map((f) => f.text));
+    assert.deepEqual(failing, Array(4).fill(['JKL']), 'whole at every offset: the one it fails at and the ones it passes');
+  } finally {
+    failPhase = null;
   }
+});
+
+test('the verdict is made on the resting font: a weight sweep keeps one check', () => {
+  const before = checks();
+  const sweep = [400, 500, 600, 700].map((weight) => drawWord('XYZ', word({ weight, glyphs: [{ ...ID, opacity: 0.5 }, ID, ID] })).fills.map((f) => f.text).join(''));
+  assert.deepEqual(sweep, Array(4).fill('XYZ'));
+  assert.equal(checks(), before + 1);
+});
+
+test('the verdict is cached on the shaping settings that change shaping, not on the font alone', () => {
+  const ctx = fakeContext();
+  const before = checks();
+  faithfulOf(ctx, FONT, 'STU');
+  faithfulOf(ctx, FONT, 'STU');
+  assert.equal(checks(), before + 1);
+  const settings = [['fontKerning', 'none'], ['fontVariantCaps', 'small-caps'], ['textRendering', 'optimizeSpeed'], ['wordSpacing', '3px'], ['direction', 'rtl']];
+  settings.forEach(([setting, value], i) => {
+    ctx[setting] = value;
+    faithfulOf(ctx, FONT, 'STU');
+    assert.equal(checks(), before + 2 + i, setting);
+  });
+  faithfulOf(ctx, { ...FONT, tracking: 0.05 }, 'STU');
+  assert.equal(checks(), before + 2 + settings.length, 'another tracking is another verdict');
+});
+
+test('the roll-up of a word\'s glyphs is one function, the mean: opacity (clamped), offsets and scale', () => {
+  assert.deepEqual(glyphRollup([{ opacity: 0, x: 0, y: 0, scale: 1 }, { opacity: 1, x: 10, y: -4, scale: 1.5 }]), { opacity: 0.5, dx: 5, dy: -2, scale: 1.25 });
+  assert.equal(glyphRollup([{ opacity: 1.5, x: 0, y: 0, scale: 1 }, { opacity: -1, x: 0, y: 0, scale: 1 }]).opacity, 0.5, 'each opacity is clamped before the mean');
+});
+
+test('a scaled glyph pivots on the centre of its ink: the letter spacing the advance carries is not part of it', () => {
+  // each glyph is 10 wide and the spacing adds 2 after it: advance 12, ink centre 5, so a glyph at scale 2 starts 12 + 5 - 10 = 7 on
+  const font = { ...FONT, tracking: 0.05 };
+  const { fills, left } = drawWord('ABC', word({ glyphs: [ID, { ...ID, scale: 2 }, ID] }), { font });
+  assert.equal(fills.find((f) => f.text === 'B').x - left, 7);
 });
