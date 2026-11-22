@@ -71,6 +71,13 @@ function highlightTogether(text, ctx) {
   return emphasised.map((on, i) => on && emphasised[i + 1] === true);
 }
 
+// The look's short-statement fill (kinds.statement.fillShort: { words, height, toWide? }, desk, cosmos, keynote) when the
+// text has `words` words or fewer; null otherwise. A short claim may take more of the band and, on a wide frame, more columns.
+function shortFill(look, text) {
+  const fill = look.kinds?.statement?.fillShort;
+  return fill !== undefined && wordsOf(text).length <= fill.words ? fill : null;
+}
+
 // The text fitted to columns FIRST_COLUMN..`to` and centred on DESK.centre of the height: { layout, font, x, y, span }.
 // `tradeFloor`: the fit gives up size for a better break (fitText) only down to this size; `clear` (slugClearance, or
 // null): the fit prefers a layout whose block, so placed, stays off it.
@@ -113,7 +120,7 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   // hanging claim may take all the room under its tag
   const maxLines = !wide && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
   const maxHeight = hangTop !== null ? bounds.bottom - hangTop
-    : Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : DESK.height), bounds.bottom - Math.max(bounds.top, top));
+    : Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : shortFill(look, text)?.height ?? DESK.height), bounds.bottom - Math.max(bounds.top, top));
   // a phrase kept whole may cost size: the fit looks down to the kind's floor for a layout that keeps it
   const floor = data.together && wide ? Math.max(tradeFloor, min) : tradeFloor;
   const fit = (lines) => fitDisplay(opts, { min, max, maxHeight, maxLines: lines, tradeFloor: floor }, look, unit);
@@ -157,7 +164,7 @@ function dropBelow(placed, clear, ctx) {
 // frame review reports text left over a card: card-overlap).
 function composeEditorial(text, shot, ctx) {
   const { look, canvas, unit, measure } = ctx;
-  const last = isWide(canvas) ? look.kinds?.statement?.toWide ?? DESK.toWide : DESK.toTall;
+  const last = isWide(canvas) ? shortFill(look, text)?.toWide ?? look.kinds?.statement?.toWide ?? DESK.toWide : DESK.toTall;
   const slug = slugBox(shot, ctx);
   const clear = slug ? slugClearance(slug, ctx) : null;
   // a statement stays three times the slug's kicker (the hero ratio the review asks of a frame's own texts; the slug is

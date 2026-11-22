@@ -99,6 +99,9 @@ export const desk = {
   // sizes are units, shares of the frame,
   // em of the text they follow, or 1-based scale steps.
   kinds: {
+    // statement (statement.mjs): a claim of at most `words` words may take `height` of the band (0.64 otherwise) and
+    // columns 2 to `toWide` (9 otherwise): a short claim set at the usual share left the right third bare (W2 task 5)
+    statement: { fillShort: { words: 6, height: 0.8, toWide: 11 } },
     // end: the closing line fitted to columns 2 to `toWide` (`toTall` on vertical formats) from step `fromStep` to `max`,
     // at most `height` of the frame; the ask in the text face `askGap` em of the title under its last baseline, at the
     // largest of `askSteps` the title stays three times; the block centred at `centre` of the height; the mark in the

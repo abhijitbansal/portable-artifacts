@@ -55,13 +55,16 @@ test('a 30-word statement on 9:16 reports overflow', () => {
 });
 
 test('desk statement carries the frame: fitted up to 300 units in 64% of the height and columns 2 to 9, its ink centred at 50%', () => {
-  // hand-computed: "Dashboards." is one word of 11 glyphs of 0.55 em, tracked -0.01 em at this size: 5.94 em; columns
-  // 2 to 9 on 1920 x 1080 run from 242 to 1386 (1144 px), so the width binds at floor(1144 / 5.94) = 192 px, under 300
+  // hand-computed: "Dashboards." is one word of 11 glyphs of 0.55 em, tracked -0.01 em at this size: 5.94 em. A statement
+  // of six words or fewer reaches column 11 (look data fillShort, W2 task 5): columns 2 to 11 on 1920 x 1080 run from 242
+  // to 1676 (1434 px), so the width binds at floor(1434 / 5.94) = 241 px, under 300. Without fillShort, columns 2 to 9
+  // (242 to 1386, 1144 px) bound it at floor(1144 / 5.94) = 192 px: that size was pinned here before W2 task 5.
   const short = expandShot({ id: 'a', show: 'statement', say: 'Dashboards.' });
   const one = textNode(short.nodes);
-  assert.equal(one.props.font.size, 192);
+  assert.equal(one.props.font.size, 241);
+  assert.equal(textOf({ id: 'a', show: 'statement', say: 'Dashboards.' }, withoutFill('desk')).font.size, 192);
   assert.equal(one.props.x, 242);
-  near(one.props.y + one.props.layout.lines[0].y - 0.7 * 192 / 2, 540, 'cap line to baseline centred on 50%');
+  near(one.props.y + one.props.layout.lines[0].y - 0.7 * 241 / 2, 540, 'cap line to baseline centred on 50%');
   // a long sentence: at most 4 lines, its block within 64% of the height, inside the span, ink centred on 50%
   const { nodes, ctx, canvas } = expandShot({ id: 'a', show: 'statement', say: 'Most dashboards cannot tell you where a number came from.' });
   const text = textNode(nodes);
@@ -607,4 +610,70 @@ test('fix pass F4: a desk statement\'s ink clears the slug card, its tape includ
       }
     }
   }
+});
+
+// W2 Task 5: kinds.statement.fillShort (desk, cosmos, keynote): a statement of at most `words` words takes `height` of
+// the band and, on a wide frame, columns up to `toWide`. The same shot expanded in the look with and without the data.
+const withoutFill = (name) => ({ without: name });
+const expandedIn = (shot, look, format = '16:9') => {
+  const { ctx } = expandShot(shot, typeof look === 'string' ? look : look.without, format);
+  // the look the film resolved for the shot (ctx.look), with and without the data, so only fillShort differs
+  const used = typeof look === 'string' ? ctx.look : { ...ctx.look, kinds: { ...ctx.look.kinds, statement: { ...ctx.look.kinds?.statement, fillShort: undefined } } };
+  return registries.kinds.get('statement').expand(shot, { ...ctx, look: used });
+};
+const textOf = (shot, look, format) => textNode(expandedIn(shot, look, format).nodes, `${shot.id}.text`).props;
+const statementOf = (text) => ({ id: 's', show: 'statement', hold: 2, text });
+const SHORT_TEXTS = ['Numbers need sources.', 'One file, no server at all.', 'Scripts do the rest of it.', 'Ship it today.', 'Make the film now.'];
+const TEN_WORDS = 'Most dashboards cannot tell you where a number came from.';
+const FILL_SHORT = { desk: { words: 6, height: 0.8, toWide: 11 }, cosmos: { words: 6, height: 0.8 }, keynote: { words: 6, height: 0.8 } };
+
+test('the three looks carry the shipped fillShort data', () => {
+  for (const [name, data] of Object.entries(FILL_SHORT)) assert.deepEqual(registries.looks.get(name).kinds.statement.fillShort, data, name);
+});
+
+// Where the data takes effect (measured with the fake measure, .scratch/motion-steals-w2/t5-search.mjs): desk on 16:9 (its
+// height share and columns), 1:1 and 4:5; keynote on 1:1 and 4:5 only (on 16:9 and 9:16 it is held by linesWide 2 and the
+// 300 cap, or by the width). Cosmos carries the data but no frame moves: its wide frame is held by linesWide 2 and the
+// 300 cap, its tall frames by their own tallHeight 0.92.
+const GROWS_ON = { desk: ['16:9', '1:1', '4:5'], keynote: ['1:1', '4:5'], cosmos: [] };
+const FORMATS_UNDER_TEST = ['16:9', '9:16', '1:1', '4:5'];
+
+for (const look of ['desk', 'cosmos', 'keynote']) {
+  test(`${look}: a statement of six words or fewer is never smaller, and is set larger where the look's other limits leave room, than the same look without fillShort`, () => {
+    const sizes = SHORT_TEXTS.flatMap((text) => FORMATS_UNDER_TEST.map((format) => ({ text, format, size: textOf(statementOf(text), look, format).font.size, was: textOf(statementOf(text), withoutFill(look), format).font.size })));
+    sizes.forEach(({ text, format, size, was }) => assert.ok(size >= was, `${look} ${format} "${text}": ${size} is not under ${was}`));
+    const grew = (format) => sizes.some((s) => s.format === format && s.size > s.was);
+    const seen = (format) => sizes.filter((s) => s.format === format).map(({ size, was }) => `${size}/${was}`).join(' ');
+    GROWS_ON[look].forEach((format) => assert.ok(grew(format), `${look} ${format} has a larger short statement: ${seen(format)}`));
+    if (GROWS_ON[look].length === 0) FORMATS_UNDER_TEST.forEach((format) => assert.ok(!grew(format), `${look} ${format} is as before: ${seen(format)}`));
+  });
+
+  test(`${look}: a ten-word statement is set exactly as it was`, () => {
+    for (const format of ['16:9', '9:16']) {
+      const now = textOf(statementOf(TEN_WORDS), look, format), was = textOf(statementOf(TEN_WORDS), withoutFill(look), format);
+      assert.equal(now.font.size, was.font.size, `${look} ${format} size`);
+      assert.deepEqual(now.layout.lines.map((line) => line.words.map((w) => w.text)), was.layout.lines.map((line) => line.words.map((w) => w.text)), `${look} ${format} breaks`);
+      assert.equal(now.x, was.x);
+      assert.equal(now.y, was.y);
+    }
+  });
+}
+
+test('desk: a short statement may reach column 11, and its ink still sits inside the safe area', () => {
+  const { ctx, canvas } = expandShot(statementOf('Dashboards.'), 'desk');
+  const reach = (text) => { const p = textOf(statementOf(text), 'desk'); return p.x + p.layout.width; };
+  const widest = Math.max(...SHORT_TEXTS.concat('Dashboards.').map(reach));
+  assert.ok(widest > gridX(ctx.look, canvas, 10), `right ink edge ${widest} is beyond the start of column 10 (${gridX(ctx.look, canvas, 10)})`);
+  assert.ok(widest <= gridX(ctx.look, canvas, 12) - ctx.look.grid.gutter * ctx.unit + EPS, 'inside the right edge of column 11');
+  assert.ok(widest <= canvas.w - ctx.look.grid.margin * ctx.unit + EPS, 'inside the right margin');
+});
+
+test('ledger hangs its claim under the tag as before, and pop still stacks', () => {
+  // recorded before fillShort (t5-sizes.mjs): the short and long statement of this task at 16:9
+  assert.equal(textOf(statementOf('Ship it today.'), 'ledger').font.size, 300);
+  assert.equal(textOf(statementOf(TEN_WORDS), 'ledger').font.size, 163);
+  const pop = expandShot(statementOf(TEN_WORDS), 'pop').nodes;
+  assert.equal(textNode(pop).props.font.size.toFixed(4), '214.1737');
+  assert.equal(registries.looks.get('ledger').kinds.statement.fillShort, undefined);
+  assert.equal(registries.looks.get('pop').kinds?.statement?.fillShort, undefined);
 });
