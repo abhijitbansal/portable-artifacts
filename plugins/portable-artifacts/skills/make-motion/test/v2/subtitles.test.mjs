@@ -153,6 +153,22 @@ test('words heard at the same second are one cue, their words joined: a merged r
   assert.deepEqual(cues, [{ start: 0, end: 0.8, text: 'Cost' }, { start: 1, end: 1.4, text: '$5 million' }, { start: 1.6, end: 2, text: 'now' }]);
 });
 
+test('words heard within a millisecond of each other are one cue, as equal starts are (float noise from a shot start plus a word time)', () => {
+  const cues = subtitleCues(oneShot([word('$5', 1, 1.4), word('million', 1.0004, 1.4), word('now', 1.6, 2)]), { level: 'word' });
+  assert.deepEqual(cues, [{ start: 1, end: 1.4, text: '$5 million' }, { start: 1.6, end: 2, text: 'now' }]);
+  const apart = subtitleCues(oneShot([word('a', 1, 1.4), word('b', 1.002, 1.4)]), { level: 'word' });
+  assert.equal(apart.length, 2, 'two milliseconds apart are two cues');
+});
+
+test('a word of one shot and a word of the next heard at the same film second are one cue, in shot order', () => {
+  // shot a's word trails into the cut (heard at 2.0 s), shot b's first word starts at its shot start (2.0 s)
+  const timeline = { timed: 'measured', duration: 4, shots: [
+    { id: 'a', start: 0, end: 2, words: [word('over', 2, 2.4)], sentences: [] },
+    { id: 'b', start: 2, end: 4, words: [word('the', 0, 0.4), word('cut', 0.5, 0.9)], sentences: [] },
+  ] };
+  assert.deepEqual(subtitleCues(timeline, { level: 'word' }), [{ start: 2, end: 2.4, text: 'over the' }, { start: 2.5, end: 2.9, text: 'cut' }]);
+});
+
 test('a long word that starts with a shorter one ends where the next cue starts, whichever cue is next', () => {
   // A [1.0-2.0], B [1.0-1.2], C [1.5-1.8]: A and B share a start so they merge; the merged cue stops where C starts
   const cues = subtitleCues(oneShot([word('A', 1, 2), word('B', 1, 1.2), word('C', 1.5, 1.8)]), { level: 'word' });

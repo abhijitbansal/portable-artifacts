@@ -383,7 +383,7 @@ async function audioTracks(steps, film, timeline, specDir, signal) {
  * The result's `timeline` is the one to draw: the given one, or its cuts moved onto the music's beats (music.snap); the
  * cues are planned on it.
  */
-async function makeSound(loaded, timeline, state, io, work, clips = [], { noMusic = false } = {}) {
+export async function makeSound(loaded, timeline, state, io, work, clips = [], { noMusic = false } = {}) { // exported for the --no-music test
   const { film, specDir } = loaded;
   try {
     return await stage(state, io.log, 'sound', async () => {

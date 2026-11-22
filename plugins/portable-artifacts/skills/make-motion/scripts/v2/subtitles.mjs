@@ -28,8 +28,9 @@ function sentenceCues(shot, { first, last }) {
 
 // One cue per word that is heard (soundEnd > soundStart), at the film second it is heard (shot.start + soundStart: a word
 // that leads or trails its cut keeps its heard time). Sorted by start across the film (stable: words heard together keep
-// their shot order), held inside 0 to the film's duration (a cue wholly outside goes). Words heard at the same second (a
-// merged run such as "$5 million") are one cue, their words joined; each cue then ends where the next one, which starts
+// their shot order), held inside 0 to the film's duration (a cue wholly outside goes). Words heard at the same second, or
+// within a millisecond of it (a file cannot tell them apart; a merged run such as "$5 million") are one cue, their words
+// joined; each cue then ends where the next one, which starts
 // later, starts: no two cues overlap.
 function wordCues(timeline) {
   const heard = timeline.shots.flatMap((shot) => (shot.words ?? [])
@@ -40,7 +41,7 @@ function wordCues(timeline) {
   const merged = [];
   for (const c of heard) {
     const last = merged.at(-1);
-    if (last && last.start === c.start) merged[merged.length - 1] = { start: c.start, end: Math.max(last.end, c.end), text: `${last.text} ${c.text}` };
+    if (last && c.start - last.start < 1 / MS) merged[merged.length - 1] = { start: last.start, end: Math.max(last.end, c.end), text: `${last.text} ${c.text}` };
     else merged.push(c);
   }
   return merged.map((c, i) => (i + 1 < merged.length && merged[i + 1].start < c.end ? { ...c, end: merged[i + 1].start } : c));

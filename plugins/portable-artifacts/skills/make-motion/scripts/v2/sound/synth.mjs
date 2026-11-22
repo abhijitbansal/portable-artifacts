@@ -205,7 +205,7 @@ function rawSamples(cue, seed, variant) {
 export function cueSamples(cue, { seed, variant = 0 } = {}) {
   if (!KNOWN_CUES.includes(cue)) throw new RangeError(`unknown cue ${JSON.stringify(cue)}; known cues: ${KNOWN_CUES.join(', ')}`);
   checkSeed(seed, 'cueSamples');
-  variantRatio(variant, 'cueSamples');
+  variantRatio(variant, 'cueSamples'); // a range check only: it throws a cueSamples-prefixed RangeError for a bad take, before any voice is built
   return withOnset(rawSamples(cue, seed, variant));
 }
 

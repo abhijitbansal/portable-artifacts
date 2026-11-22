@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { CUE_LAYERS, CUE_VARIANTS, VARIANT_CENTS, cueWav, layerCue, variantRatio } from '../../scripts/v2/sound/cue-synth.mjs';
+import { CUE_LAYERS, CUE_VARIANTS, VARIANT_CENTS, cueWav, layerCue, typingLayers, variantRatio } from '../../scripts/v2/sound/cue-synth.mjs';
 import { KNOWN_CUES, cueSamples, renderCues, riserTo } from '../../scripts/v2/sound/synth.mjs';
 import { mulberry32 } from '../../engine/seeded.mjs';
 
@@ -28,6 +28,15 @@ function window(file, t, seconds) {
 test('three takes, the first with no detune', () => {
   assert.equal(CUE_VARIANTS, 3);
   assert.deepEqual(VARIANT_CENTS, [0, 30, -30]);
+});
+
+test('typing: the 3 kHz ping of each key is detuned by the take ratio, as every other voice is', () => {
+  const flat = () => 0.5; // no jitter and no noise burst: only the ping is left
+  const crossings = (xs) => xs.reduce((n, x, i) => n + (i > 0 && (x > 0) !== (xs[i - 1] > 0) ? 1 : 0), 0);
+  const ping = (ratio) => typingLayers(1, 0.05).transient(440 * ratio, flat, ratio);
+  const [one, up] = [ping(1), ping(1.5)];
+  assert.ok(Math.abs(crossings(up) / crossings(one) - 1.5) < 0.05, `${crossings(one)} crossings at ratio 1, ${crossings(up)} at 1.5`);
+  assert.ok(Buffer.from(ping(1).buffer).equals(Buffer.from(typingLayers(1, 0.05).transient(440, flat).buffer)), 'ratio 1 is the layer as it was');
 });
 
 test('variant 0 is today: the same bytes with and without the argument', () => {

@@ -297,15 +297,15 @@ export const CUE_LAYERS = Object.freeze({
 const TYPING_JITTER = 0.08; // each key's ping is up to 8 % off 3 kHz, so a run of keys is not one tick repeated
 const TYPING_RING_SECONDS = 0.05; // room after the last key for its tick to die away
 // `chars` key ticks, the k-th at (k + 1) × spacing: each lands as its character appears on screen.
-function typingLayers(chars, spacing) {
+export function typingLayers(chars, spacing) {
   const keys = Math.max(1, chars);
   const seconds = keys * spacing + TYPING_RING_SECONDS;
   return {
     seconds,
-    transient: (f0, noise) => {
+    transient: (f0, noise, ratio = 1) => {
       const out = new Float64Array(frames(seconds));
       for (let k = 0; k < keys; k++) {
-        const hz = 3000 * (1 + TYPING_JITTER * (noise() * 2 - 1));
+        const hz = 3000 * ratio * (1 + TYPING_JITTER * (noise() * 2 - 1)); // the take's detune moves the ping as it moves every voice
         const at = frames((k + 1) * spacing);
         tick(0.04, hz, noise, { noiseTau: 0.0015, ping: 0.35 }).forEach((x, i) => { if (at + i < out.length) out[at + i] += x; });
       }

@@ -10,7 +10,8 @@ import path from 'node:path';
 import { browserAvailable, ffmpegOrNull } from './helpers/session.mjs';
 import { findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
-import { runMake } from '../../scripts/v2/run.mjs';
+import { runMake, makeSound } from '../../scripts/v2/run.mjs';
+import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { formatText, NOT_RENDERED_NOTE, soundLine } from '../../scripts/v2/report.mjs';
 import { withFilmDefaults } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
@@ -221,12 +222,12 @@ test('--outline takes no sound stage', async () => {
 const SNAP_FREE = (id, hold, cut) => ({ id, show: 'free', hold, background: '#f3eee3', ...(cut ? { cut } : {}), nodes: [{ type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' } }] });
 const SNAP_BEATS = Array.from({ length: 21 }, (_, k) => k * 0.5); // 120 BPM over 10 s
 // A film with no narration, a music file and a beats file whose beats move three cuts (as sound-snap.test.mjs builds its own).
-function snapFilm(name) {
+function snapFilm(name, extra = {}) {
   const at = path.join(dir, name);
   mkdirSync(at, { recursive: true });
   writeNoise(path.join(at, 'm.wav'), { seconds: 10 });
   writeBeatsFile(path.join(at, 'm.beats.json'), { source: 'm.wav', bpm: 120, confidence: 1, beats: SNAP_BEATS });
-  const film = { version: 2, fps: FPS, mode: 'pro', shots: [SNAP_FREE('a', 1.9), SNAP_FREE('b', 2.3, 'cut'), SNAP_FREE('c', 2.1, 'cut'), SNAP_FREE('d', 1.7, 'cut')], music: { src: 'm.wav', beats: 'm.beats.json', snap: true } };
+  const film = { version: 2, fps: FPS, mode: 'pro', shots: [SNAP_FREE('a', 1.9), SNAP_FREE('b', 2.3, 'cut'), SNAP_FREE('c', 2.1, 'cut'), SNAP_FREE('d', 1.7, 'cut')], music: { src: 'm.wav', beats: 'm.beats.json', snap: true }, ...extra };
   const specPath = path.join(at, 'film.json');
   writeFileSync(specPath, JSON.stringify(film));
   return specPath;
@@ -248,6 +249,25 @@ test('--no-music keeps the cuts the snap moved and drops the track', async (t) =
   assert.equal(without.report.timed, withMusic.report.timed);
   assert.equal(without.report.frames, withMusic.report.frames);
   assert.equal(without.report.seconds, withMusic.report.seconds);
+});
+
+test('--no-music leaves every shot start and every cue time where the snap put them', async (t) => {
+  if (!await mediaTools(t)) return;
+  const loaded = loadFilm(snapFilm('snap-nomusic-times', { sound: 'on' }));
+  const plain = buildTimeline(loaded.film, { fps: loaded.film.fps });
+  const plan = async (noMusic) => {
+    const state = { stages: [], findings: [], audio: null };
+    const { timeline } = await makeSound(loaded, plain, state, { log: () => {} }, null, [], { noMusic });
+    return { starts: timeline.shots.map((s) => [s.id, s.start]), cues: planCues(loaded.film, timeline).map((c) => [c.cue, c.t]), audio: state.audio };
+  };
+  const [withMusic, without] = [await plan(false), await plan(true)];
+  assert.notDeepEqual(withMusic.starts, plain.shots.map((s) => [s.id, s.start]), 'the snap moved a cut');
+  assert.ok(withMusic.cues.length > 0, 'the film has cues');
+  assert.deepEqual(without.starts, withMusic.starts, 'every shot start');
+  assert.deepEqual(without.cues, withMusic.cues, 'every cue time');
+  assert.equal(without.audio.cues, withMusic.audio.cues);
+  assert.deepEqual(without.audio.music.moved, withMusic.audio.music.moved);
+  assert.equal(without.audio.music.muted, true);
 });
 
 test('--no-music leaves the cue plan and the timeline of a film with cues as they were', async (t) => {
