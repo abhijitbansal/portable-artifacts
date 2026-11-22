@@ -413,3 +413,15 @@ opened. So the proof shows the agent finds defects the spec and its narration st
 - **B:** a second billed proof with defects that exist only in the pixels (for example a highlight drawn on the wrong
   region with a neutral region name, or a chart mark coloured against its label), scored on `looked` too. Estimated
   6 to 15 USD for 15 sessions at the first proof's cost; needs the owner's yes.
+
+## make-motion overlays: where the progress bar sits on a viral short (branch feat/motion-steals, 2026-11-22)
+
+On a 9:16 viral short the bar sits at the top of the platform safe zone (about y=290), which is also the top edge of
+the text band in pop, cosmos and poster, so the two touch. The bottom of the safe zone is worse: every band runs past
+1245 px, so the bar would cross the lower text.
+
+- **A (default, shipped):** keep the bar inside the safe zone at its top edge, touching the band; schema.md and the
+  `overlay-covers` row say so.
+- **B:** end the bar on the safe-zone line (`y = insets.top - h`, about 284 to 290 px): it shares no pixel with any band
+  but sits 6 px inside the area the platform may cover.
+- **C:** let `overlay-covers` also judge the bar's box (about 5 lines), so a text under the bar is flagged.
