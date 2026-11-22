@@ -22,6 +22,7 @@ import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const HALF = 2;
 const HERO_MARGIN = 1.03;
+const WIDE_LABEL_STEPS = 1; // scale steps a wide label is set above the look's labelStep
 const DELTA_GAP = 24; // units: the delta's cap line under the label's baseline
 const DELTA_LAG = 0.15;
 const LINEAR = 'linear';
@@ -63,28 +64,30 @@ function lightNodes(id, ctx, { axis, across, from, to, gaps }, times) {
 }
 
 // Wide: the line across at the sun's height from its disc to Earth at the grid's right edge, the figure centred over it,
-// the label under it. The whole block (sun, line, Earth, figure, label, delta) is moved down by one `shift` so the ink of
-// the figure, label and delta is centred on the editorial band: the sun's anchor leaves it above the middle otherwise.
-function wideSky(shot, ctx, fit, labelSize, deltaH) {
+// the label under it. The sun stays on its anchor (a cut from a statement keeps it where it was); the block grows
+// downward instead: the label is set one scale step larger (see wideLabelSize) so it and its delta fill the lower half.
+function wideSky(shot, ctx, fit) {
   const { look, unit } = ctx;
   const data = look.kinds.number.sky, gap = data.line.gap * unit;
-  const anchor = sunAnchor(look, ctx), span = editorialSpan(ctx, 1, look.grid.columns), bounds = editorialBounds(ctx);
+  const sun = sunAnchor(look, ctx), span = editorialSpan(ctx, 1, look.grid.columns);
   const reach = earthReach(look, unit);
-  const x0 = anchor.cx + look.sun.disc * anchor.r + gap, x1 = span.x + span.w - reach - reach - gap;
+  const earth = { x: span.x + span.w - reach, y: sun.cy };
+  const x0 = sun.cx + look.sun.disc * sun.r + gap, x1 = earth.x - reach - gap;
   const fig = fit(data.fit * (x1 - x0));
-  const set = labelSet(shot, ctx, labelSize, x1 - x0, 'center');
-  const labelH = set.layout.lines.at(-1).y - set.layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * labelSize;
-  const inkTop = anchor.cy - data.above * unit - CAP_HEIGHT * fig.size;
-  const inkBottom = shot.label === undefined ? anchor.cy - data.above * unit + deltaH : anchor.cy + data.labelGap * unit + labelH + deltaH;
-  const shift = (bounds.top + bounds.bottom) / HALF - (inkTop + inkBottom) / HALF;
-  const cy = anchor.cy + shift;
-  const sun = { ...anchor, cy }, earth = { x: span.x + span.w - reach, y: cy };
   const mid = (x0 + x1) / HALF;
   return {
-    fig, earth, sun, align: 'center', figLeft: mid - fig.total / HALF, baseline: cy - data.above * unit,
-    labelTop: cy + data.labelGap * unit, labelLeft: x0, labelWidth: x1 - x0,
-    segments: [[[x0, cy], [x1, cy]]], light: { axis: 'x', across: cy, from: x0, to: x1, gaps: [] },
+    fig, earth, sun, align: 'center', figLeft: mid - fig.total / HALF, baseline: sun.cy - data.above * unit,
+    labelTop: sun.cy + data.labelGap * unit, labelLeft: x0, labelWidth: x1 - x0,
+    segments: [[[x0, sun.cy], [x1, sun.cy]]], light: { axis: 'x', across: sun.cy, from: x0, to: x1, gaps: [] },
   };
+}
+
+// A wide label is set one scale step larger than the look's, as far as the figure keeps its hero ratio over it (a figure
+// at its floor keeps the label it has).
+function wideLabelSize(look, unit, base, figSize) {
+  const step = Math.min(look.kinds.number.sky.labelStep + WIDE_LABEL_STEPS, look.scale.length);
+  const cap = figSize / (HERO_MARGIN * MIN_HERO_RATIO);
+  return Math.max(base, Math.min(sizeAt(look, step, unit), cap));
 }
 
 // Tall: the line down from the sun to Earth at the band's bottom, broken round the figure, its label and its delta
@@ -115,16 +118,17 @@ function tallSky(shot, ctx, fit, labelSize, deltaH) {
 export function skyParts(shot, ctx, steps, times, parts, { minSize, maxSize }) {
   const { look, unit } = ctx;
   const data = look.kinds.number.sky;
-  const labelSize = sizeAt(look, data.labelStep, unit);
-  const floor = Math.max(minSize, HERO_MARGIN * MIN_HERO_RATIO * labelSize);
+  const baseSize = sizeAt(look, data.labelStep, unit);
+  const floor = Math.max(minSize, HERO_MARGIN * MIN_HERO_RATIO * baseSize);
   const fit = (maxWidth) => parts.figureAt(shot, ctx, { maxWidth, minSize: floor, maxSize, steps });
   const probe = shot.delta === undefined ? null : parts.plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: 0, top: 0, maxWidth: editorialSpan(ctx, 1, look.grid.columns).w, at: 0 });
   const deltaH = probe === null ? 0 : DELTA_GAP * unit + probe.box[3];
-  const sky = isWide(ctx.canvas) ? wideSky(shot, ctx, fit, labelSize, deltaH) :tallSky(shot, ctx, fit, labelSize, deltaH);
+  const wide = isWide(ctx.canvas);
+  const sky = wide ? wideSky(shot, ctx, fit) : tallSky(shot, ctx, fit, baseSize, deltaH);
+  const labelSize = wide ? wideLabelSize(look, unit, baseSize, sky.fig.size) : baseSize;
   const figure = parts.figureGroup(shot, ctx, look.kinds.number.glow ? parts.glowingFigure(sky.fig, ctx, times) : sky.fig, { left: sky.figLeft, baseline: sky.baseline, tracks: {} });
   const labelAt = times.land + look.moves.enter.dur;
-  const set = labelSet(shot, ctx, labelSize, sky.labelWidth, 'center');
-  const label = shot.label === undefined ? null : labelNode(shot, ctx, set, sky.labelLeft, sky.labelTop, labelAt);
+  const label = shot.label === undefined ? null : labelNode(shot, ctx, labelSet(shot, ctx, labelSize, sky.labelWidth, 'center'), sky.labelLeft, sky.labelTop, labelAt);
   const line = sky.segments.map((s, i) => segment(`${shot.id}.line${i}`, ctx, ...s));
   const nodes = [
     ...sunNodes(`${shot.id}.sun`, look, { ...sky.sun, at: undefined }), ...line,

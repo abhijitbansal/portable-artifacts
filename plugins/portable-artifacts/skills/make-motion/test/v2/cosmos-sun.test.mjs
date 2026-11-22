@@ -76,10 +76,7 @@ test('sun: the statement, number and end kinds put their sun on the format ancho
       const out = expand(shot);
       const a = sunAnchor(look, out.ctx);
       const at = worldOf(out.nodes, SUN_OF[shot.id]);
-      // W2 Task 4: a wide number moves its whole sky block (sun included) down to centre it on the band, on the anchor's axis
-      const centred = shot === COUNT && out.ctx.canvas.w > out.ctx.canvas.h;
-      const yOk = centred ? at.y > a.cy + 1 : Math.abs(at.y - a.cy) < 1;
-      assert.ok(Math.abs(at.x - a.cx) < 1 && yOk, `${shot.show} ${out.ctx.canvas.w}: ${JSON.stringify(at)} vs ${JSON.stringify(a)}`);
+      assert.ok(Math.abs(at.x - a.cx) < 1 && Math.abs(at.y - a.cy) < 1, `${shot.show} ${out.ctx.canvas.w}: ${JSON.stringify(at)} vs ${JSON.stringify(a)}`);
       assert.equal(byId(out.nodes, SUN_OF[shot.id]).props.radial.stops[0][2], look.sun.core, 'drawn as the one sun');
     }
   }
