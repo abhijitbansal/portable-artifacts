@@ -56,20 +56,24 @@ function logoNodes({ film, look, unit, safe, asset }) {
   const picture = asset(src);
   const sized = [picture.width, picture.height].every((side) => Number.isFinite(side) && side > 0);
   if (!sized) throw new Error(`overlays.logo.src: the picture "${src}" has no size (${picture.width} by ${picture.height}); it could not be decoded`);
-  const h = data.height * unit;
-  const w = (h * picture.width) / picture.height;
   const gap = data.margin * unit;
+  // a very wide wordmark is scaled down, both sides, to the width the corner has: it never runs past the overlay rectangle
+  const scaleToFit = Math.min(1, Math.max(0, safe.w - 2 * gap) / ((data.height * unit * picture.width) / picture.height));
+  const h = data.height * unit * scaleToFit;
+  const w = (h * picture.width) / picture.height;
   const x = corner.endsWith('left') ? safe.left + gap : safe.left + safe.w - gap - w;
   const y = corner.startsWith('top') ? safe.top + gap : safe.top + safe.h - gap - h;
   return [node('image', 'overlay.logo', mark({ src, w, h, x, y, opacity: data.opacity }, 'logo'))];
 }
 
-function progressNodes({ look, unit, safe, duration }) {
+// The bar runs along the frame's own edge (`edge`: the whole frame, `inset` from its sides), never along the composition
+// band's: on a viral short the frame's edge is the platform safe zone's (the account bar and the caption cover the rest).
+function progressNodes({ look, unit, edge, duration }) {
   const data = look.overlays.progress;
   const h = data.height * unit;
-  const x = safe.left + data.inset * unit;
-  const w = safe.w - 2 * data.inset * unit;
-  const y = data.edge === 'top' ? safe.top : safe.top + safe.h - h;
+  const x = edge.left + data.inset * unit;
+  const w = edge.w - 2 * data.inset * unit;
+  const y = data.edge === 'top' ? edge.top : edge.top + edge.h - h;
   const d = roundedRect(x, y, w, h, 0);
   return [
     node('path', 'overlay.progress.track', mark({ d, fill: colourOf(look, data.track) }, 'progress')),
@@ -104,8 +108,16 @@ for (const { name, ...entry } of OVERLAYS) {
 // zone's bottom (pop to 1440 px, cosmos to 1613 px, against 1245 px on 1080x1920): its text keeps to the band, but a corner
 // mark or a bar at the foot there would sit under the platform's caption and buttons. `rect.safe` alone is not enough: it
 // is also true for a banded look in a mode with no platform (poster in pro, composed at its margins), which stays as it is.
+const onPlatform = (rect, mode) => rect.safe && mode.platformSafeZone === true;
+
+// The frame's own edges for the bar: the whole canvas, and on a composed short in a platform mode the platform's safe zone.
+function edgeRect(rect, insets, canvas, mode) {
+  if (!onPlatform(rect, mode)) return { left: 0, top: 0, w: canvas.w, h: canvas.h };
+  return { left: insets.left, top: insets.top, w: canvas.w - insets.left - insets.right, h: canvas.h - insets.top - insets.bottom };
+}
+
 function overlayRect(rect, insets, canvas, mode) {
-  if (!rect.safe || mode.platformSafeZone !== true) return rect;
+  if (!onPlatform(rect, mode)) return rect;
   const left = Math.max(rect.left, insets.left);
   const top = Math.max(rect.top, insets.top);
   const right = Math.min(rect.left + rect.w, canvas.w - insets.right);
@@ -127,12 +139,14 @@ export function overlayNodes({ film, look, canvas, timeline, assets = new Map(),
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
   // a short's platform safe zone, as the review reads it (review.mjs): used only where the look composes inside it
   const insets = viralInsets ?? safeInsets([canvas.w, canvas.h], VIRAL_SAFE_ZONE);
-  const safe = overlayRect(compositionRect({ canvas, look, viralInsets: insets, mode }), insets, canvas, mode);
+  const composed = compositionRect({ canvas, look, viralInsets: insets, mode });
+  const safe = overlayRect(composed, insets, canvas, mode);
+  const edge = edgeRect(composed, insets, canvas, mode);
   const asset = (src) => {
     const picture = assets.get(src);
     if (!picture) throw new Error(`overlays.logo.src: no loaded picture for "${src}"`);
     return picture;
   };
-  const context = { film, look, canvas, unit: unitOf(canvas), safe, duration: timeline.duration, asset };
+  const context = { film, look, canvas, unit: unitOf(canvas), safe, edge, duration: timeline.duration, asset };
   return registries.overlays.names().filter((name) => asked[name] !== undefined).flatMap((name) => registries.overlays.get(name).build(context));
 }

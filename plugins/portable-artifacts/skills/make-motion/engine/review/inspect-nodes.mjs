@@ -26,6 +26,21 @@ function textReport(n, opacity, scale, unit, ctx) {
 }
 
 /**
+ * `listed` (inspectNodes's result) with each box cut to the part that is drawn: a node with `reveal` below 1 shows only the
+ * left share of its box (engine/page/draw.mjs), which is how the progress bar's fill reads. Flat trees only (the overlays),
+ * matched by id against the sampled `tree`.
+ */
+export function drawnBoxes(listed, tree) {
+  const reveals = new Map((Array.isArray(tree) ? tree : []).map((n) => [n.id, n.reveal ?? 1]));
+  return listed.map((item) => {
+    const share = Math.min(1, Math.max(0, reveals.get(item.id) ?? 1));
+    if (share >= 1 || item.bbox === null) return item;
+    const [x, y, w, h] = item.bbox;
+    return { ...item, bbox: [x, y, round(w * share), h] };
+  });
+}
+
+/**
  * Every node on the frame with an accumulated opacity above 0 (a node at 0 takes its children out with it), parent before
  * child, as { id, type, role?, bbox: [x, y, w, h], opacity, offFrame, text? }. bbox is in canvas pixels, opacity is the
  * node's own times its groups', `offFrame` says the box is not wholly inside the canvas, and a text carries

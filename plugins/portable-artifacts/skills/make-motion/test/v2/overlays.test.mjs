@@ -25,6 +25,7 @@ import { startV2Server } from '../../scripts/v2/server.mjs';
 import { pngOf } from './helpers/png.mjs';
 import { overlayCoverFindings } from '../../engine/review/overlay.mjs';
 import { landedTexts } from '../../engine/review/frame.mjs';
+import { drawnBoxes } from '../../engine/review/inspect-nodes.mjs';
 import { dedupeFindings, overlayCoverItems, restingByShot } from '../../scripts/v2/review.mjs';
 import { RULES } from '../../engine/review/rules.mjs';
 import { CAPPED_HERE } from '../../engine/review/outline.mjs';
@@ -225,6 +226,81 @@ test('in pro on a 9:16 canvas there is no platform: overlays keep to the composi
   }
   const poster = resolveLook({ version: 2, mode: 'pro', look: 'poster', shots: [SHOT] });
   assert.equal(compositionRect({ canvas: TALL, look: poster, viralInsets: insets, mode: pro }).left, poster.grid.margin * unit, 'poster composes at its margins in pro');
+});
+
+// The ys of a bar's path ("M x y L ..."): its top is the smallest, its foot the largest.
+const barYs = (nodes) => nodes.filter((n) => n.id.startsWith('overlay.progress')).flatMap((n) => [...n.props.d.matchAll(/[ML]([\d.]+)[ ,]([\d.]+)/g)].map((m) => Number(m[2])));
+const barFilm = (name, mode) => ({ version: 2, mode, look: name, overlays: { progress: true }, shots: [SHOT] });
+const barNodes = (film, look, insets) => overlayNodes({ film, look, canvas: TALL, timeline: buildTimeline(film, { fps: FPS }), assets: new Map(), viralInsets: insets });
+
+test('on 9:16 in pro the bar sits on the frame edge and clear of the band, in every look that draws one', () => {
+  const insets = safeInsets([TALL.w, TALL.h], VIRAL_SAFE_ZONE);
+  const pro = registries.modes.get('pro');
+  const looks = allLookNames().filter((name) => registries.looks.get(name).modes.includes('pro') && registries.looks.get(name).overlays.progress);
+  assert.ok(looks.includes('cosmos') && looks.includes('poster'), `looks: ${looks.join(', ')}`);
+  for (const name of looks) {
+    const film = barFilm(name, 'pro');
+    const look = resolveLook(film);
+    const ys = barYs(barNodes(film, look, insets));
+    const rect = compositionRect({ canvas: TALL, look, viralInsets: insets, mode: pro });
+    if (look.overlays.progress.edge === 'top') {
+      assert.equal(Math.min(...ys), 0, `${name}: the bar starts at the frame's top edge`);
+      if (rect.safe) assert.ok(Math.max(...ys) <= rect.top, `${name}: the bar (to ${Math.max(...ys)}) stays above the band (from ${rect.top})`);
+    } else {
+      assert.equal(Math.max(...ys), TALL.h, `${name}: the bar ends at the frame's bottom edge`);
+      if (rect.safe) assert.ok(Math.min(...ys) >= rect.top + rect.h, `${name}: the bar stays below the band`);
+    }
+  }
+});
+
+// The bar cannot be kept off the band on a viral short: the platform covers everything above the safe zone's top, and every
+// banded look's band begins exactly there. So the bar starts at the band's own top edge (it lies in the band by its own height);
+// the docs (schema.md, Overlays) say so.
+test('on a viral short the bar starts on the platform safe zone\'s top edge, which is exactly where a banded look\'s band begins', () => {
+  const insets = safeInsets([TALL.w, TALL.h], VIRAL_SAFE_ZONE);
+  const viral = registries.modes.get('viral');
+  const looks = allLookNames().filter((name) => registries.looks.get(name).modes.includes('viral') && registries.looks.get(name).overlays.progress);
+  assert.ok(looks.includes('pop') && looks.includes('cosmos') && looks.includes('poster'), `looks: ${looks.join(', ')}`);
+  for (const name of looks) {
+    const film = barFilm(name, 'viral');
+    const look = resolveLook(film);
+    const nodes = barNodes(film, look, insets);
+    const ys = barYs(nodes);
+    const rect = compositionRect({ canvas: TALL, look, viralInsets: insets, mode: viral });
+    if (look.overlays.progress.edge === 'top') {
+      assert.equal(Math.min(...ys), insets.top, `${name}: the bar starts at the top of the safe zone`);
+      assert.equal(Math.min(...ys), rect.top, `${name}: the bar starts at the band's top (${rect.top}), neither above it nor lower`);
+    } else {
+      assert.equal(Math.max(...ys), TALL.h - insets.bottom, `${name}: the bar ends at the foot of the safe zone`);
+    }
+    const xs = nodes.filter((n) => n.id.startsWith('overlay.progress')).flatMap((n) => [...n.props.d.matchAll(/[ML]([\d.]+)[ ,]([\d.]+)/g)].map((m) => Number(m[1])));
+    assert.ok(Math.min(...xs) >= insets.left && Math.max(...xs) <= TALL.w - insets.right, `${name}: inside the platform sides`);
+  }
+});
+
+test('on 16:9 the bar sits on the frame edge, as it did', () => {
+  const film = barFilm('desk', 'pro');
+  const ys = barYs(overlayNodes({ film, look: resolveLook(film), canvas: WIDE, timeline: buildTimeline(film, { fps: FPS }), assets: new Map() }));
+  assert.equal(Math.max(...ys), WIDE.h);
+});
+
+test('a very wide logo is scaled down to the overlay rectangle, never past the platform sides', () => {
+  const insets = safeInsets([TALL.w, TALL.h], VIRAL_SAFE_ZONE);
+  const film = { version: 2, mode: 'viral', overlays: { logo: { src: 'assets/logo.png', corner: 'top-right' } }, shots: [SHOT] };
+  const wide = { width: 2000, height: 100 }; // 20:1
+  const [logo] = overlayNodes({ film, look: resolveLook(film), canvas: TALL, timeline: buildTimeline(film, { fps: FPS }), assets: new Map([['assets/logo.png', wide]]), viralInsets: insets });
+  assert.ok(logo.props.x >= insets.left, `x ${logo.props.x} >= ${insets.left}`);
+  assert.ok(logo.props.x + logo.props.w <= TALL.w - insets.right, `right edge ${logo.props.x + logo.props.w}`);
+  assert.ok(Math.abs(logo.props.w / logo.props.h - 20) < 1e-9, 'the proportions hold');
+});
+
+test('--inspect lists the drawn part of the bar, not its whole track', () => {
+  const listed = [{ id: 'overlay.progress.track', bbox: [0, 0, 1000, 6] }, { id: 'overlay.progress.bar', bbox: [0, 0, 1000, 6] }, { id: 'overlay.logo', bbox: [10, 10, 50, 20] }];
+  const sampled = [{ id: 'overlay.progress.track', reveal: 1 }, { id: 'overlay.progress.bar', reveal: 0.25 }, { id: 'overlay.logo', reveal: 1 }];
+  const out = drawnBoxes(listed, sampled);
+  assert.deepEqual(out.find((n) => n.id === 'overlay.progress.bar').bbox, [0, 0, 250, 6]);
+  assert.deepEqual(out.find((n) => n.id === 'overlay.progress.track').bbox, [0, 0, 1000, 6]);
+  assert.deepEqual(out.find((n) => n.id === 'overlay.logo').bbox, [10, 10, 50, 20]);
 });
 
 test('a picture with no size is an error naming the logo, not an infinite or NaN width', () => {

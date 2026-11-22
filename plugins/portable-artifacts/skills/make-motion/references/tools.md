@@ -52,7 +52,7 @@ The JSON:
 | `safe` | `{ left, top, right, bottom }`: the rectangle text must stay inside, in pixels |
 | `cut` | `null`, or the cut whose window the frame is in (below) |
 | `nodes` | Every node that shows, parent before child, as below |
-| `overlays` | The film's logo and progress bar in the same node shape, `[]` when the film has none; they are never in `nodes` |
+| `overlays` | The film's logo and progress bar in the same node shape, `[]` when the film has none; they are never in `nodes`. The bar's box is the part drawn so far (its width grows over the film), the track's is the whole width |
 
 Each node is `{ id, type, role?, bbox: [x, y, w, h], opacity, offFrame, text? }`. `bbox` is in canvas pixels. `opacity` is the node's own times those of the groups around it; a node at 0 is left out with everything inside it. `offFrame` is true when the box is not wholly inside the canvas. A text also has `text: { sizeUnits, smallestUnits, ink, landed, outsideSafe }`: `sizeUnits` is the height a viewer reads (in units), `smallestUnits` that of the smallest word on screen, `ink` the box of its glyphs `[x, y, w, h]` in pixels, `landed` whether every word shown is at rest and the text fully opaque, and `outsideSafe` whether its ink leaves the safe rectangle by more than the review allows. These are the numbers the review rules judge (`min-size`, `safe-area`), measured on this one frame; `landed` does not judge whether a camera move has settled, which the review does over the whole shot.
 

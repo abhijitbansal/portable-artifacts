@@ -9,7 +9,7 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { cutWindowAt } from '../../engine/graph/film.mjs';
-import { inspectNodes } from '../../engine/review/inspect-nodes.mjs';
+import { drawnBoxes, inspectNodes } from '../../engine/review/inspect-nodes.mjs';
 import { unitOf } from '../../engine/units.mjs';
 import { frameContext } from './review.mjs';
 
@@ -50,7 +50,8 @@ function writeWhole(files) {
  * Draws `frame` on the session's page, and writes `<dir>/<frame>.png` and `<dir>/<frame>.json`. The JSON: { frame, seconds,
  * shot, timed, canvas: { w, h }, unit, safe: { left, top, right, bottom }, cut: { name, family, p, from } | null, nodes,
  * overlays }. `overlays` lists the film's logo and progress bar (engine/overlays) in the node shape, [] for a film with
- * none: they are the film's, over every cut, so they are never in `nodes`.
+ * none: they are the film's, over every cut, so they are never in `nodes`. The bar's box is the part drawn so far (its
+ * track's box is the whole width).
  * `shot` is the shot the frame belongs to (the incoming one inside a window). `nodes` are as the page's __snapshot gives
  * them: inside a layer or shader cut's window the incoming shot's alone, whatever the PNG shows of the outgoing one at that
  * `p`; a node cut moves both shots' nodes in one tree, which `nodes` lists as drawn. -> { png, json, frame, seconds, shot }.
@@ -63,7 +64,7 @@ export async function writeInspect({ session, frame, dir }) {
   const overlays = await page.evaluate((i) => window.__snapshotOverlays(i), frame);
   const ctx = frameContext(film, timeline, new Map(), { frame, whole: false }, info.backgrounds);
   const seconds = round(frame / timeline.fps, SECONDS_DECIMALS);
-  const dump = { frame, seconds, shot: ctx.shotId, timed: timeline.timed, canvas: ctx.canvas, unit: unitOf(ctx.canvas), safe: ctx.safe, cut: cutAt(film, timeline, frame), nodes: inspectNodes(sampled, ctx), overlays: inspectNodes(overlays, ctx) };
+  const dump = { frame, seconds, shot: ctx.shotId, timed: timeline.timed, canvas: ctx.canvas, unit: unitOf(ctx.canvas), safe: ctx.safe, cut: cutAt(film, timeline, frame), nodes: inspectNodes(sampled, ctx), overlays: drawnBoxes(inspectNodes(overlays, ctx), overlays) };
   const png = path.join(dir, `${frame}.png`), json = path.join(dir, `${frame}.json`);
   writeWhole([[png, picture], [json, `${JSON.stringify(dump, null, 2)}\n`]]);
   return { png, json, frame, seconds, shot: ctx.shotId };
