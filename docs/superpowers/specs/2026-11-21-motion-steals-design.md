@@ -6,6 +6,8 @@ Evidence base (gitignored, kept locally): `.scratch/research-2026-11-21/` holds 
 of 25 ideas, five adversarial verifier notes, `PROPOSAL.md` (the ranked steal-list this design is built from),
 `beast-src.md` (a code read of beast_explainer) and `compose.md` (a composition and scale measurement of every gallery
 film). Item numbers below ("P2", "P5") point to `PROPOSAL.md` section 2A.
+**[R2]** A second round read video-shotcraft, Reelfactory and motionmaxxing; its decisions are in
+`round2/DECISIONS.md` (14 rows accepted, all folded into W0 to W3).
 
 ## 1. Intent
 
@@ -63,6 +65,8 @@ Anti-goals (a failure even if it technically works)
 - Every code fix and guardrail is shown failing first (RED), then passing.
 - HyperFrames and Rune mechanisms are rewritten in our own words and code, with a credit line in
   `THIRD_PARTY_NOTICES.md`. No file is ported (default; `locate.mjs` is rewritten, not copied).
+  **[R2]** The same holds for video-shotcraft and motionmaxxing (both Apache-2.0) and for Reelfactory's public guides
+  (a closed product: ideas only, no instructions extracted).
 
 ## 4. Approaches considered
 
@@ -105,7 +109,7 @@ here.
 recorded music file; both capture spike arms (CDP `optimizeForSpeed` in JPEG mode, and bytes returned through
 `page.evaluate`) against today's path on that same film, so a capture change that wins is decided early and is in
 place before the final gallery rebuild (orchestrator's call); a per-frame `__snapshot` dump on three films for the motion-gate decision; a test that every frame
-the capture key calls held is pixel-equal to its predecessor. Each result decides a later item, as listed in
+the capture key calls held is pixel-equal to its predecessor; **[R2-2]** a browser-free pixel pass over finished files; **[R2-3]** the audio offset counts only when its nine onsets agree. Each result decides a later item, as listed in
 `PROPOSAL.md` section 4. W0 runs first and its results go in the PR body.
 
 **W1, doctrine and colour.**
@@ -121,6 +125,8 @@ the capture key calls held is pixel-equal to its predecessor. Each result decide
   converted in one filter on the JPEG path. RED first on `MM/test/v2/make.test.mjs`, plus a flat-patch round trip
   within 2 levels in both capture modes.
 - Step 0 of capture diagnostics (P17): draw, capture and encode split plus the stage name and console tail on a hang.
+- **[R2-1]** A check of the finished file (frame count, a picture that is not blank).
+- **[R2-5 to R2-11]** Round-2 doctrine lines in the files this wave already writes.
 - (The gallery rebuild is the final phase, after W6; see section 3.)
 
 **W2, composition and cut craft.**
@@ -184,6 +190,9 @@ plan. Ranked from `beast-src.md`:
 5. Q05 colour from the G4 DOM probe, after G4's scope proof.
 6. J and L narration across cuts, only if the owner reverses rule Q14 (see section 9).
 7. A locate step for match-cut anchors; one "ground it first" line in the script-writer prompt.
+
+**[R2]** Round 2 added no task. Two owner questions are parked (R2-9b, R2-35) and two ideas wait on a trigger (R2-23,
+R2-34).
 
 ## 8. Left to the builder
 

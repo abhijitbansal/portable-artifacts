@@ -295,6 +295,8 @@ test('references/reviewing.md names the reviewer only once a passing proof is re
 
 ### Task 6 (conditional): The motion gate
 
+**[R2-12]** The new registry row sets `evidence` (`unmeasured` unless a table of ours is named) and, for a creative rule, `ask`; its `rules.md` row fills both cells. Without it W3's evidence test fails on this rule.
+
 **Build this task only if W0's row "motion defects" records at least one viewed defect** (`.scratch/motion-steals-w0/results/W0-RESULTS.md`, copied into the PR body; w0 plan, Task 5: one viewed defect switches the gate on). Otherwise skip it and write one line in the wave's PR notes: `motion gate not built: W0 viewed <n> findings on three films, 0 defects`. Build only the rules whose prototype found a viewed defect.
 
 **Files:**

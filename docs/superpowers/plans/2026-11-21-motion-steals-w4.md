@@ -97,6 +97,8 @@ test('the sentence form is unchanged', () => { /* the existing tests of this fil
 
 ### Task 2: The poster read at thumbnail size
 
+**[R2-12]** The new registry row sets `evidence` (`unmeasured` unless a table of ours is named) and, for a creative rule, `ask`; its `rules.md` row fills both cells. Without it W3's evidence test fails on this rule.
+
 **Files:**
 - Create: `engine/review/poster.mjs`, `test/v2/poster-read.test.mjs`
 - Modify: `scripts/v2/run.mjs:396-406` (`makePoster`), `engine/review/rules.mjs`, `references/rules.md`, `test/v2/review-rules.test.mjs` (39 rules; the scan's file list)
@@ -324,6 +326,8 @@ test('the same frames under --workers 2 are the frames of one page', async (t) =
 - [ ] **Step 5: Commit** `feat(w4): overlays drawn over every cut, before the post pass`.
 
 ### Task 7: The review and overlays
+
+**[R2-12]** The new registry row sets `evidence` (`unmeasured` unless a table of ours is named) and, for a creative rule, `ask`; its `rules.md` row fills both cells. Without it W3's evidence test fails on this rule.
 
 **Files:**
 - Create: `engine/review/overlay.mjs`

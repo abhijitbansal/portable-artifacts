@@ -41,6 +41,7 @@ Test commands used below:
 4. **A stall on the parallel path.** `--workers` seeks and captures in `MM/scripts/v2/workers.mjs:42-60`, not in `render.mjs`. Task 7 times and guards both paths through one function.
 5. **A film error reported as a stall.** An error the page raised about the film is a finding (`MM/scripts/v2/session.mjs:28-31`). Task 7's stall error wraps only a stage that did not answer in time (its own timer, or the browser's `TimeoutError`), never any other error a stage threw.
 6. **An agent that cannot pause.** The storyline step must still say what to do in `claude -p`, `codex exec` and the eval: pick the first and say so. Task 3's test pins that sentence.
+7. **[R2-1] A check that fails a legal film.** One held still, a film on a flat ground, a one-frame film: each must pass. Task 7's still-picture test pins the first.
 
 ## File Structure
 
@@ -53,6 +54,7 @@ Test commands used below:
 - `MM/references/music.md`: the beat-grid notes moved out of `SKILL.md` step 10.
 - `MM/scripts/v2/render.mjs`: the colour filters; the capture loop goes through the clock.
 - `MM/scripts/v2/capture-clock.mjs` (new): the stage clock and the stall error.
+- **[R2-1]** `MM/scripts/v2/output-check.mjs` (new) and `MM/test/v2/output-check.test.mjs` (new): the check of the finished file.
 - `MM/scripts/v2/workers.mjs`, `report.mjs`, `run.mjs`: the clock on the parallel path, the report's `timing`.
 - `MM/THIRD_PARTY_NOTICES.md`: a credits section.
 - Tests: `BT/make-motion-docs.test.mjs`, `BT/intake.test.mjs`, `MM/test/v2/make.test.mjs`, `MM/test/v2/helpers/session.mjs`, `MM/test/v2/color-browser.test.mjs` (new), `MM/test/v2/capture-clock.test.mjs` (new), `MM/test/v2/workers-browser.test.mjs`, `MM/test/v2/review.test.mjs`.
@@ -146,6 +148,33 @@ The decisions the implementer cannot make alone (the wording is theirs, in our o
 - **Devices**, in the type files: only what our kinds and cuts draw. A worked example, a `diagram` that grows, before and after (`compare`), a `number` that lands, a `match` chain, cuts on the beat (`music.snap`). Not a continuous take and not an endless zoom: say so in one line, outside the Devices section.
 - **Type files**, each with `## When`, `## Shape`, `## Devices`, `## Check`: `explainer` (one idea through one worked example), `data` (one claim per chart, the highlighted mark says what to see), `vertical` (the hook reads from frame 0, captions recommended, a picture still for at most 3 s).
 - **Tells**, in `tells.md`: one `## <look>` section per registered look (seven), each with at least two tells that give that look away when it is used badly, and one line on the content it suits (moved from `story.md:41`). No section bans a look, and there is no list of banned looks or fields.
+- **[R2-5] The shape of a short**, in `types/vertical.md` under `## Shape`: the first line says who the short is for;
+  the next one or two say what they want or what hurts; the first useful point lands inside the first 10 s; where the
+  content has steps, promise a counted result early; once, about midway, one line opens a second question and the next
+  line answers it; end on one ask and stop. It is craft, not proof: no view count or retention figure is quoted. The
+  source's beat-by-beat sequence and its formula list are not reproduced. (Wording stays the implementer's, in our own
+  words; no heading is added to any file, so the pinned heading lists hold.)
+- **[R2-6] Honest hooks**, in `types/vertical.md` under `## Check` and one sentence in `story.md` under `Claims`: what
+  the hook names is on screen in the first shot; a promise the film does not pay off is cut from the hook; no number,
+  result or deadline that the brief did not give; a "wrong way, then right way" film shows the right way; at most two
+  hook devices in one opening.
+- **[R2-7] A tell states when it is right.** In `tells.md`, each tell bullet ends with a `works when` clause naming the
+  case where the same choice is right. A tell with no such case says `never` and why; expect few. Before the tells are
+  committed, search `MM/SKILL.md` and `MM/references/*.md` for a sentence that tells the agent to do the thing each
+  tell names; fix the sentence or drop the tell, and list what was found in the task report. One sentence in `story.md`
+  under `Three storylines`: "The example films show the shape of the fields; they are not a pace, a look or a shot
+  order to copy." (`SKILL.md:74` sends the agent to those films; it is not reworded, so this adds 0 bytes there.)
+- **[R2-8a] The cue pass**, in `story.md` under `Write for the picture`, two lines at most: before the shots are
+  written, mark each line's cue. A number is drawn as a quantity (a `number`, a `chart` mark, a count of things), not
+  printed as a caption. An abstract noun gets one concrete thing from the subject's own world, not the stock picture
+  of its category. A turn word (but, instead, until) is where a cut or a `compare` goes. Not every word goes on screen.
+- **[R2-9a] Lines that read as machine-written**, one bullet in `story.md` under `Narration`: a "not just this, but
+  that" turn; three one-word sentences in a row; a product told to "unlock" or "meet" something; a figure the brief did
+  not give. Each is right when the picture shows the real contrast it claims. Prose only; no finding.
+- **[R2-11] Demo data**, one sentence in `story.md` under `Write for the picture`: "A page you screenshot for a
+  `screen` or `clipping` shot holds made-up, realistic data before the capture: never a real customer's, never filler
+  text, never an empty state."
+- **[R2] `SKILL.md` bytes added by these six rows: 0.**
 
 - [ ] **Step 1: Write the failing tests** in `BT/make-motion-docs.test.mjs`.
 
@@ -185,8 +214,23 @@ test('guardrail: a device no kind draws, and a look with no section, are caught'
 });
 ```
 
-- [ ] **Step 2: Run to see RED.** `node --test "BT/make-motion-docs.test.mjs"`. Expected: FAIL in the first three (the stubs have no sections; `story.md` has today's six headings).
-- [ ] **Step 3: Write the four files and rewrite `story.md`.** Keep every sentence of today's `story.md` that still holds (Write for the picture, Narration, What the review tells you); today's `## Two arcs` text goes into the type files, with each mode's pace sentence kept in `story.md`. Length: `story.md` at most 60 lines, each type file at most 30, `tells.md` at most 45.
+**[R2] Step 1, one more test** in `BT/make-motion-docs.test.mjs`:
+
+```js
+test('[R2] the shape of a short, honest hooks, tells with their condition, the cue pass, machine-written lines, demo data', () => {
+  const story = read('references/story.md'); const vertical = read('references/types/vertical.md'); const tells = read('references/tells.md');
+  for (const phrase of ['who the short is for', 'one ask']) assert.ok(section(vertical, 'Shape').includes(phrase), phrase);
+  assert.ok(section(vertical, 'Check').includes('on screen in the first shot'));
+  assert.ok(section(story, 'Claims').includes('the brief did not give'));
+  for (const look of registries.looks.names()) assert.ok(section(tells, look).split('\n').filter((l) => l.startsWith('- ') && /works when|never/.test(l)).length >= 2, look);
+  assert.ok(section(story, 'Three storylines').includes('not a pace, a look or a shot order to copy'));
+  for (const phrase of ['not printed as a caption', 'made-up, realistic data']) assert.ok(section(story, 'Write for the picture').includes(phrase), phrase);
+  assert.ok(section(story, 'Narration').includes('not just'));
+});
+```
+
+- [ ] **Step 2: Run to see RED.** `node --test "BT/make-motion-docs.test.mjs"`. Expected: FAIL in the first three (the stubs have no sections; `story.md` has today's six headings) **[R2]** and in the round-2 test.
+- [ ] **Step 3: Write the four files and rewrite `story.md`.** Keep every sentence of today's `story.md` that still holds (Write for the picture, Narration, What the review tells you); today's `## Two arcs` text goes into the type files, with each mode's pace sentence kept in `story.md`. Length: `story.md` at most 66 lines (**[R2]** was 60), `types/vertical.md` at most 34 (**[R2]** was 30), the other two type files at most 30, `tells.md` at most 45.
 - [ ] **Step 4: Run to see GREEN.** The same command, then `node --test "BT/intake.test.mjs"` and `node --test "BT/skill-budget.test.mjs"`. Expected: PASS.
 - [ ] **Step 5: Commit (controller).** `docs(w1): story doctrine: the one thing, three storylines as three films, type files, per-look tells`.
 
@@ -204,6 +248,14 @@ The decisions:
 - **Never score.** No mark out of ten, no percentage, no "looks great". A review is its notes.
 - **Pictures alone.** One question per shot: with the narration hidden, does the picture still make the shot's point?
 - **Delivery**, four labelled lines in the final report: `weakest shot:` (the shot id and why), `measured:` (what the report printed), `looked at:` (the sheets opened), `not checked:` (what nobody could check; the audio always, since no agent can listen).
+- **[R2-10]** `not checked:` always carries the standing list, quoted and not improvised: the sound (no agent can
+  listen); text inside a picture or a clip (the size and contrast rules measure the film's own type, not pixels inside
+  an image); motion between the frames the sheets sample; taste. A line leaves the list only when something the report
+  printed measured it, and the note names what.
+- **[R2-10]** When something needed to judge is missing, write `cannot verify` and what is missing, never a guessed
+  baseline. When the brief and the film disagree, report the disagreement and do not pick one. (From video-shotcraft's
+  reviewer brief, restated.)
+- **[R2-10]** No W5 edit is needed: W5 Task 4's reviewer reads `reviewing.md` first and does not restate it, so its `unchecked` array starts from this list.
 
 - [ ] **Step 1: Write the failing test.**
 
@@ -214,6 +266,7 @@ test('reviewing.md ranks notes P0 to P2, never scores, asks the pictures-alone q
   for (const rank of ['P0', 'P1', 'P2']) assert.ok(section(md, 'Notes').includes(rank), rank);
   assert.ok(section(md, 'Notes').includes('· time · where · problem → change · what stays'));
   for (const label of ['weakest shot:', 'measured:', 'looked at:', 'not checked:']) assert.ok(section(md, 'Delivery').includes(label), label);
+  for (const phrase of ['text inside a picture', 'between the frames the sheets sample', 'cannot verify']) assert.ok(section(md, 'Delivery').includes(phrase), phrase); // [R2-10]
   const skill = read('SKILL.md');
   assert.match(skill, /references\/reviewing\.md/);
   assert.match(skill, /write `review\.md` next to the film/);
@@ -221,7 +274,7 @@ test('reviewing.md ranks notes P0 to P2, never scores, asks the pictures-alone q
 ```
 
 - [ ] **Step 2: RED.** `node --test "BT/make-motion-docs.test.mjs"`. Expected: FAIL, the headings are missing.
-- [ ] **Step 3: Write `reviewing.md`** (at most 40 lines).
+- [ ] **Step 3: Write `reviewing.md`** (at most 46 lines; **[R2-10]** was 40).
 - [ ] **Step 4: GREEN**, the three doc tests. `wc -c MM/SKILL.md` still at most 19,700.
 - [ ] **Step 5: Commit (controller).** `docs(w1): review protocol: P0 to P2 notes, no score, the pictures-alone question, delivery lines`.
 
@@ -319,10 +372,11 @@ Each test skips without a browser, ffmpeg or ffprobe, as `make.test.mjs:62-67` d
 - [ ] **Step 6: Size check. [BROWSER]** W0's `R/.scratch/motion-steals-w0/results/fixed-fast.report.json` holds `bytes` for `kinds-desk.json` on the old arguments. Render it again (`node MM/scripts/make.mjs MM/references/examples/v2/kinds-desk.json --json --out R/.scratch/motion-steals-w1/fixed-fast-709.mp4`) and record both sizes. A file more than 5% larger is reported to the controller before the commit; it is not a failure.
 - [ ] **Step 7: Commit (controller).** `feat(w1): convert to BT.709 and tag the stream on both capture paths`. The body: "Every MP4 changes colour data and gains bt709 tags, on purpose. No gallery file is rebuilt here; the one rebuild is the final phase." and the red patch's values before and after.
 
-### Task 7: Capture diagnostics, step 0 (P17)
+### Task 7: Capture diagnostics, step 0 (P17), and a check of the finished file (R2-1)
 
 **Files:**
 - Create: `MM/scripts/v2/capture-clock.mjs`, `MM/test/v2/capture-clock.test.mjs`
+- **[R2-1]** Create: `MM/scripts/v2/output-check.mjs`, `MM/test/v2/output-check.test.mjs`
 - Modify: `MM/scripts/v2/render.mjs:120-160` (`capture`, `encodeFrames`, `encodeWithWorkers`), `:208-248` (`renderFilm`'s result), `MM/scripts/v2/workers.mjs:42-60,89` (`produce`, `captureParallel`), `MM/scripts/v2/report.mjs:33-42,105-124,195` (`HINTS`, `reportOf`, the frames line), `MM/scripts/v2/run.mjs:63-66,134` (`newState`, the fields copied from the render), `MM/references/schema.md:127-140` (the report table), `MM/test/v2/review.test.mjs:513-516`, `MM/test/v2/workers-browser.test.mjs:84-98`
 
 **Interfaces:**
@@ -333,6 +387,38 @@ Each test skips without a browser, ffmpeg or ffprobe, as `make.test.mjs:62-67` d
 - In `render.mjs`: `shootFrame(page, i, { exact, clock }) -> Promise<Buffer>` (exported): `__seek(i)` timed as `draw`, the screenshot timed as `capture`. The serial loop and the parallel path both call it; each write to ffmpeg, and the final `finish`, is timed as `encode`. `renderFilm` returns `timing: { drawMs, captureMs, encodeMs }` (whole milliseconds). The clock's `tail` is `() => session.errors`, the page and console errors the session already collects (`MM/scripts/v2/session.mjs:71-72`).
 - In `workers.mjs`: `captureParallel({ pages, frames, shoot, write, onProgress, signal })`, where `shoot(page, i) -> Promise<Buffer>` replaces both `capture(page)` and the `__seek` call in `produce` (`:51-52`).
 - In `report.mjs`: the report always carries `timing` (`null` until a render ran); the text form's frames line gains `, draw ${d} capture ${c} encode ${e} ms` after `ms per frame` when `timing` is not null; `HINTS` gains `[/^render stalled in the /, 'the browser or ffmpeg stopped answering at that stage; run again, and with --workers 1 if it keeps happening']`.
+- **[R2-1]** In `capture-clock.mjs`: `STAGES = ['draw', 'capture', 'encode', 'check']`, and `totals()` returns
+  `{ drawMs, captureMs, encodeMs, checkMs }`. In Step 1's tests, the first `deepEqual` expects
+  `{ drawMs: 10, captureMs: 30, encodeMs: 0, checkMs: 0 }` and the unknown-stage message becomes
+  `/stage must be one of draw, capture, encode, check/`.
+- **[R2-1]** Produces, in `output-check.mjs`:
+  - `CHECK_WIDTH = 96`, `CHECK_HEIGHT = 54`, `BLANK_STD = 1.5` (the standard deviation of a frame's luma, in levels of
+    255; the value is motionmaxxing's and W0's pixel pass, R2-2, confirms it on our films before this ships).
+  - `checkArgs(file) -> string[]`: the ffmpeg arguments that decode the file's first video stream to
+    `CHECK_WIDTH` by `CHECK_HEIGHT` 8-bit gray frames on stdout (`-map 0:v:0 -vf scale=96:54:flags=area,format=gray
+    -f rawvideo -`; not run by the planner).
+  - `outputProblem({ decoded, stds, frames }) -> string | null`: `the finished file holds ${decoded} frames, the
+    timeline has ${frames}` when the counts differ; `the finished file's picture is blank: none of its ${decoded}
+    frames has any detail` when every value of `stds` is under `BLANK_STD`; else `null`.
+  - `checkOutput({ ffmpeg, file, frames, signal }) -> Promise<{ decoded: number }>`: reads the frames as a stream
+    (never the whole film in memory), and throws `render check: ${problem}; nothing was written` when there is a
+    problem. It takes the ffmpeg path and the abort signal, not the voice steps' runner: a film with no sound has no
+    runner (`render.mjs:220-221`).
+- **[R2-1]** In `render.mjs` `renderFilm`: after the encode, and the mux when the film has sound, and before the
+  `renameSync` that makes the output, `await clock.time('check', frames - 1, () => checkOutput({ … file: the file about
+  to become the output, frames }))`. A failed check leaves no output file (the `finally` already removes both partial
+  files). It is a render error, not a finding: the film is not at fault.
+- **[R2-1]** Not checked, on purpose: a picture that does not move (a film of one held still is legal) and a flat
+  stretch inside a film (a flood, a field, the `poster` look's grounds). Only a wrong frame count, or a film with no
+  detail in any frame, fails.
+- **[R2-1]** In `report.mjs`: the text form's frames line reads `, draw ${d} capture ${c} encode ${e} check ${k} ms`;
+  `HINTS` gains `[/^render check: /, 'the browser drew or captured nothing, or the encode lost frames; run again with
+  --workers 1, then with --exact, and report it if it stays']`. In `schema.md`, the `timing` row reads
+  `{ drawMs, captureMs, encodeMs, checkMs }`. No new top-level report key, so the pinned key list changes only by
+  `timing`, which this task already adds.
+- **[R2-1] Cross-wave note** (for the master plan's Review Focus item 1, "Two waves that disagree on a name"): W3
+  Task 7's slice render gives the check the slice's own frame count, not the film's; a slice that fails `render check`
+  with the film's count is this bug.
 
 - [ ] **Step 1: Write the failing tests.** `capture-clock.test.mjs` (no browser):
 
@@ -371,7 +457,33 @@ In `review.test.mjs:516`, add `'timing'` to the expected keys. In `workers-brows
 - [ ] **Step 3: Implement.** In `schema.md`, add one table row after the `seconds` row and leave that row's text as it is (`BT/make-motion-docs.test.mjs:242` replaces it literally): `` | `timing` | `{ drawMs, captureMs, encodeMs }`: where the render's time went, or `null` when nothing was rendered | ``.
 - [ ] **Step 4: GREEN.** Step 2's three commands, then `node --test "BT/make-motion-docs.test.mjs"` (the report keys agree with `schema.md`), then `node --test --test-concurrency=1 "MM/test/v2/make.test.mjs"` **[BROWSER]** (its text-mode test at `:243` expects `frames: 30` for a film that was not rendered: `timing` is null there, so the line does not change). Expected: PASS.
 - [ ] **Step 5: One real number.** In `make.test.mjs`, "a full run renders…" (`:330`) gains: `assert.ok(report.timing.drawMs > 0 && report.timing.captureMs > 0 && report.timing.encodeMs >= 0)` and `assert.ok(report.timing.drawMs + report.timing.captureMs <= report.seconds * 1000)`. Run the file again **[BROWSER]**: PASS.
+- [ ] **Step 5a [R2-1]: Write the failing tests** (`output-check.test.mjs`; ffmpeg, no browser).
+
+```js
+test('a film whose every frame is flat is blank; one frame with detail is enough', () => {
+  assert.match(outputProblem({ decoded: 3, stds: [0, 0.4, 1.4], frames: 3 }), /picture is blank: none of its 3 frames/);
+  assert.equal(outputProblem({ decoded: 3, stds: [0, 0, 9], frames: 3 }), null);
+});
+test('a frame count that differs from the timeline names both numbers', () => {
+  assert.equal(outputProblem({ decoded: 29, stds: [9], frames: 30 }), 'the finished file holds 29 frames, the timeline has 30');
+});
+test('a black clip fails; a test pattern passes; one still picture held for the whole clip passes too', async () => {
+  /* three 1 s clips, 320x180 at 30 fps, made with ffmpeg lavfi: color=black, testsrc, and one testsrc frame looped;
+     checkOutput rejects the first with /render check: .*blank/ and resolves { decoded: 30 } for the other two */
+});
+test('a clip one frame short of the timeline fails, naming 30 and 31', async () => { /* the testsrc clip against frames: 31 */ });
+```
+
+- [ ] **Step 5b [R2-1]: RED.** `node --test "MM/test/v2/output-check.test.mjs"`. Expected: FAIL, module not found.
+- [ ] **Step 5c [R2-1]: Implement, then GREEN.** The same command; then `node --test "MM/test/v2/capture-clock.test.mjs"`
+  and `node --test "BT/make-motion-docs.test.mjs"`. In `make.test.mjs`, "a full run renders…" also asserts
+  `report.timing.checkMs > 0`; run that file **[BROWSER]**: PASS.
+- [ ] **Step 5d [R2-1]: The cost, measured. [BROWSER]** One `--json` render of `X/kinds-desk.json`; write
+  `timing.checkMs` and `seconds * 1000` in the task report with the command. Bar: the check takes at most 5% of the
+  render's wall time. Over it: sample two frames a second for the blank test (`fps=2` before the scale), count frames by
+  a stream copy (`-c copy -f framecrc`), and measure again. The bar exists because no wave may slow the edit loop.
 - [ ] **Step 6: Commit (controller).** `feat(w1): the report says where a render's time went, and a stalled stage is named`.
+- [ ] **Commit [R2-1] (controller), its own commit after Step 6's:** `feat(w1): the finished file is decoded and checked before it is kept`. Files: `MM/scripts/v2/output-check.mjs`, `MM/test/v2/output-check.test.mjs`, and the R2-1 changes to `MM/scripts/v2/capture-clock.mjs`, `MM/scripts/v2/render.mjs`, `MM/scripts/v2/report.mjs`, `MM/references/schema.md`, `MM/test/v2/capture-clock.test.mjs`, `MM/test/v2/make.test.mjs`.
 
 ### Task 8: Credit lines in `THIRD_PARTY_NOTICES.md`
 
@@ -382,7 +494,15 @@ In `review.test.mjs:516`, add `'timing'` to the expected keys. In `workers-brows
 **Interfaces:**
 - Produces: a section `## Ideas credited, no code ported`, to which W2 to W6 each append. Its form: one bullet per project, the project's name, owner and licence, then the ideas taken, each with the wave that took it. W1's HyperFrames bullet includes naming the capture stage and its console tail on a hang (P17, review fix).
 
-- [ ] **Step 1: Append the section.** Its first paragraph: "The following are ideas, rewritten here in our own words and code. No file, table or paragraph from these projects is in this repository." Then two bullets. **HyperFrames** (HeyGen, Apache-2.0): planning a film around one thing and three storylines, review notes ranked P0 to P2 with no score, the pictures-alone question (W1). **Rune** (MIT): converting to BT.709 and tagging the stream in the encode (W1).
+- [ ] **Step 1: Append the section.** Its first paragraph: "The following are ideas, rewritten here in our own words and code. No file, table or paragraph from these projects is in this repository." Then two bullets. **HyperFrames** (HeyGen, Apache-2.0): planning a film around one thing and three storylines, review notes ranked P0 to P2 with no score, the pictures-alone question (W1). **Rune** (MIT): converting to BT.709 and tagging the stream in the encode (W1). **[R2]** "Then two bullets" becomes "Then five bullets", adding:
+  - **[R2]** **motionmaxxing** (github.com/Tejashmakwana/motionmaxxing, Apache-2.0): a tell stated with the case where
+    it is right; a cue pass over the script; a standing list of what a review cannot see; decoding the finished file to
+    check its picture (W1).
+  - **[R2]** **video-shotcraft** (github.com/Vincentwei1021/video-shotcraft, Apache-2.0): "cannot verify" in place of a
+    guessed baseline; made-up data before a page is captured (W1).
+  - **[R2]** **Reelfactory** (reelfactory.dev; a closed product, public guides only): the shape of a short's opening and
+    the honest-hook checks (W1).
+  - **[R2]** W0's three round-2 rows are scratch measurements and a test; they port nothing and need no credit beyond these bullets.
 - [ ] **Step 2: Run** `node --test "MM/test/v2/cuts-notices.test.mjs"`. Expected: PASS, unchanged.
 - [ ] **Step 3: Commit (controller).** `docs(w1): credit HyperFrames and Rune for the ideas this wave takes`.
 
@@ -391,7 +511,7 @@ In `review.test.mjs:516`, add `'timing'` to the expected keys. In `workers-brows
 - [ ] **Step 1: The local gate for the areas touched.** `node P/bin/sync-shared.mjs --check`; `node --test "P/shared/test/*.test.mjs"`; `node --test "BT/*.test.mjs"`; `python3 -m pytest R/tests/pytest`; then make-motion's suite serially **[BROWSER]**: `node --test --test-concurrency=1 "MM/test/**/*.test.mjs"`, started in the background (CI's comment puts the suite at about 2,300 s of tests). Expected: all green. `wc -c MM/SKILL.md`: at most 19,700.
 - [ ] **Step 2: Fresh-context review (reviewer tier, Opus at medium, report only).** The prompt gives `git diff --stat origin/main...HEAD`, the diff path (read per file when it is over 1,000 lines), this plan's Review Focus, and this sentence verbatim: "Report every issue you find, including ones you are uncertain about or consider low-severity. Do not filter for importance or confidence at this stage — a separate verification step will do that. Your goal here is coverage: it is better to surface a finding that later gets filtered out than to silently drop a real bug. For each finding, include your confidence level and an estimated severity so a downstream filter can rank them."
 - [ ] **Step 3: Gate.** No CRITICAL or HIGH open; each code fix ships with a test that failed first (prose fixes are exempt). The controller pushes.
-- [ ] **Step 4: For the branch test checklist (manual, the owner's).** One agent run on two sample briefs, whose three storylines a person reads and judges as three films or one; one check of a W1 render on QuickTime, Safari and Chrome against the sheet PNG (does the accent match). Both go on the list the final phase turns into the checklist; neither blocks the wave.
+- [ ] **Step 4: For the branch test checklist (manual, the owner's).** One agent run on two sample briefs, whose three storylines a person reads and judges as three films or one; one check of a W1 render on QuickTime, Safari and Chrome against the sheet PNG (does the accent match). Both go on the list the final phase turns into the checklist; neither blocks the wave. **[R2-5, R2-6]** One of the two sample briefs is a vertical short; a person reads its first three lines against `types/vertical.md`.
 
 ## Self-review notes
 

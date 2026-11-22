@@ -37,7 +37,7 @@ Abbreviations (write each out in full in a command): `R` = `/Users/abhijitbansal
 
 ## File Structure
 
-- `S0/probe-tags.mjs`, `S0/time-split.mjs`, `S0/capture-spike.mjs`, `S0/make-click.mjs`, `S0/audio-offset.mjs`, `S0/dump-snapshots.mjs`, `S0/motion-rules.mjs`, `S0/slam-strip.mjs`, `S0/phase-sweep.mjs`: one job each, each prints the path of the file it wrote.
+- `S0/probe-tags.mjs`, `S0/time-split.mjs`, `S0/capture-spike.mjs`, `S0/make-click.mjs`, `S0/audio-offset.mjs`, `S0/dump-snapshots.mjs`, `S0/motion-rules.mjs`, `S0/slam-strip.mjs`, `S0/phase-sweep.mjs`, **[R2-2]** `S0/pixel-pass.mjs`: one job each, each prints the path of the file it wrote.
 - `S0/out/`: rendered MP4s. `S0/audio/`: the click track and its film. `S0/results/`: one result file per measurement, plus `results/W0-RESULTS.md`, the table the pull request body carries.
 - `MM/test/v2/held-frames-browser.test.mjs`: the one committed file.
 
@@ -101,29 +101,42 @@ Abbreviations (write each out in full in a command): `R` = `/Users/abhijitbansal
 **Interfaces:**
 - `node S0/make-click.mjs` writes `S0/audio/click.wav` (48 kHz, mono, 16-bit PCM, 10 s of silence with a 5 ms 1 kHz burst at half scale starting at each whole second 1 to 9) and `S0/audio/offset-film.json`: version 2, one `free` shot `{ "id": "a", "show": "free", "hold": 10, "background": "#101820", "nodes": [<the still bar of MM/test/v2/make.test.mjs:21>] }`, `"music": { "src": "click.wav" }`. No fixture of recorded music exists in the repo (searched `MM/test` and `MM/references` for wav, mp3, m4a), so the track is synthesised with known onsets.
 - `node S0/audio-offset.mjs <film.mp4> --out <result.json>` decodes the MP4's audio with ffmpeg to 48 kHz mono 32-bit float on stdout, finds each burst's onset (the first sample above 25% of the track's peak after at least 0.2 s below 5% of it) and writes `{ onsets: [{ expected, found, offsetMs }], medianOffsetMs, medianOffsetFrames30 }`.
+- **[R2-3]** `audio-offset.mjs` also writes `spreadMs` (the largest offset minus the smallest). With `--ignore-editlist` it adds ffmpeg's `-ignore_editlist 1` before the input, so the decode keeps the encoder's priming samples that a player skips (the flag is the MP4 demuxer's; not run by the planner).
 
 - [ ] **Step 1: Write both scripts; run `make-click.mjs`.**
 - [ ] **Step 2: Validate the film.** `node MM/scripts/make.mjs S0/audio/offset-film.json --outline`. Expected: exit 0, one line. A validation line means the film is wrong: fix the film, not the validator.
 - [ ] **Step 3: Render. [BROWSER]** `node MM/scripts/make.mjs S0/audio/offset-film.json --json --out S0/out/offset.mp4`. Expected: exit 0 and `audio.music.kind` `"file"`. If the render refuses the level (a click track is far from the loudness target), record the refusal message as the result and stop this task: the measurement then needs a denser track, which is reported, not improvised.
-- [ ] **Step 4: Measure.** `node S0/audio-offset.mjs S0/out/offset.mp4 --out S0/results/audio-offset.json`. Expected: nine onsets found. Fewer than nine is recorded with the count.
-- [ ] **Step 5: Record.** Row "audio offset": the median in ms and in frames at 30 fps, and whether its magnitude is above 20 ms (the master plan's threshold for building the beat audit).
+- [ ] **Step 4: Measure.** `node S0/audio-offset.mjs S0/out/offset.mp4 --out S0/results/audio-offset.json`. Expected: nine onsets found. Fewer than nine is recorded with the count. **[R2-3]** Run it twice: as a player decodes, to `S0/results/audio-offset.json`, and with `--ignore-editlist`, to `S0/results/audio-offset-raw.json`. The first is the number the decision uses. The difference between the two is the delay the container declares and a player removes.
+- [ ] **Step 4b [R2-3]: The agreement bar.** `spreadMs` at most 5: the measurement stands. Above 5: the result is recorded as `not measured: the nine onsets disagree by <n> ms`, the threshold is not applied, and the row is listed for the controller.
+- [ ] **Step 4c [R2-3]: Record the pipeline beside the number:** the first line of `ffmpeg -version`; the audio encoder arguments (`AAC_AUDIO`, `MM/scripts/v2/voice/master.mjs:42`); and the output of `ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,start_time -of json S0/out/offset.mp4`. The number belongs to this pipeline. A change to the audio encoder arguments or to the mux makes it stale; W1 changes the video arguments only.
+- [ ] **Step 5: Record.** Row "audio offset": the median in ms and in frames at 30 fps, and whether its magnitude is above 20 ms (the master plan's threshold for building the beat audit). **[R2-3]** Also `spreadMs`, the raw median, and the pipeline line.
+
+**[R2-3]** Master plan (`docs/superpowers/plans/2026-11-21-motion-steals.md`), "W0 result decisions", row "Audio offset (4)": the threshold cell becomes "The nine offsets agree within 5 ms, and the median offset, decoded as a player decodes, is above 20 ms in magnitude"; the "If not" cell gains "; when the onsets disagree, the audit is not built and the result reads 'not measured'". Not taken from the source: cross-correlation, a second probe through the cue path, and its 1.28-frame figure (one Remotion pipeline's claim).
 
 ### Task 5: Per-frame snapshot dump on three films, and prototype motion rules
 
 **Files:**
 - Create: `S0/dump-snapshots.mjs`, `S0/motion-rules.mjs`
+- **[R2-2]** Create: `S0/pixel-pass.mjs`
 - Read: `MM/engine/page/stage.mjs:150-174` (`__snapshot`, `__heldFlags`), `MM/scripts/v2/review.mjs:96-109` (which frames are inside a cut window), `MM/engine/looks/desk.mjs:9,45-84` (`HAND_STEP`: stepped motion is the default pro look's intent)
 
 **Interfaces:**
 - `node S0/dump-snapshots.mjs <film.json> --frames all|last --out <file.ndjson>` opens one session on the film with its estimated timeline (no voice is made) and writes one JSON line per frame. With `--frames all`: `{ frame, shot, t, held, inCut, nodes: [{ id, parent, type, depth, bbox, opacity, scale, fixed, text }] }`, the tree flattened, `opacity` and `scale` accumulated down the tree, `text` the node's words joined (text nodes only), `inCut` true inside a cut window or on a shot's first frame. With `--frames last`: only the last frame of each shot, and each line carries `tree`, the whole `__snapshot` result. **W2 Task 4 reads the `--frames last` form; do not change its shape.**
 - `node S0/motion-rules.mjs <file.ndjson> --out <result.md>` applies three prototype rules to consecutive frames with `inCut` false, per node id: `pop-in` (first seen at accumulated opacity 0.9 or more, box area above 0.5% of the canvas, with no frame at a lower opacity before it), `jump` (box centre moves more than 40 units in one frame and under 4 units in the next), `flash` (on screen for 1 or 2 frames only). It writes the count per rule and, per finding, the frame, the film second, the node id and the node's `text`.
 - The films, read from `X` because the gallery `film.json` files are copies whose pictures resolve only there: `showreel-pro.json` (desk), `showreel-viral.json` (pop), `gate-marker.json` (marker).
+- **[R2-2]** `node S0/pixel-pass.mjs <film.mp4> --out <result.json>`. No browser. It decodes the first video stream with ffmpeg to 96 by 54 8-bit gray frames and computes, per frame, the luma mean, its standard deviation, the mean absolute difference from the frame before and the correlation with it. It writes `{ file, frames, maxStd, flat: [{ from, to, t }], flashes: [{ frame, t, diff }] }`:
+  - `flat`: runs of frames whose standard deviation is under 1.5.
+  - `flashes`: a frame that differs from both neighbours by at least 5 levels while those two neighbours correlate at 0.9 or more. A cut cannot produce this (the frames either side of a cut differ from each other); a blank or foreign frame does.
+  - Neither detector needs the film's cut times, which a scratch script cannot get: a full render's report has no shot times (`MM/scripts/v2/run.mjs:65,494-496`) and the films are voiced. The source's third detector, a jump judged against known cut windows, is not built for that reason.
+  - The numbers are motionmaxxing's, tuned on its films. Here they only pick what to view; they pass or fail nothing.
+- **[R2-2]** The files, ten: `S0/out/fixed-fast.mp4`, `S0/out/fixed-exact.mp4`, and the eight version 2 gallery films (`G/showreel/pro`, `showreel/viral`, `showreel/whats-new`, `looks/cosmos`, `looks/keynote`, `looks/ledger`, `looks/marker`, `looks/poster`, each `video.mp4`). `cosmos` matters most: it is the dark look, so it sets the lowest `maxStd`.
 
 - [ ] **Step 1: Write both scripts.**
 - [ ] **Step 2: Dump the three films, one call each. [BROWSER]** To `S0/results/snap-desk.ndjson`, `snap-pop.ndjson`, `snap-marker.ndjson` with `--frames all`. Expected: one line per film frame.
 - [ ] **Step 3: Run the rules on each dump** (no browser) to `S0/results/motion-desk.md`, `motion-pop.md`, `motion-marker.md`.
-- [ ] **Step 4: View up to five findings per film. [BROWSER]** For each, `node MM/scripts/make.mjs <film> --poster <the finding's second> --poster-out S0/results/poster-<film>-<n>.png`, and the frame before it; open both PNGs. Classify each as intended (a `slam` that appears at once, a `count` that swaps its text, a stepped mark, the marker hand) or a defect (something a viewer would read as a glitch). A finding not viewed is "not viewed".
-- [ ] **Step 5: Record.** Row "motion defects": per film, findings per rule, how many were viewed, how many are defects. One viewed defect is enough to switch the motion gate on.
+- [ ] **Step 3b [R2-2]: Run the pixel pass, ten calls, no browser**, to `S0/results/pixel-<name>.json`. Expected on the two fixed renders: `frames` equals Task 1's count.
+- [ ] **Step 4: View up to five findings per film. [BROWSER]** For each, `node MM/scripts/make.mjs <film> --poster <the finding's second> --poster-out S0/results/poster-<film>-<n>.png`, and the frame before it; open both PNGs. Classify each as intended (a `slam` that appears at once, a `count` that swaps its text, a stepped mark, the marker hand) or a defect (something a viewer would read as a glitch). A finding not viewed is "not viewed". **[R2-2]** Also view, up to five per film: every flash, and every flat run that is not at the film's first or last frames. Extract the frame and its two neighbours with `ffmpeg -y -ss <t> -i <film> -frames:v 1 <png>` (no browser) and open them. Classify as in this step: intended (a flood, a field held before the type lands), or a defect. A gallery film was rendered by older code: a defect seen only there is rendered again from its source spec **[BROWSER]** and counts only if the new file shows it too.
+- [ ] **Step 5: Record.** Row "motion defects": per film, findings per rule, how many were viewed, how many are defects. One viewed defect is enough to switch the motion gate on. **[R2-2]** Row 'pixel pass': per film, `frames`, `maxStd`, the counts of flat runs and flashes, how many were viewed, how many are defects.
 
 ### Task 6: The five-frame slam strip
 
@@ -146,7 +159,7 @@ Abbreviations (write each out in full in a command): `R` = `/Users/abhijitbansal
 
 **Interfaces:**
 - Consumes: `openStage(film) -> { page, hashFrame(i), close() } | null` and the page's `__heldFlags(from, to, withGrain)`.
-- Produces: three tests and one proof, each skipping when `openStage` returns null (no browser; `PA_REQUIRE_BROWSER=1` makes that a failure, as in every browser test).
+- Produces: three tests and one proof, each skipping when `openStage` returns null (no browser; `PA_REQUIRE_BROWSER=1` makes that a failure, as in every browser test). **[R2-4]** One more test follows the proof: a jump back (Step 1), so the file holds five tests.
 
 - [ ] **Step 1: Write the test.** Three films at 30 fps: `still` (one `free` shot, `hold: 2`, the still bar on `#f3eee3`, no look named, so the default look's grain runs at 12 patterns a second), `mesh` (one `free` shot, `hold: 2`, the mesh field node: a field painted from the time), `fade` (two `free` still shots of `hold: 1` on different backgrounds, the second with `"cut": "crossfade"`).
 
@@ -164,9 +177,20 @@ test('guardrail proof: the 2D key alone calls frames held whose pixels differ, s
 //   assert.ok(i > 0);  assert.notEqual(hashes[i], hashes[i - 1]);
 ```
 
-- [ ] **Step 2: Run it. [BROWSER]** `node --test --test-concurrency=1 "MM/test/v2/held-frames-browser.test.mjs"`. Expected: PASS, 4 tests (this is a passing invariant, so there is no RED on today's code).
-- [ ] **Step 3: Prove it bites with a broken key.** With the Edit tool, in `MM/engine/page/stage.mjs:82`, replace `` `${drawKey(i)}|grain${grainPhase(i / fps)}` `` with `drawKey(i)` (one match). Run Step 2's command. Expected: FAIL in "still: every frame the capture key calls held…" naming a frame number. Restore the line with the Edit tool, run `git diff --stat R/plugins/portable-artifacts/skills/make-motion/engine/page/stage.mjs` (expected: no output), and run Step 2's command again (expected: PASS). Put the failing output's first line in the report.
-- [ ] **Step 4: Commit (controller).**
+**[R2-4]** Step 1, add a fifth test after the guardrail proof:
+
+```js
+test('[R2-4] mesh: a frame reached by a jump back is pixel-equal to the same frame reached in order', …);
+//   hashes[] were taken in order, 0 to frames - 1. Then, in this order, with no frame in between:
+//   for (const i of [frames - 1, 0, 31, 7, 44, 8, 30]) assert.equal(await stage.hashFrame(i), hashes[i], `frame ${i}`);
+//   assert.equal(new Set([7, 8, 30, 31, 44].map((i) => hashes[i])).size, 5);  // the frames differ, so a stale picture would show
+```
+
+**[R2-4]** A comment at the top of the file says what is pinned elsewhere: forward jumps into worker ranges (`MM/test/v2/workers-browser.test.mjs:50-58`) and, after W3, slices (W3 Task 7).
+
+- [ ] **Step 2: Run it. [BROWSER]** `node --test --test-concurrency=1 "MM/test/v2/held-frames-browser.test.mjs"`. Expected: PASS, **[R2-4]** 5 tests (was 4) (this is a passing invariant, so there is no RED on today's code).
+- [ ] **Step 3: Prove it bites with a broken key.** With the Edit tool, in `MM/engine/page/stage.mjs:82`, replace `` `${drawKey(i)}|grain${grainPhase(i / fps)}` `` with `drawKey(i)` (one match). Run Step 2's command. Expected: FAIL in "still: every frame the capture key calls held…" naming a frame number. Restore the line with the Edit tool, run `git diff --stat R/plugins/portable-artifacts/skills/make-motion/engine/page/stage.mjs` (expected: no output), and run Step 2's command again (expected: PASS). Put the failing output's first line in the report. **[R2-4]** Then prove the jump-back test bites. With the Edit tool, add as the first line of `__seek`'s body (`MM/engine/page/stage.mjs:153-154`): `i = Math.max(i, window.__w0 = Math.max(window.__w0 ?? 0, i));` (a page that cannot seek back). Run Step 2's command. Expected: FAIL in the jump-back test, naming frame 0. Restore the line, check `git diff --stat` on that file is empty, and run Step 2's command again: PASS. Put the failing output's first line in the report. (The one-line mutation was written from a read of `stage.mjs:153-156`; it was not run.)
+- [ ] **Step 4: Commit (controller).** **[R2-4]** The commit body gains: "and a frame reached by a jump back equals the frame reached in order (proven with a page that cannot seek back)".
 
 ```bash
 git add plugins/portable-artifacts/skills/make-motion/test/v2/held-frames-browser.test.mjs

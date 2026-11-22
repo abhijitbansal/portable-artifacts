@@ -51,13 +51,14 @@ A resumed session reads this table first, then `git log --oneline origin/main..H
 4. **A browser run that overlapped another.** Any report with two **[BROWSER]** steps and one `pgrep` line is sent back.
 5. **A measurement used after it went stale.** W0's numbers are taken before W1 changes the encoder arguments. A later wave that quotes a W0 timing says so, or measures again.
 6. **A release that ships a changed MP4 nobody looked at.** Every rebuilt film's sheets are opened in the final phase, and what was not viewed is said.
+7. **[R2] Round 2.** Every round-2 change carries an `R2-n` tag in the plan it touches; the record is `.scratch/research-2026-11-21/round2/DECISIONS.md`. The final review greps `R2-` in the seven wave plans and checks each accepted tag has its commit.
 
 ## Wave index
 
 | Wave | Plan file | Items | Depends on | Gate, beyond the common one |
 |---|---|---|---|---|
-| W0 | `2026-11-21-motion-steals-w0.md` | Measurements: colour tags, frame time split, capture spike, audio offset, snapshot dump and prototype motion rules, slam strip, held-frame test, two probes, two code reads | nothing | The results table is in this file and every decision below is filled in |
-| W1 | `2026-11-21-motion-steals-w1.md` | `SKILL.md` as a router; story doctrine P1; review protocol P7 (prose); b-roll guidance P18; viral captions intake line P8; BT.709 P2; capture diagnostics step 0 P17; credit lines | W0 (its fixed-film sizes and tag table) | `SKILL.md` at most 19,700 bytes; both capture modes tagged bt709 |
+| W0 | `2026-11-21-motion-steals-w0.md` | Measurements: colour tags, frame time split, capture spike, audio offset, snapshot dump and prototype motion rules, slam strip, held-frame test, two probes, two code reads; **[R2-2]** a pixel pass over finished files | nothing | The results table is in this file and every decision below is filled in |
+| W1 | `2026-11-21-motion-steals-w1.md` | `SKILL.md` as a router; story doctrine P1; review protocol P7 (prose); b-roll guidance P18; viral captions intake line P8; BT.709 P2; capture diagnostics step 0 P17; credit lines; **[R2-1]** a check of the finished file | W0 (its fixed-film sizes and tag table) | `SKILL.md` at most 19,700 bytes; both capture modes tagged bt709 |
 | W2 | `2026-11-21-motion-steals-w2.md` | `dead-space` and `scale-contrast` findings; cosmos number recentred; short statements; J and L narration P5; live outgoing shot P5; `at` on iris and zoom, colour flood P11 | W0 (the snapshot dump script), W1 (the story doctrine it adds a section to) | Thresholds come from the calibration table; the cut strips were viewed |
 | W3 | `2026-11-21-motion-steals-w3.md` | Findings v2 P3 (one rule registry, rules doc with a parity test, the `suggest` payload, `cut-variety` and `sameness`); slices P4; locate helper P6 | W2 (its rule ids) | The registry lists every rule id the code emits |
 | W4 | `2026-11-21-motion-steals-w4.md` | Word-level subtitles and small-size poster read P8; cue variants, `--no-music`, the beat audit if W0 says so P12; logo and progress overlays P10 | W2 (the narration field), W0 (audio offset) | Audio items are on the manual list |
@@ -91,8 +92,9 @@ Each threshold is written here before W0 runs. W0 Task 9 fills in "Measured" and
 | Colour tags (1) | Any gallery film, or either fixed render, not `bt709` on all three fields | W1 Task 6 (P2) is a visible fix today; the final rebuild is recorded as fixing those files | P2 still ships (the spec decided it); its note says "robustness only" | | |
 | Frame time split (2) | The capture stage takes 25% or more of the render's wall time in fast mode | The capture spike's result is acted on | No capture change, whatever the spike says: there is too little to win | | |
 | Capture spike (3) | An arm's median is 0.80 or less of today's, and its worst `maxDiff` is no more than today's plus 1 level | The deferred item "a raw capture path" is promoted: see the note under this table | Fast and exact capture stay as they are | | |
-| Audio offset (4) | The median offset is above 20 ms in magnitude | W4 builds the beat audit (P12) | W4 ships cue variants and `--no-music` only; the audit is dropped and the number recorded | | |
+| Audio offset (4) | **[R2-3]** The nine offsets agree within 5 ms, and the median offset, decoded as a player decodes, is above 20 ms in magnitude | W4 builds the beat audit (P12) | W4 ships cue variants and `--no-music` only; the audit is dropped and the number recorded; **[R2-3]** when the onsets disagree, the audit is not built and the result reads 'not measured' | | |
 | Motion defects (5) | One viewed defect or more, after the intended cases are set aside | W5 builds the motion gate (P13), reading intent from look data | The gate is dropped; the counts are recorded | | |
+| **[R2-2]** Pixel pass (5) | One viewed defect or more: a blank or foreign frame the film did not ask for, seen on a file today's code rendered | A render bug: fixed with a failing test before W1 starts, as a held-frame failure would be. It does not switch the motion gate on (P13 reads the scene graph and could not see it) | Recorded. W1's output check (R2-1) keeps `BLANK_STD = 1.5` when every film's `maxStd` is 15 or more; if one is lower, the controller sets the number from this table before W1 Task 7 | | |
 | Slam strip (6) | Separate copies read as a strobe | "In-shot motion blur" (P20) stays deferred with this strip as its trigger met; the owner is told | It stays deferred, trigger not met | | |
 | Held frames (7) | The test passes, and fails with the grain term removed | Held-frame reuse stays trusted | A failure on today's code is a render bug: fixed, with the test, before W1 starts | | |
 | Half-size draft (8) | The validator accepts a root `size` | Recorded under Deferred as "half-size draft for slices", with no schema change needed (review fix: W3 plans no draft) | Recorded under Deferred as needing a schema change | | |
@@ -183,7 +185,7 @@ test('validate reports it as a warning only, and no bundled example reads as one
 
 | Item | Why not now | Trigger |
 |---|---|---|
-| In-shot motion blur (P20); starting idea: one sample at rest, several when fast (an idea from beast's speed gate, no code) | A redesign of the accumulator, and nobody has seen the strobing it would fix | W0's slam strip shows a strobe, and the owner asks |
+| In-shot motion blur (P20); starting idea: one sample at rest, several when fast (an idea from beast's speed gate, no code) **[R2-19, R2-29]** two more starting ideas, no code: a delayed copy of a node's state as a trail (video-shotcraft); a forward-open shutter averaged in 16-bit inside the encode (motionmaxxing). | A redesign of the accumulator, and nobody has seen the strobing it would fix | W0's slam strip shows a strobe, and the owner asks |
 | A raw capture path (P17, second half) | No source gives a measured win | W0's capture spike wins (see the note under the decision table) |
 | Layered depth and bleed crops (`compose.md` W7, W8) | Every look's data, the safe-area maths and every sheet change | `dead-space` and `scale-contrast` have run on real films for one release and still fire on more than a third of a look's shots |
 | A chart beside its claim on a wide frame (`compose.md` W3, replacement) | High risk to chart tests; the gain is inferred | `dead-space` keeps firing on chart shots after W2 |
@@ -194,6 +196,33 @@ test('validate reports it as a warning only, and no bundled example reads as one
 | CSS spring export for explainer pages | Look motion data lives in make-motion; no field binds a page to a film look | Ownership of look motion data is decided |
 | The composition measure as a gallery regression aid (`compose.md` W10) | One rebuild does not need it | A second gallery rebuild |
 | Text shimmer under a slow drift; dither before the encode | Measurements, not features | W0 Task 8 finds a spread above 2%, or visible steps |
+
+### Round 2 (R2), deferred
+
+Make-motion rows from `.scratch/research-2026-11-21/round2/DECISIONS.md` section 4. The beast rows (R2-9b, R2-23, R2-34, R2-35) live in the beast addendum and its `docs/decisions-pending.md`.
+
+| Item | Why not now | Trigger |
+|---|---|---|
+| **[R2-15]** Exact `regions` boxes read from a live local page by CSS selector (sc-dom-boxes) | `shot.mjs` is a review tool (full-page captures, cut at 16,000 px); a `screen` or `clipping` picture needs a viewport or an element crop, and it is the only item that would add a CLI surface to code copied into every skill | After W3's locate helper ships, a film is built from a screenshot of a local page and the helper's stated tolerance (1.25 cells) is too loose for an element. Then design the capture and the boxes together |
+| **[R2-16]** A separate, larger floor for spoken captions (sc-text-floor-roles) | No caption has been seen unreadable | W4 Task 2's thumbnail-size read, or the owner on a phone, shows captions that cannot be read |
+| **[R2-17]** A recorded "seen, intended" for a creative finding (sc-waiver) | No finding has been fixed against the author's intent yet | W3 has shipped and a capped creative finding is "fixed" twice against the author's intent on one film |
+| **[R2-18]** Place a cue by its loudest instant, not its start (sc-cue-peak-lag) | No late cue has been heard | The owner's listen on the W4 manual list hears a whoosh or riser land late against its picture |
+| **[R2-19]** Follow-through as a delayed copy of a node's state (sc-lagged-trail) | Recorded as a second starting idea on the P20 row above; no code | Same as P20: W0's slam strip reads as a strobe and the owner asks |
+| **[R2-20]** Freeze a clip mid-shot, annotate, resume (sc-clip-freeze) | No brief needs it | A brief needs "stop the recording and circle this" |
+| **[R2-21]** Classify onsets by band, keep the strongest low hits (sc-beat-band-hits) | No viral film on recorded music has shown the need | A viral film on recorded music is made and its accents are visibly off the drums |
+| **[R2-22]** A big title shrinks and parks as the section label (sc-title-demote) | It belongs with W4's overlays (P10), which are not built; not for beast, whose section card is the scaffold's | W4's overlays (P10) have shipped; revisit as one overlay behaviour |
+| **[R2-24]** Hook formulas grouped by what material the brief supplies (R-03) | No repeated hook shape has been seen | Agents are seen repeating one hook shape on vertical briefs; then write a short list of our own, never the vendor's 40 |
+| **[R2-25]** A brand file read before every film (R-04) | Its fields are not known until W4's overlays and W6's look intake exist, and it needs the owner's say on where it lives | W4's overlays (P10) and W6's look intake (P16) have shipped, so the fields are known |
+| **[R2-26]** A blind two-way look pick over three rounds (R-05) | W6's comparison sheet is not in use yet | W6's comparison sheet (P16) is in use and the owner finds a many-cell sheet hard to answer |
+| **[R2-27]** A post caption written with the short (R-06) | No one has asked | A user asks for it; then one prose line in `types/vertical.md` |
+| **[R2-28]** Judge cut-on-hit sync against chance (mm-beat-audit-baseline) | W4 Task 4b prints an offset per beat and a median; it claims no share of cuts on hits, so there is no rate to compare with chance | W4 Task 4b is built and is later extended to print a share of cuts that land on hits |
+| **[R2-29]** Forward-open shutter and 16-bit averaging for in-shot blur (mm-shutter-notes) | Recorded as notes on the P20 row above; no code | Same as P20 |
+| **[R2-30]** Flag a final shot over a quarter of the film (mm-end-cta-share) | No film has shown the need | The final phase's inventory (F2 Step 3) shows an end shot over a quarter of a film's length |
+| **[R2-31]** Fewer, hand-picked sound cues (mm-cue-density) | No listen has heard a metronome | The owner's listen on the W4 manual list hears a metronome |
+| **[R2-32]** On-screen words land up to two frames before the spoken word (mm-text-lead) | No late highlight has been seen | The owner sees highlights land late on a played film |
+| **[R2-33]** A blind A/B page for two versions of a film (mm-blind-ab) | No pending decision needs it | An owner decision that measurement cannot settle is pending (a narration default, a cue default) |
+
+**[R2-9a]** Also deferred, inside an accepted tag: the finding form of the narration-tell bullet (a `copy-tell` rule in `--outline`). It would be a 39th rule id resting on one rater's list, and user narrations will contain a legitimate "not just". It reopens if W5's reviewer proof or the gallery's narrations show the patterns surviving the prose line.
 
 The beast_explainer track (design section 7) is not in this plan set. It ships in beast's own repository as an addendum to its Phase G plan, under that repository's conventions.
 
@@ -255,7 +284,7 @@ The gallery's eight `film.json` files are copies; their pictures resolve only fr
 - Modify: `P/.claude-plugin/plugin.json:4` (`"version": "2.2.0"`), `P/CHANGELOG.md` (a new heading under `## [Unreleased]`), `R/docs/index.html:115` (`<dd>2.2.0</dd>`), `P/README.md`, `P/USAGE.md`, `MM/README.md`
 
 - [ ] **Step 1: Bump once,** to 2.3.0 (new features, and three changes a user will see without asking: converted and tagged colour, two new creative findings, layer and shader cuts whose outgoing shot moves).
-- [ ] **Step 2: The changelog heading,** `## [2.3.0] - <date>`, as release notes for a user: behaviour changes first (colour; the new findings and that they never fail a run; the moving outgoing shot), then what is new by wave, then what was measured in W0 and dropped. One heading for the whole branch.
+- [ ] **Step 2: The changelog heading,** `## [2.3.0] - <date>`, as release notes for a user: behaviour changes first (colour; the new findings and that they never fail a run; the moving outgoing shot; **[R2-1]** a render fails, and keeps no file, when the finished file is short of frames or its picture is blank), then what is new by wave, then what was measured in W0 and dropped. One heading for the whole branch.
 - [ ] **Step 3: The cover Revision** to 2.3.0.
 - [ ] **Step 4: README and USAGE:** every new field, flag, cut, finding and reference file from the seven wave plans, each checked against the code it names (a command or flag is cited only after it is confirmed to exist). `MM/README.md`'s Looks table stays equal to `SKILL.md`'s (`BT/make-motion-docs.test.mjs:158-163`).
 - [ ] **Step 5: Validate the manifests.** `claude plugin validate R` and `claude plugin validate P`.

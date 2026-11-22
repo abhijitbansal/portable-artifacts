@@ -62,6 +62,26 @@ Abbreviations: `P` = `plugins/portable-artifacts`, `MM` = `P/skills/make-motion`
   - The 38 ids. Frame (23): `measure`, `empty-first-frame`, `contrast`, `region-off-frame`, `frame-edge`, `overflow`, `min-size`, `safe-area`, `overlap`, `word-overlap`, `sizes`, `hero`, `dropped`, `highlight-lines`, `card-overlap`, `covered`, `line-words`, `hook-words`, `caption-zone`, `caption-hero`, `caption-late`, `caption-clipped`, `caption-covers`. Frame, from W2 (2): `dead-space`, `scale-contrast`. Film (7): `unsettled`, `still`, `kind`, `cut-window`, `match`, `hook`, `loop`. Hand (4): `stroke-edge`, `hand-speed`, `hand-covered`, `hand-edge`. Outline (2): `cut-variety`, `sameness`.
   - `kinds` holds both values for `card-overlap` (`frame.mjs:410-411`), `cut-window` (`review.mjs:327`) and `kind` (`review.mjs:284`). `capped: true` for `dead-space`, `scale-contrast`, `cut-variety`, `sameness` only (who caps which is Task 3's). `suggest`: `contrast` is `'color'`, `min-size` is `'minSize'`, `cut-variety` and `sameness` are `'cuts'`, every other `null`.
   - `references/rules.md`: one table, columns `Rule | Kind | Checked | Meaning | Fix value`, one row per id, the id in backticks in the first cell, `Kind` reading `mechanical`, `creative` or `mechanical, creative`.
+- **[R2-12]** `RULES[]` gains `evidence: 'measured' | 'convention' | 'unmeasured'` and `ask: string | null`.
+  - `measured`: the threshold comes from a table of ours that the row names. At this task: `dead-space` and
+    `scale-contrast` (W2's `calibration.md`). `convention`: a published standard the row names (the contrast ratio).
+    `unmeasured`: every other rule, which is most of them today; the number is ours or another project's and nobody
+    here has measured it. A rule moves to `measured` only together with its table.
+  - `ask`: for every rule whose `kinds` includes `creative`, one question to ask of the frame or the film, ending in a
+    question mark ("Is the empty part of this frame doing a job?"). `null` for a rule that is only mechanical: its fix
+    value is the answer.
+- **[R2-12]** `references/rules.md`: the columns become `Rule | Kind | Checked | Meaning | Ask | Fix value | Evidence`.
+  An `Evidence` cell reads `measured: <table>`, `convention: <standard>` or `unmeasured`. One sentence above the table:
+  "A rule id is never renamed or reused after 2.3.0; a new rule takes a new id." (This wave's rename of the hand rule
+  happens before that line applies.)
+- **[R2-12]** No rule id is added: the count stays 38 and no cap list changes. The test helper `docRows()` also returns each
+  row's `ask` and `evidence` cells.
+- **[R2-12]** Later waves that add a rule carry one line, same wording: "The new registry row sets `evidence`
+  (`unmeasured` unless a table of ours is named) and, for a creative rule, `ask`; its `rules.md` row fills both cells."
+  It belongs in `docs/superpowers/plans/2026-11-21-motion-steals-w4.md` Task 2 (`poster-read`, the 39th rule) and Task 7
+  (`overlay-covers`, the 40th), and in `docs/superpowers/plans/2026-11-21-motion-steals-w5.md` Task 6 Step 3 (the motion
+  rules, if built). Without it those tasks fail R2-12's test. (Added to W4 Tasks 2 and 7 and W5 Task 6.)
+- **[R2-12]** `SKILL.md` bytes added by R2-12: 0.
 
 - [ ] **Step 1: Write the failing test** (`test/v2/review-rules.test.mjs`)
 
@@ -92,6 +112,22 @@ test('guardrail: a rule renamed in the code, in the registry or in the page is c
 test('the hand rule and the frame rule no longer share an id', () => {
   assert.equal(ruleOf('covered').stage, 'frame');
   assert.equal(ruleOf('hand-covered').stage, 'hand');
+});
+```
+
+**[R2-12]** Step 1, add one test:
+
+```js
+test('[R2-12] every rule states its evidence, and every creative rule asks a question', () => {
+  for (const rule of RULES) {
+    assert.ok(['measured', 'convention', 'unmeasured'].includes(rule.evidence), rule.id);
+    assert.equal(rule.kinds.includes('creative'), typeof rule.ask === 'string' && rule.ask.endsWith('?'), rule.id);
+  }
+  assert.deepEqual(RULES.filter((r) => r.evidence === 'measured').map((r) => r.id).sort(), ['dead-space', 'scale-contrast']);
+  for (const row of docRows()) {
+    assert.equal(row.evidence.split(':')[0], ruleOf(row.id).evidence, row.id);
+    assert.equal(row.ask, ruleOf(row.id).ask ?? '', row.id);
+  }
 });
 ```
 
@@ -241,7 +277,7 @@ Run: `node --test "<MM>/test/v2/review-outline.test.mjs" "<MM>/test/v2/outline.t
 Expected: PASS.
 
 - [ ] **Step 5: The example suites [browser], one at a time.** The `*-examples-browser` suites and `review-browser.test.mjs` assert the full list of findings of each shipped example (w2 plan, Task 3 Step 5, which gave them their table of known findings). Run each; a `cut-variety` or `sameness` line that appears is accepted into that suite's table only after reading the film's script and agreeing it is a tell, else the rule's threshold is wrong: stop and report.
-- [ ] **Step 5b: Calibrate on the examples, no browser.** Run `node <MM>/scripts/make.mjs <MM>/references/examples/v2/<film>.json --outline --json` on each `.json` film in that folder (29 at the time of writing), one call each, and put a table in the task report: film, `cut-variety` (yes or no), `sameness` count. More than a third of the films flagged means the thresholds teach the agent to ignore the rule (spec section 2, anti-goals): stop and report before committing.
+- [ ] **Step 5b: Calibrate on the examples, no browser.** Run `node <MM>/scripts/make.mjs <MM>/references/examples/v2/<film>.json --outline --json` on each `.json` film in that folder (29 at the time of writing), one call each, and put a table in the task report: film, `cut-variety` (yes or no), `sameness` count. More than a third of the films flagged means the thresholds teach the agent to ignore the rule (spec section 2, anti-goals): stop and report before committing. **[R2-12]** When this table is in the task report, `cut-variety` and `sameness` become `evidence: 'measured'` naming it, and Task 1's test list of measured rules gains the two ids.
 
 - [ ] **Step 6: Commit** `feat(w3): cut-variety and sameness findings in the outline, capped per film`.
 
@@ -471,7 +507,7 @@ test('a JPEG without ffmpeg exits 2 and says what to do', () => { /* env FFMPEG_
 
 - [ ] **Step 2: Run and see it fail** — `node --test "<MM>/test/v2/locate.test.mjs"`; expected FAIL, module not found.
 - [ ] **Step 3: Implement** the signatures above, from the description in `PROPOSAL.md` item 6 alone: do not open the HyperFrames file.
-- [ ] **Step 4: Notices.** In `THIRD_PARTY_NOTICES.md`, under W1's `## Ideas credited, no code ported`, append to the HyperFrames bullet (HeyGen, Apache-2.0): the two-pass numbered-grid picker for a region, and findings that carry their fix value (W3); and to the Rune bullet (MIT): time references by name (W3). Each was written here from a description; no file was copied.
+- [ ] **Step 4: Notices.** In `THIRD_PARTY_NOTICES.md`, under W1's `## Ideas credited, no code ported`, append to the HyperFrames bullet (HeyGen, Apache-2.0): the two-pass numbered-grid picker for a region, and findings that carry their fix value (W3); and to the Rune bullet (MIT): time references by name (W3). Each was written here from a description; no file was copied. **[R2-12]** And to the video-shotcraft bullet (W1's round-2 credit): a rules page that states each threshold's evidence and asks one question per creative rule (W3).
 - [ ] **Step 5: Run and see it pass** — `node --test "<MM>/test/v2/locate.test.mjs" "<MM>/test/v2/cuts-notices.test.mjs"`, then `node --test "<P>/bin/test/make-motion-docs.test.mjs"`; expected PASS.
 - [ ] **Step 6: One real use, viewed.** Run the three steps on `<MM>/references/examples/v2/clipping.png` into `.scratch/w3-locate/`, open each PNG, and write in the task report what the numbers look like at full size (readable or not) and the region it printed for the region that film already names (`engine/kinds/clipping.mjs:447`, `query`).
 - [ ] **Step 7: Commit** `feat(w3): locate.mjs turns a seen target into a regions box`.
