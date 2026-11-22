@@ -4,7 +4,7 @@
 // <plan stem>.stills/ beside the plan (its old board-<n>.jpg copies cleared first) and shown as a picture after the shots,
 // tied to its shots by the number in its name; only strips with a shot behind them are copied. Exit 2: a folder with no
 // usable strip, a strip that is a symbolic link, not a file or over 1.5 MB, the board folder being that copy folder, a
-// <stem>.stills that is a file or a link, or a copy that fails. After the path a second line says the timing is estimated.
+// <stem>.stills that is a file or a link, or a copy that fails. After the path a second line says the timing is estimated (for a voiced film), or that the times are the shots' holds (a silent film).
 // Still no browser and no voice.
 // For a draft film longer than 20 s (its length estimated from its narration and holds: no voice is made and no browser
 // starts) it writes a make-explainer `plan` page spec, the storyboard the user answers before the film is built, and
@@ -140,7 +140,11 @@ export function main(argv, { explainerDir = path.join(SKILL_DIR, '..', 'make-exp
     const stills = board === null ? [] : copyStrips(board, checkStrips(board, loaded.film.shots.length), file);
     writePlan(file, storyboardPlan(loaded.film, loaded.timeline, { name: path.basename(opts.film, path.extname(opts.film)), stills }));
     out(`${file}\n`);
-    if (board !== null) out('storyboard: the pictures and the times are on estimated timing (no voice was made)\n');
+    if (board !== null) {
+      out(loaded.film.voice === undefined
+        ? 'storyboard: the pictures use the shots\' holds as their times (the film has no voice)\n'
+        : 'storyboard: the pictures and the times are on estimated timing (no voice was made)\n');
+    }
     out(`build: node ${shellQuote(path.join(explainerDir, 'scripts/build.mjs'))} ${shellQuote(file)}\n`);
     return 0;
   } catch (e) {

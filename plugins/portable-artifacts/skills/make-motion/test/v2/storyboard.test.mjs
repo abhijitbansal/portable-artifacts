@@ -103,13 +103,14 @@ const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024; // make-explainer's limit per image
 const JPEG = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
 
 // A film of `count` shots, each 5 s on its (estimated) timeline, as storyboardPlan takes them.
-function synthetic(count) {
+// `voice` adds a voice to the film: only then is the timeline an estimate (a silent film's times are its holds).
+function synthetic(count, { voice = false } = {}) {
   const shots = Array.from({ length: count }, (_, i) => ({ id: `s${i + 1}`, show: 'statement', say: 'x y z' }));
-  return { film: { look: 'desk', shots }, timeline: { duration: count * 5, shots: shots.map((_, i) => ({ start: i * 5, end: (i + 1) * 5 })) } };
+  return { film: { look: 'desk', ...(voice ? { voice: { name: 'af_heart' } } : {}), shots }, timeline: { duration: count * 5, shots: shots.map((_, i) => ({ start: i * 5, end: (i + 1) * 5 })) } };
 }
 
 test('with stills the plan gains one image section per strip, after the shots, each saying the timing is estimated', () => {
-  const { film, timeline } = synthetic(8); // six shots to a strip: two strips
+  const { film, timeline } = synthetic(8, { voice: true }); // six shots to a strip: two strips
   const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS, stills: ['demo.stills/board-1.jpg', 'demo.stills/board-2.jpg'] });
   const images = plan.sections.filter((s) => s.type === 'image');
   assert.equal(images.length, 2);
@@ -123,6 +124,15 @@ test('with stills the plan gains one image section per strip, after the shots, e
     assert.equal(image.caption, 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.');
   }
   assert.equal(plan.sections.at(-1).type, 'verdict');
+});
+
+// L5: a silent film has no voice to wait for, so its times are its holds, not an estimate.
+test('on a silent film the image caption says the times are the holds, and never "estimated"', () => {
+  const { film, timeline } = synthetic(4);
+  const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS, stills: ['demo.stills/board-1.jpg'] });
+  const [image] = plan.sections.filter((s) => s.type === 'image');
+  assert.equal(image.caption, 'Timing: this film has no voice, so each shot lasts as long as its hold says.');
+  assert.doesNotMatch(image.caption, /estimated|no voice was made/i);
 });
 
 test('a strip with no shot behind it (a board left from a longer film) is not put on the page', () => {
@@ -247,11 +257,23 @@ test('--stills copies the strips beside the plan, and make-explainer\'s validato
   assert.equal(JSON.parse(readFileSync(planFile, 'utf8')).sections.find((s) => s.type === 'image').src, 'plan.stills/board-1.jpg');
   assert.equal(lines.join('').split('\n')[0], planFile);
   const printed = lines.join('').split('\n');
-  assert.equal(printed[1], 'storyboard: the pictures and the times are on estimated timing (no voice was made)', 'the second line, as the brief says');
+  assert.equal(printed[1], 'storyboard: the pictures use the shots\' holds as their times (the film has no voice)', 'the second line: LONG is silent, so nothing is estimated');
   assert.match(printed[2], /^build: node /);
   const check = spawnSync(process.execPath, [VALIDATE, planFile, '--json'], { encoding: 'utf8' });
   assert.equal(check.status, 0, check.stdout + check.stderr);
   assert.deepEqual((JSON.parse(check.stdout).warnings ?? []).filter((w) => w.path !== 'generatedBy'), [], 'no warning either');
+  return undefined;
+});
+
+test('--stills on a voiced film says the pictures and the times are on estimated timing (no voice was made)', (t) => {
+  if (EXPLAINER_SKIP) return t.skip(EXPLAINER_SKIP);
+  const board = boardFolder('board-voiced');
+  const planFile = path.join(dir, 'voiced-stills', 'plan.json');
+  const { lines, io } = capture();
+  const voiced = { ...LONG, voice: { name: 'af_heart' } };
+  assert.equal(main([writeFilm('long-voiced-stills', voiced), '--out', planFile, '--stills', board], io), 0, lines.join(''));
+  assert.equal(lines.join('').split('\n')[1], 'storyboard: the pictures and the times are on estimated timing (no voice was made)');
+  assert.equal(JSON.parse(readFileSync(planFile, 'utf8')).sections.find((s) => s.type === 'image').caption, 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.');
   return undefined;
 });
 

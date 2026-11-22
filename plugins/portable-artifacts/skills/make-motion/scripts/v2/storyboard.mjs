@@ -68,7 +68,10 @@ function lookDecision(film, looks) {
   };
 }
 
+// A voiced film's times are an estimate until its voice is made; a silent film has no voice to wait for, so its times are its
+// holds, and it never says "estimated".
 const STILLS_CAPTION = 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.';
+const STILLS_CAPTION_SILENT = 'Timing: this film has no voice, so each shot lasts as long as its hold says.';
 
 // One image section per board strip (`stills`, paths relative to the plan's folder), in order. Strip `board-<n>.jpg` holds the
 // shots (n - 1) * BOARD_PER_STRIP onward, as the board's own layout does: n is read from the file name, so a missing strip
@@ -80,7 +83,8 @@ function stillSections(film, stills) {
     const ids = film.shots.slice((n - 1) * BOARD_PER_STRIP, n * BOARD_PER_STRIP).map((s) => s.id);
     if (ids.length === 0) return;
     const range = ids.length === 1 ? ids[0] : `${ids[0]} to ${ids.at(-1)}`;
-    sections.push({ type: 'image', title: `Shots ${range} as drawn`, label: 'Pictures', src, alt: `Shots ${ids.join(', ')} of the draft film`, caption: STILLS_CAPTION });
+    const caption = film.voice === undefined ? STILLS_CAPTION_SILENT : STILLS_CAPTION;
+    sections.push({ type: 'image', title: `Shots ${range} as drawn`, label: 'Pictures', src, alt: `Shots ${ids.join(', ')} of the draft film`, caption });
   });
   return sections;
 }

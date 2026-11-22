@@ -140,10 +140,38 @@ test('the recorded proof the section cites exists, passed, and names the agent i
   assert.match(summary, /\*\*PASSED\*\*/);
   assert.match(summary, /Agent that ran, read from the stream: motion-reviewer/);
   assert.match(summary, /model: opus/, 'the summary says the agent file pins opus');
-  assert.doesNotMatch(summary, /account default/, 'the agent runs on its pinned model, not the account default');
+  assert.doesNotMatch(summary, /account default/, 'the summary names no "account default" model (the director ran on one model too, so the proof cannot tell the pin from the default)');
   assert.match(summary, /6173284/, 'the summary names the commit of the agent file it proved');
   const index = fs.readFileSync(path.join(PLUGIN_ROOT, 'eval/results/INDEX.md'), 'utf8');
   assert.ok(index.split('\n').some((l) => l.includes(path.basename(cited[1])) && l.includes('6173284')), 'the INDEX row names the same commit');
+});
+
+// M3: every planted defect was also readable from film.json (value 24 against "forty two percent", highlight "May" against
+// "March was the peak", region blue against "the red button", a shot id aside), and the scorer never checks `looked`. So the
+// proof shows the agent finds defects stated in the spec and its narration and replies in the agent format; it does not show
+// that it reads pictures. The docs say exactly that, and no more.
+test('the docs claim only what the proof measured: defects found in the spec and its narration, not that it reads pictures', () => {
+  const section = secondReviewer(fs.readFileSync(REVIEWING, 'utf8'));
+  assert.match(section, /defects that the film's spec and its narration state/);
+  assert.match(section, /does not show that it reads pictures/);
+  assert.doesNotMatch(section, /evidence it can read a `say` line against its sheets/);
+  const summary = fs.readFileSync(path.join(PLUGIN_ROOT, 'eval/results/summary-motion-reviewer-2026-11-22.md'), 'utf8');
+  assert.match(summary, /[Ee]very planted defect could also be read from `film\.json` alone/);
+  assert.match(summary, /does not show that the agent reads pictures/);
+  assert.match(summary, /`looked`/, 'the summary says the scorer never checks looked');
+  assert.match(summary, /portable-artifacts:motion-reviewer/, 'the summary says the proof ran a workdir file, not the plugin-prefixed agent');
+  const index = fs.readFileSync(path.join(PLUGIN_ROOT, 'eval/results/INDEX.md'), 'utf8');
+  const row = index.split('\n').find((l) => l.includes('summary-motion-reviewer-2026-11-22.md'));
+  assert.ok(row, 'the INDEX row exists');
+  assert.doesNotMatch(row, /Evidence that it reads a `say` line against its sheets/);
+  assert.match(row, /does not show that it reads pictures/);
+});
+
+// L14: the reviewer file pins model: opus whatever the director runs on, so the section says what that costs.
+test('the Second reviewer section says it is optional, pinned to Opus and once per finished film', () => {
+  const section = secondReviewer(fs.readFileSync(REVIEWING, 'utf8'));
+  assert.match(section, /pinned to Opus/);
+  assert.match(section, /once per finished film/);
 });
 
 test('guardrail proof: the cited-summary pattern reads a path from a section and finds none in prose without one', () => {
