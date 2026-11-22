@@ -18,7 +18,7 @@ Measurements outrank the eye. When the report printed a number for a thing, quot
 
 ## Never score
 
-No mark out of ten, no percentage, no "looks great". A review is its notes, and a film with no P0 or P1 notes says so in those words.
+No mark out of ten, no percentage, no "looks great". A review is its notes, and a film with nothing to fix writes `no P0 or P1 notes`.
 
 ## Pictures alone
 
@@ -26,7 +26,7 @@ Ask one question of each shot: with the narration hidden, does the picture still
 
 ## Delivery
 
-End the final report with four labelled lines:
+Put four labelled lines in the final report. They replace its weakest-shot and what-nobody-checked items:
 
 - `weakest shot:` the shot id, and why it is the weakest.
 - `measured:` what the report printed (findings, durations, sizes), copied and not paraphrased.
