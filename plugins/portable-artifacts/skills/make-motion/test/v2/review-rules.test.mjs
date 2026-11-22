@@ -176,6 +176,7 @@ test('[R2-12] the numbers rules.md and the registry state are the ones the code 
     ['cut-variety', ['fix'], `fewer than ${MIN_SEAMS} cuts`],
     ['cut-variety', ['summary'], 'two thirds'],
     ['sameness', ['fix'], `first ${CREATIVE_CAP} findings`],
+    ['overlay-covers', ['fix'], `first ${CREATIVE_CAP} findings`],
   ];
   assert.equal(REPEATED_CUT_SHARE, 2 / 3, 'the summary says "two thirds"');
   assert.equal(SAME_RUN, 3, 'the summary says "Three or more"');

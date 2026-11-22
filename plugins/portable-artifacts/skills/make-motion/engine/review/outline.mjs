@@ -102,7 +102,7 @@ const capGroup = (f) => (f.rule === 'sameness' ? `sameness ${String(f.node ?? ''
 
 /**
  * At most `CREATIVE_CAP` findings of each rule in `CAPPED_HERE` (of each form, for `sameness`): the earliest stay, in their
- * place in the list, and the last of them says how many were left out and in which shots, one id for each. Every other
+ * place in the list, and the last of them says how many were left out and in which shots, each shot's id once. Every other
  * finding passes through untouched; the input is not changed.
  */
 export function capCreative(findings) {
@@ -121,6 +121,6 @@ export function capCreative(findings) {
   }
   return findings.filter((f) => !dropped.has(f)).map((f) => {
     const more = lastKept.get(f);
-    return more === undefined ? f : { ...f, message: `${f.message} (and ${more.length} more: ${more.map((m) => m.shot).join(', ')})` };
+    return more === undefined ? f : { ...f, message: `${f.message} (and ${more.length} more: ${[...new Set(more.map((m) => m.shot))].join(', ')})` };
   });
 }

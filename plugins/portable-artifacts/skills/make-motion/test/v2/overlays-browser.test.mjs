@@ -146,8 +146,10 @@ test('a poster seek and the loop check draw no overlay', async (t) => {
   assert.ok(close(at(...LOGO_CENTRE), GROUND_RGB, 3), 'the poster has no logo');
 });
 
-// The hash (FNV-1a over the RGBA bytes, 1920x1080) of frame 10 of the overlay-free film above, a flat #101820 fill: recorded
-// at b41e178, before the page drew overlays, from both window.__source and the visible canvas after the post pass at 0.
+// The hash (FNV-1a over the RGBA bytes, 1920x1080) of a solid #101820 frame: frame 10 of the overlay-free film above is the
+// bare ground, so the pin says no overlay is drawn on it and the post pass at 0 changes nothing. It is the hash of the fill
+// [16, 24, 32, 255] over every pixel, so it can be re-derived without a checkout. Recorded at b41e178, before the page drew
+// overlays, from both window.__source and the visible canvas after the post pass at 0.
 const FLAT_FRAME_10_HASH = 517316037;
 const shownHash = (s, frame) => s.page.evaluate((i) => {
   window.__seek(i);
@@ -219,6 +221,24 @@ test('a film has the same findings with and without its overlays, when no text m
   const without = await findingsOf(t, reviewFilmOf({}));
   assert.deepEqual(withOverlays, without);
   assert.deepEqual(withOverlays.filter((f) => f.rule === 'overlay-covers'), []);
+});
+
+test('the same findings with and without overlays hold across a cut, a loop and a viral short', async (t) => {
+  const shotOf = (id, background, extra = {}) => ({ id, show: 'free', hold: 2, background, nodes: [reviewText(200, id)], ...extra });
+  const films = {
+    cut: reviewFilmOf({ shots: [shotOf('one', GROUND), shotOf('two', '#182010', { cut: { type: 'slide', smear: true } }), shotOf('three', '#201018', { cut: 'crossfade' })] }),
+    loop: reviewFilmOf({ loop: true, shots: [shotOf('one', GROUND), shotOf('two', '#182010')] }),
+    short: reviewFilmOf({ mode: 'viral', look: undefined, format: '9:16', shots: [shotOf('one', GROUND), shotOf('two', '#182010', { cut: 'cut' })] }),
+  };
+  let compared = 0;
+  for (const [name, film] of Object.entries(films)) {
+    const withOverlays = await findingsOf(t, { ...film, overlays: ON }); if (!withOverlays) return;
+    const without = await findingsOf(t, film);
+    assert.deepEqual(withOverlays, without, name);
+    assert.deepEqual(withOverlays.filter((f) => f.rule === 'overlay-covers'), [], name);
+    compared += withOverlays.length;
+  }
+  assert.ok(compared > 0, 'the films raise findings, so equal is not two empty lists');
 });
 
 test('a still shot under a moving progress bar still raises still', async (t) => {

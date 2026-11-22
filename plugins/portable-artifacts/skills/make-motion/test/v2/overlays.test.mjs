@@ -29,7 +29,7 @@ import { dedupeFindings, overlayCoverItems, restingByShot } from '../../scripts/
 import { RULES } from '../../engine/review/rules.mjs';
 import { CAPPED_HERE } from '../../engine/review/outline.mjs';
 
-const SHOT ={ id: 'a', show: 'statement', say: 'One short line.' };
+const SHOT = { id: 'a', show: 'statement', say: 'One short line.' };
 const FPS = 30;
 const WIDE = { w: 1920, h: 1080 };
 const TALL = { w: 1080, h: 1920 };

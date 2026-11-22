@@ -1,11 +1,11 @@
 // make.mjs --inspect <film time>: one moment of the film as a PNG and a JSON dump. The PNG is the film's own frame, post
 // pass and captions included; the JSON lists every node on it (engine/review/inspect-nodes.mjs: id, box, opacity, and for a
 // text its height in units, its ink and whether it left the safe area), the film's overlays in the same shape, the safe
-// rectangle and, inside a cut's window, the cut. Inside a layer or shader cut's window the PNG is the cut's composition at `p`: the outgoing shot (still moving) and
-// the incoming one, each as faded, moved or covered as the cut's recipe has it at that `p`, so one of them may be partly or
-// wholly gone (a crossfade shows both only for p between 0.3 and 0.5). `nodes` lists the incoming shot alone (the page's
-// __snapshot, engine/page/stage.mjs), so `cut` names the outgoing shot and the second it stands at. No review, no sound,
-// no ffmpeg: the browser writes the picture.
+// rectangle and, inside a cut's window, the cut. Inside a layer or shader cut's window the PNG is the cut's composition at
+// `p`: the outgoing shot (still moving) and the incoming one, each as faded, moved or covered as the cut's recipe has it at
+// that `p`, so one of them may be partly or wholly gone (a crossfade shows both only for p between 0.3 and 0.5). `nodes`
+// lists the incoming shot alone (the page's __snapshot, engine/page/stage.mjs), so `cut` names the outgoing shot and the
+// second it stands at. No review, no sound, no ffmpeg: the browser writes the picture.
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { cutWindowAt } from '../../engine/graph/film.mjs';
