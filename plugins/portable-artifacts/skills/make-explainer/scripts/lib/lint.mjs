@@ -3,6 +3,7 @@
 // section titles. Length is not linted here: soft caps live in budget.mjs.
 import fs from 'node:fs';
 import { proseOnly } from './markdown.mjs';
+import { PLAN_ITEM_TYPES } from './schema.mjs';
 
 const STYLE_FILE = new URL('../../references/style.md', import.meta.url);
 const q = (v) => JSON.stringify(v);
@@ -114,8 +115,6 @@ export function labelTitleWarnings(title, path) {
 
 /** A run of this many consecutive sections of one type reads as one repeated block. */
 export const SAMENESS_RUN = 3;
-// Plan items come in runs by design (semantic.mjs PLAN_ITEM_TYPES): a run of them is not repetition.
-const RUN_EXEMPT = new Set(['decision', 'approval', 'question']);
 
 /** One warning per run of SAMENESS_RUN or more consecutive sections of one type, at the run's third section -> [{ path, message }]. */
 export function sectionSamenessWarnings(sections) {
@@ -125,7 +124,8 @@ export function sectionSamenessWarnings(sections) {
     if (i < sections.length && sections[i]?.type === sections[first]?.type) continue;
     const n = i - first;
     const type = sections[first]?.type;
-    if (n >= SAMENESS_RUN && !RUN_EXEMPT.has(type)) {
+    // Plan items come in runs by design: a run of them is not repetition.
+    if (n >= SAMENESS_RUN && !PLAN_ITEM_TYPES.has(type)) {
       out.push({ path: `sections[${first + SAMENESS_RUN - 1}]`, message: `${n} ${type} sections in a row (sections ${first + 1} to ${i}); a page of one repeated block reads as a list: merge some, or put a different kind of section between them` });
     }
     first = i;
