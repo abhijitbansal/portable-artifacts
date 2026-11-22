@@ -131,6 +131,15 @@ test('a strip with no shot behind it (a board left from a longer film) is not pu
   assert.deepEqual(plan.sections.filter((s) => s.type === 'image').map((i) => i.src), ['x.stills/board-1.jpg']);
 });
 
+test('a strip is tied to its shots by the number in its name: board-1 and board-3 with board-2 missing', () => {
+  const { film, timeline } = synthetic(18);
+  const plan = storyboardPlan(film, timeline, { name: 'gap', looks: PLAIN_LOOKS, stills: ['g.stills/board-1.jpg', 'g.stills/board-3.jpg'] });
+  const images = plan.sections.filter((s) => s.type === 'image');
+  assert.deepEqual(images.map((i) => i.src), ['g.stills/board-1.jpg', 'g.stills/board-3.jpg']);
+  assert.deepEqual(images.map((i) => i.title), ['Shots s1 to s6 as drawn', 'Shots s13 to s18 as drawn']);
+  assert.equal(images[1].alt, 'Shots s13, s14, s15, s16, s17, s18 of the draft film');
+});
+
 test('without stills the plan is unchanged', () => {
   const { film, timeline } = loadFilm(writeFilm('long-nostills', LONG));
   const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS });
@@ -237,7 +246,9 @@ test('--stills copies the strips beside the plan, and make-explainer\'s validato
   assert.deepEqual(readFileSync(copy), JPEG);
   assert.equal(JSON.parse(readFileSync(planFile, 'utf8')).sections.find((s) => s.type === 'image').src, 'plan.stills/board-1.jpg');
   assert.equal(lines.join('').split('\n')[0], planFile);
-  assert.ok(lines.includes('storyboard: the pictures and the times are on estimated timing (no voice was made)\n'), lines.join(''));
+  const printed = lines.join('').split('\n');
+  assert.equal(printed[1], 'storyboard: the pictures and the times are on estimated timing (no voice was made)', 'the second line, as the brief says');
+  assert.match(printed[2], /^build: node /);
   const check = spawnSync(process.execPath, [VALIDATE, planFile, '--json'], { encoding: 'utf8' });
   assert.equal(check.status, 0, check.stdout + check.stderr);
   assert.deepEqual((JSON.parse(check.stdout).warnings ?? []).filter((w) => w.path !== 'generatedBy'), [], 'no warning either');
@@ -281,4 +292,85 @@ test('a folder with no strips, a strip that is a link and a strip over 1.5 MB ea
   assert.equal(big.code, 2);
   assert.match(big.text, /board-1\.jpg is \d\.\d\d MB; make-explainer takes at most 1\.5 MB/);
   assert.equal(existsSync(planFile), false, 'no plan is written when a strip is refused');
+
+  mkdirSync(path.join(dir, 'board-dir', 'board-1.jpg'), { recursive: true }); // a folder where a strip should be
+  const dirStrip = run2(path.join(dir, 'board-dir'));
+  assert.equal(dirStrip.code, 2);
+  assert.match(dirStrip.text, /board-1\.jpg is not a regular file/);
+});
+
+// ---- --stills: the copy never harms a source strip, and a strip is tied to its shots by its number ----
+
+test('--stills naming the folder the strips are copied into (a rerun) is exit 2 and every strip is still there', () => {
+  const folder = boardFolder('rerun/plan.stills', { 'board-1.jpg': JPEG });
+  const planFile = path.join(dir, 'rerun', 'plan.json');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-rerun', LONG), '--out', planFile, '--stills', folder], io), 2);
+  assert.match(lines.join(''), /is the folder the pictures are copied into/);
+  assert.ok(lines.join('').includes(folder), 'names the folder');
+  assert.deepEqual(readFileSync(path.join(folder, 'board-1.jpg')), JPEG, 'the source strip is not deleted');
+  assert.equal(existsSync(planFile), false, 'no plan is written');
+});
+
+test('--stills naming the destination through a link is refused too, and the strip stays', () => {
+  const real = boardFolder('via-link/plan.stills', { 'board-1.jpg': JPEG });
+  symlinkSync(real, path.join(dir, 'via-link', 'alias'));
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-via-link', LONG), '--out', path.join(dir, 'via-link', 'plan.json'), '--stills', path.join(dir, 'via-link', 'alias')], io), 2);
+  assert.match(lines.join(''), /is the folder the pictures are copied into/);
+  assert.ok(existsSync(path.join(real, 'board-1.jpg')));
+});
+
+test('a regular file named <stem>.stills beside the plan is exit 2 naming it, not a stack trace', () => {
+  const board = boardFolder('board-file-in-way');
+  mkdirSync(path.join(dir, 'in-the-way'), { recursive: true });
+  const inTheWay = path.join(dir, 'in-the-way', 'plan.stills');
+  writeFileSync(inTheWay, 'a file');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-in-the-way', LONG), '--out', path.join(dir, 'in-the-way', 'plan.json'), '--stills', board], io), 2);
+  assert.ok(lines.join('').includes(inTheWay), lines.join(''));
+  assert.equal(readFileSync(inTheWay, 'utf8'), 'a file', 'the file is untouched');
+});
+
+test('a symbolic link named <stem>.stills beside the plan is exit 2', () => {
+  const board = boardFolder('board-link-dest');
+  mkdirSync(path.join(dir, 'link-dest', 'elsewhere'), { recursive: true });
+  symlinkSync(path.join(dir, 'link-dest', 'elsewhere'), path.join(dir, 'link-dest', 'plan.stills'));
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-link-dest', LONG), '--out', path.join(dir, 'link-dest', 'plan.json'), '--stills', board], io), 2);
+  assert.match(lines.join(''), /is a symbolic link/);
+  assert.equal(existsSync(path.join(dir, 'link-dest', 'elsewhere', 'board-1.jpg')), false, 'nothing was copied through the link');
+});
+
+test('only strips with shots behind them are copied, and old board copies beside the plan are cleared (other files stay)', () => {
+  const board = boardFolder('board-longer', { 'board-1.jpg': JPEG, 'board-3.jpg': JPEG }); // LONG has 4 shots: one strip
+  const stills = path.join(dir, 'tidy', 'plan.stills');
+  mkdirSync(stills, { recursive: true });
+  writeFileSync(path.join(stills, 'board-9.jpg'), 'old copy');
+  writeFileSync(path.join(stills, 'notes.txt'), 'mine');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-tidy', LONG), '--out', path.join(dir, 'tidy', 'plan.json'), '--stills', board], io), 0, lines.join(''));
+  assert.ok(existsSync(path.join(stills, 'board-1.jpg')));
+  assert.equal(existsSync(path.join(stills, 'board-3.jpg')), false, 'a strip with no shot behind it is not copied');
+  assert.equal(existsSync(path.join(stills, 'board-9.jpg')), false, 'an old copy is cleared');
+  assert.equal(readFileSync(path.join(stills, 'notes.txt'), 'utf8'), 'mine');
+  assert.ok(existsSync(path.join(board, 'board-3.jpg')), 'the source folder is never touched');
+});
+
+test('a folder whose strips are all past the film\'s shots is exit 2', () => {
+  const board = boardFolder('board-all-past', { 'board-5.jpg': JPEG });
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-all-past', LONG), '--out', path.join(dir, 'all-past', 'plan.json'), '--stills', board], io), 2);
+  assert.match(lines.join(''), /no strip in .* has a shot of this 4-shot film behind it/);
+});
+
+test('with board-1 and board-3 the page puts board-3 on its own shots, found by number', () => {
+  const sixteen = { version: 2, look: 'desk', shots: Array.from({ length: 13 }, (_, i) => ({ id: `n${i + 1}`, show: 'free', hold: 3, background: '#f3eee3', nodes: [BAR] })) };
+  const board = boardFolder('board-gap', { 'board-1.jpg': JPEG, 'board-3.jpg': JPEG });
+  const planFile = path.join(dir, 'gap', 'plan.json');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('thirteen', sixteen), '--out', planFile, '--stills', board], io), 0, lines.join(''));
+  const images = JSON.parse(readFileSync(planFile, 'utf8')).sections.filter((s) => s.type === 'image');
+  assert.deepEqual(images.map((i) => i.src), ['plan.stills/board-1.jpg', 'plan.stills/board-3.jpg']);
+  assert.deepEqual(images.map((i) => i.title), ['Shots n1 to n6 as drawn', 'Shots n13 as drawn']);
 });

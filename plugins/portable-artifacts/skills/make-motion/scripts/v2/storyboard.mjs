@@ -70,12 +70,14 @@ function lookDecision(film, looks) {
 
 const STILLS_CAPTION = 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.';
 
-// One image section per board strip (`stills`, paths relative to the plan's folder), in order: strip k holds the shots
-// k * BOARD_PER_STRIP onward, as the board's own layout does. A strip with no shot behind it is left out.
+// One image section per board strip (`stills`, paths relative to the plan's folder), in order. Strip `board-<n>.jpg` holds the
+// shots (n - 1) * BOARD_PER_STRIP onward, as the board's own layout does: n is read from the file name, so a missing strip
+// shifts nothing (a path with no such name takes its place in the list). A strip with no shot behind it is left out.
 function stillSections(film, stills) {
   const sections = [];
   stills.forEach((src, k) => {
-    const ids = film.shots.slice(k * BOARD_PER_STRIP, (k + 1) * BOARD_PER_STRIP).map((s) => s.id);
+    const n = Number(/board-(\d+)\.jpg$/.exec(src)?.[1] ?? k + 1);
+    const ids = film.shots.slice((n - 1) * BOARD_PER_STRIP, n * BOARD_PER_STRIP).map((s) => s.id);
     if (ids.length === 0) return;
     const range = ids.length === 1 ? ids[0] : `${ids[0]} to ${ids.at(-1)}`;
     sections.push({ type: 'image', title: `Shots ${range} as drawn`, label: 'Pictures', src, alt: `Shots ${ids.join(', ')} of the draft film`, caption: STILLS_CAPTION });
