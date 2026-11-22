@@ -32,7 +32,7 @@ import { posterFindings, posterPath, writePoster } from './poster.mjs';
 import { filmFrame, filmSeconds } from './film-time.mjs';
 import { inspectDir, writeInspect } from './inspect.mjs';
 import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf, slicePath } from './slice.mjs';
-import { comparePath, writeComparison } from './compare.mjs';
+import { comparePath, memoiseMusicInput, writeComparison } from './compare.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { logoThrowFinding, pictureLoadFinding } from './picture-finding.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
@@ -427,8 +427,9 @@ export async function makeSound(loaded, timeline, state, io, work, clips = [], {
 
 // `timeline` with its cuts moved onto the beats of the film's music (music.snap): the music plan alone, no cue plan and no WAV.
 // A SpecError when the music is the film's to fix (no steady beat, an anchor the move leaves outside its shot).
-async function snappedTimeline({ film, specDir }, timeline, signal) {
-  return (await fileMusicPlan(await soundSteps(), film, timeline, specDir, signal)).timeline;
+// `steps`: the sound stage's modules when the caller has them already (--compare-looks shares one set across the looks).
+async function snappedTimeline({ film, specDir }, timeline, signal, steps) {
+  return (await fileMusicPlan(steps ?? await soundSteps(), film, timeline, specDir, signal)).timeline;
 }
 
 // The timeline a still (--poster, --inspect) reads film time on: the one the render draws, so with music.snap the cuts are
@@ -482,12 +483,17 @@ async function makeInspect(options, loaded, state, io) {
 
 // What --compare-looks draws for one look's film (compare.mjs `prepare`): its own estimated timeline (look data can lengthen a shot),
 // with the cuts moved onto the beats for a music.snap film, as --poster draws it, and its clips decoded. A film's fault is a SpecError.
-const comparePrepare = (options, io) => async (loaded) => {
-  const { film, specDir } = loaded;
-  const [w, h] = canvasSize(film);
-  const clips = clipUses(film).length === 0 ? [] : await prepareClips({ film, specDir, timeline: loaded.timeline, cacheDir: clipCacheDir(options), canvas: { w, h }, signal: io.signal });
-  const snapped = film.music?.snap === true && wantsSound(film, clips);
-  return { ...loaded, clips, timeline: snapped ? await snappedTimeline(loaded, loaded.timeline, io.signal) : loaded.timeline };
+// The music's beats are detected once for the run, not once per look (memoiseMusicInput).
+const comparePrepare = (options, io) => {
+  let steps = null;
+  return async (loaded) => {
+    const { film, specDir } = loaded;
+    const [w, h] = canvasSize(film);
+    const clips = clipUses(film).length === 0 ? [] : await prepareClips({ film, specDir, timeline: loaded.timeline, cacheDir: clipCacheDir(options), canvas: { w, h }, signal: io.signal });
+    const snapped = film.music?.snap === true && wantsSound(film, clips);
+    if (snapped) steps ??= memoiseMusicInput(await soundSteps());
+    return { ...loaded, clips, timeline: snapped ? await snappedTimeline(loaded, loaded.timeline, io.signal, steps) : loaded.timeline };
+  };
 };
 
 // --compare-looks: one PNG of the anchor shot in every look that can draw it (compare.mjs), beside the MP4 path, on estimated timing,

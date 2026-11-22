@@ -13,13 +13,13 @@ import { UsageError } from '../../shared/cli.mjs';
 import { registries } from '../../engine/registry.mjs';
 import { encodePng } from '../../scripts/lib/png-write.mjs';
 import { readPng } from '../../scripts/v2/png.mjs';
-import { SpecError } from '../../scripts/v2/spec.mjs';
+import { SpecError, validateFilm } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { FilmTimeError } from '../../scripts/v2/film-time.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { absolutePaths, formatText, reportOf } from '../../scripts/v2/report.mjs';
-import { COMPARE_COLUMNS, COMPARE_MAX, COMPARE_TILE_WIDTH, assembleSheet, comparableLooks, comparePath, writeComparison } from '../../scripts/v2/compare.mjs';
+import { COMPARE_COLUMNS, COMPARE_MAX, COMPARE_TILE_WIDTH, assembleSheet, comparableLooks, comparePath, memoiseMusicInput, writeComparison } from '../../scripts/v2/compare.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FILM_PATH = 'film.json';
@@ -77,6 +77,56 @@ test('an overlay a look does not draw refuses that look, with the validator\'s w
   assert.deepEqual(['desk', 'cosmos', 'poster'].map((look) => byLook[look].status).filter((s) => s === 'refused'), []);
 });
 
+// A look is refused only by the anchor shot or a film-wide field. A fault on another shot leaves the anchor drawn, from the film's
+// film-wide fields and the anchor shot alone.
+const TWO_SHOTS = (anchorExtra = {}) => ({ version: 2, mode: 'pro', look: 'desk', shots: [
+  { id: 'hook', show: 'statement', say: 'Every row has a source.' },
+  { id: 'rows', show: 'number', say: 'Four hundred rows.', value: 400, label: 'rows', ...anchorExtra },
+] });
+const UNDERLINE = { on: [{ at: 'start', do: 'underline', target: 'value' }] }; // keynote does not draw the underline device
+
+test('a fault on another shot does not refuse a look: the anchor is drawn alone, and the entry says so', () => {
+  const film = TWO_SHOTS(UNDERLINE);
+  assert.equal(validateFilm(film, { specDir: process.cwd() }).ok, true, 'the premise: the film is valid in desk');
+  const keynote = comparableLooks(film, { shot: 'hook' }).find((c) => c.look === 'keynote');
+  assert.equal(keynote.status, 'drawn');
+  assert.equal(keynote.otherFaults, 1);
+  assert.match(keynote.note, /other shots do not validate in this look \(1 problem\); the anchor is drawn alone/);
+  assert.equal('otherFaults' in comparableLooks(film, { shot: 'hook' }).find((c) => c.look === 'desk'), false, 'a look with no fault has no count');
+});
+
+test('a fault on the anchor refuses the look and the note cites it', () => {
+  const keynote = comparableLooks(TWO_SHOTS(UNDERLINE), { shot: 'rows' }).find((c) => c.look === 'keynote');
+  assert.equal(keynote.status, 'refused');
+  assert.match(keynote.note, /^shots\[1\]\.on\[0\]\.do: device "underline" is not supported by look "keynote"/);
+});
+
+test('a film-wide fault refuses every look that has it, whichever shot is the anchor', () => {
+  const film = { ...TWO_SHOTS(), overlays: { progress: true } };
+  for (const shot of ['hook', 'rows']) assert.match(comparableLooks(film, { shot }).find((c) => c.look === 'marker').note, /^overlays\.progress: /, shot);
+});
+
+test('a parked anchor kind and a fault on another shot are both on the entry', () => {
+  const [rows] = TWO_SHOTS().shots.slice(1);
+  const film = { ...TWO_SHOTS(), shots: [rows, { ...rows, id: 'r2', ...UNDERLINE }] };
+  const keynote = comparableLooks(film, { shot: 'rows' }).find((c) => c.look === 'keynote');
+  assert.deepEqual([keynote.status, keynote.otherFaults], ['parked', 1]);
+  assert.match(keynote.note, /^experimental kind; other shots do not validate/);
+});
+
+test('memoiseMusicInput asks for a music file once, however many looks ask', async () => {
+  let calls = 0;
+  const steps = { other: 1, musicInput: async (film) => { calls += 1; return { file: film.music.src }; } };
+  const memo = memoiseMusicInput(steps);
+  const film = { music: { src: 'm.wav', beats: 'm.beats.json' } };
+  const all = await Promise.all(Array.from({ length: 6 }, () => memo.musicInput(film, '/d', { seconds: 9 })));
+  assert.equal(calls, 1);
+  assert.deepEqual(all.map((a) => a.file), Array(6).fill('m.wav'));
+  assert.equal(memo.other, 1, 'the other steps are untouched');
+  await memo.musicInput({ music: { src: 'n.wav' } }, '/d', {});
+  assert.equal(calls, 2, 'another file is another call');
+});
+
 test('a film that does not validate in a look for any other reason (here a cut) is a refused entry too, never a throw', () => {
   const film = { version: 2, mode: 'pro', look: 'desk', shots: [{ id: 'hook', show: 'statement', say: 'Hello there.', cut: 'no-such-cut' }, { id: 'b', show: 'statement', say: 'Again.' }] };
   const entries = comparableLooks(film);
@@ -120,7 +170,7 @@ test('--compare-looks refuses every flag that makes it do two things, and --esti
     '--outline': ['--outline'], '--phonemes': ['--phonemes'], '--poster': ['--poster', '2'], '--poster-out': ['--poster', '2', '--poster-out', 'p.png'],
     '--inspect': ['--inspect', '2'], '--shot': ['--shot', 'a'], '--range': ['--range', '0..1'], '--subtitles': ['--subtitles', 'srt'],
     '--subtitle-words': ['--subtitles', 'srt', '--subtitle-words'], '--workers': ['--workers', '2'], '--exact': ['--exact'], '--no-music': ['--no-music'],
-    '--estimated': ['--estimated'], '--preview': ['--preview'],
+    '--estimated': ['--estimated'], '--preview': ['--preview'], '--list': ['--list', 'kinds'],
   };
   for (const [flag, argv] of Object.entries(beside)) {
     for (const order of [[FILM_PATH, '--compare-looks', 'a', ...argv], [FILM_PATH, ...argv, '--compare-looks', 'a']]) {
@@ -233,7 +283,14 @@ test('the report carries compare only for a compare run, with its path absolute 
 });
 
 test('the text form says where the sheet is and which looks were drawn, parked or refused', () => {
-  const text = formatText(reportOf({ ...BLANK, compare: COMPARE }), { sheetsDir: null });
+  const text = formatText(reportOf({ ...BLANK, stages: [...BLANK.stages, { name: 'compare', ok: true, seconds: 1 }], compare: COMPARE }), { sheetsDir: null });
   assert.match(text, /^compare: out\/film\.looks\.png \(shot hook; desk, ledger \(parked\), marker \(refused\)\)$/m);
   assert.doesNotMatch(text, /^sheets:|^output:/m, 'no sheets and no video were written');
+});
+
+test('a comparison that failed prints its verdict and findings only: no sheets, output or frame lines', () => {
+  const failed = reportOf({ ...BLANK, validated: true, stages: [{ name: 'validate', ok: true, seconds: 0 }, { name: 'compare', ok: false, seconds: 0 }],
+    findings: [{ kind: 'mechanical', shot: null, path: 'shots[0]', message: 'no look of mode "pro" can draw shot "hook"' }] });
+  assert.equal('compare' in failed, false);
+  assert.equal(formatText(failed, { sheetsDir: null }), 'invalid\nmechanical: shots[0]: no look of mode "pro" can draw shot "hook"');
 });

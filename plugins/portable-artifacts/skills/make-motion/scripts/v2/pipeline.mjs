@@ -51,12 +51,15 @@ export function readFilmFile(specPath) {
 // problems are the film's, thrown as a SpecError with the validation errors' paths.
 // `values`: the film's vars (vars.mjs substitute, before validation; a var left out takes its default).
 // `look`: a look name that replaces the film's own before validation (--compare-looks draws one film in each look).
-export function loadFilm(specPath, { registries = defaultRegistries, values = {}, look } = {}) {
+// `only`: a shot id; the film is read with that shot alone (--compare-looks draws the anchor of a film whose other shots a look refuses).
+export function loadFilm(specPath, { registries = defaultRegistries, values = {}, look, only } = {}) {
   const raw = readFilmFile(specPath);
   // Only a version 2 film is substituted: anything else gets the validator's own message (a version 1 spec's says what to do).
   const filmShaped = raw?.version === 2 && typeof raw === 'object' && !Array.isArray(raw);
   const substituted = filmShaped ? substitute(raw, values) : raw;
-  const spec = filmShaped && typeof look === 'string' ? { ...substituted, look } : substituted;
+  const spec = filmShaped
+    ? { ...substituted, ...(typeof look === 'string' ? { look } : {}), ...(typeof only === 'string' && Array.isArray(substituted.shots) ? { shots: substituted.shots.filter((s) => s?.id === only) } : {}) }
+    : substituted;
   const specDir = path.dirname(path.resolve(specPath));
   const { ok, errors } = validateFilm(spec, { specDir, registries });
   if (!ok) throw new SpecError(errors);

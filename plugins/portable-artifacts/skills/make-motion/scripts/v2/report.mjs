@@ -242,7 +242,8 @@ export function formatText(report, { sheetsDir }) {
   const lines = [verdict(report)];
   for (const f of report.findings) lines.push(findingLine(f));
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
-  if (report.compare) return [...lines, compareLine(report.compare)].join('\n'); // a comparison writes one picture: no sheets, no video
+  // a comparison writes one picture (or none, when no look can draw the shot): never sheets or a video, so no such lines
+  if (report.stages.some((s) => s.name === 'compare')) return [...lines, ...(report.compare ? [compareLine(report.compare)] : [])].join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   if (report.board) lines.push(report.board.length === 0 ? 'board: none written' : `board: ${path.dirname(report.board[0])} (${plural(report.board.length, 'strip')})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);

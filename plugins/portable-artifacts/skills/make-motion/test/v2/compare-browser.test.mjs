@@ -12,12 +12,12 @@ import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and c
 import { findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 import { readPng } from '../../scripts/v2/png.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
-import { launchRunBrowser } from '../../scripts/v2/session.mjs';
+import { launchRunBrowser, openSession } from '../../scripts/v2/session.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { lateFrameOf } from '../../scripts/v2/plan.mjs';
 import { readBeatsFile, writeBeatsFile } from '../../scripts/v2/sound/beats-file.mjs';
 import { snapFilm } from '../../scripts/v2/sound/snap.mjs';
-import { COMPARE_COLUMNS, COMPARE_TILE_WIDTH } from '../../scripts/v2/compare.mjs';
+import { COMPARE_COLUMNS, COMPARE_TILE_WIDTH, writeComparison } from '../../scripts/v2/compare.mjs';
 
 const TILE_HEIGHT = 270; // 480 px of a 16:9 film
 const PRO_LOOKS = ['desk', 'cosmos', 'ledger', 'poster', 'keynote', 'marker'];
@@ -112,6 +112,7 @@ test('two cells of different looks differ; the same look twice would not', async
   if (!await browserAvailable()) return t.skip('no browser');
   const { report, exitCode } = await runMake({ specPath: writeFilm('sheet-differ', FILM), compareLooks: 'hook', out: null });
   assert.equal(exitCode, 0, JSON.stringify(report.findings));
+  assert.equal(headlessPidsUnder(process.pid).size, 0, 'a run that launched its own browser closed it');
   const png = readPng(readFileSync(report.compare.file));
   const cells = PRO_LOOKS.map((_, i) => cellOf(png, i, STAMP_BAND).bytes);
   assert.equal(cells[0].equals(cells[0]), true, 'the premise: the same cell is equal to itself');
@@ -162,6 +163,126 @@ test('the report\'s frame is the anchor\'s late frame in the film\'s own look, a
   assert.equal(exitCode, 0, JSON.stringify(report.findings));
   assert.deepEqual(report.compare.looks.map((c) => c.look), PRO_LOOKS);
   assert.equal(report.compare.frame, report.compare.looks.find((c) => c.look === 'cosmos').frame, 'frame is the one of the film\'s own look');
+  assert.equal(report.compare.frameLook, 'cosmos', 'and the report names that look');
+  return undefined;
+});
+
+// ---- a look is refused by the anchor shot or a film-wide field, never by another shot ----
+
+const KEYNOTE_FILM = { ...FILM, shots: [FILM.shots[0], { ...FILM.shots[1], on: [{ at: 'start', do: 'underline', target: 'value' }] }] }; // keynote does not draw `underline`
+
+test('a device a look refuses on another shot still draws the anchor in that look, marked; on the anchor itself the look is refused', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const specPath = writeFilm('sheet-other-shot', KEYNOTE_FILM);
+  const other = await runMake({ specPath, compareLooks: 'hook', out: null });
+  assert.equal(other.exitCode, 0, JSON.stringify(other.report.findings));
+  const keynote = other.report.compare.looks.find((c) => c.look === 'keynote');
+  assert.deepEqual([keynote.status, keynote.frame], ['drawn', null], 'drawn, and its frame is in the one-shot film: not reported');
+  assert.match(keynote.note, /other shots do not validate in this look/);
+  const png = readPng(readFileSync(other.report.compare.file));
+  const cell = cellOf(png, PRO_LOOKS.indexOf('keynote'), STAMP_BAND);
+  assert.ok(share(cell, REFUSED_BACKGROUND) < 0.05, 'a picture, not a flat cell');
+  assert.notEqual(cell.bytes.equals(cellOf(png, 0, STAMP_BAND).bytes), true);
+  const own = await runMake({ specPath, compareLooks: 'rows', out: null });
+  assert.equal(own.exitCode, 0, JSON.stringify(own.report.findings));
+  const refused = own.report.compare.looks.find((c) => c.look === 'keynote');
+  assert.equal(refused.status, 'refused');
+  assert.match(refused.note, /^shots\[1\]\.on\[0\]\.do: device "underline" is not supported by look "keynote"/);
+  assert.ok(share(cellOf(readPng(readFileSync(own.report.compare.file)), PRO_LOOKS.indexOf('keynote')), REFUSED_BACKGROUND) > 0.5, 'a flat cell');
+  return undefined;
+});
+
+// ---- a page's fault stays in its own cell ----
+
+const REAL = openSession;
+const PAGE_THROWN = (what) => new Error(`page.evaluate: Error: ${what}`); // as Playwright words an Error the page raised on purpose
+
+async function compareWith(name, options) {
+  const specPath = writeFilm(name, FILM);
+  const file = path.join(dir, name, 'out', 'film.looks.png');
+  const result = await writeComparison({ specPath, shot: 'hook', file, ...options });
+  return { result, png: readPng(readFileSync(file)) };
+}
+
+for (const [when, faulty] of [['first', 'desk'], ['last', 'marker']]) {
+  test(`a look whose page raises an error is a labelled flat cell, the look that is ${when} too, and the run goes on`, async (t) => {
+    if (!await browserAvailable()) return t.skip('no browser');
+    const open = async (loaded, o) => { if (loaded.film.look === faulty) throw PAGE_THROWN(`node "bar" cannot be placed in ${faulty}`); return REAL(loaded, o); };
+    const { result, png } = await compareWith(`page-${when}`, { open });
+    const index = PRO_LOOKS.indexOf(faulty);
+    assert.deepEqual(result.looks.map((c) => c.status), PRO_LOOKS.map((l) => (l === faulty ? 'refused' : 'drawn')));
+    assert.equal(result.looks[index].note, `page: node "bar" cannot be placed in ${faulty}`);
+    assert.equal(result.looks[index].frame, null);
+    assert.deepEqual(result.findings.filter((f) => f.kind === 'mechanical'), [], 'a page fault of one look is not a finding of the run');
+    const flat = cellOf(png, index);
+    assert.ok(share(flat, REFUSED_BACKGROUND) > 0.5 && share(flat, REFUSED_BACKGROUND) < 0.995, 'flat, carrying its name and the reason in ink');
+    const drawn = cellOf(png, index === 0 ? 1 : 0);
+    assert.ok(share(drawn, REFUSED_BACKGROUND) < 0.05, 'the others are pictures');
+    return undefined;
+  });
+}
+
+test('a page error only one look logs refuses that look\'s cell, labelled; the run stays ok', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const open = async (loaded, o) => {
+    const session = await REAL(loaded, o);
+    if (loaded.film.look === 'keynote') session.errors.push('keynote console error');
+    return session;
+  };
+  const { result, png } = await compareWith('page-specific', { open });
+  const keynote = result.looks.find((c) => c.look === 'keynote');
+  assert.deepEqual([keynote.status, keynote.note], ['refused', 'page: keynote console error']);
+  assert.equal(result.looks.filter((c) => c.status === 'drawn').length, 5);
+  assert.deepEqual(result.findings.filter((f) => f.kind === 'mechanical'), []);
+  assert.ok(share(cellOf(png, PRO_LOOKS.indexOf('keynote')), REFUSED_BACKGROUND) > 0.5, 'a flat cell');
+  return undefined;
+});
+
+test('a page finding every look shares (no WebGL, say) is reported once, as a note, and refuses nobody', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const open = async (loaded, o) => {
+    const session = await REAL(loaded, o);
+    session.errors.push('shared console error');
+    return session;
+  };
+  const { result } = await compareWith('page-shared', { open });
+  assert.deepEqual(result.looks.map((c) => c.status), Array(6).fill('drawn'));
+  assert.deepEqual(result.findings.map((f) => [f.kind, f.message]), [['creative', 'page: shared console error']]);
+  return undefined;
+});
+
+test('writeComparison launches its own browser once for all the looks, and closes it', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  let launched = 0, closed = 0;
+  const launch = async () => {
+    launched += 1;
+    const browser = await launchRunBrowser();
+    const close = browser.close.bind(browser);
+    browser.close = async () => { closed += 1; return close(); };
+    return browser;
+  };
+  const { result } = await compareWith('launch-count', { launch });
+  assert.equal(result.looks.length, 6);
+  assert.deepEqual([launched, closed], [1, 1]);
+  assert.equal(headlessPidsUnder(process.pid).size, 0, 'no browser is left');
+  return undefined;
+});
+
+test('when every look is refused through runMake the run is exit 1 with one finding at the shot, and no file', async (t) => {
+  const ffmpeg = await ffmpegOrNull();
+  if (!ffmpeg || !findFfprobe({ ffmpeg })) return t.skip('no ffmpeg or ffprobe');
+  const at = path.join(dir, 'all-refused');
+  mkdirSync(at, { recursive: true });
+  writeNoise(path.join(at, 'm.wav'), { seconds: 10 }); // no steady beat, no beats file: music.snap has nothing to move the cuts onto
+  const film = { version: 2, fps: 30, mode: 'pro', shots: [SNAP_FREE('a', 1.9), SNAP_FREE('b', 2.3, 'cut')], music: { src: 'm.wav', snap: true } };
+  const specPath = path.join(at, 'film.json');
+  writeFileSync(specPath, JSON.stringify(film));
+  const { report, exitCode } = await runMake({ specPath, compareLooks: 'b', out: null });
+  assert.equal(exitCode, 1, JSON.stringify(report));
+  assert.equal('compare' in report, false);
+  assert.deepEqual(report.findings.map((f) => [f.kind, f.path]), [['mechanical', 'shots[1]']]);
+  assert.match(report.findings[0].message, /no look of mode "pro" can draw shot "b"/);
+  assert.equal(existsSync(path.join(at, 'out', 'film.looks.png')), false);
   return undefined;
 });
 
