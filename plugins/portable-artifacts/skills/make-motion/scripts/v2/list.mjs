@@ -2,7 +2,7 @@
 // and a one-line summary; a kind also lists its own fields with their types and gives one example shot as JSON.
 import { registries } from '../../engine/registry.mjs';
 import { allLookNames, listedKinds, listedLooksOf } from '../../engine/looks/index.mjs';
-import '../../engine/moves/index.mjs';
+import { motionFacts } from '../../engine/moves/index.mjs';
 import '../../engine/modes/index.mjs';
 import '../../engine/kinds/index.mjs';
 import '../../engine/cuts/index.mjs';
@@ -47,6 +47,14 @@ function kindEntry(entry, def, name) {
 // A move's entry: its values in each listed look (null where the look does not use it).
 const moveLooks = (name) => Object.fromEntries(registries.looks.names().map((look) => [look, registries.looks.get(look).moves?.[name] ?? null]));
 
+// A move's facts in each look: its bounce and visible length (motionFacts), null where the look does not use it. `letters`
+// reports one letter's curve and carries the look's stagger: a word's own length depends on its letter count.
+const moveFacts = (name) => Object.fromEntries(registries.looks.names().map((look) => {
+  const move = registries.looks.get(look).moves?.[name] ?? null;
+  if (move === null) return [look, null];
+  return [look, { ...motionFacts(move), ...(move.stagger !== undefined ? { stagger: move.stagger } : {}) }];
+}));
+
 // A cut's entry: its family, its directions (the first the default, or null), its default length, whether it takes
 // `smear`, one valid `cut` value, the listed looks whose palette holds it (every look may use every cut), and whether it
 // shows the outgoing shot still moving (`live`: a layer or shader cut; a node cut holds its last frame), and whether it can
@@ -65,7 +73,7 @@ function entryOf(listName, name) {
   const entry = { name, summary: def.summary ?? '', ...(def.experimental === true ? { experimental: true } : {}) };
   if (listName === 'kinds') return kindEntry(entry, def, name);
   if (listName === 'looks') return { ...entry, overlays: lookOverlays(def) };
-  if (listName === 'moves') return { ...entry, looks: moveLooks(name) };
+  if (listName === 'moves') return { ...entry, looks: moveLooks(name), facts: moveFacts(name) };
   if (listName === 'cuts') return cutEntry(entry, def, name);
   return entry;
 }
@@ -82,8 +90,8 @@ function namesOf(listName, all) {
  * @param {{ all?: boolean }} [options] all: the experimental looks and the parked kinds too (--list looks --all, --list
  *   kinds --all), each with experimental: true
  * @returns {{ name: string, summary: string, fields?: { name: string, type: string, required: boolean }[], example?: object | null,
- *   looks?: string[] | Record<string, object | null> }[]} a kind's looks: the listed looks that ship it; a move's: its
- *   values in each listed look
+ *   looks?: string[] | Record<string, object | null>, facts?: Record<string, object | null> }[]} a kind's looks: the listed
+ *   looks that ship it; a move's: its values in each listed look, and `facts` its { bounce, visible } there (null where unused)
  */
 export function listEntries(listName, { all = false } = {}) {
   if (listName === 'voices') return voiceEntries();
@@ -92,13 +100,19 @@ export function listEntries(listName, { all = false } = {}) {
 
 const fieldText = (f) => `${f.name}${f.required ? '*' : ''}: ${f.type}`;
 
-// A move's values as one short phrase: "outCubic 0.6 s, 24 units, steps at 12 fps, from 0.6", or "not used".
-function moveText(move) {
+// A move's values as one short phrase: "outCubic 0.6 s, 24 units, steps at 12 fps, from 0.6, bounce 10%, visible 0.39 s"
+// (a bounce only above 0; a `letters` move ends with its stagger), or "not used".
+function moveText(move, facts) {
   if (move === null) return 'not used';
   const parts = [`${move.ease} ${move.dur} s`];
   if (move.dist !== undefined) parts.push(`${move.dist} units`);
   if (move.step !== undefined) parts.push(`steps at ${move.step} fps`);
   if (move.scale !== undefined) parts.push(`from ${move.scale}`);
+  if (facts) {
+    if (facts.bounce > 0) parts.push(`bounce ${Math.round(facts.bounce * 100)}%`);
+    parts.push(`visible ${facts.visible} s`);
+    if (facts.stagger !== undefined) parts.push(`stagger ${facts.stagger} s`);
+  }
   return parts.join(', ');
 }
 
@@ -123,7 +137,7 @@ export function formatList(listName, entries) {
     if (e.fields) lines.push(`  fields: ${e.fields.map(fieldText).join(', ') || 'none of its own'}`);
     if (listName === 'cuts') lines.push(`  ${cutText(e)}`);
     if (e.example) lines.push(`  example: ${JSON.stringify(e.example)}`);
-    if (listName === 'moves') lines.push(...Object.entries(e.looks).map(([look, move]) => `  ${look}: ${moveText(move)}`));
+    if (listName === 'moves') lines.push(...Object.entries(e.looks).map(([look, move]) => `  ${look}: ${moveText(move, e.facts?.[look])}`));
     return lines.join('\n');
   });
   return [...head, ...blocks].join('\n');

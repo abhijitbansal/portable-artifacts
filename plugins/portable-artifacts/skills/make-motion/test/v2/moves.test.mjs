@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registries, createRegistry } from '../../engine/registry.mjs';
-import { MOVE_NAMES, moveOf } from '../../engine/moves/index.mjs';
+import { MOVE_NAMES, moveOf, motionFacts } from '../../engine/moves/index.mjs';
 import { validateLook } from '../../engine/looks/index.mjs';
 import { listEntries, formatList } from '../../scripts/v2/list.mjs';
 
@@ -135,6 +135,54 @@ test('--list moves gives nine entries with each listed look values', () => {
   assert.match(text, /^moves \(9\)/);
   assert.match(text, /^settle {2}/m);
   assert.match(text, /^ {2}desk: outCubic 0\.6 s/m);
+});
+
+// ---- motionFacts: a move read as bounce and visible length ----
+
+test('a linear move is visible for 99% of its length and does not bounce', () => assert.deepEqual(motionFacts({ ease: 'linear', dur: 1 }), { bounce: 0, visible: 0.99 }));
+test('outQuad settles at 90% of its length, outCubic at 78.5%', () => {
+  assert.equal(motionFacts({ ease: 'outQuad', dur: 1 }).visible, 0.9);
+  assert.equal(motionFacts({ ease: 'outCubic', dur: 0.5 }).visible, 0.39);
+});
+test('outBack passes its end by ten percent; inBack does not bounce', () => {
+  assert.equal(motionFacts({ ease: 'outBack', dur: 1 }).bounce, 0.1);
+  assert.equal(motionFacts({ ease: 'inBack', dur: 1 }).bounce, 0);
+});
+test('a spring at half damping bounces 16%; a critically damped one does not', () => {
+  assert.equal(motionFacts({ ease: 'spring(100,10)', dur: 1 }).bounce, 0.16);
+  assert.equal(motionFacts({ ease: 'spring(100,20)', dur: 1 }).bounce, 0);
+});
+test('a spring is visible for less than its length', () => assert.ok(motionFacts({ ease: 'spring(100,10)', dur: 1 }).visible < 1));
+test('the two new forms have facts', () => {
+  assert.equal(motionFacts({ ease: 'steps(4)', dur: 1 }).visible, 1);
+  assert.equal(motionFacts({ ease: 'steps(4,start)', dur: 1 }).visible, 0.75);
+  assert.ok(motionFacts({ ease: 'cubic-bezier(0.34,1.56,0.64,1)', dur: 1 }).bounce > 0);
+});
+test('a move of no length has no facts to show', () => assert.deepEqual(motionFacts({ ease: 'linear', dur: 0 }), { bounce: 0, visible: 0 }));
+test('--list moves prints them, and --json carries them', () => {
+  assert.match(formatList('moves', listEntries('moves')), /desk: outCubic 0\.5 s, 24 units, visible 0\.39 s/);
+  assert.deepEqual(listEntries('moves').find((m) => m.name === 'rise').facts.desk, { bounce: 0, visible: 0.39 });
+});
+test('a bounce prints as a percent; a look that does not use a move has null facts and its line is unchanged', () => {
+  const entries = listEntries('moves');
+  const pop = entries.find((m) => m.name === 'pop');
+  const bouncing = Object.entries(pop.facts).find(([, f]) => f !== null && f.bounce > 0);
+  assert.ok(bouncing, 'some look pops with a bounce');
+  assert.match(formatList('moves', entries), new RegExp(`^ {2}${bouncing[0]}: .*, bounce ${Math.round(bouncing[1].bounce * 100)}%, visible `, 'm'));
+  const slam = entries.find((m) => m.name === 'slam');
+  const unused = Object.entries(slam.looks).find(([, move]) => move === null);
+  assert.ok(unused, 'some look does not slam');
+  assert.equal(slam.facts[unused[0]], null);
+  assert.match(formatList('moves', entries), new RegExp(`^ {2}${unused[0]}: not used$`, 'm'));
+});
+test('letters report one letter plus the stagger, and the text prints the stagger', () => {
+  const letters = listEntries('moves').find((m) => m.name === 'letters');
+  assert.deepEqual(letters.facts.cosmos, { ...motionFacts({ ease: 'steps(3)', dur: 0.18 }), stagger: 0.035 });
+  assert.equal(letters.facts.cosmos.visible, 0.18);
+  assert.equal(letters.facts.desk, null);
+  assert.match(formatList('moves', listEntries('moves')), /^ {2}cosmos: steps\(3\) 0\.18 s, visible 0\.18 s, stagger 0\.035 s$/m);
+  const lines = listEntries('moves').find((m) => m.name === 'lines');
+  assert.equal(Object.hasOwn(lines.facts.desk, 'stagger'), false);
 });
 
 test('make --list moves exits 0; --list movs exits 2 naming the accepted lists', () => {
