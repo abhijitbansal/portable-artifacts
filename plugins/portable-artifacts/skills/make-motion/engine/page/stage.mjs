@@ -20,6 +20,7 @@ import { createCutPictures } from './cut-pictures.mjs';
 import { createAccumulator } from './accumulate.mjs';
 import { createClipFrames } from './clip-frames.mjs';
 import { resolveShotCut } from '../cuts/resolve.mjs';
+import { floodColor } from '../cuts/layers.mjs';
 import { shaderUniforms, standInOf } from '../cuts/shaders/index.mjs';
 
 // The face the review sheets stamp their tiles with; the sheet code reads window.__stampFamily.
@@ -61,7 +62,7 @@ const keyOfP = (p) => Math.round(p * KEY_DECIMALS) / KEY_DECIMALS;
 // can stand still while the cut moves: the key then carries the cut, its direction, its progress and the outgoing shot
 // (and the second it stands at, when it is live).
 // Inside a smeared window they are the still nodes alone (none for a punch): the key carries the smeared cut the same way.
-function stateKeyOf(state) {
+function stateKeyOf(state, look) {
   const base = stateKey({ background: state.background, sampled: state.sampled });
   if (state.smear !== undefined) {
     const { name, direction, p } = state.smear.cut;
@@ -71,16 +72,18 @@ function stateKeyOf(state) {
   const { name, direction, p } = state.cut;
   // a live outgoing shot stands at a different second each frame: the key carries it, so no such frame reads as held
   const outgoing = state.from.live === true ? `:t${keyOfP(state.from.t)}` : '';
-  return `${base}|cut:${name}:${direction}:${keyOfP(p)}|from:${state.from.shot}${outgoing}`;
+  // a flood paints the colour its look picks for these two grounds: the key carries it, so a held frame is judged by what is drawn
+  const flood = name === 'flood' ? `|flood:${floodColor(look, groundsOf(state))}` : '';
+  return `${base}|cut:${name}:${direction}:${keyOfP(p)}|from:${state.from.shot}${outgoing}${flood}`;
 }
 
 // The keys that say whether two frames look alike, over `frameState(i)`. drawKey: the sampled state, plus the frame itself
 // when a field on screen is painted from the time (the sampled state alone does not say such a field moved). captureKey:
 // what frame i looks like once the post pass has run, the 2D key plus the grain pattern when there is grain.
-function frameKeys({ frameState, fps, grainNow }) {
+function frameKeys({ frameState, fps, grainNow, look }) {
   const drawKey = (i) => {
     const state = frameState(i);
-    return hasAnimatedField(state.sampled) ? `${stateKeyOf(state)}|frame${i}` : stateKeyOf(state);
+    return hasAnimatedField(state.sampled) ? `${stateKeyOf(state, look)}|frame${i}` : stateKeyOf(state, look);
   };
   const captureKey = (i) => (grainNow() > 0 ? `${drawKey(i)}|grain${grainPhase(i / fps)}` : drawKey(i));
   return { drawKey, captureKey };
@@ -116,12 +119,15 @@ function lineInkOf(ctx) {
   };
 }
 
+// The two grounds a cut window covers, the outgoing shot's then the incoming one's (a flood avoids both: floodColor).
+const groundsOf = (state) => [state.from.background, state.background];
+
 // The recipe a frame inside a cut window is composed by in 2D (engine/cuts/layers.mjs): a layer cut's own, or the
 // stand-in of a shader cut the post pass cannot run.
-function cutRecipe(cut, canvas, look) {
+function cutRecipe(cut, canvas, look, grounds) {
   const entry = registries.cuts.get(cut.name);
   const at = cut.at ?? null; // the canvas point the cut opens from (frameAt's cut.at), a stand-in included
-  if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas, look, at });
+  if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas, look, at, grounds });
   if (entry.family === 'shader') {
     const standIn = standInOf(entry, cut.direction);
     return standIn.entry.layers({ p: cut.p, direction: standIn.direction, canvas, look, at });
@@ -250,10 +256,10 @@ async function init() {
       const { shader } = registries.cuts.get(state.cut.name);
       return { from: cutPictures.outgoing(state, captions), shader: state.cut.name, params: shaderUniforms(shader, { p: state.cut.p, direction: state.cut.direction, canvas, ground: state.background }) };
     }
-    cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas, look), t, captions);
+    cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas, look, groundsOf(state)), t, captions);
     return null;
   };
-  const keys = frameKeys({ frameState, fps, grainNow: () => grain });
+  const keys = frameKeys({ frameState, fps, grainNow: () => grain, look });
   const snapshotOf = (sampled) => annotate(sampled, { lineInk: lineInkOf(document.createElement('canvas').getContext('2d')) });
   // Shot `index` alone at frame i: only its own nodes, as they stand inside a cut window where both shots are drawn.
   const snapshotShot = (index, i) => {

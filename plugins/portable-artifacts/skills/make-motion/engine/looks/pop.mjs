@@ -67,7 +67,7 @@ export const pop = {
   // fade (look review gate-cuts-3), so a pop film naming it is refused and desk and cosmos keep it
   cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
-  cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'flood','polka-dots', 'glitch-memories', 'cross-zoom'],
+  cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'flood', 'polka-dots', 'glitch-memories', 'cross-zoom'],
   // the motion blur on the cuts that move (engine/cuts/smear.mjs)
   // the punch gets 0.3 s to land and settle (look review gate-cuts-1 P1: 0.2 s read as a 3% nudge)
   // slides and covers smear only when they move across the frame: on the condensed type the blur of a vertical move

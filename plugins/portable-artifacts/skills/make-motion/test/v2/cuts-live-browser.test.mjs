@@ -5,6 +5,9 @@
 // One browser at a time: run with --test-concurrency=1; skips without a browser.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import '../../scripts/v2/list.mjs'; // registers the looks, kinds and cuts
+import { registries } from '../../engine/registry.mjs';
+import { buildTimeline } from '../../engine/script/timing.mjs';
 import { openStage } from './helpers/stage.mjs';
 
 const FPS = 30;
@@ -112,6 +115,50 @@ test('flood: the window\'s first frame is the outgoing still and the frame after
   assert.notEqual(incoming, outgoing);
   assert.equal(await frameHash(s, START + FLOOD_WINDOW + 5), incoming);
   assert.notEqual(await frameHash(s, START + 3), outgoing, 'inside the window the frame is neither');
+});
+
+test('flood seek order: the window\'s frames read forwards, then backwards, then backwards in a fresh page, hash the same', async (t) => {
+  const s = await open(t, floodFilm()); if (!s) return;
+  const frames = Array.from({ length: FLOOD_WINDOW }, (_, k) => START + k);
+  const forwards = [];
+  for (const i of frames) forwards.push(await frameHash(s, i));
+  assert.equal(new Set(forwards).size > FLOOD_WINDOW / 2, true, 'the window\'s frames are not all one picture');
+  const backwards = [];
+  for (const i of [...frames].reverse()) backwards.unshift(await frameHash(s, i));
+  assert.deepEqual(backwards, forwards);
+  await s.close();
+  const fresh = await open(t, floodFilm());
+  const reversed = [];
+  for (const i of [...frames].reverse()) reversed.unshift(await frameHash(fresh, i));
+  assert.deepEqual(reversed, forwards);
+});
+
+// A flood never paints the colour of a ground it covers: poster's red is also one of its grounds. Five statements in
+// poster (seed 1, 9:16) sit on blue, paper, black, red, blue; each cut is a flood.
+const POSTER_SHOTS = ['One.', 'Two.', 'Three.', 'Four.', 'Five.'].map((say, i) => ({ id: `s${i}`, show: 'statement', say, ...(i > 0 ? { cut: 'flood' } : {}) }));
+const posterFilm = () => ({ version: 2, mode: 'viral', look: 'poster', format: '9:16', fps: FPS, seed: 1, shots: POSTER_SHOTS });
+const startOf = (index) => Math.round(buildTimeline(posterFilm(), { fps: FPS }).shots[index].start * FPS);
+const rgbOf = (hex) => [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16));
+const poster = () => registries.looks.get('poster').palette;
+
+test('flood in poster: out of the red ground it is the ink, into the red ground the paper, and the key says which', async (t) => {
+  const s = await open(t, posterFilm()); if (!s) return;
+  const red = poster().accent;
+  const cases = [[3, poster().paper, 'into red from black'], [4, poster().ink, 'out of red into blue']]; // [boundary, colour]
+  for (const [boundary, colour, why] of cases) {
+    const frame = startOf(boundary) + 3;
+    for (const pixel of await samples(s, frame, 0.5)) {
+      rgbOf(colour).forEach((level, k) => assert.ok(Math.abs(level - pixel[k]) <= LEVELS, `${why}: ${pixel} is not ${colour}`));
+      assert.notDeepEqual(pixel.map((level, k) => Math.abs(level - rgbOf(red)[k]) <= LEVELS), [true, true, true], `${why}: red over red`);
+    }
+    assert.match(await s.page.evaluate((i) => window.__stateKey(i), frame), new RegExp(`\\|flood:${colour}`), why);
+  }
+  assert.deepEqual(s.errors, []);
+});
+
+test('a window that is not a flood has no flood in its key', async (t) => {
+  const s = await open(t, film(wipe)); if (!s) return;
+  assert.doesNotMatch(await s.page.evaluate((i) => window.__stateKey(i), START + 3), /flood/);
 });
 
 test('a film with no layer or shader cut still makes no second picture', async (t) => {

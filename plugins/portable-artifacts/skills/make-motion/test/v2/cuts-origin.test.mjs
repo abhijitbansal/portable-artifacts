@@ -12,7 +12,7 @@ import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
 import { listEntries, formatList } from '../../scripts/v2/list.mjs';
-import { allLookNames } from '../../engine/looks/index.mjs';
+import { allLookNames, validateLook } from '../../engine/looks/index.mjs';
 import { measure, canvasOf, viralOf, IMAGES, CLIP, FPS, filmOf, expandIn } from './helpers/kinds.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -167,6 +167,50 @@ test('a flood may name a target of the shot before: it validates, and the built 
   const [x, y] = built.frameAt(timeline.shots[1].start + 0.1).cut.at;
   assert.ok(x > 0 && x < 1920 && y > 0 && y < 1080);
 });
+// A flood never paints the colour of a ground it covers (fix round 1): poster's accent is also one of its grounds, so the
+// look lists the colours to try (`cutFlood.colors`) and the flood takes the first one that differs from both grounds.
+const poster = () => registries.looks.get('poster');
+const ground = (key) => poster().palette[key];
+const floodOn = (...grounds) => flood(0.5, { look: poster(), grounds }).flood.color;
+
+test('a poster flood out of, or into, the red ground is not red; the accent stays the colour where no ground is red', () => {
+  assert.deepEqual([...poster().cutFlood.colors], ['accent', 'ink', 'paper']);
+  assert.equal(floodOn(ground('accent'), ground('accent2')), ground('ink'));
+  assert.equal(floodOn(ground('accent2'), ground('accent')), ground('ink'));
+  assert.equal(floodOn(ground('paper'), ground('accent2')), ground('accent'));
+  assert.equal(floodOn(ground('ink'), ground('paper')), ground('accent'));
+});
+test('a flood between the red and the ink ground takes the next colour, and when every colour is a ground, the last', () => {
+  assert.equal(floodOn(ground('accent'), ground('ink')), ground('paper'));
+  assert.equal(floodOn(ground('ink'), ground('accent')), ground('paper'));
+  assert.equal(floodOn(ground('accent'), ground('ink').toUpperCase(), ground('paper')), ground('paper'), 'all three are grounds: the last colour');
+  assert.equal(floodOn(ground('accent').toUpperCase(), ground('accent2')), ground('ink'), 'hex case does not matter');
+});
+test('a look with no cutFlood floods in its accent, even over a ground of that colour, and a film with no grounds gets it', () => {
+  assert.equal(registries.looks.get('desk').cutFlood, undefined);
+  const desk = registries.looks.get('desk');
+  assert.equal(flood(0.5, { look: desk }).flood.color, desk.palette.accent);
+  assert.equal(flood(0.5, { look: desk, grounds: [desk.palette.accent, desk.palette.paper] }).flood.color, desk.palette.accent);
+});
+test('every look that lists colours for the flood names palette keys it has', () => {
+  for (const name of allLookNames()) {
+    const look = registries.looks.get(name);
+    for (const key of look.cutFlood?.colors ?? []) assert.equal(Object.hasOwn(look.palette, key), true, `${name}: ${key}`);
+  }
+});
+
+const withFlood = (cutFlood) => ({ ...registries.looks.get('desk'), name: 'flood-test', cutFlood });
+test('validateLook refuses a cutFlood that is not { colors: [palette keys] }, naming the field', () => {
+  assert.doesNotThrow(() => validateLook(withFlood({ colors: ['accent', 'ink'] })));
+  assert.doesNotThrow(() => validateLook(withFlood(undefined)));
+  assert.throws(() => validateLook(withFlood('accent')), /look "flood-test": cutFlood must be an object of colors, got accent/);
+  assert.throws(() => validateLook(withFlood({ colors: [] })), /look "flood-test": cutFlood\.colors must be a non-empty list of palette colours/);
+  assert.throws(() => validateLook(withFlood({ colors: 'accent' })), /cutFlood\.colors must be a non-empty list of palette colours/);
+  assert.throws(() => validateLook(withFlood({ colors: ['accent', 'teal'] })), /look "flood-test": cutFlood\.colors\.1 "teal" is not a palette colour \(paper, ink, ink2, accent/);
+  assert.throws(() => validateLook(withFlood({ colors: ['toString'] })), /cutFlood\.colors\.0 "toString" is not a palette colour/);
+  assert.throws(() => validateLook(withFlood({ colors: ['accent'], color: 'ink' })), /cutFlood\.color is not a field; it takes colors/);
+});
+
 test('every look names a cue for the flood, lists it where it lists the iris, and pop and poster reach for it', () => {
   for (const name of allLookNames()) {
     const look = registries.looks.get(name);

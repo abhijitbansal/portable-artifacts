@@ -114,6 +114,9 @@ export const poster = {
   cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'cover', 'iris', 'flood', 'wipe', 'punch', 'slide'],
+  // the accent is also a ground (red), so a flood out of or into the red ground takes the ink, and the paper between the
+  // red and the ink ground: the first colour that is neither ground (engine/cuts/layers.mjs floodColor)
+  cutFlood: { colors: ['accent', 'ink', 'paper'] },
   // a cover is a hard sheet of the next ground (the bar that wipes is the cut paper): no smear
   // the lead's ruling on gate-poster-3 (ruling 7 revised: no word half sliced on a HELD frame; a sheet that moves every
   // frame holds none): `ease` 'inOutQuad', a steady curve, so the sheet moves every frame (the snap made both covers

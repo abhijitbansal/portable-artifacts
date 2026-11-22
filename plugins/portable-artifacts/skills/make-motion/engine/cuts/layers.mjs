@@ -3,6 +3,8 @@
 // (engine/graph/film.mjs frameAt gives both inside its window). Its entry's layers({ p, direction, canvas }) is a pure recipe for that composition:
 //   { under: 'from' | 'to', from: Pose, to: Pose, backdrop: 'from' | 'to' | null, flood: { color, circle: [cx, cy, r] } | null }
 // `flood` (the flood cut only, null in the others) is a disc of one colour laid between the picture under and the one over.
+// layers() also takes `grounds`, the two shots' background colours (the outgoing one's, then the incoming one's): the flood
+// colour is the look's first cutFlood colour that is neither (floodColor).
 //   Pose = { opacity, clip: { rect: [x, y, w, h] } | { circle: [cx, cy, r] } | null, scale (about `origin`), origin:
 //            [x, y] | null (null: the canvas centre), blur (px), dim (0..1: black laid over the picture inside its clip) }
 // An iris, a zoom and a flood may be given `at`, a canvas point (a cut's origin, engine/graph/film.mjs): they open from it.
@@ -59,6 +61,23 @@ const smoothstep = (lo, hi, v) => {
 const leaving = (p) => 1 - smoothstep(0, CLEAR_OUT, p);
 const arriving = (p) => smoothstep(ARRIVE_FROM, 1, p);
 
+// The colours a flood may paint, as palette keys, when the look names none (look.cutFlood.colors).
+const FLOOD_COLORS = Object.freeze(['accent']);
+
+/**
+ * The colour a flood paints between two grounds: the first of the look's flood colours (look.cutFlood.colors, else the
+ * accent) that differs from every colour in `grounds` (the outgoing and the incoming shot's ground), so the disc never
+ * paints a ground over itself; the last colour when each matches one. Hex case does not matter.
+ */
+export function floodColor(look, grounds = []) {
+  const keys = look?.cutFlood?.colors ?? FLOOD_COLORS;
+  const missing = keys.filter((key) => !Object.hasOwn(look?.palette ?? {}, key));
+  if (missing.length > 0) throw new Error(`flood.layers: the look's palette has no ${missing.join(', ')}`);
+  const colors = keys.map((key) => look.palette[key]);
+  const taken = grounds.map((ground) => String(ground).toLowerCase());
+  return colors.find((color) => !taken.includes(color.toLowerCase())) ?? colors.at(-1);
+}
+
 const LAYERS = Object.freeze({
   crossfade: (e, { p }) => recipe('from', pose({ opacity: leaving(p) }), pose({ opacity: arriving(p) })),
   // a dip: the outgoing shot fades to the incoming background over the first half, the incoming one up over the second
@@ -74,9 +93,8 @@ const LAYERS = Object.freeze({
   blur: (e, { p, canvas }) => recipe('from', pose({ opacity: leaving(p) }), pose({ opacity: arriving(p), blur: Math.max(0, BLUR_SHARE * Math.min(canvas.w, canvas.h) * (1 - e)) })),
   // the look's accent grows as a circle from the point over the outgoing picture (the first half), then the incoming
   // picture opens as a circle from the same point over the colour (the second); the colour is the whole frame at p 0.5
-  flood: (e, { p, canvas, look, at }) => {
-    const color = look?.palette?.accent;
-    if (typeof color !== 'string') throw new Error('flood.layers: needs a look whose palette has an accent');
+  flood: (e, { p, canvas, look, at, grounds }) => {
+    const color = floodColor(look, grounds);
     const centre = at ?? [canvas.w / HALF, canvas.h / HALF], reach = cornerReach(canvas, centre);
     const eased = ease(LAYER_EASE);
     const grown = eased(clamp01(p * HALF)), opened = eased(clamp01(p * HALF - 1));
@@ -90,11 +108,11 @@ function defineLayer(name, { directions = null, summary, example, origin = false
   return Object.freeze({
     family: 'layer', dur, summary, example, directions, smearable: false, incomingOnly: false,
     ...(origin ? { origin: true } : {}), // the cut may open from a point (`at`, resolve.mjs)
-    layers({ p, direction, canvas, look = null, at = null }) {
+    layers({ p, direction, canvas, look = null, at = null, grounds = [] }) {
       if (!Number.isFinite(p)) throw new Error(`${name}.layers: p must be a finite number, got ${p}`);
       if (directions !== null && !directions.includes(direction)) throw new Error(`${name}.layers: direction must be one of ${directions.join(', ')}, got ${direction}`);
       const q = clamp01(p);
-      return build(ease(LAYER_EASE)(q), { p: q, direction, canvas, look, at });
+      return build(ease(LAYER_EASE)(q), { p: q, direction, canvas, look, at, grounds });
     },
   });
 }

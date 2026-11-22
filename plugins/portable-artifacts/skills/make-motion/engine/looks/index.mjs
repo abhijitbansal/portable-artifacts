@@ -70,6 +70,8 @@ import { marker } from './marker.mjs';
  * @property {string[]} cuts  the cuts a film in this look may name: registered cut names (every shipped look lists all)
  * @property {string[]} cutPalette  the look's preferred cuts, in order: a non-empty subset of `cuts` holding "cut" (what
  *   --list cuts names per look and the director reaches for; a cut outside it is not a finding)
+ * @property {{ colors: string[] }} [cutFlood]  the palette keys the flood cut may paint, in order of preference: the first
+ *   that differs from both the outgoing and the incoming shot's ground wins (default: the accent alone)
  * @property {Record<string, { direction?: string, duration?: number, smear?: boolean, smearAxes?: string[] }>} [cutStyle]
  *   the look's defaults per cut, each checked against that cut's options (engine/cuts/resolve.mjs resolveCut reads them
  *   after the shot's and the film's root cut); `smear: true` makes a smearable cut draw its motion smear, and
@@ -342,6 +344,23 @@ function cutMotionErrors(name, look) {
   });
 }
 
+// look.cutFlood (absent, or { colors: [palette keys] }): the colours the flood cut may paint, tried in order, the first one
+// that differs from both grounds it covers winning (engine/cuts/layers.mjs floodColor); absent: the accent alone.
+const CUT_FLOOD_KEYS = Object.freeze(['colors']);
+
+function cutFloodErrors(name, look) {
+  const flood = look.cutFlood;
+  if (flood === undefined) return [];
+  const at = `look "${name}": cutFlood`;
+  if (!isPlainObject(flood)) return [`${at} must be an object of ${CUT_FLOOD_KEYS.join(', ')}, got ${String(flood)}`];
+  const unknown = Object.keys(flood).filter((key) => !CUT_FLOOD_KEYS.includes(key)).map((key) => `${at}.${key} is not a field; it takes ${CUT_FLOOD_KEYS.join(', ')}`);
+  const palette = isPlainObject(look.palette) ? look.palette : {};
+  const names = Object.keys(palette).join(', ');
+  if (!Array.isArray(flood.colors) || flood.colors.length === 0) return [...unknown, `${at}.colors must be a non-empty list of palette colours (${names}), got ${JSON.stringify(flood.colors) ?? 'undefined'}`];
+  const outside = flood.colors.map((key, i) => (typeof key === 'string' && Object.hasOwn(palette, key) ? null : `${at}.colors.${i} ${JSON.stringify(key)} is not a palette colour (${names})`)).filter(Boolean);
+  return [...unknown, ...outside];
+}
+
 /** Does `look` carry composition data for `kind` (look.kinds[kind])? */
 export const supportsKind = (look, kind) => isPlainObject(look?.kinds) && isPlainObject(look.kinds[kind]);
 
@@ -405,7 +424,7 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
   if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
   const moveErrors = movesErrors(look.name, look.moves, moves.names());
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
-  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look)];
+  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look), ...cutFloodErrors(look.name, look)];
   if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));
   const fill = [...fillErrors(look.name, look), ...fillShortErrors(look.name, look)];
   if (fill.length > 0) throw new RangeError(fill.join('\n'));
