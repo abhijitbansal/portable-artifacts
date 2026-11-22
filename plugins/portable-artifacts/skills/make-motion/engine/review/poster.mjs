@@ -13,6 +13,9 @@ export const POSTER_MIN_TEXT_PX = 14;
 /** The size a thumbnail line needs, in units (a unit is the short side over 1080, engine/units.mjs): 14 px on 180 px is 84. */
 export const POSTER_MIN_UNITS = (POSTER_MIN_TEXT_PX * REFERENCE_SIDE) / POSTER_THUMB_SHORT_SIDE;
 
+// A line still sliding in from off the frame, or fading in below this opacity, is not what a thumbnail shows as the poster's
+// line (the review has no such floor: it counts any text above 0). Our number, unmeasured.
+const POSTER_MIN_OPACITY = 0.5;
 const PX_DECIMALS = 1;
 const pxOf = (units) => Number(((units * POSTER_THUMB_SHORT_SIDE) / REFERENCE_SIDE).toFixed(PX_DECIMALS));
 
@@ -29,7 +32,8 @@ function setAsideIds(sampled) {
 }
 
 /**
- * The poster-read finding for one poster frame, as a list of none or one: of the texts that show on the frame, the largest
+ * The poster-read finding for one poster frame, as a list of none or one: of the texts that show on the frame (wholly on it,
+ * at an opacity of 0.5 or more), the largest
  * by height in units; under POSTER_MIN_UNITS it is `{ kind: 'creative', rule: 'poster-read', node, path, message,
  * suggest: { minSize, factor } }`. `path` is the frame's shot, `shots[i]`.
  * @param {object[]} sampled the tree the page's __snapshot(i) returns for the poster frame
@@ -37,12 +41,12 @@ function setAsideIds(sampled) {
  */
 export function posterReadFindings(sampled, ctx) {
   const aside = setAsideIds(sampled);
-  const texts = inspectNodes(sampled, ctx).filter((n) => n.text !== undefined && !aside.has(n.id));
+  const texts = inspectNodes(sampled, ctx).filter((n) => n.text !== undefined && !aside.has(n.id) && !n.offFrame && n.opacity >= POSTER_MIN_OPACITY);
   if (texts.length === 0) return [];
   const largest = texts.reduce((best, n) => (n.text.sizeUnits > best.text.sizeUnits ? n : best));
   if (largest.text.sizeUnits >= POSTER_MIN_UNITS) return [];
   return [{
-    kind: 'creative', rule: 'poster-read', node: largest.id, path: `shots[${ctx.shotIndex ?? ctx.shotId}]`,
+    kind: 'creative', rule: 'poster-read', node: largest.id, path: `shots[${ctx.shotIndex}]`,
     message: `the largest text on the poster is ${pxOf(largest.text.sizeUnits)} px tall on a ${POSTER_THUMB_SHORT_SIDE} px thumbnail; it needs ${POSTER_MIN_TEXT_PX} px (${POSTER_MIN_UNITS} units), so pick a frame with a bigger line or enlarge "${largest.id}"`,
     suggest: minSizeSuggest(POSTER_MIN_UNITS, largest.text.sizeUnits),
   }];

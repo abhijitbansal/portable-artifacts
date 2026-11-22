@@ -423,7 +423,8 @@ async function makePoster(options, loaded, state, io) {
   try {
     state.poster = await stage(state, io.log, 'poster', () => writePoster({ session, frame, file }));
     // how the poster reads as a thumbnail: creative findings (poster-read), so the exit code stays 0
-    state.findings = [...state.findings, ...(await posterFindings({ session, frame })).map(reviewFinding)];
+    const read = await stage(state, io.log, 'poster-read', () => posterFindings({ session, frame }));
+    state.findings = [...state.findings, ...read.map(reviewFinding)];
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
     await session.close();

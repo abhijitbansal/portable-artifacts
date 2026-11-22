@@ -102,22 +102,22 @@ test('a poster whose biggest line is small is a creative finding, and the exit c
   assert.deepEqual(found[0].suggest, { minSize: 84, factor: 2.1 });
   assert.match(found[0].message, /is 6\.7 px tall on a 180 px thumbnail; it needs 14 px \(84 units\).*"headline"/);
   assert.equal(report.ok, true, 'a creative finding does not fail the run');
+  assert.deepEqual(report.stages.filter((s) => s.name.startsWith('poster')).map((s) => [s.name, s.ok]), [['poster', true], ['poster-read', true]], 'the check is a stage of its own, so a failure names it');
   return undefined;
 });
 
-test('a poster whose biggest line reads at thumbnail size has no poster-read finding', async (t) => {
+// A "no finding" case proves nothing alone: it also passes when makePoster never runs the check. So the two cases that
+// expect none run in one test with a small poster as the control, which fails the whole test unless the check ran.
+test('a poster that reads at thumbnail size, or has no text, has no poster-read finding while a small one does', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
-  const run = make([writeFilm('big-poster', textFilm(120)), '--poster', '0.5', '--poster-out', path.join(dir, 'big.png'), '--json'], NO_FFMPEG);
-  assert.equal(run.status, 0, run.stdout + run.stderr);
-  assert.deepEqual(JSON.parse(run.stdout).findings.filter((f) => f.rule === 'poster-read'), []);
-  return undefined;
-});
-
-test('a poster with no text is a picture poster: not judged', async (t) => {
-  if (!await browserAvailable()) return t.skip('no browser');
-  const run = make([writeFilm('picture-poster', FILM), '--poster', '0.5', '--poster-out', path.join(dir, 'pic.png'), '--json'], NO_FFMPEG);
-  assert.equal(run.status, 0, run.stdout + run.stderr);
-  assert.deepEqual(JSON.parse(run.stdout).findings.filter((f) => f.rule === 'poster-read'), []);
+  const poster = (name, film) => {
+    const run = make([writeFilm(name, film), '--poster', '0.5', '--poster-out', path.join(dir, `${name}.png`), '--json'], NO_FFMPEG);
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    return JSON.parse(run.stdout).findings.filter((f) => f.rule === 'poster-read');
+  };
+  assert.equal(poster('control-small', textFilm(40)).length, 1, 'the control: the check runs, so a small line is found');
+  assert.deepEqual(poster('big-poster', textFilm(120)), [], 'a 120-size line reads at 180 px');
+  assert.deepEqual(poster('picture-poster', FILM), [], 'no text: a picture poster is not judged');
   return undefined;
 });
 
