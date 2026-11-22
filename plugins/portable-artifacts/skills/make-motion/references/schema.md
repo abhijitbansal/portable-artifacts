@@ -104,7 +104,21 @@ Every `src` is a file inside the film's folder. A URL, an absolute path or a pat
 
 ## Cuts
 
-A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", "duration": 0.5, "smear": true }`. Only `type` is required. `direction`, `duration` and `smear` apply to the cuts that take them. `--list cuts` prints each cut with its family, directions, default length, whether the outgoing shot stays live, and an example. A layer or shader cut shows the outgoing shot still moving (its camera and its animated fields carry on; a video clip in it holds its last frame); a node cut (and a smear) holds its last frame, and so does every cut in a look drawn by hand. A cut must be one the look lists: the error names the cuts it has. `"cut": "match"` carries the node two shots share across the cut, so both shots need a node with the same id (see `hero` in `--list kinds`).
+A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", "duration": 0.5, "smear": true, "at": "mark" }`. Only `type` is required. `direction`, `duration`, `smear` and `at` apply to the cuts that take them. `at` is a target of the shot the cut leaves (the names an `on` event's `target` takes there) and only `iris`, `zoom` and `flood` take it: the cut opens from that thing on screen, such as the button just clicked, instead of from the centre (or the point the look keeps clear). A name the shot before lacks is an error that lists the names it has; the cut never opens from the centre in silence. `flood` paints a colour over the outgoing shot as a growing circle, then opens the next shot from the same point; its colour is the first of the look's `cutFlood.colors` (default: the accent) that differs from both shots' grounds. `--list cuts` prints each cut with its family, directions, default length, whether the outgoing shot stays live, and an example. A layer or shader cut shows the outgoing shot still moving (its camera and its animated fields carry on; a video clip in it holds its last frame); a node cut (and a smear) holds its last frame, and so does every cut in a look drawn by hand. A cut must be one the look lists: the error names the cuts it has. `"cut": "match"` carries the node two shots share across the cut, so both shots need a node with the same id (see `hero` in `--list kinds`).
+
+## Composition findings
+
+Two `creative` findings judge how a shot fills its frame. Each is judged once per shot, on its resting frame: a shot mid-entrance, a frame inside a cut, and a frame that is all picture (a ground or a full-bleed image) give none. The caption zone, when captions are on, is taken out of the safe area first. At most 3 a film reach the report, the largest overshoots; the last kept finding says how many were left out.
+
+- `dead-space`: the longest empty band of the safe area reaches `band` of its width or height. Fix: let the hero take more of the frame, add a second element, or use a look that fills with type.
+- `scale-contrast`: the hero is the largest element and leads the next by at least 1.5 times, but covers less than `hero` of the frame. Fix: set it larger, crop in on it, or give it a second mass. A kind that lays out equals (the engine marks it `peers`: `list`, `compare`, `timeline`, `feed`) is not judged, since a slug or a divider is its "second" element.
+
+| Look data | Meaning |
+|---|---|
+| `fill` | `{ "band", "hero" }`, each a number above 0 and at most 1. Defaults 0.35 and 0.50. Set only where a look's layouts are measured and viewed to fill well under them |
+| `kinds.statement.fillShort` | `{ "words", "height", "toWide", "linesWide", "max" }`. A statement of at most `words` words may take `height` of the band, up to column `toWide` and `linesWide` lines on a wide frame, and take a size cap of `max` units in place of 300. `words` and `height` are required. `desk`, `cosmos` and `keynote` set `fillShort`; the other looks keep their usual share |
+
+`desk` and `ledger` set `fill.band` to 0.40 (`ledger` also `hero` to 0.45): their flush-left statements and lists leave 35 to 39% of the width bare beside the slug and read filled, so the default would flag them. That is a ruled trade, and it has a cost: the 0.40 band also lets through two `desk` shapes that were viewed as sparse, the 16:9 statement and the 16:9 timeline. Look at those two on the sheets even when no finding is printed.
 
 ## The `--list` names
 

@@ -93,7 +93,7 @@ Sharing: the MP4 is one file you can send as is; the preview page is for this ma
 - `say` is the narration of a shot, and it sets the shot's length: its words at the mode's pace, plus a short tail. A shot with no narration takes `hold` (seconds). A shot takes `say` or `hold`, never both.
 - Write for the ear: short sentences, one idea each. A list, a timeline or a feed shows one item per sentence, in order. Mark the words that carry the point with stars (`*came from*`), but only a few.
 - An anchor ties an event to a spoken word: `"on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]`. `at` names a word of this shot's narration as `word:<word>`, `do` is a device (`--list devices`) and `target` is a region of the shot or one of its parts. An anchor that falls outside its shot is a `mechanical` finding.
-- Cuts and sound (`music`, `sound`, `cues`, `audio`): see Cuts and Sound in `<skill-dir>/references/schema.md`.
+- Cuts and sound (`music`, `sound`, `cues`, `audio`): see Cuts and Sound in `<skill-dir>/references/schema.md`. A shot's `narration` can start before its cut or run past it; a cut's `at` opens it from a part of the shot it leaves (`references/story.md`, `references/schema.md`).
 
 ## Looking things up
 

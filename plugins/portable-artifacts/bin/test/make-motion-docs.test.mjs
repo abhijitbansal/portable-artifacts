@@ -18,6 +18,7 @@ import { VARS_MAX } from '../../skills/make-motion/scripts/v2/vars.mjs';
 import { MAX_WORKERS } from '../../skills/make-motion/scripts/v2/workers.mjs';
 import { KNOWN_CUES } from '../../skills/make-motion/scripts/v2/sound/synth.mjs';
 import { errorReport, reportOf } from '../../skills/make-motion/scripts/v2/report.mjs';
+import { NARRATION_SHIFT_MAX } from '../../skills/make-motion/engine/script/timing.mjs';
 
 const MOTION = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../skills/make-motion');
 const read = (...parts) => fs.readFileSync(path.join(MOTION, ...parts), 'utf8');
@@ -123,12 +124,29 @@ const headings = (md) => [...md.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
 
 test('story.md is built around the one thing, three storylines as three films and the five-line teaching check', () => {
   const md = read('references/story.md');
-  assert.deepEqual(headings(md), ['The one thing', 'Claims', 'Three storylines', 'Write for the picture', 'Narration', 'The teaching check', 'Tells every look shares', 'What the review tells you']);
+  assert.deepEqual(headings(md), ['The one thing', 'Claims', 'Three storylines', 'Write for the picture', 'Narration', 'Sound across a cut', 'The teaching check', 'Tells every look shares', 'What the review tells you']);
   const three = section(md, 'Three storylines');
   for (const phrase of ['three different films', 'first two seconds', 'storylines.md', '`claude -p`', 'pick the first']) assert.ok(three.includes(phrase), phrase);
   assert.equal(section(md, 'The teaching check').split('\n').filter((l) => /^\d\. /.test(l)).length, 5);
   for (const mode of ['pro', 'viral']) assert.ok(md.includes(`${registries.modes.get(mode).wpm} words a minute`), `${mode} pace`);
   assert.deepEqual([registries.modes.get('pro').wpm, registries.modes.get('viral').wpm], [150, 175]);
+});
+
+test('the docs say how sound crosses a cut, where a cut opens from, and which cuts keep the outgoing shot moving', () => {
+  const across = section(read('references/story.md'), 'Sound across a cut');
+  for (const word of ['`lead`', '`trail`', `${NARRATION_SHIFT_MAX} s`]) assert.ok(across.includes(word), word);
+  const cuts = section(read('references/schema.md'), 'Cuts');
+  for (const word of ['`at`', '`flood`', 'still moving']) assert.ok(cuts.includes(word), word);
+  assert.ok(read('SKILL.md').includes('`narration`'));
+  assert.ok(registries.cuts.has('flood'));
+});
+
+test('the docs name the composition findings, the look fill that tunes them, and the kinds that skip scale-contrast', () => {
+  const schema = read('references/schema.md');
+  const findings = section(schema, 'Composition findings');
+  for (const word of ['`dead-space`', '`scale-contrast`', '`fill`', '`peers`', '`band`', '`hero`', '`fillShort`']) assert.ok(findings.includes(word), word);
+  assert.ok(findings.includes('3 a film'), 'the cap');
+  assert.ok(section(read('references/story.md'), 'What the review tells you').includes('`dead-space`'));
 });
 
 // The storyline pick must obey the intake's one round: SKILL.md folds the three storylines into the intake message, and
