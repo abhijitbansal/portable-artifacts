@@ -173,7 +173,7 @@ function musicText(music) {
   const tempo = music.bpm === null ? `${source} with no steady beat` : `${source} at ${music.bpm} bpm`;
   const landed = music.landed === null || music.cuts === 0 ? '' : `, ${music.landed} of ${plural(music.cuts, 'cut')} on a beat`; // no cuts, no count
   const moved = Array.isArray(music.moved) ? `, ${music.moved.length} moved onto a beat` : ''; // music.snap: how many cuts it moved
-  return `${tempo}${landed}${moved}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}`;
+  return `${tempo}${landed}${moved}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}${music.muted === true ? ' (muted)' : ''}`; // --no-music: planned, not in the file
 }
 
 /** The text form's line for sound: the cue count, the bed or file and its tempo, the cuts on a beat; null for none. */
