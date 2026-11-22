@@ -619,13 +619,13 @@ export function builderAgent() {
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
     check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0 && reviewerProblems(ctx).length === 0,
     // A Claude Code builder with no motion-reviewer.md at either level (and no plugin shipping the agents): one note, never a failure.
-    // A motion-reviewer.md written by a newer skill is also a note here: it is never downgraded, and this skill's copy is the old one.
+    // The newer-file note is alwaysInfo, so it shows even while another builder_agent problem is reported.
+    alwaysInfo: (ctx) => {
+      const newer = reviewerNewer(ctx);
+      return newer.length ? { note: `${newer.map((r) => r.file).join(' and ')} was written by a newer portable-artifacts than this skill's copy: left alone (this skill's copy is older; update it, or run the doctor from the newer one)` } : null;
+    },
     presentInfo: (ctx) => {
       const P = pp(ctx);
-      const newer = reviewerNewer(ctx);
-      if (newer.length) {
-        return { note: `${newer.map((r) => r.file).join(' and ')} was written by a newer portable-artifacts than this skill's copy: left alone (this skill's copy is older; update it, or run the doctor from the newer one)` };
-      }
       const builder = builderAgentFiles(ctx).find((f) => f.host === 'claude');
       if (!builder || reviewerAgentFiles(ctx).length > 0 || pluginServes(ctx)) return null;
       const dir = P.join(builder.file, '..');
@@ -706,6 +706,9 @@ export async function diagnose(requirements, ctx) {
   const info = [];
   for (const r of requirements) {
     if (r.applies && !r.applies(ctx)) continue;
+    // alwaysInfo: a note that holds whatever else the requirement reports (present or missing).
+    const always = r.alwaysInfo?.(ctx);
+    if (always) info.push({ id: r.id, note: always.note, sudoHint: always.sudoHint });
     if (await r.check(ctx)) {
       const hint = r.presentInfo?.(ctx);
       if (hint) info.push({ id: r.id, note: hint.note, sudoHint: hint.sudoHint });

@@ -1086,6 +1086,23 @@ test("builderAgent: a newer reviewer is never rewritten even when the fix runs f
   assert.match(m.fix.manual.linux, /install\.mjs claude --agents-only --force \(replaces \/h\/\.claude\/agents\/artifact-builder\.md and \/h\/\.claude\/agents\/motion-reviewer\.md; \/h\/\.claude\/agents\/motion-reviewer\.md is newer than this skill's copy\)/);
 });
 
+test("builderAgent: the newer-reviewer note shows whatever else builder_agent reports (here a stale builder)", async () => {
+  const c = rctx({ [BUILDER_USER]: OLD_TEXT, [REVIEWER_USER]: REVIEWER_NEWER });
+  const r = await diagnose([builderAgent()], c);
+  assert.equal(r.ok, true, "builder_agent is optional: the stale builder does not fail the doctor");
+  assert.equal(r.missing.length, 1, "the stale builder is still reported");
+  assert.equal(r.info.length, 1);
+  assert.equal(r.info[0].id, "builder_agent");
+  assert.match(r.info[0].note, /newer/);
+  assert.match(r.info[0].note, /this skill's copy is older/);
+});
+
+test("builderAgent: with a stale builder and no newer reviewer there is no newer note", async () => {
+  const c = rctx({ [BUILDER_USER]: OLD_TEXT, [REVIEWER_USER]: REVIEWER_CURRENT });
+  const r = await diagnose([builderAgent()], c);
+  assert.equal(r.info, undefined);
+});
+
 test("builderAgent: when cwd is the home folder, the one reviewer file is listed once, at user level", () => {
   const same = ctx({ homedir: "/h", cwd: "/h", execPath: "/n/node", exists: (p) => [BUILDER_USER, REVIEWER_USER, "/h/.claude"].includes(p), readFile: readerOf({ [BUILDER_USER]: CURRENT_TEXT, [REVIEWER_USER]: REVIEWER_OURS_OLD }) });
   const fix = builderAgent().fix(same);

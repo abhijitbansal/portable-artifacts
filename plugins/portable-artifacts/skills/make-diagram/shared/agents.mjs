@@ -66,15 +66,20 @@ const REVIEWER_MARKER_LINE = /^<!-- portable-artifacts: motion-reviewer format (
 
 // 'current' (our file, this format), 'older' (our file, a lower format), 'newer' (our file, a higher format, written by
 // a newer skill) or 'foreign' (no marker line right after the frontmatter, or no number).
-export function reviewerFileState(text) {
+// The format number on the marker line, or null when the text is not a file of ours (see reviewerFileState).
+function reviewerFormatOf(text) {
   const lines = String(text).split(/\r?\n/);
-  if (lines[0] !== '---') return 'foreign';
+  if (lines[0] !== '---') return null;
   const close = lines.indexOf('---', 1);
-  if (close < 0) return 'foreign';
+  if (close < 0) return null;
   const first = lines.slice(close + 1).find((l) => l.trim() !== '');
   const m = first === undefined ? null : REVIEWER_MARKER_LINE.exec(first);
-  if (!m) return 'foreign';
-  const n = Number(m[1]);
+  return m ? Number(m[1]) : null;
+}
+
+export function reviewerFileState(text) {
+  const n = reviewerFormatOf(text);
+  if (n === null) return 'foreign';
   if (n === REVIEWER_FORMAT) return 'current';
   return n < REVIEWER_FORMAT ? 'older' : 'newer';
 }
@@ -180,21 +185,27 @@ export const CURRENT_MARKER = 'make.mjs';
 
 // `write claude` also writes the reviewer (the doctor's auto fix runs it, so a skills-CLI install gets both agents).
 // `write-reviewer <host> <dir> [--force [--replace-foreign]]` writes only the reviewer: the doctor's fix for an older
-// reviewer file of ours. --force never replaces a file that is not ours (no marker line) unless --replace-foreign is
-// also given, so the doctor is not the only gate.
+// reviewer file of ours. --force never replaces a file that is not ours (no marker line), one it cannot read, or one
+// written by a newer skill, unless --replace-foreign is also given, so the doctor is not the only gate.
 const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-dir>
        node agents.mjs write-reviewer <${REVIEWER_HOSTS.join('|')}> <agents-dir> [--force [--replace-foreign]]`;
 
-// The reason --force must be refused for this file, or null: it exists as a readable file and is not ours.
-function foreignReviewerReason(dir, fileName) {
+// The reason --force must be refused for this file, or null. It fails closed: only an absent file (ENOENT) is clear to
+// write. A file the writer cannot read (EACCES, EISDIR, ELOOP...) is not known to be ours, a file with no marker is not
+// ours, and one written by a newer skill would be downgraded. --replace-foreign overrides all three.
+function reviewerRefusal(dir, fileName) {
   const file = path.join(path.resolve(dir), fileName);
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
-  } catch {
-    return null; // absent, a directory or unreadable: the writer decides
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    return `cannot read ${file} to check it is ours (${e.code ?? e.message}); to replace it anyway pass --force --replace-foreign (keep a copy first)`;
   }
-  return reviewerFileState(text) === 'foreign' ? `${file} is not a portable-artifacts file; to replace it anyway pass --force --replace-foreign (keep a copy first)` : null;
+  const state = reviewerFileState(text);
+  if (state === 'foreign') return `${file} is not a portable-artifacts file; to replace it anyway pass --force --replace-foreign (keep a copy first)`;
+  if (state === 'newer') return `${file} is newer than this skill's copy (format ${reviewerFormatOf(text)}, this skill writes format ${REVIEWER_FORMAT}); to downgrade it anyway pass --force --replace-foreign`;
+  return null;
 }
 
 // Writes each { fileName, content } into dir and prints one line per file. Returns 1 if any could not be written.
@@ -228,7 +239,7 @@ function cli(argv) {
   const flagsOk = flags.size === rest.length && rest.every((f) => f === '--force' || f === '--replace-foreign') && (!flags.has('--replace-foreign') || flags.has('--force'));
   if (command === 'write-reviewer' && REVIEWER_HOSTS.includes(host) && validDir && flagsOk) {
     const file = reviewerFile(host);
-    const refusal = flags.has('--force') && !flags.has('--replace-foreign') ? foreignReviewerReason(dir, file.fileName) : null;
+    const refusal = flags.has('--force') && !flags.has('--replace-foreign') ? reviewerRefusal(dir, file.fileName) : null;
     if (refusal) {
       process.stderr.write(`agent: ${refusal}\n`);
       return 1;

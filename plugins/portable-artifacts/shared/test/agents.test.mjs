@@ -402,6 +402,66 @@ test('cli: write-reviewer --force refuses a foreign file unless --replace-foreig
   assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
 });
 
+// Fail closed: only an absent file (ENOENT) is "not foreign". A file the writer cannot read is not known to be ours.
+const canTestUnreadable = process.platform !== 'win32' && !(typeof process.getuid === 'function' && process.getuid() === 0);
+
+test('cli: write-reviewer --force refuses a file it cannot read, naming the error code, unless --replace-foreign is given', { skip: !canTestUnreadable && 'mode 000 does not stop a read on Windows or as root' }, () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  fs.writeFileSync(file, 'my own private reviewer\n');
+  fs.chmodSync(file, 0o000);
+  const refused = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+  assert.match(refused.stderr, /EACCES/);
+  assert.match(refused.stderr, /cannot read/);
+  assert.match(refused.stderr, /--force --replace-foreign/);
+  fs.chmodSync(file, 0o600);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'my own private reviewer\n', 'nothing written');
+  fs.chmodSync(file, 0o000);
+  const replaced = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force', '--replace-foreign'], { encoding: 'utf8' });
+  assert.equal(replaced.status, 0, replaced.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+});
+
+test('cli: write-reviewer --force refuses a path it cannot read as a file (a directory: EISDIR), and writes nothing', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(path.join(dir, 'motion-reviewer.md'), { recursive: true });
+  const refused = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /EISDIR/);
+  assert.ok(fs.statSync(path.join(dir, 'motion-reviewer.md')).isDirectory(), 'the directory is untouched');
+});
+
+test('cli: write-reviewer --force refuses a NEWER file of ours, says it is newer, and replaces it only with --replace-foreign', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  const newer = reviewerFile('claude').content.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 9 -->`);
+  fs.writeFileSync(file, newer);
+  const refused = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+  assert.match(refused.stderr, /newer/);
+  assert.match(refused.stderr, /format 9/);
+  assert.match(refused.stderr, /--force --replace-foreign/);
+  assert.equal(fs.readFileSync(file, 'utf8'), newer, 'nothing written');
+  const replaced = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force', '--replace-foreign'], { encoding: 'utf8' });
+  assert.equal(replaced.status, 0, replaced.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+});
+
+test('cli: write-reviewer --force still replaces our own older file and a current one without any extra flag', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  for (const text of [OURS_OLD(), reviewerFile('claude').content]) {
+    fs.writeFileSync(file, text);
+    const r = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+  }
+});
+
 test('cli: write-reviewer --replace-foreign needs --force, and an absent file is simply written', () => {
   const dir = path.join(tmpDir(), 'agents');
   const alone = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--replace-foreign'], { encoding: 'utf8' });
