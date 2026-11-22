@@ -594,6 +594,125 @@ export function openingFindings(sampled, ctx) {
   return [finding(ctx, MECHANICAL, 'empty-first-frame', '', `shot "${ctx.shotId}" opens on an empty frame: only the field is on screen; bring its hero in on the first frame`)];
 }
 
+// ---- composition: where a shot's resting frame is empty, and what leads it ----
+//
+// One measure (compositionOf) and two creative rules over it. An element is a top-level node that shows something (not the
+// field behind the picture plane, not a caption); its box is the union of the boxes of the nodes that show themselves. The
+// band is the longest stretch of the safe rectangle that no element's box enters. The hero is the largest element when it
+// leads the second by HERO_LEAD or more. Both rules are judged once per shot, on its resting frame (ctx.restsShot), and a
+// frame with a ground (an element covering GROUND_SHARE of the canvas) is judged by neither.
+
+export const COMPOSITION_RULES = Object.freeze(['dead-space', 'scale-contrast']);
+// The share of the safe rectangle's side left empty, and the share a hero reaches of it, at which a rule fires; a look may
+// give its own as `fill` (looks/index.mjs).
+export const DEFAULT_FILL = Object.freeze({ band: 0.4, hero: 0.4 });
+export const HERO_LEAD = 1.5;
+const PERCENT = 100;
+const WHERE = Object.freeze({ left: 'the left', right: 'the right', top: 'the top', bottom: 'the bottom', middle: 'a band through the middle' });
+const SIDE = Object.freeze({ x: 'width', y: 'height' });
+
+/** The fill thresholds of a look: DEFAULT_FILL with the look's optional `fill` laid over it. */
+export const fillOf = (look) => ({ ...DEFAULT_FILL, ...look?.fill });
+
+// A box cut to the canvas, or null when none of it is on the canvas.
+function clipToCanvas([x, y, w, h], canvas) {
+  const left = Math.max(x, 0), top = Math.max(y, 0), right = Math.min(x + w, canvas.w), bottom = Math.min(y + h, canvas.h);
+  return right > left && bottom > top ? [left, top, right - left, bottom - top] : null;
+}
+
+// What a node shows in canvas pixels: a text by its ink, anything else by its bbox; null when it has no usable box.
+function ownBox(n) {
+  if (!isBox(n.bbox)) return null;
+  if (n.type !== 'text' || !hasWords(n.layout)) return n.bbox;
+  try {
+    const ink = inkBox(n, hiddenNow(n));
+    return isBox(ink) ? ink : n.bbox;
+  } catch {
+    return n.bbox;
+  }
+}
+
+// The boxes of the nodes in a subtree that show themselves at an accumulated opacity above 0.
+function shownBoxes(n, opacity) {
+  const o = opacity * (n.opacity ?? 1);
+  if (o <= 0) return [];
+  const own = showsItself(n) ? [ownBox(n)].filter(Boolean) : [];
+  return [...own, ...(n.children ?? []).flatMap((child) => shownBoxes(child, o))];
+}
+
+// The top-level nodes that show something, as { id, box, area }: not behind the picture plane, not the shot's captions.
+function elementsOf(sampled, ctx) {
+  const captions = `${ctx.shotId}.captions`;
+  const tops = (Array.isArray(sampled) ? sampled : []).filter((n) => !(n.depth > 0) && !String(n.id ?? '').startsWith(captions));
+  return tops.flatMap((n) => {
+    const boxes = shownBoxes(n, 1);
+    const box = boxes.length > 0 ? clipToCanvas(union(boxes), ctx.canvas) : null;
+    return box ? [{ id: n.id, box, area: box[2] * box[3] }] : [];
+  });
+}
+
+// The longest stretch of [lo, hi] that none of the spans enters, as { size, from, to }; the first of equal ones.
+function longestGap(spans, lo, hi) {
+  let best = { size: 0, from: lo, to: lo }, cursor = lo;
+  const within = spans.map(([a, b]) => [Math.max(a, lo), Math.min(b, hi)]).filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0]);
+  for (const [a, b] of within) {
+    if (a - cursor > best.size) best = { size: a - cursor, from: cursor, to: a };
+    cursor = Math.max(cursor, b);
+  }
+  return hi - cursor > best.size ? { size: hi - cursor, from: cursor, to: hi } : best;
+}
+
+function bandAlong(gap, lo, hi, axis, [before, after]) {
+  const touches = gap.from === lo ? before : gap.to === hi ? after : 'middle';
+  return { share: gap.size / (hi - lo), axis, where: gap.from === lo && gap.to === hi ? 'middle' : touches };
+}
+
+// The larger of the empty band across the safe width and down its height, `x` on a tie.
+function bandOf(elements, safe) {
+  const across = bandAlong(longestGap(elements.map((e) => [e.box[0], e.box[0] + e.box[2]]), safe.left, safe.right), safe.left, safe.right, 'x', ['left', 'right']);
+  const down = bandAlong(longestGap(elements.map((e) => [e.box[1], e.box[1] + e.box[3]]), safe.top, safe.bottom), safe.top, safe.bottom, 'y', ['top', 'bottom']);
+  return down.share > across.share ? down : across;
+}
+
+/**
+ * The composition of one frame: { ground, elements: [{ id, box, area }], band: { share, axis, where }, hero: { id,
+ * extent } | null, next: { id, area } | null }. `ground`: an element covers GROUND_SHARE of the canvas. `hero`: the largest
+ * element when it stands alone or is HERO_LEAD times the next; `extent` is the larger of its width over the safe width and
+ * its height over the safe height. @param {object[]} sampled @param {object} ctx as for auditFrame
+ */
+export function compositionOf(sampled, ctx) {
+  const elements = elementsOf(sampled, ctx);
+  const [top, second] = [...elements].sort((a, b) => b.area - a.area);
+  const { safe } = ctx;
+  const leads = top !== undefined && (second === undefined || top.area >= HERO_LEAD * second.area);
+  return {
+    ground: elements.some((e) => canvasShare(e.box, ctx.canvas) >= GROUND_SHARE),
+    elements,
+    band: bandOf(elements, safe),
+    hero: leads ? { id: top.id, extent: Math.max(top.box[2] / (safe.right - safe.left), top.box[3] / (safe.bottom - safe.top)) } : null,
+    next: second === undefined ? null : { id: second.id, area: second.area },
+  };
+}
+
+/**
+ * The two composition findings of a frame, each { kind: 'creative', path, message, rule, node: '', measure }: dead-space
+ * (the empty band reaches fill.band of its side; measure: how far past) and scale-contrast (a hero that leads the next
+ * reaches less than fill.hero of the frame; measure: how far short). A frame with a ground has none.
+ */
+export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
+  const c = compositionOf(sampled, ctx);
+  if (c.ground) return [];
+  const out = [];
+  if (c.band.share >= fill.band) {
+    out.push({ ...finding(ctx, CREATIVE, 'dead-space', '', `the frame leaves ${Math.round(c.band.share * PERCENT)}% of its ${SIDE[c.band.axis]} empty (${WHERE[c.band.where]}); let the hero take more of the frame, add a second element, or use a look that fills with type`), measure: c.band.share - fill.band });
+  }
+  if (c.hero && c.hero.extent < fill.hero) {
+    const rest = c.next ? `, and the next largest thing, "${c.next.id}", is smaller still` : ' and stands alone';
+    out.push({ ...finding(ctx, CREATIVE, 'scale-contrast', '', `the hero, "${c.hero.id}", reaches ${Math.round(c.hero.extent * PERCENT)}% of the frame${rest}; set it larger, crop in on it, or give it a second mass (a picture, a chart, a card)`), measure: fill.hero - c.hero.extent });
+  }
+  return out;
+}
+
 /**
  * @param {object[]} sampled the tree the page's __snapshot(i) returns for one frame
  * @param {{ look: object, canvas: { w: number, h: number }, mode: string | { name: string }, shotId: string, t: number,
@@ -609,7 +728,8 @@ export function openingFindings(sampled, ctx) {
  *   is at rest within 0.2% of it (1 when absent). opensShot: the frame is the one its shot opens on (the opening rule,
  *   openingFindings). regionMarks: the ids of the marks the shot draws on its regions (regions.mjs regionMarkIds); a
  *   mark among them that runs past the frame is a finding (region-off-frame), as is a text the frame edge slices during
- *   a close-up (frame-edge).
+ *   a close-up (frame-edge). restsShot: the frame is the shot's resting frame (not mid-entrance, not inside a cut's window):
+ *   only then are the composition findings (compositionFindings) added.
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {
@@ -621,5 +741,6 @@ export function auditFrame(sampled, ctx) {
   const make = (kind, rule, node, message, role) => finding(ctx, kind, rule, node, message, role);
   const contrast = contrastFindings(texts, sampled, ctx, make);
   const regions = regionFindings(sampled, texts, ctx, make);
-  return [...lost, ...opening, ...contrast, ...regions,...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit), ...captionRules(texts, sampled, ctx, unit)];
+  const composition = ctx.restsShot === true ? compositionFindings(sampled, ctx) : [];
+  return [...lost, ...opening, ...contrast, ...regions,...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit), ...captionRules(texts, sampled, ctx, unit), ...composition];
 }
