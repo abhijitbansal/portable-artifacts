@@ -107,7 +107,8 @@ const recordedPass = (files) => files.some(({ name, text }) => /^summary-motion-
 test('references/reviewing.md names the reviewer only once a passing proof is recorded', () => {
   const text = fs.readFileSync(path.join(mm, 'references/reviewing.md'), 'utf8');
   const dir = path.join(evalDir, 'results');
-  const files = fs.readdirSync(dir).map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), 'utf8') }));
+  // results/ also holds the (gitignored) timestamp folders of real runs: read only the committed summaries
+  const files = fs.readdirSync(dir).filter((name) => /^summary-.*\.md$/.test(name)).map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), 'utf8') }));
   assert.equal(text.includes('motion-reviewer'), recordedPass(files));
 });
 

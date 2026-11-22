@@ -91,6 +91,46 @@ test('no SKILL.md names the reviewer in its Director and operator section', () =
   for (const skill of DELEGATING) assert.ok(!section(read(skill)).includes('motion-reviewer'), skill);
 });
 
+// The second reviewer is named in reviewing.md only because a proof passed (eval/results/summary-motion-reviewer-2026-11-22.md,
+// 12 of 12 planted defects, no false fail), and only as an option: a skills-CLI install has no agent file and the director
+// reviews with the same checklist. SKILL.md stays unchanged (its Director and operator section is the same text everywhere).
+const REVIEWING = path.join(SKILLS, 'make-motion/references/reviewing.md');
+const REVIEWING_HEADINGS = ['## Notes', '## Never score', '## Pictures alone', '## Delivery'];
+const SECOND_REVIEWER_PHRASES = ['motion-reviewer', 'optional', 'list of available agents', 'review it yourself with the same checklist', 'sheets', '2026-11-22'];
+
+// The text of the `## Second reviewer` section, or null.
+const secondReviewer = (md) => {
+  const at = md.indexOf('\n## Second reviewer\n');
+  if (at < 0) return null;
+  const rest = md.slice(at + 1);
+  const next = rest.indexOf('\n## ', 3);
+  return next < 0 ? rest : rest.slice(0, next);
+};
+
+test('reviewing.md has a Second reviewer section after its four headings, with the pinned phrases and the proof date', () => {
+  const md = fs.readFileSync(REVIEWING, 'utf8');
+  const heads = md.split('\n').filter((l) => l.startsWith('## '));
+  assert.deepEqual(heads, [...REVIEWING_HEADINGS, '## Second reviewer'], 'the four headings keep their order and the section comes last');
+  const body = secondReviewer(md);
+  assert.ok(body, 'the section exists');
+  for (const phrase of SECOND_REVIEWER_PHRASES) assert.ok(body.includes(phrase), phrase);
+  assert.match(body, /if `motion-reviewer` is in your list of available agents/i);
+  assert.match(body, /otherwise review it yourself with the same checklist/i);
+  assert.match(body, /review\.md/);
+});
+
+test('the recorded proof the section cites exists, passed, and names the agent it proved', () => {
+  const summary = fs.readFileSync(path.join(SKILLS, '../eval/results/summary-motion-reviewer-2026-11-22.md'), 'utf8');
+  assert.match(summary, /\*\*PASSED\*\*/);
+  assert.match(summary, /Agent that ran, read from the stream: motion-reviewer/);
+});
+
+test('guardrail proof: the section finder reads a section and returns null for a file without one', () => {
+  assert.equal(secondReviewer('# x\n\n## Delivery\ny\n'), null);
+  assert.match(secondReviewer('## Delivery\ny\n\n## Second reviewer\nbody text\n\n## Later\nz\n'), /body text/);
+  assert.doesNotMatch(secondReviewer('## Delivery\ny\n\n## Second reviewer\nbody text\n\n## Later\nz\n'), /Later/);
+});
+
 // Guardrail proofs: each rule above fires on a document that breaks it.
 test('guardrail proof: a frontmatter with model: haiku or effort: low is caught, one without is not', () => {
   assert.deepEqual(pins('---\nname: make-x\nmodel: haiku\n---\nBody\n'), ['model']);
