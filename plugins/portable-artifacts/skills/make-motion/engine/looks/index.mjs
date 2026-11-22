@@ -205,11 +205,16 @@ function kindsErrors(name, kinds) {
 const isMoveOrNull = (move) => move === null
   || (isPlainObject(move) && typeof move.ease === 'string' && move.ease !== '' && Number.isFinite(move.dur) && move.dur >= 0);
 
-// The errors of a look's moves: an entry, a Move or null, for each registered move in `names`.
+// The errors of a look's moves: an entry, a Move or null, for each registered move in `names`; and the ease of every
+// entry that has one (a registered move or a legacy key such as enter) must parse.
 function movesErrors(name, moves, names) {
   if (!isPlainObject(moves)) return [`look "${name}": moves must be an object of move names to { ease, dur }, got ${String(moves)}`];
-  return names.filter((key) => !isMoveOrNull(moves[key]))
+  const shape = names.filter((key) => !isMoveOrNull(moves[key]))
     .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
+  const eases = Object.entries(moves).filter(([, move]) => isPlainObject(move) && typeof move.ease === 'string')
+    .map(([key, move]) => [key, easeProblem(move.ease)]).filter(([, problem]) => problem !== null)
+    .map(([key, problem]) => `look "${name}": moves.${key}.ease: ${problem}`);
+  return [...shape, ...eases];
 }
 
 const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes', 'ease']);

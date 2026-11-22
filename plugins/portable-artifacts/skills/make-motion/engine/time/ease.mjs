@@ -130,8 +130,9 @@ function cubicBezier(x1, y1, x2, y2) {
 function parseCubicBezier(name) {
   const m = BEZIER_PATTERN.exec(name);
   const [x1, y1, x2, y2] = m ? m.slice(1).map(Number) : [];
-  const ok = m && [x1, y1, x2, y2].every(Number.isFinite) && x1 >= 0 && x1 <= 1 && x2 >= 0 && x2 <= 1;
-  if (!ok) throw new Error(`bad ease "${name}"; expected ${BEZIER_FORM}`);
+  const xsOk = m && x1 >= 0 && x1 <= 1 && x2 >= 0 && x2 <= 1;
+  if (!xsOk) throw new Error(`bad ease "${name}"; expected ${BEZIER_FORM}`);
+  if (!Number.isFinite(y1) || !Number.isFinite(y2)) throw new Error(`bad ease "${name}"; y1 and y2 must be finite numbers`);
   return cubicBezier(x1, y1, x2, y2);
 }
 
