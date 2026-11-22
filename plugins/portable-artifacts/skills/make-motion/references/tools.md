@@ -93,4 +93,4 @@ node <skill-dir>/scripts/locate.mjs shot.png --cols 5-6 --rows 2-3 --cells 15-30
 
 Name every strip and cell the target touches. The box is that rectangle grown by a quarter cell, so it holds the target and each edge lies within 1.25 cells of it (a cell of the second grid, plus the pad). A cell label is the first thing in its cell, at the top left. The pictures are at most 1600 px a side.
 
-A PNG the reader takes (8-bit RGB or RGBA) is read directly. Any other format, or a PNG of another kind, is decoded by ffmpeg, one frame; with no ffmpeg that is exit 2 saying so, and a PNG avoids it. A URL, a folder, an `--out` that is the picture, a strip outside 1 to 9 and a cell outside 1 to 36 are each exit 2 naming the accepted values.
+A PNG the reader takes (8-bit RGB or RGBA) is read directly. Any other format, or a PNG of another kind, is decoded by ffmpeg, one frame; with no ffmpeg that is exit 2 saying so, and a PNG avoids it. A URL, a folder, an `--out` that is the picture, a picture over 2 GiB (more than the reader takes), a strip outside 1 to 9 and a cell outside 1 to 36 are each exit 2 naming the accepted values or the limit.

@@ -20,6 +20,7 @@ import { encodePng } from './lib/png-write.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const CELLS = GRID * GRID;
+const MAX_PICTURE_BYTES = 2 ** 31 - 1; // readFileSync refuses a file over 2 GiB (ERR_FS_FILE_TOO_LARGE, which has no syscall)
 const USAGE = 'node scripts/locate.mjs <picture> --out <dir> | --cols 5-6 --rows 2-3 --out <dir> | --cols 5-6 --rows 2-3 --cells 15-30 [--out <dir>] [--json]';
 const ACCEPTED = '--out <dir>, --cols <first-last>, --rows <first-last>, --cells <first-last>, --json';
 const OPTIONS = { out: { type: 'string' }, cols: { type: 'string' }, rows: { type: 'string' }, cells: { type: 'string' }, json: { type: 'boolean' } };
@@ -77,6 +78,7 @@ function checkPicture(picture) {
   }
   if (stat.isDirectory()) throw new UsageError(`${picture} is a folder; name a picture file`);
   if (!stat.isFile()) throw new UsageError(`${picture} is not a regular file (a device or a pipe); name a picture file`);
+  if (stat.size > MAX_PICTURE_BYTES) throw new UsageError(`${picture} is too large to read (${stat.size} bytes; the limit is ${MAX_PICTURE_BYTES}); name a smaller picture`);
 }
 
 // The folder to write into, made; never the picture itself, and no file it writes may replace the picture.

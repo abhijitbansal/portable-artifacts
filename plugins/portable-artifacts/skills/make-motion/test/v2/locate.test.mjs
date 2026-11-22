@@ -3,7 +3,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -243,6 +243,18 @@ test('--out under a file, and an unwritable folder, exit 2 with one line', { ski
 
 test('a device or a pipe is not a picture: exit 2', () => {
   assertOneLineExit2(run(['/dev/zero', '--out', path.join(scratch(), 'o')]), '/dev/zero');
+});
+
+// A sparse file over Node's read limit (2 GiB: readFileSync throws ERR_FS_FILE_TOO_LARGE, a RangeError with no syscall):
+// it takes no disk, and the check reads its size, never its bytes.
+test('a picture over the read limit exits 2 with one line', () => {
+  const dir = scratch();
+  const big = path.join(dir, 'big.png');
+  const fd = openSync(big, 'w');
+  try { ftruncateSync(fd, 2 ** 31); } finally { closeSync(fd); }
+  const r = run([big, '--out', path.join(dir, 'o')]);
+  assertOneLineExit2(r, 'a 2 GiB picture');
+  assert.match(r.stderr, /too large/);
 });
 
 test('a JPEG without ffmpeg exits 2 and says what to do', () => {
