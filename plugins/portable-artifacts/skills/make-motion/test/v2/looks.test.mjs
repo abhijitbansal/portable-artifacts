@@ -539,6 +539,25 @@ test('a look\'s fill is a band and a hero share, each above 0 and at most 1; any
   for (const name of registries.looks.names.all()) assert.doesNotThrow(() => validateLook({ ...registries.looks.get(name), name }), `${name} is valid`);
 });
 
+test('a look\'s kinds.statement.fillShort needs words and height; every field is checked and anything else is refused by name', () => {
+  const desk = registries.looks.get('desk');
+  const bad = (fillShort) => () => validateLook({ ...desk, name: 'test-fs', kinds: { ...desk.kinds, statement: { fillShort } } });
+  const path = 'look "test-fs": kinds.statement.fillShort';
+  assert.throws(bad({ height: 0.8 }), new RegExp(`${path}\\.words: needs a whole number of at least 1, got undefined`));
+  assert.throws(bad({ words: 6 }), new RegExp(`${path}\\.height: needs a number above 0 and at most 1, got undefined`));
+  assert.throws(bad({ words: 0, height: 0.8 }), new RegExp(`${path}\\.words: needs a whole number of at least 1, got 0`));
+  assert.throws(bad({ words: 6, height: 1.2 }), new RegExp(`${path}\\.height: needs a number above 0 and at most 1, got 1\\.2`));
+  assert.throws(bad({ words: 6, height: 0.8, toWide: 13 }), new RegExp(`${path}\\.toWide: needs a whole number from 1 to 12, got 13`));
+  assert.throws(bad({ words: 6, height: 0.8, linesWide: 2.5 }), new RegExp(`${path}\\.linesWide: needs a whole number of at least 1, got 2\\.5`));
+  assert.throws(bad({ words: 6, height: 0.8, max: 0 }), new RegExp(`${path}\\.max: needs a number above 0, got 0`));
+  assert.throws(bad({ words: 6, height: 0.8, max: '360' }), new RegExp(`${path}\\.max: needs a number above 0, got "360"`));
+  assert.throws(bad({ words: 6, height: 0.8, gap: 1 }), new RegExp(`${path}\\.gap: is not a field; it takes words, height, toWide, linesWide, max`));
+  assert.throws(bad({ words: 6, height: 0.8, constructor: 1 }), new RegExp(`${path}\\.constructor: is not a field`));
+  assert.throws(bad(3), new RegExp(`${path}: needs an object of words, height, toWide, linesWide, max, got 3`));
+  assert.doesNotThrow(bad({ words: 6, height: 0.8 }));
+  assert.doesNotThrow(bad({ words: 6, height: 1, toWide: 11, linesWide: 3, max: 360 }));
+});
+
 test('desk and ledger take a wider bare column (band 0.40), ledger a lower hero bar too (0.45); every other look takes the default fill', () => {
   assert.deepEqual(registries.looks.get('desk').fill, { band: 0.4 });
   assert.deepEqual(registries.looks.get('ledger').fill, { band: 0.4, hero: 0.45 });

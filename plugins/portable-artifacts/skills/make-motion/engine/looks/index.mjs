@@ -296,6 +296,41 @@ function fillErrors(name, look) {
   });
 }
 
+// look.kinds.statement.fillShort (absent, or { words, height, toWide?, linesWide?, max? }, read by engine/kinds/statement.mjs
+// shortFill): what a statement of at most `words` words may take instead of the look's usual share. `words` and `height`
+// are required; every field is checked, and a key that is not a field is refused (Object.hasOwn: no inherited names).
+const FILL_SHORT_RULES = Object.freeze({
+  words: { ok: (v) => Number.isInteger(v) && v >= 1, need: 'a whole number of at least 1' },
+  height: { ok: isFillShare, need: 'a number above 0 and at most 1' },
+  toWide: { ok: (v, columns) => Number.isInteger(v) && v >= 1 && v <= columns, need: (columns) => `a whole number from 1 to ${columns}` },
+  linesWide: { ok: (v) => Number.isInteger(v) && v >= 1, need: 'a whole number of at least 1' },
+  max: { ok: (v) => Number.isFinite(v) && v > 0, need: 'a number above 0' },
+});
+const FILL_SHORT_KEYS = Object.keys(FILL_SHORT_RULES);
+const FILL_SHORT_REQUIRED = ['words', 'height'];
+const shown = (v) => (typeof v === 'string' ? JSON.stringify(v) : String(v));
+
+function fillShortErrors(name, look) {
+  const statement = look.kinds?.statement;
+  if (!isPlainObject(statement) || !Object.hasOwn(statement, 'fillShort') || statement.fillShort === undefined) return [];
+  const at = `look "${name}": kinds.statement.fillShort`;
+  const data = statement.fillShort;
+  if (!isPlainObject(data)) return [`${at}: needs an object of ${FILL_SHORT_KEYS.join(', ')}, got ${shown(data)}`];
+  const columns = look.grid?.columns;
+  const fields = FILL_SHORT_KEYS.flatMap((key) => {
+    if (!Object.hasOwn(data, key)) return FILL_SHORT_REQUIRED.includes(key) ? [[key, undefined]] : [];
+    return [[key, data[key]]];
+  });
+  const bad = fields.filter(([key, value]) => !FILL_SHORT_RULES[key].ok(value, columns))
+    .map(([key, value]) => {
+      const { need } = FILL_SHORT_RULES[key];
+      return `${at}.${key}: needs ${typeof need === 'function' ? need(columns) : need}, got ${shown(value)}`;
+    });
+  const unknown = Object.keys(data).filter((key) => !FILL_SHORT_KEYS.includes(key))
+    .map((key) => `${at}.${key}: is not a field; it takes ${FILL_SHORT_KEYS.join(', ')}`);
+  return [...bad, ...unknown];
+}
+
 function cutMotionErrors(name, look) {
   const motion = look.cutMotion;
   if (motion === undefined) return [];
@@ -372,7 +407,7 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
   const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look)];
   if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));
-  const fill = fillErrors(look.name, look);
+  const fill = [...fillErrors(look.name, look), ...fillShortErrors(look.name, look)];
   if (fill.length > 0) throw new RangeError(fill.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {

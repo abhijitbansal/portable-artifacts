@@ -625,27 +625,27 @@ const textOf = (shot, look, format) => textNode(expandedIn(shot, look, format).n
 const statementOf = (text) => ({ id: 's', show: 'statement', hold: 2, text });
 const SHORT_TEXTS = ['Numbers need sources.', 'One file, no server at all.', 'Scripts do the rest of it.', 'Ship it today.', 'Make the film now.'];
 const TEN_WORDS = 'Most dashboards cannot tell you where a number came from.';
-const FILL_SHORT = { desk: { words: 6, height: 0.8, toWide: 11 }, cosmos: { words: 6, height: 0.8 }, keynote: { words: 6, height: 0.8 } };
+const FILL_SHORT = {
+  desk: { words: 6, height: 0.8, toWide: 11 },
+  cosmos: { words: 6, height: 0.8, linesWide: 3, max: 360 },
+  keynote: { words: 6, height: 0.8, linesWide: 3, max: 360 },
+};
 
 test('the three looks carry the shipped fillShort data', () => {
   for (const [name, data] of Object.entries(FILL_SHORT)) assert.deepEqual(registries.looks.get(name).kinds.statement.fillShort, data, name);
 });
 
-// Where the data takes effect (measured with the fake measure, .scratch/motion-steals-w2/t5-search.mjs): desk on 16:9 (its
-// height share and columns), 1:1 and 4:5; keynote on 1:1 and 4:5 only (on 16:9 and 9:16 it is held by linesWide 2 and the
-// 300 cap, or by the width). Cosmos carries the data but no frame moves: its wide frame is held by linesWide 2 and the
-// 300 cap, its tall frames by their own tallHeight 0.92.
-const GROWS_ON = { desk: ['16:9', '1:1', '4:5'], keynote: ['1:1', '4:5'], cosmos: [] };
 const FORMATS_UNDER_TEST = ['16:9', '9:16', '1:1', '4:5'];
+const SHIP = 'Ship it today.'; // the brief's short statement; at 300 units (the cap) in desk, cosmos and keynote before fillShort
 
 for (const look of ['desk', 'cosmos', 'keynote']) {
-  test(`${look}: a statement of six words or fewer is never smaller, and is set larger where the look's other limits leave room, than the same look without fillShort`, () => {
+  test(`${look}: a statement of six words or fewer is set larger at 16:9 than the same look without fillShort, and is never smaller on any format`, () => {
     const sizes = SHORT_TEXTS.flatMap((text) => FORMATS_UNDER_TEST.map((format) => ({ text, format, size: textOf(statementOf(text), look, format).font.size, was: textOf(statementOf(text), withoutFill(look), format).font.size })));
     sizes.forEach(({ text, format, size, was }) => assert.ok(size >= was, `${look} ${format} "${text}": ${size} is not under ${was}`));
-    const grew = (format) => sizes.some((s) => s.format === format && s.size > s.was);
-    const seen = (format) => sizes.filter((s) => s.format === format).map(({ size, was }) => `${size}/${was}`).join(' ');
-    GROWS_ON[look].forEach((format) => assert.ok(grew(format), `${look} ${format} has a larger short statement: ${seen(format)}`));
-    if (GROWS_ON[look].length === 0) FORMATS_UNDER_TEST.forEach((format) => assert.ok(!grew(format), `${look} ${format} is as before: ${seen(format)}`));
+    // these three break into more lines or reach more columns; a one-line or a width-bound two-line text ("Make the film
+    // now." in cosmos) cannot grow, and "Ship it today." sits on the cap (own test below for cosmos and keynote)
+    const GROWS = ['Numbers need sources.', 'One file, no server at all.', 'Scripts do the rest of it.'];
+    sizes.filter((s) => s.format === '16:9' && GROWS.includes(s.text)).forEach(({ text, size, was }) => assert.ok(size > was, `${look} 16:9 "${text}": ${size} is larger than ${was}`));
   });
 
   test(`${look}: a ten-word statement is set exactly as it was`, () => {
@@ -656,6 +656,14 @@ for (const look of ['desk', 'cosmos', 'keynote']) {
       assert.equal(now.x, was.x);
       assert.equal(now.y, was.y);
     }
+  });
+}
+
+for (const look of ['cosmos', 'keynote']) {
+  test(`${look}: "${SHIP}" at 16:9 is set larger than its 300-unit cap before fillShort`, () => {
+    const now = textOf(statementOf(SHIP), look, '16:9').font.size, was = textOf(statementOf(SHIP), withoutFill(look), '16:9').font.size;
+    assert.equal(was, 300);
+    assert.ok(now > was, `${look}: ${now} is larger than ${was}`);
   });
 }
 
@@ -674,6 +682,7 @@ test('ledger hangs its claim under the tag as before, and pop still stacks', () 
   assert.equal(textOf(statementOf(TEN_WORDS), 'ledger').font.size, 163);
   const pop = expandShot(statementOf(TEN_WORDS), 'pop').nodes;
   assert.equal(textNode(pop).props.font.size.toFixed(4), '214.1737');
+  assert.equal(textNode(expandShot(statementOf(SHIP), 'pop').nodes).props.font.size, 265, 'pop short statement (t5-sizes.mjs, before fillShort)');
   assert.equal(registries.looks.get('ledger').kinds.statement.fillShort, undefined);
   assert.equal(registries.looks.get('pop').kinds?.statement?.fillShort, undefined);
 });

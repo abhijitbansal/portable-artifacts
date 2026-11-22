@@ -130,8 +130,10 @@ export const keynote = {
     // n2 ruling 3: at 16:9 across all twelve columns (`toWide` 12) and centred down the frame, not hung under the tag:
     // hung, the two-line claim left 34 percent of the height empty under it (measured with real glyphs,
     // keynote-glyphs-browser.test.mjs)
-    // `fillShort` (statement.mjs): a claim of at most 6 words may take 0.8 of the band's height (0.64 otherwise)
-    statement: { toWide: 12, linesWide: 2, tallFrom: 1, tail: 1.6, fillShort: { words: 6, height: 0.8 } },
+    // `fillShort` (statement.mjs): a claim of at most 6 words may take 0.8 of the band's height (0.64 otherwise), up to
+    // `linesWide` 3 lines (2 otherwise) and a size of 360 units (300 otherwise): at 2 lines and 300 units a short claim
+    // left the lower third of the frame bare (W2 task 5)
+    statement: { toWide: 12, linesWide: 2, tallFrom: 1, tail: 1.6, fillShort: { words: 6, height: 0.8, linesWide: 3, max: 360 } },
     // parked (looks-four Task 10): on 9:16 the desk number composition leaves 75 percent of the height empty (25 percent
     // used, keynote-kinds.test.mjs; the 35 percent rule), as it did in ledger; a tall number composition is open work
     number: { experimental: true, labelFace: 'text' },

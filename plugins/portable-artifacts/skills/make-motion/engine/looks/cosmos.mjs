@@ -145,8 +145,10 @@ export const cosmos = {
     // phrase, strength)
     // (gate round 3) `fromSun`: on a wide frame from the column the sun leaves free (sun.mjs besideSun) to `toWide`, so
     // the sun has a column of its own; on a tall one centred on the sun's axis (`tallAlign`) in the band under its disc
-    // `fillShort` (statement.mjs): a claim of at most 6 words may take 0.8 of the band's height (0.64 otherwise)
-    statement: { toWide: 12, fromSun: true, tallAlign: 'center', linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { strength: 1 }, fillShort: { words: 6, height: 0.8 } },
+    // `fillShort` (statement.mjs): a claim of at most 6 words may take 0.8 of the band's height (0.64 otherwise), up to
+    // `linesWide` 3 lines (2 otherwise) and a size of 360 units (300 otherwise): at 2 lines and 300 units a short claim
+    // left the lower half of the frame bare (W2 task 5)
+    statement: { toWide: 12, fromSun: true, tallAlign: 'center', linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { strength: 1 }, fillShort: { words: 6, height: 0.8, linesWide: 3, max: 360 } },
     // clipping (optional data, clipping.mjs): the picture on the look's rounded `card`, square (`turn` 0), with a soft
     // accent `glow` (units of blur) round the card, and a region's marker frame round-cornered (`mark`: radius, width units)
     clipping: { card: true, turn: 0, glow: 26, mark: { radius: 18, width: 6 } },

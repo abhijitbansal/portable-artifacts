@@ -33,7 +33,8 @@ const TEXT_MAX = 200;
 const KICKER_MAX = 40;
 // desk: fitted between scale step 3 and 300 units, its block at most 64% of the height, ink centred at 50%; columns 2
 // to 9 (2 to 11 on vertical formats), and with a slug no narrower than columns 2 to 5, trading size for a better break
-// no lower than 3 times its kicker
+// no lower than 3 times its kicker. For a short statement, look data kinds.statement.fillShort overrides the 300 cap
+// (max), the 64% (height), the last column (toWide) and the look's linesWide (shortFill below).
 const DESK = Object.freeze({ centre: 0.5, height: 0.64, fromStep: 3, max: 300, toWide: 9, toTall: 11, minTo: 5 });
 const POP = Object.freeze({ fromStep: 3, toStep: 5 }); // so a long word can shrink the block
 const FIRST_COLUMN = 2;
@@ -71,8 +72,9 @@ function highlightTogether(text, ctx) {
   return emphasised.map((on, i) => on && emphasised[i + 1] === true);
 }
 
-// The look's short-statement fill (kinds.statement.fillShort: { words, height, toWide? }, desk, cosmos, keynote) when the
-// text has `words` words or fewer; null otherwise. A short claim may take more of the band and, on a wide frame, more columns.
+// The look's short-statement fill (kinds.statement.fillShort: { words, height, toWide?, linesWide?, max? }, desk, cosmos,
+// keynote) when the text has `words` words or fewer; null otherwise. A short claim may take more of the band, more
+// columns and lines on a wide frame, and go past the 300-unit cap.
 function shortFill(look, text) {
   const fill = look.kinds?.statement?.fillShort;
   return fill !== undefined && wordsOf(text).length <= fill.words ? fill : null;
@@ -95,7 +97,8 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const bounds = editorialBounds(ctx);
   // on a tall frame with a sun the block keeps out of its bright light: never higher than belowSun
   const top = !wide && sunny ? Math.max(bounds.top, belowSun(look, ctx)) : -Infinity;
-  const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
+  const fill = shortFill(look, text);
+  const min = sizeAt(look, DESK.fromStep, unit), max = (fill?.max ?? DESK.max) * unit;
   // a look may set a tall frame's lines further apart (data.tallLineHeight, marker: a board written down the page)
   const font = !wide && data.tallLineHeight ? { ...fontFor(look, 'display', max, unit), lineHeight: data.tallLineHeight } : fontFor(look, 'display', max, unit);
   // a claim that hangs under its tag on a wide frame (kinds.statement.hang, ledger) is fitted where it will stand: its
@@ -120,11 +123,12 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   // hanging claim may take all the room under its tag
   const maxLines = !wide && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
   const maxHeight = hangTop !== null ? bounds.bottom - hangTop
-    : Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : shortFill(look, text)?.height ?? DESK.height), bounds.bottom - Math.max(bounds.top, top));
+    : Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : fill?.height ?? DESK.height), bounds.bottom - Math.max(bounds.top, top));
   // a phrase kept whole may cost size: the fit looks down to the kind's floor for a layout that keeps it
   const floor = data.together && wide ? Math.max(tradeFloor, min) : tradeFloor;
   const fit = (lines) => fitDisplay(opts, { min, max, maxHeight, maxLines: lines, tradeFloor: floor }, look, unit);
-  const fewer = wide && data.linesWide ? fit(data.linesWide) : null;
+  const linesWide = fill?.linesWide ?? data.linesWide;
+  const fewer = wide && linesWide ? fit(linesWide) : null;
   const fitted = fewer && !fewer.layout.overflow && whole(fewer.layout) ? fewer : fit(maxLines);
   return place(fitted.layout, fitted.font);
 }
