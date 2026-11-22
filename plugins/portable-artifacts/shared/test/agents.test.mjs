@@ -538,6 +538,24 @@ test('cli: write-reviewer --force --replace-foreign copies the foreign file to .
   assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md.bak'), 'utf8'), 'mine é\n');
 });
 
+// R1: when no backup can be made, the rewrite is refused whatever flags are given, so a full disk never loses both files.
+test('cli: write-reviewer --force --replace-foreign refuses to replace a file it cannot back up, and leaves it as it is', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  // every backup name is taken: .bak, .bak.1 ... .bak.999
+  fs.writeFileSync(`${file}.bak`, 'earlier');
+  for (let n = 1; n < 1000; n += 1) fs.writeFileSync(`${file}.bak.${n}`, 'earlier');
+  for (const [text, flags] of [['mine é\n', ['--force', '--replace-foreign']], [OURS_OLD(), ['--force']]]) {
+    fs.writeFileSync(file, text);
+    const r = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, ...flags], { encoding: 'utf8' });
+    assert.equal(r.status, 1, `${flags.join(' ')}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /backup/);
+    assert.equal(fs.readFileSync(file, 'utf8'), text, `${flags.join(' ')}: the file is as it was`);
+  }
+  assert.equal(fs.readFileSync(`${file}.bak`, 'utf8'), 'earlier', 'no earlier copy was overwritten');
+});
+
 // A symlink to a file of ours must not be swapped for a plain file: the link may be the user's own arrangement.
 test('cli: write-reviewer --force refuses a symlink to a file of ours, and replaces it only with --replace-foreign', { skip: process.platform === 'win32' && 'symbolic links need a privilege on Windows' }, () => {
   const dir = path.join(tmpDir(), 'agents');

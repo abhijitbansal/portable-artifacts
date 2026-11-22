@@ -1267,6 +1267,40 @@ test("builderAgent: doctor --fix writes a missing builder and rewrites an older 
   assert.deepEqual(await diagnose([builderAgent()], c), { ok: true, missing: [] });
 });
 
+// R2: the writer refuses a symbolic link, so the doctor must not offer a fix for one that then fails on every run. A link is
+// one info note, whatever it points at (an older file of ours, or nothing).
+test("builderAgent: a symlinked older reviewer of ours is one info note, not a failure with a fix that cannot work", async () => {
+  const links = new Set([REVIEWER_USER]);
+  const c = { ...rctx({ [BUILDER_USER]: CURRENT_TEXT, [REVIEWER_USER]: REVIEWER_OURS_OLD }), isLink: (p) => links.has(p) };
+  assert.equal(await builderAgent().check(c), true);
+  const r = await diagnose([builderAgent()], c);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.missing, []);
+  assert.equal(r.info.length, 1);
+  assert.match(r.info[0].note, /\/h\/\.claude\/agents\/motion-reviewer\.md is a symbolic link: left alone/);
+  assert.doesNotMatch(r.info[0].note, /--replace-foreign|--force/);
+  // a dangling link: nothing exists at the path, but a link is there, so it is not "not installed" either
+  const dangling = { ...rctx({ [BUILDER_USER]: CURRENT_TEXT }), isLink: (p) => p === REVIEWER_USER };
+  const d = await diagnose([builderAgent()], dangling);
+  assert.equal(d.info.length, 1);
+  assert.match(d.info[0].note, /is a symbolic link/);
+  assert.doesNotMatch(d.info[0].note, /is not installed/);
+});
+
+test("builderAgent: doctor --fix on a fake HOME with a symlinked older reviewer leaves the link and its target alone and does not fail", async () => {
+  const { agents, c } = fakeMachine();
+  const target = path.join(path.dirname(agents), "elsewhere.md");
+  fs.writeFileSync(target, REVIEWER_OURS_OLD);
+  fs.symlinkSync(target, path.join(agents, "motion-reviewer.md"));
+  const r = await diagnose([builderAgent()], c);
+  assert.deepEqual(r.missing, []);
+  assert.match(r.info[0].note, /is a symbolic link/);
+  const res = await runFixes(["builder_agent"], [builderAgent()], c);
+  assert.equal(res[0].ok, true, JSON.stringify(res));
+  assert.ok(fs.lstatSync(path.join(agents, "motion-reviewer.md")).isSymbolicLink());
+  assert.equal(fs.readFileSync(target, "utf8"), REVIEWER_OURS_OLD);
+});
+
 test("builderAgent: doctor --fix never rewrites a project-level reviewer, even our own older one", async () => {
   const { projectAgents, c } = fakeMachine({ project: REVIEWER_OURS_OLD });
   const res = await runFixes(["builder_agent"], [builderAgent()], c);

@@ -46,6 +46,14 @@ export function defaultCtx(skillDir) {
     cwd: process.cwd(),
     homedir: os.homedir(),
     exists: (p) => fs.existsSync(p),
+    // Whether the path itself is a symbolic link (lstat: a dangling one counts). Optional in a test ctx: absent means no link.
+    isLink: (p) => {
+      try {
+        return fs.lstatSync(p).isSymbolicLink();
+      } catch {
+        return false;
+      }
+    },
     readFile: (p) => fs.readFileSync(p, 'utf8'),
     realpath: (p) => fs.realpathSync(p),
     isExecutable: (p) => {
@@ -568,15 +576,16 @@ function reviewerAgentFiles(ctx) {
   const base = { home: ctx.homedir ?? os.homedir(), cwd: ctx.cwd ?? process.cwd() };
   return REVIEWER_PLACES
     .map(([where, rel]) => ({ file: P.join(base[where], ...rel.split('/'), 'motion-reviewer.md'), host: 'claude', project: where === 'cwd' }))
-    .filter(({ file }) => ctx.exists(file))
+    .filter(({ file }) => ctx.exists(file) || ctx.isLink?.(file) === true) // a dangling link is something there too
     // When the project folder is the home folder both places are one file: list it once, at user level (it comes first).
     .filter((r, i, all) => all.findIndex((x) => x.file === r.file) === i);
 }
 
-// Every existing reviewer file with its state ('current', 'older', 'newer' or 'foreign'). An unreadable file is left out:
-// nothing to compare, so it counts as current.
+// Every existing reviewer file with its state ('current', 'older', 'newer', 'foreign' or 'linked': a symbolic link, whatever it
+// points at, which the writer never replaces). An unreadable file is left out: nothing to compare, so it counts as current.
 function reviewerStates(ctx) {
   return reviewerAgentFiles(ctx).flatMap((r) => {
+    if (ctx.isLink?.(r.file) === true) return [{ ...r, state: 'linked' }];
     try {
       return [{ ...r, state: reviewerFileState(ctx.readFile(r.file)) }];
     } catch {
@@ -592,6 +601,8 @@ const reviewerProblems = (ctx) => reviewerStates(ctx).filter((r) => r.state === 
 const reviewerNewer = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'newer');
 // Files the user wrote under our name: never rewritten, only noted.
 const reviewerForeign = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'foreign');
+// Symbolic links: the writer refuses to replace one, so the doctor offers no fix for it, only a note.
+const reviewerLinked = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'linked');
 // The copy the writer makes before it rewrites an older file of ours (see agents.mjs writeReviewerFile).
 const backupNote = (file) => `${file} is copied to ${file}.bak first (or the next free .bak.N)`;
 
@@ -628,7 +639,9 @@ export function builderAgent() {
     alwaysInfo: (ctx) => {
       const newer = reviewerNewer(ctx);
       const foreign = reviewerForeign(ctx);
+      const linked = reviewerLinked(ctx);
       const notes = [];
+      if (linked.length) notes.push(`${linked.map((r) => r.file).join(' and ')} is a symbolic link: left alone (neither the doctor nor the writer replaces a link; if it points at an older portable-artifacts file, replace the link yourself)`);
       if (newer.length) notes.push(`${newer.map((r) => r.file).join(' and ')} was written by a newer portable-artifacts than this skill's copy: left alone (this skill's copy is older; update it, or run the doctor from the newer one)`);
       if (foreign.length) notes.push(`${foreign.map((r) => r.file).join(' and ')} is not a portable-artifacts motion-reviewer file: left alone (it is your own, so the optional second reviewer there is yours, not ours)`);
       return notes.length ? { note: notes.join('; ') } : null;
@@ -667,10 +680,11 @@ export function builderAgent() {
         const cmds = [...new Map(old.map(({ file, host, project }) => {
           const reviewer = P.join(P.join(file, '..'), 'motion-reviewer.md');
           const state = host === 'claude' ? stateOf.get(reviewer) : undefined;
-          const kept = state === 'foreign' || state === 'newer';
+          const kept = state === 'foreign' || state === 'newer' || state === 'linked';
           const files = [file, ...(host === 'claude' && !kept ? [reviewer] : [])];
           const warn = state === 'foreign' ? `; ${reviewer} is kept as it is: it is not a portable-artifacts file`
             : state === 'newer' ? `; ${reviewer} is kept as it is: it is newer than this skill's copy`
+              : state === 'linked' ? `; ${reviewer} is kept as it is: it is a symbolic link`
               : state === 'older' ? `; the old ${reviewer} is copied to ${reviewer}.bak first` : '';
           return [`${host}|${project}`, `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''} (replaces ${files.join(' and ')}${warn})`];
         })).values()];

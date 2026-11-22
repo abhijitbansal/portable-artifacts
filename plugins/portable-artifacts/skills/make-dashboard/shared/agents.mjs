@@ -221,8 +221,8 @@ export function reviewerRefusal(dir, fileName) {
   return null;
 }
 
-// Before a rewrite of a regular file whose text differs from what will be written: copy it beside itself as <file>.bak, or
-// .bak.1, .bak.2 ... when that name is taken (COPYFILE_EXCL: an earlier copy is never overwritten). Returns the copy's path,
+// Before a rewrite of a regular file whose text differs from what will be written: keep it beside itself as <file>.bak, or
+// .bak.1, .bak.2 ... when that name is taken (see keepAs: an earlier copy is never overwritten). Returns the copy's path,
 // or null when there is nothing to keep (no file, a link, or the same text). Throws when the copy cannot be made.
 const MAX_BACKUPS = 1000;
 function backupBeforeRewrite(file, content) {
@@ -241,41 +241,54 @@ function backupBeforeRewrite(file, content) {
   }
   for (let n = 0; n < MAX_BACKUPS; n += 1) {
     const copy = n === 0 ? `${file}.bak` : `${file}.bak.${n}`;
-    try {
-      fs.copyFileSync(file, copy, fs.constants.COPYFILE_EXCL);
-      return copy;
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-    }
+    if (keepAs(file, copy)) return copy;
   }
   throw new Error(`more than ${MAX_BACKUPS} backups of ${file} already exist`);
 }
 
+// Keeps `file` under the name `copy` without ever overwriting `copy`. Returns true when it did, false when `copy` is taken.
+// A hard link is tried first: it is atomic, moves no data (so a full disk cannot stop it) and fails with EEXIST rather than
+// replace anything; the rewrite then unlinks `file` and leaves the old text under `copy`. A file system with no hard links
+// gets an exclusive copy instead. Any other error throws.
+function keepAs(file, copy) {
+  try {
+    fs.linkSync(file, copy);
+    return true;
+  } catch (e) {
+    if (e.code === 'EEXIST') return false;
+  }
+  try {
+    fs.copyFileSync(file, copy, fs.constants.COPYFILE_EXCL);
+    return true;
+  } catch (e) {
+    if (e.code === 'EEXIST') return false;
+    throw e;
+  }
+}
+
 // The one way to write the reviewer file, for the writer CLI and the installer. Without force an existing file is kept.
 // With force it applies the gate (reviewerRefusal) unless replaceForeign, copies the old text to a .bak first, then
-// replaces the file. Returns { result: 'written' | 'kept' | 'not-file' | 'refused', reason?, backup?, backupError? }.
-// A failed copy refuses the rewrite, except under replaceForeign where the owner asked to replace it anyway.
+// replaces the file. Returns { result: 'written' | 'kept' | 'not-file' | 'refused', reason?, backup? }.
+// A backup that cannot be made refuses the rewrite, whatever flags were given: the file is left as it is, so a full disk or
+// a locked folder never costs the user both the old file and the new one.
 export function writeReviewerFile(dir, file, content, { force = false, replaceForeign = false } = {}) {
   if (!force) return { result: writeAgentFile(dir, file, content, false) };
   if (!replaceForeign) {
     const reason = reviewerRefusal(dir, path.basename(file));
     if (reason) return { result: 'refused', reason };
   }
-  let backup = null;
-  let backupError;
+  let backup;
   try {
     backup = backupBeforeRewrite(file, content);
   } catch (e) {
-    if (!replaceForeign) return { result: 'refused', reason: `could not copy ${file} to a backup first (${e.code ?? e.message}), so it is left as it is` };
-    backupError = `could not copy ${file} to a backup first (${e.code ?? e.message})`;
+    return { result: 'refused', reason: `could not keep a backup of ${file} first (${e.code ?? e.message}), so it is left as it is` };
   }
-  return { result: writeAgentFile(dir, file, content, true), ...(backup ? { backup } : {}), ...(backupError ? { backupError } : {}) };
+  return { result: writeAgentFile(dir, file, content, true), ...(backup ? { backup } : {}) };
 }
 
 // Prints the lines for one reviewer write (stdout for the facts, stderr for a refusal or a warning).
 function reportReviewer(file, r) {
   if (r.backup) process.stdout.write(`agent: backed up ${file} to ${r.backup}\n`);
-  if (r.backupError) process.stderr.write(`agent: ${r.backupError}\n`);
   if (r.result === 'refused') {
     process.stderr.write(`agent: ${r.reason}\n`);
     return 1;

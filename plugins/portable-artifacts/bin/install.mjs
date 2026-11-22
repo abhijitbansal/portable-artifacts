@@ -276,7 +276,6 @@ function installAgents(targets, { force, replaceForeign = false }) {
       try {
         const r = isReviewer ? writeReviewerFile(dir, file, content, { force, replaceForeign }) : { result: writeAgentFile(dir, file, content, force) };
         if (r.backup) process.stdout.write(`agent: backed up ${file} to ${r.backup}\n`);
-        if (r.backupError) process.stderr.write(`install: agent: ${r.backupError}\n`);
         const result = r.result;
         if (result === 'refused') {
           // The user's file is safe: say why it was kept, and do not fail the install.
