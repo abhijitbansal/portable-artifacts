@@ -60,7 +60,7 @@ export function brokenLinks(md) {
   return [...new Set(found)].filter((rel) => !fs.existsSync(path.join(MOTION, rel)));
 }
 
-test('every references/ path and scripts/ file the five documents name exists', () => {
+test('every references/ path and scripts/ file a document names exists', () => {
   for (const doc of DOCS) assert.deepEqual(brokenLinks(read(doc)), [], doc);
 });
 
@@ -131,13 +131,54 @@ test('story.md is built around the one thing, three storylines as three films an
   assert.deepEqual([registries.modes.get('pro').wpm, registries.modes.get('viral').wpm], [150, 175]);
 });
 
+// The storyline pick must obey the intake's one round: SKILL.md folds the three storylines into the intake message, and
+// routes the teaching check and the storylines from step 1, so no agent asks a second time or skips the step.
+test('SKILL.md folds the storyline pick into the one intake round and routes the teaching check from step 1', () => {
+  const skill = read('SKILL.md');
+  const intake = section(skill, 'Intake (one round)');
+  assert.match(intake, /three storylines/);
+  assert.match(intake, /references\/story\.md/);
+  assert.ok(intake.indexOf('three storylines') < intake.indexOf('do not ask again'), 'the pick comes before "do not ask again"');
+  const step1 = skill.split('\n').find((l) => l.startsWith('1. Pick the film'));
+  assert.ok(step1.includes('teaching check') && step1.includes('storylines') && step1.includes('references/story.md'), 'step 1 routes to both');
+  assert.ok(section(read('references/story.md'), 'Three storylines').includes('no second question'));
+});
+
 test('each type file has its four sections, and offers only devices the kinds, cuts and devices can draw', () => {
+  // 'music.snap', 'captions', 'say', 'hold' and 'on' are fields, not registry entries, so they are taken on trust here.
+  // `music.snap` and `captions` carry conditions the validator and the engine hold; the two tests below pin those.
   const drawable = new Set([...listedKinds(), ...registries.cuts.names(), ...registries.devices.names(), 'music.snap', 'captions', 'say', 'hold', 'on']);
   for (const type of ['explainer', 'data', 'vertical']) {
     const md = read(`references/types/${type}.md`);
     assert.deepEqual(headings(md), ['When', 'Shape', 'Devices', 'Check'], type);
     for (const word of ticks(section(md, 'Devices'))) assert.ok(drawable.has(word), `${type}: \`${word}\` is not something the engine draws`);
   }
+});
+
+// `music.snap` is a field, not a registry entry, so the check above takes it on trust. This one pins what the validator
+// (scripts/v2/spec-sound.mjs checkMusic) allows: snap needs a music file of your own and a film with no `say`.
+test('a type file offers music.snap only where the validator allows it: a music file of your own, no narration', () => {
+  const shots = [{ id: 'a', show: 'statement', hold: 2 }];
+  const bed = validateFilm({ version: 2, music: { bed: 'pulse', snap: true }, shots }, { specDir: MOTION });
+  assert.ok(bed.errors.some((e) => e.path === 'music' && /snap/.test(e.message)), 'the validator refuses snap with a bed');
+  const narrated = validateFilm({ version: 2, music: { src: 'nope.wav', snap: true }, shots: [{ id: 'a', show: 'statement', say: 'Hello there.' }] }, { specDir: MOTION });
+  assert.ok(narrated.errors.some((e) => e.path === 'music.snap'), 'the validator refuses snap in a narrated film');
+  const explainer = ticks(section(read('references/types/explainer.md'), 'Devices'));
+  assert.ok(!explainer.includes('music.snap'), 'an explainer is narration-led, so it never offers snap');
+  const offered = section(read('references/types/vertical.md'), 'Devices').split('\n').filter((l) => l.includes('`music.snap`'));
+  assert.equal(offered.length, 1);
+  for (const phrase of ['no narration', 'music file of your own']) assert.ok(offered[0].includes(phrase), `vertical: the snap line says "${phrase}"`);
+});
+
+test('captions are advised only for kinds that do not show their own words', () => {
+  const vertical = read('references/types/vertical.md');
+  const line = section(vertical, 'Devices').split('\n').find((l) => l.includes('`captions`'));
+  assert.ok(line, 'vertical.md advises captions');
+  for (const kind of ['statement', 'number', 'compare']) {
+    assert.equal(registries.kinds.get(kind).showsWords, true, `${kind} shows its own words`);
+  }
+  assert.ok(/its own words|their own words/.test(line), 'the line says a statement is its own words');
+  assert.ok(!/\bwith `captions`/.test(line), 'it does not pair captions with a statement');
 });
 
 test('tells.md has one section per look, never a banned list', () => {

@@ -9,7 +9,7 @@ Rank every note, rank first, in this form:
 `P1 · time · where · problem → change · what stays`
 
 - **P0**: the film says something false, or a shot cannot be read (clipped or overlapping text, an empty frame, a picture that hides its words). Fix every P0 before you deliver.
-- **P1**: a shot is weaker than it could be (a chart with no highlighted mark, a cut that means nothing, a picture the narration does not name).
+- **P1**: a shot is weaker than it could be (a chart with no highlighted mark, unless the claim is the pattern as a whole; a cut that means nothing, a picture the narration does not name).
 - **P2**: polish (spacing, a starred word too many, a hold a beat long).
 
 Always say what stays. A note that only attacks a shot invites a rewrite of the shots that work. Edit only the shots the notes name, then build again.
@@ -26,7 +26,7 @@ Ask one question of each shot: with the narration hidden, does the picture still
 
 ## Delivery
 
-Put four labelled lines in the final report. They replace its weakest-shot and what-nobody-checked items:
+Put four labelled lines in the final report. They are its review lines:
 
 - `weakest shot:` the shot id, and why it is the weakest.
 - `measured:` what the report printed (findings, durations, sizes), copied and not paraphrased.

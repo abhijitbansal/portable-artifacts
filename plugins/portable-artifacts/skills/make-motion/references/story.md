@@ -12,9 +12,9 @@ Every number and every claim in a `say` comes from the brief or from the user's 
 
 ## Three storylines
 
-For a film over 15 seconds, when a person is there to answer, offer three storylines before you write shots, and make them three different films, not three phrasings of one. Each gives four things: the first two seconds written out (the opening shot's kind and its exact `say`), the worked example, the arc in one line per shot, and the closing ask. Two storylines that share both their opening kind and their worked example are one storyline: replace one. Write the three to `storylines.md` beside the film, and the user picks one.
+For a film over 15 seconds, when a person is there to answer, offer three storylines before you write shots, and make them three different films, not three phrasings of one. Each gives four things: the first two seconds written out (the opening shot's kind and its exact `say`), the worked example, the arc in one line per shot, and the closing ask. Two storylines that share both their opening kind and their worked example are one storyline: replace one. Fill the teaching check (below) first, then write the three to `storylines.md` beside the film. They are the last item of the intake message, so the one reply that settles the options also picks the storyline: no second question. If the prompt settled every option and the intake round is skipped, the three are the one question you ask.
 
-When nobody can answer (`claude -p`, `codex exec`, an eval), pick the first and say so in the report. The example films show the shape of the fields; they are not a pace, a look or a shot order to copy.
+When nobody can answer (`claude -p`, `codex exec`, an eval), or the intake already ran without them, pick the first and say so in the report. The example films show the shape of the fields; they are not a pace, a look or a shot order to copy.
 
 ## Write for the picture
 
@@ -38,7 +38,7 @@ Every line of narration names what is on screen while it is said. If a line has 
 
 ## The teaching check
 
-Fill these five lines in before you write the shots. If one will not fill, the film is not ready.
+Fill these five lines in before you write the storylines or the shots. If one will not fill, the film is not ready.
 
 1. The one thing: the sentence a viewer could repeat.
 2. The worked example the whole film follows.
@@ -53,7 +53,7 @@ These make a film look generated. Each look also has tells of its own, and the c
 - A bullet list read aloud word for word. Use `list` with one sentence for each item, or cut to the point; it is right when the list is the thing being read, such as a checklist the viewer follows.
 - A chart with no highlighted mark, so nothing says what to see. A highlight is the default; leave it out only when the claim is the pattern as a whole.
 - Every shot a `statement`. Mix the kinds: a figure, a picture, a comparison; it is right for a spoken manifesto of short lines.
-- The same cut on every shot. Let a cut mean something: `match` carries a shared node across, `slide` moves on, a plain `cut` is a change of subject; one cut throughout is right for a quick run of like items.
+- The same cut on every shot. Let a cut mean something, using the cuts the look lists (`--list cuts`): `match` carries a shared node across and `slide` moves on, where the look has them; a plain `cut` is a change of subject; one cut throughout is right for a quick run of like items.
 - A closing shot that repeats the opening. End on the ask; a repeat is right when it is the ask itself.
 - Starred words in every line; it is right only in a film of two or three lines with one star each.
 

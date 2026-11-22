@@ -20,7 +20,7 @@ The user wants a viewer to understand a thing: how a tool works, why a decision 
 - Before and after: a `compare` set to its before and after mode.
 - A `number` that lands on the word that says it.
 - A `match` cut that carries one object from a shot to the next.
-- Cuts on the beat, with `music.snap`, when the film has a music bed, and a `circle` on the word that names the thing to see.
+- A `circle` on the word that names the thing to see.
 
 ## Check
 

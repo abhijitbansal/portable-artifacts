@@ -19,11 +19,11 @@ The film is meant for a feed, often watched with the sound off, by someone who h
 
 ## Devices
 
-- A `statement` that reads from frame 0, with `captions` for the viewer who has no sound.
-- A `punch` or `slide` cut, to change the picture at least every 3 seconds.
+- A `statement` that reads from frame 0. It is its own words, as a `number` and a `compare` are, so `captions` go on the shots that are not (a `chart`, a `diagram`, a `media` clip) for the viewer who has no sound.
+- A `punch` or `slide` cut where the next shot is a new thing, to change the picture at least every 3 seconds. On every cut it is the pop look's tell (references/tells.md).
 - A `number` that lands on the word that says it.
 - A `compare` for before and after.
-- Cuts on the beat, with `music.snap`, when the short has a music bed.
+- Cuts on the beat (`music.snap`) only in a short with no narration, cut to a music file of your own with its beats file (workflow step 10). A synthesised bed already follows the cuts.
 
 ## Check
 
