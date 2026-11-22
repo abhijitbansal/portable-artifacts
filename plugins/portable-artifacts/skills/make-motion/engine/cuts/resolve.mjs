@@ -84,7 +84,7 @@ function atProblem(value, name, entry, cuts) {
     const origins = cuts.names().filter((other) => cuts.get(other).origin === true);
     return `the "${name}" cut takes no "at"; the cuts that open from a point: ${origins.join(', ')}`;
   }
-  return typeof value === 'string' && value !== '' ? null : `must be the name of a target of the shot before, such as "region:chart", got ${shown(value)}`;
+  return typeof value === 'string' && value !== '' ? null : `must be the name of a target of the shot before (the names an "on" event's "target" takes there), got ${shown(value)}`;
 }
 
 // a look's cutStyle only (engine/cuts/smear.mjs smearsAlong): the axes the cut's smear runs along

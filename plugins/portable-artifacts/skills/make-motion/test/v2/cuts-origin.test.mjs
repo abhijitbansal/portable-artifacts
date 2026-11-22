@@ -12,7 +12,7 @@ import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
 import { listEntries, formatList } from '../../scripts/v2/list.mjs';
-import { measure, canvasOf, IMAGES, CLIP } from './helpers/kinds.mjs';
+import { measure, canvasOf, viralOf, IMAGES, CLIP, FPS, filmOf, expandIn } from './helpers/kinds.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const X = path.resolve(HERE, '../../references/examples/v2');
@@ -37,7 +37,9 @@ test('resolveCut reads at from the shot\'s own cut only, and explicitCut keeps i
 });
 test('a cut that opens from no point refuses at, naming the cuts that do', () => {
   assert.deepEqual(cutOptionProblems({ type: 'wipe', at: 'x' }, 'wipe'), [{ key: 'at', message: `the "wipe" cut takes no "at"; the cuts that open from a point: ${origins().join(', ')}` }]);
-  assert.deepEqual(cutOptionProblems({ type: 'iris', at: '' }, 'iris').map((p) => p.key), ['at']);
+  const [empty] = cutOptionProblems({ type: 'iris', at: '' }, 'iris');
+  assert.equal(empty.key, 'at');
+  assert.equal(empty.message, 'must be the name of a target of the shot before (the names an "on" event\'s "target" takes there), got ""');
   assert.deepEqual(cutOptionProblems({ type: 'iris', at: 'region:r' }, 'iris'), []);
 });
 test('pointThroughCamera: the identity leaves a point; a pan of 100 and a zoom of 2 move it as they move a node', () => {
@@ -45,6 +47,16 @@ test('pointThroughCamera: the identity leaves a point; a pan of 100 and a zoom o
   assert.deepEqual(pointThroughCamera([300, 200], still, CANVAS), [300, 200]);
   assert.deepEqual(pointThroughCamera([960, 540], { ...still, x: 100, zoom: 2 }, CANVAS), [860, 540]);
   assert.deepEqual(pointThroughCamera([1060, 540], { ...still, x: 100, zoom: 2 }, CANVAS), [1060, 540]);
+});
+test('pointThroughCamera: a rotate turns a point about the centre as it turns a node, and a depth softens the pan and the zoom', () => {
+  const turned = { x: 0, y: 0, zoom: 1, rotate: 90 };
+  const [tx, ty] = pointThroughCamera([1060, 540], turned, CANVAS); // 100 right of the centre, a quarter turn: 100 below it
+  assert.ok(Math.abs(tx - 960) < 1e-9 && Math.abs(ty - 640) < 1e-9, `${tx}, ${ty}`);
+  const push = { x: 100, y: 0, zoom: 2, rotate: 0 };
+  // depth 1: k = 2, so the zoom is 1 + (2 - 1) / 2 = 1.5 and the pan 50: 960 + 100 * 1.5 - 50
+  assert.deepEqual(pointThroughCamera([1060, 540], push, CANVAS, 1), [1060, 540]);
+  assert.deepEqual(pointThroughCamera([1160, 540], push, CANVAS, 1), [1210, 540]); // 960 + 200 * 1.5 - 50
+  assert.deepEqual(pointThroughCamera([1160, 540], push, CANVAS, 0), [1260, 540]); // 960 + 200 * 2 - 100
 });
 test('--list cuts says which cuts open from a point', () => {
   const cuts = listEntries('cuts');
@@ -82,4 +94,44 @@ test('the built film gives the window one fixed point inside the frame, and a na
   assert.throws(() => buildFilm({ film: bad, timeline, measure, assets: IMAGES, canvas: canvasOf('16:9') }), /^Error: shot "b": cut at "region:zzz" has no box in shot "a" \(have: /);
   const plain = buildFilm({ film: { ...f, shots: [f.shots[0], { ...f.shots[1], cut: 'iris' }] }, timeline, measure, assets: IMAGES, canvas: canvasOf('16:9') });
   assert.deepEqual(Object.keys(plain.frameAt(start + 0.1).cut), ['name', 'family', 'p', 'direction']);
+});
+
+// The origin is where the target is DRAWN on the cut's first frame (the outgoing shot at its end), not where its box was
+// laid out. A film of a captioned clipping with a region push, then a statement whose iris opens `at` a target.
+const centre = ([x, y, w, h]) => [x + w / 2, y + h / 2];
+const NEAR = 1e-6;
+const close = (got, want, msg) => assert.ok(Math.abs(got[0] - want[0]) < NEAR && Math.abs(got[1] - want[1]) < NEAR, `${msg}: ${got} vs ${want}`);
+const apart = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+function drawnFilm(look, at, format = '16:9') {
+  const clip = CLIP({ id: 'a', caption: 'The query', on: [{ at: 'word:behind', do: 'circle', target: 'region:r' }] });
+  const f = filmOf([clip, { id: 'b', show: 'statement', say: 'Next.', cut: { type: 'iris', at } }], look, format);
+  const timeline = buildTimeline(f, { fps: FPS });
+  const built = buildFilm({ film: f, timeline, measure, assets: IMAGES, canvas: canvasOf(format), viralInsets: viralOf(canvasOf(format)) });
+  const cut = built.frameAt(timeline.shots[1].start + 0.05).cut;
+  const end = timeline.shots[0].duration;
+  return { f, built, origin: cut.at, end, rest: expandIn(filmOf([clip], look, format), 0) };
+}
+
+test('a camera target after a push: the origin is the target as the camera draws it at the end of the shot', () => {
+  const { built, origin, end, rest } = drawnFilm('desk', 'image');
+  const hero = built.sampleShot(0, end).find((n) => n.bbox !== undefined);
+  close(origin, centre(hero.bbox), 'the image box as drawn, which the page also reports');
+  assert.ok(apart(origin, centre(rest.boxes.image)) > 5, 'the push moved the picture, so a box at rest is the wrong point');
+});
+test('a pinned caption card follows the push on its own tracks and skips the camera: the origin is where the card is drawn', () => {
+  const { built, origin, end, rest } = drawnFilm('desk', 'caption');
+  const id = 'a.caption.card';
+  const card = rest.nodes.find((n) => n.id === id);
+  assert.equal(card.props.fixed, true);
+  const drawn = built.sampleShot(0, end).find((n) => n.id === id);
+  const moved = [drawn.x - card.props.x, drawn.y - card.props.y];
+  assert.ok(Math.hypot(...moved) > 5, 'the card followed the push');
+  const at = centre(rest.boxes.caption);
+  close(origin, [at[0] + moved[0], at[1] + moved[1]], 'the caption box moved with its card');
+});
+test('a pinned caption of a stack look is drawn where it was laid out, whatever the camera does', () => {
+  const { built, origin, end, rest } = drawnFilm('pop', 'caption', '9:16');
+  const drawn = built.sampleShot(0, end).find((n) => n.id === 'a.caption');
+  assert.equal(drawn.props.fixed, true);
+  close(origin, centre(rest.boxes.caption), 'a fixed text with no tracks of its own');
 });

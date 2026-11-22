@@ -202,18 +202,38 @@ function carriedCamera(cam, duration, t, fps) {
 const HALF = 2;
 const centreOf = ([x, y, w, h]) => [x + w / HALF, y + h / HALF];
 
+function findNode(nodes, id) {
+  for (const n of nodes) {
+    const found = n.id === id ? n : findNode(n.children, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+// Where the centre of target `at`'s box (laid out at rest) is drawn as shot `prev` ends. A target is a camera node of depth 0
+// unless the kind names the node it belongs to (targetNodes): that node's own depth then sets how far the camera moves it,
+// and a pinned (fixed) node skips the camera and is moved only by its own tracks, from its rest pose to its pose at the end.
+function drawnCentre(prev, at, canvas) {
+  const centre = centreOf(prev.boxes[at]);
+  const id = prev.targetNodes[at];
+  const rest = id === undefined ? null : findNode(prev.nodes, id);
+  if (rest === null) return pointThroughCamera(centre, prev.cam(prev.duration), canvas);
+  const drawn = findNode(sampleGraph(prev.nodes, prev.duration), id);
+  if (rest.props.fixed !== true) return pointThroughCamera(centre, prev.cam(prev.duration), canvas, drawn.depth);
+  return [centre[0] + drawn.x - (rest.props.x ?? 0), centre[1] + drawn.y - (rest.props.y ?? 0)];
+}
+
 /**
- * A shot whose cut names `at` gets `origin`: the centre of the box `at` names in the shot before, where the camera has it as
- * that shot ends (one fixed point for the whole window). A name the shot before has no box for throws, listing the boxes
- * it has: a cut never opens from the middle in silence. Any other shot is returned as it is.
+ * A shot whose cut names `at` gets `origin`: where the box `at` names in the shot before is drawn as that shot ends (one
+ * fixed point for the whole window; drawnCentre). A name the shot before has no box for throws, listing the boxes it has: a
+ * cut never opens from the middle in silence. Any other shot is returned as it is.
  */
 function withOrigin(shot, index, shots, canvas) {
   const at = shot.cut?.at ?? null;
   if (at === null) return shot;
   const prev = shots[index - 1];
-  const box = prev.boxes[at];
-  if (!box) throw new Error(`shot "${shot.id}": cut at "${at}" has no box in shot "${prev.id}" (have: ${Object.keys(prev.boxes).join(', ')})`);
-  return { ...shot, origin: pointThroughCamera(centreOf(box), prev.cam(prev.duration), canvas) };
+  if (!prev.boxes[at]) throw new Error(`shot "${shot.id}": cut at "${at}" has no box in shot "${prev.id}" (have: ${Object.keys(prev.boxes).join(', ')})`);
+  return { ...shot, origin: drawnCentre(prev, at, canvas) };
 }
 
 // ---- shots ----
@@ -258,6 +278,7 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look: filmL
     start: timing.start,
     duration: timing.duration,
     boxes: out.boxes ?? {}, // the kind's target boxes at rest: where a cut that opens from one of them (cut.at) starts
+    targetNodes: out.targetNodes ?? {}, // a target's node id, for a box that is not a plain camera node's (withOrigin)
     // a look with `hand` data draws the shot with the drawing hand (engine/hand); any other look: the nodes as they are
     nodes: handLayer(groundLayer(withCaptions(out, shot, kind, ctx, film, cam), ctx), timing, ctx),
     cam,
