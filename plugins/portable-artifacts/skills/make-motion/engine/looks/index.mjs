@@ -14,6 +14,8 @@ import '../devices/index.mjs';
 import '../captions/index.mjs';
 // ...and give values (or null) for every named move, so the moves are registered before any look is.
 import '../moves/index.mjs';
+// ...and an entry (an object or null) for every film-level overlay, so the overlays are registered before any look is.
+import '../overlays/index.mjs';
 import { FILL_KEYS, isFillShare } from './fill.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
@@ -93,6 +95,11 @@ import { marker } from './marker.mjs';
  * @property {{ cut: Record<string, string | null>, device: Record<string, string | null>, emphasis: string | null,
  *   land: string | null }} sounds  the cue each event makes, or null for none: one entry per registered cut and device
  *   (checked by validateLook as the look registers); which names a synth knows is scripts/v2/sound's to check
+ * @property {{ logo: { corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right', height: number, margin: number,
+ *   opacity: number } | null, progress: { edge: 'top' | 'bottom', height: number, inset: number, bar: string, track: string } | null }} overlays
+ *   the film-level overlays (engine/overlays): an entry for every registered one, an object (units; `bar` and `track`
+ *   palette keys; `corner` is the default a film's logo takes) or null where the look does not draw it (checked by
+ *   validateLook as the look registers; a film asking for an overlay the look refuses is invalid)
  * @property {string} captions  the caption style, a name in registries.captions (engine/captions): how the spoken words
  *   of a narrated shot that does not show its own words are drawn (checked by validateLook as the look registers)
  * @property {'plain'} [captionVariant]  a variant of the caption style the look selects (lower: 'plain', ledger's strip)
@@ -333,6 +340,22 @@ function fillShortErrors(name, look) {
   return [...bad, ...unknown];
 }
 
+// look.overlays: an entry, an object or null, for each registered overlay (`overlays`), the object's fields checked by the
+// overlay itself (engine/overlays problems); a key that is no registered overlay is refused.
+function overlayErrors(name, look, overlays) {
+  const data = look.overlays;
+  const names = overlays.names();
+  if (!isPlainObject(data)) return [`look "${name}": overlays must be an object with an entry (an object or null) for each of ${names.join(', ')}, got ${String(data)}`];
+  const unknown = Object.keys(data).filter((key) => !names.includes(key)).map((key) => `look "${name}": overlays.${key} is not an overlay; they are ${names.join(', ')}`);
+  const entries = names.flatMap((key) => {
+    const entry = data[key];
+    if (entry === null) return [];
+    if (!isPlainObject(entry)) return [`look "${name}": overlays.${key} must be an object or null, got ${JSON.stringify(entry) ?? 'undefined'}`];
+    return overlays.get(key).problems(entry, look.palette).map((problem) => `look "${name}": overlays.${key}.${problem}`);
+  });
+  return [...entries, ...unknown];
+}
+
 function cutMotionErrors(name, look) {
   const motion = look.cutMotion;
   if (motion === undefined) return [];
@@ -415,9 +438,10 @@ export function kindData(look, kind, looks = registries.looks) {
  * Throws a RangeError naming the look and the field when its `sounds` is missing, or does not name a cue (or null) for
  * every cut in `cuts` and every device in `devices` (registries; default the shared ones), and for emphasis and land; or
  * when its `captions` does not name a style in `captions` (default the shared caption styles registry); or when its
- * `kinds`, given, is not an object of objects. Returns the look, so it can be used inline.
+ * `kinds`, given, is not an object of objects; or when its `overlays` lacks an entry (an object or null) for a registered
+ * overlay, or holds a field that is wrong. Returns the look, so it can be used inline.
  */
-export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions, moves = registries.moves } = {}) {
+export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions, moves = registries.moves, overlays = registries.overlays } = {}) {
   const caption = captionsError(look.name, look.captions, captions);
   if (caption !== null) throw new RangeError(caption);
   const kinds = kindsErrors(look.name, look.kinds);
@@ -439,6 +463,8 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
       .map((key) => `look "${name}": sounds.${key} must be a cue name or null, got ${String(sounds[key])}`),
   ];
   if (errors.length > 0) throw new RangeError(errors.join('\n'));
+  const overlay = overlayErrors(name, look, overlays);
+  if (overlay.length > 0) throw new RangeError(overlay.join('\n'));
   return look;
 }
 

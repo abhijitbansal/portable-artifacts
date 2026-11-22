@@ -36,6 +36,7 @@ An unknown root field is an error. Only `shots` and `version` are required.
 | `sound` | `"on"` or `"off"` | `on` plays the designed sound cues. In `viral` they play unless the film says `off` |
 | `cues` | array of up to 64 `{ "at", "cue" }` | Your own sound cues. See Sound |
 | `audio` | array of up to 20 `{ "src", "at" }` | Extra sound files. See Sound |
+| `overlays` | `{ "logo": { "src", "corner" }, "progress": true }` | A logo and a progress bar that stay unbroken over every cut. See Overlays |
 | `captions` | boolean | Draws the narration as captions, on shots whose kind does not show its own words. Off by default |
 | `loop` | boolean | `true`: the review checks that the last frame matches the first |
 | `vars` | object | Typed names for `{{name}}` in the film (see Variables) |
@@ -99,6 +100,15 @@ Sound is opt-in. A film with none of `voice`, `music`, `sound`, `cues` or `audio
 `--no-music` renders the film without its music, for a second delivery with no bed or track. The music is still planned, so `music.snap` moves the cuts as before and the cues sit on that timeline: the picture is the same film. When the render holds any other sound (a voice, cues, extra audio), `report.audio.music` keeps its summary and gains `muted: true`, and the text report's sound line ends `(muted)`; a film whose only sound was the music renders with no audio stream and `report.audio` is `null`. On a film with no music the flag does nothing and says so on the log. It does not go with `--outline`, `--phonemes`, `--poster`, `--poster-out`, `--inspect` or `--preview`.
 
 Every `src` is a file inside the film's folder. A URL, an absolute path or a path that leaves the folder is an error.
+
+## Overlays
+
+`overlays` puts two marks over the film itself, not over a shot, so a cut never moves, fades or breaks them: `{ "logo": { "src": "assets/logo.png", "corner": "top-right" }, "progress": true }`. Each key is optional. An unknown key gets a did-you-mean.
+
+- **`logo`**: a png, jpg, webp or gif inside the film's folder, held to the same rules as a shot's picture; a problem is reported at `overlays.logo.src`. `corner` is `top-left`, `top-right`, `bottom-left` or `bottom-right`; left out, it takes the look's own corner. The logo keeps its proportions and sits in its corner, inset by the look's margin.
+- **`progress`**: `true` draws a thin bar along one edge of the frame that fills from left to right over the film's length. The look sets the edge, thickness and colours.
+
+Both stand inside the rectangle the look composes in, so on a short they keep clear of the platform's interface. The look decides how each is drawn (`--list looks --json` says which overlays each look draws); asking for an overlay a look does not draw, such as `progress` in `marker`, is an error that names the looks that do.
 
 ## Variables
 

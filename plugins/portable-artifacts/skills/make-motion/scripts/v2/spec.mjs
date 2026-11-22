@@ -17,6 +17,7 @@ import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
 import { fieldAt } from '../../engine/assets.mjs';
 import { SpecError, isPlainObject, quote, schemaErrors, srcProblem } from './spec-common.mjs';
 import { cutErrors } from './spec-cuts.mjs';
+import { checkOverlays } from './spec-overlays.mjs';
 import { cutNameOf } from '../../engine/cuts/resolve.mjs';
 import { AUDIO_SCHEMA, CUES_MAX, MUSIC_SCHEMA, VOICE_SCHEMA, checkAudio, checkCueItems, checkMusic, checkVoice, isRecordingVoice, readRecording } from './spec-sound.mjs';
 
@@ -67,6 +68,7 @@ const ROOT_SCHEMA = {
     provenance: { type: 'boolean' }, // false: the MP4 carries no provenance tags (stamp.mjs), as --no-provenance
     loop: { type: 'boolean' }, // true: the review checks the last frame against the first (loop.mjs)
     audio: AUDIO_SCHEMA, // checkAudio: each { src, at? }, src inside the folder
+    overlays: {}, // checkOverlays (spec-overlays.mjs): { logo?: { src, corner? }, progress?: true }, each an overlay the look draws
     vars: {}, // vars.mjs varsErrors checks it, and substitute puts the values in before validation
     voice: VOICE_SCHEMA, // checkVoice: one of the two shapes, a voice that exists
     // Items are not listed: Ajv would walk and report every one of a huge array.
@@ -688,6 +690,7 @@ function collectErrors(spec, specDir, regs) {
     ...checkCueItems(spec),
     ...checkAccent(spec),
     ...settings,
+    ...checkOverlays(spec, base),
     ...checkRootCut(spec, ctx),
     ...checkShots(spec, ctx),
     ...narrationErrors(spec, ctx),

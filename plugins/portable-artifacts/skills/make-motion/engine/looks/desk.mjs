@@ -95,6 +95,12 @@ export const desk = {
   captions: 'lower',
   // 0.02: the paper field already carries the texture; more grain is noise a 20 s film pays for in megabytes (round 4 measurements)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units; accent2 for
+  // the bar, since desk's yellow accent is too pale to read on the paper
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'bottom', height: 6, inset: 0, bar: 'accent2', track: 'rule' },
+  },
   // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs, quote.mjs, compare.mjs, chart.mjs);
   // sizes are units, shares of the frame,
   // em of the text they follow, or 1-based scale steps.

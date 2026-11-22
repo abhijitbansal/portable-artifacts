@@ -1,5 +1,5 @@
 // The assertions every look owes (looks-four plan, "Interfaces shared by every look task"). lookContract(name, opts)
-// registers one node:test per assertion, named "(a)" to "(j)" in the output; contractChecks returns the same checks as
+// registers one node:test per assertion, named "(a)" to "(k)" in the output; contractChecks returns the same checks as
 // { key, title, run } so a test can prove each one fires (look-contract.test.mjs).
 //
 // opts: `modes`; `grounds`: every #rrggbb a text or mark can sit on; `pairs`: [fg, ground, min] for every pairing the
@@ -144,6 +144,14 @@ export function contractChecks(name, { modes, grounds = [], pairs = [], banned =
           assert.equal(ok, modes.includes(mode), `${mode} ${format}: ${ok ? 'validates' : errors.map((e) => e.message ?? e).join('; ')}`);
         }
       }
+    } },
+    { key: 'k', title: 'overlays: an entry (an object or null) for every registered overlay, the fields valid', run: () => {
+      for (const overlay of registries.overlays.names()) {
+        assert.ok(Object.hasOwn(look().overlays ?? {}, overlay), `overlays.${overlay} is given (an object or null)`);
+        const entry = look().overlays[overlay];
+        if (entry !== null) assert.deepEqual(registries.overlays.get(overlay).problems(entry, look().palette), [], `overlays.${overlay}`);
+      }
+      assert.deepEqual(sorted(Object.keys(look().overlays)), sorted(registries.overlays.names()), 'overlays names no overlay that is not registered');
     } },
   ];
 }

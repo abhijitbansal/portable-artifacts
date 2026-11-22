@@ -153,6 +153,12 @@ export const poster = {
   },
   captions: 'stack',
   post: { grain: 0.015, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units, read on the
+  // film's base palette (not a shot's ground); the bar at the top of the band, clear of the captions under it
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'top', height: 6, inset: 0, bar: 'accent', track: 'dim' },
+  },
   // Composition data per kind (looks-four Task 7): pop's family (the `-pop` compositions, pop.mjs explains each field),
   // every colour a palette key read on the shot's ground. A plate under text is `ink` with `paper` text (always a
   // permitted pair), or `plate` with `ink` text; nothing is translucent (dims are the opaque `dim`).

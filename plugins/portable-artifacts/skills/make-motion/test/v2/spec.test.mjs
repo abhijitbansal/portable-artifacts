@@ -416,6 +416,20 @@ test('a symlink that points outside the spec folder is refused', () => {
     rmSync(outside, { recursive: true, force: true });
   }
 });
+test('a logo is held to the film folder as a shot picture is, at overlays.logo.src, whatever registries check the film', () => {
+  const outside = mkdtempSync(path.join(tmpdir(), 'mm-v2-outside-'));
+  try {
+    writeFileSync(path.join(outside, 'mark.png'), 'x');
+    symlinkSync(path.join(outside, 'mark.png'), path.join(specDir, 'assets', 'mark.png'));
+    const linked = check(film({ overlays: { logo: { src: 'assets/mark.png' } } }));
+    assert.equal(linked.errors[0].path, 'overlays.logo.src');
+    assert.match(linked.errors[0].message, /outside the spec folder/);
+    assert.match(check(film({ overlays: { logo: { src: 'https://example.com/a.png' } } })).errors[0].message, /relative/);
+    assert.deepEqual(check(film({ overlays: { logo: { src: 'assets/photo.png' }, progress: true } })).errors, [], 'stub looks without overlay data refuse nothing');
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
 test('every picture of an array srcField is held to the film folder, at its own path (branch review A, Minor 1)', () => {
   const r = check(film({}, [{ id: 'g', show: 'gallery', srcs: ['assets/photo.png', '/etc/passwd', 'https://example.com/a.png'], hold: 2 }]));
   assert.deepEqual(r.errors.map((e) => e.path), ['shots[0].srcs[1]', 'shots[0].srcs[2]']);

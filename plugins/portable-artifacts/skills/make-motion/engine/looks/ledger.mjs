@@ -124,6 +124,11 @@ export const ledger = {
   captions: 'lower',
   captionVariant: 'plain',
   post: { grain: 0, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'bottom', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   // Composition data for the kinds that read it, in the editorial family's terms (desk.mjs explains each field).
   kinds: {
     // the claim across columns 2 to 11 at 16:9 (`toWide`, gate-ledger-1 ruling 5: on 2 to 9 it left the right half

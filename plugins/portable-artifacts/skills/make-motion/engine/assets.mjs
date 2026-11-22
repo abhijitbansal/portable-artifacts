@@ -4,6 +4,9 @@
 // film in this order (/asset/<n>) and the stage uses the same list to match each src string to its served file, so a
 // request never names a path. Pure and DOM-free.
 
+/** The file types a picture in a film may be (the server serves nothing else; a film's logo is checked against them too). */
+export const IMAGE_EXTENSIONS = Object.freeze(new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']));
+
 /** The value at a srcFields entry ("src" or a dotted path such as "left.src") in `shot`, or undefined. */
 export function fieldAt(shot, field) {
   return field.split('.').reduce((value, key) => (value !== null && typeof value === 'object' && Object.hasOwn(value, key) ? value[key] : undefined), shot);
