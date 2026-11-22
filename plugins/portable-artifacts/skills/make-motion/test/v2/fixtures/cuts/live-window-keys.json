@@ -5,17 +5,17 @@
     "into dissolve": {
       "frames": 15,
       "live": true,
-      "sha": "f833514e37d5115c99ae35dc72a449ceb3fc94e6e5259210917f1bab2f8d475c"
+      "sha": "bbf986d5e8cbf16ea64cdb805b21f8fb5983ad0efe55e050a7edcb9731d7a1b2"
     },
     "into dip": {
       "frames": 12,
       "live": true,
-      "sha": "8b920742511f834262885160507bfa98f2469a0c676704f6f57ce342549ab4cd"
+      "sha": "997c867899328f8d36e86e4c315341aa8aea5bccb6dc1735e94470c6979e8fcb"
     },
     "into page": {
       "frames": 12,
       "live": true,
-      "sha": "e25ea92d0e532a0421ed296a879aebf04b338134bb1073fa9d38c9599d3d0a6c"
+      "sha": "2f34f3b82033c4595576a9ffdcfed2f79aaace33aaf92c8018c55a8f566978b1"
     },
     "into steps": {
       "frames": 12,
@@ -30,12 +30,12 @@
     "into focus": {
       "frames": 24,
       "live": true,
-      "sha": "29afd766ce58f20dc3e2e859304148d3061ad3cd2937e0363ebef1b26468a780"
+      "sha": "03e5992b23af32e9b727264b2ba20c461989605fc23e73e151f39aa5139d181f"
     },
     "into curl": {
       "frames": 18,
       "live": true,
-      "sha": "71ed5e790e96d6881caf53867a9dbeb968aeb2c2627b13a2368b5d5fcd98f554"
+      "sha": "b9c272863ea4a0304a7e7be2c283c51459fe70f4a92c6b1fdfbf53bcf8d1dc11"
     },
     "into gust": {
       "frames": 18,
@@ -50,12 +50,12 @@
     "into drop": {
       "frames": 18,
       "live": true,
-      "sha": "58851794b07a38fcc3770e7849476dd7a215c9ac6c14e63e9e12e300186795d9"
+      "sha": "fa85619d9cc38d4ce0dacac2b27bcaa7d1f03852e028f69ecce534639175ac80"
     },
     "into warp": {
       "frames": 18,
       "live": true,
-      "sha": "934556e0f59e4dadce6c993a2e05a1445b2bce37c586fbfaa8d6e6cac7f72dda"
+      "sha": "9e97f68f20e1a95bb503876f20f939f9883b2f362212aca2819becbce8cd7bb2"
     }
   }
 }

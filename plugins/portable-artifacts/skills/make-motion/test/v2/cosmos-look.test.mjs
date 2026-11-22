@@ -187,8 +187,11 @@ test('its field is registered and plans with its params at 16:9 and 9:16', () =>
 
 test('every move parses and has the grammar keys; tracking answers each role and refuses others', () => {
   const l = look();
-  assert.deepEqual(Object.keys(l.moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle']);
-  for (const key of ['rise', 'wipe', 'slam']) assert.equal(l.moves[key], null, `${key}: not used by the look`);
+  assert.deepEqual(Object.keys(l.moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle', 'letters', 'lines']);
+  for (const key of ['rise', 'wipe', 'slam', 'lines']) assert.equal(l.moves[key], null, `${key}: not used by the look`);
+  // W6 task 4: a statement arrives one letter after another, flickering up in three steps (an entrance that ends at rest)
+  assert.deepEqual({ ...l.moves.letters }, { ease: 'steps(3)', dur: 0.18, stagger: 0.035 });
+  assert.equal(l.kinds.statement.entrance, 'letters');
   // the second-wave kinds ask for two of the named moves: the screen's card pops in, a part settles into place (looks phase)
   assert.deepEqual({ ...l.moves.pop }, { ease: 'outBack', dur: 0.55, scale: 0.92 });
   assert.deepEqual({ ...l.moves.settle }, { ease: 'inOutCubic', dur: 0.6 });

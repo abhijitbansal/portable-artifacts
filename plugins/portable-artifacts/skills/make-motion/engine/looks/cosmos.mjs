@@ -97,6 +97,10 @@ export const cosmos = {
     // the second-wave named moves (engine/moves): the look uses the two its second-wave kinds ask for, the screen's card
     // (`pop`, the enter spring) and a part settling into place (`settle`, a plain ease: the data never overshoots)
     rise: null, wipe: null, slam: null, pop: { ease: SMOOTH, dur: 0.55, scale: 0.92 }, settle: { ease: PLAIN, dur: 0.6 },
+    // the statement's entrance (kinds.statement.entrance 'letters', W6 task 4): each letter flickers up in three steps over
+    // 0.18 s, one letter every 0.035 s, the first landing on the word's spoken time
+    letters: { ease: 'steps(3)', dur: 0.18, stagger: 0.035 },
+    lines: null,
   },
   wordStagger: 0,
   // the resting camera: a slow linear drift across each shot (the 'desk' camera style), no shake
@@ -148,7 +152,8 @@ export const cosmos = {
     // `fillShort` (statement.mjs): a claim of at most 6 words may take 0.8 of the band's height (0.64 otherwise), up to
     // `linesWide` 3 lines (2 otherwise) and a size of 360 units (300 otherwise): at 2 lines and 300 units a short claim
     // left the lower half of the frame bare (W2 task 5)
-    statement: { toWide: 12, fromSun: true, tallAlign: 'center', linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { strength: 1 }, fillShort: { words: 6, height: 0.8, linesWide: 3, max: 360 } },
+    // `entrance` 'letters': a word arrives one letter after another (moves.letters) in pro; viral keeps its lit ghosts
+    statement: { toWide: 12, fromSun: true, tallAlign: 'center', linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { strength: 1 }, fillShort: { words: 6, height: 0.8, linesWide: 3, max: 360 }, entrance: 'letters' },
     // clipping (optional data, clipping.mjs): the picture on the look's rounded `card`, square (`turn` 0), with a soft
     // accent `glow` (units of blur) round the card, and a region's marker frame round-cornered (`mark`: radius, width units)
     clipping: { card: true, turn: 0, glow: 26, mark: { radius: 18, width: 6 } },

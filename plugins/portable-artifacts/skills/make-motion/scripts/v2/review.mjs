@@ -440,8 +440,9 @@ export function matchFindings(film, timeline, snapshots) {
 }
 
 // The first shot of a mode that reads from frame 0 must show all of its text on frame 0: in a kind that says its hero
-// reads so (kind.hookText: the statement), every word of the hero is on screen (opacity above 0) in the first frame.
-// Mechanical when not.
+// reads so (kind.hookText: the statement), every word of the hero is on screen (opacity above 0) and at rest (its letters
+// and its line no longer moving: seenWords) in the first frame. Mechanical when not; the message counts both kinds of word,
+// one not on screen yet and one whose letters or line are still moving, so it never claims a visible word is missing.
 export function hookFindings(film, timeline, snapshots) {
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
   const first = film.shots[0];
@@ -454,7 +455,7 @@ export function hookFindings(film, timeline, snapshots) {
   if (all === 0 || shown === all) return [];
   return [{
     kind: 'mechanical', shot: first.id, path: 'shots[0]', t: 0, rule: 'hook', node: '',
-    message: `the first shot of a ${film.mode} film must show all of its text on frame 0; ${all - shown} of its ${all} words are not on screen yet`,
+    message: `the first shot of a ${film.mode} film must show all of its text on frame 0; ${all - shown} of its ${all} words are not on screen yet, or its letters or lines are still moving`,
   }];
 }
 

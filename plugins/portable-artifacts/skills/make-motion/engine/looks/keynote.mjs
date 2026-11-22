@@ -77,6 +77,8 @@ export const keynote = {
     slam: { ease: 'linear', dur: 0 }, // keynote does not slam
     pop: { ease: SETTLE, dur: 0.7, scale: 0.96 },
     settle: { ease: SETTLE, dur: 1.0 },
+    letters: null, // every shot opens composed (opens 'set'): its claim is whole on frame 0, no letter or line entrance
+    lines: null,
   },
   wordStagger: 0,
   // a slow continuous move through every shot: never still

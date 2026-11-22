@@ -80,6 +80,8 @@ export const ledger = {
     slam: { ease: 'linear', dur: 0 }, // ledger does not slam
     pop: ENTER,
     settle: { ease: 'inOutCubic', dur: 0.6 },
+    letters: null, // every shot opens composed (opens 'set'): its claim is whole on frame 0, no letter or line entrance
+    lines: null,
   },
   wordStagger: 0,
   // no drift: a locked camera keeps the grid on the columns; a region close-up is a cut, not a push, to a window of the

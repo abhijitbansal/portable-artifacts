@@ -277,6 +277,20 @@ export function enterTracks(look, unit, at, rest = { y: 0 }) {
   return tracks;
 }
 
+// An entrance of the letters or lines move landing on `at`: a fade, plus a rise of `dist` units. It has no end value of
+// its own: every track ends at the identity (opacity 1, offset 0), which is what the review's "has landed" reads.
+function restingEntrance(move, unit, at) {
+  const tracks = { opacity: landing(at, move, 0, 1) };
+  if (move.dist) tracks.y = landing(at, move, move.dist * unit, 0);
+  return tracks;
+}
+
+/** The look's letters move as one track map per glyph of a word of `count` glyphs (graphemes): glyph k lands on `at + k * stagger`. */
+export const letterTracks = (look, unit, at, count) => Array.from({ length: count }, (_, k) => restingEntrance(look.moves.letters, unit, at + k * look.moves.letters.stagger));
+
+/** The look's lines move as the track map of one line, landing on `at`: the line moves as one block. */
+export const lineEntrance = (look, unit, at) => restingEntrance(look.moves.lines, unit, at);
+
 /** A scale track: the enter pop landing on `start + enter.dur` (when `enter`), then the emphasize pulse from `pulse` up to `peak` (default: the look's value). `enterFrom` replaces the pop's start scale. */
 export function pulseScale(look, { enterAt, enterFrom, pulse, peak }) {
   const { enter, emphasize } = look.moves;

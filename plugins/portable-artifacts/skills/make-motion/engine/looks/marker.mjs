@@ -66,6 +66,8 @@ export const marker = {
     slam: { ease: STROKE, dur: 0 }, // a pinned print is put on the board at once
     pop: { ease: STROKE, dur: 0.5 },
     settle: { ease: STROKE, dur: 0 },
+    letters: null, // what is written is never faded in (validateLook refuses letters and lines in a look with a hand)
+    lines: null,
   },
   wordStagger: 0,
   // locked: nothing on a whiteboard zooms. No region close-up either (closeUp: false, m3): a cut to a window of the source

@@ -27,7 +27,8 @@ import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes, widerKeyword } from './stack.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
-import { unmarked, opensSet } from './shared.mjs';
+import { unmarked, opensSet, letterTracks, lineEntrance } from './shared.mjs';
+import { graphemesOf } from '../graph/rollup.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
@@ -258,9 +259,27 @@ function hookTracks(look, at, to, peak) {
   return peak === undefined ? ghost : { ...ghost, scale: pulseScale(look, { pulse: at, peak }) };
 }
 
-// Word tracks: the entrance on each word's time (none for a matched hero), and in a recolour look the emphasis (a pulse
-// as well for recolor-scale). In a mode that reads from frame 0 there is no entrance at all (see ghostWords).
-function wordTracksFor(words, times, ctx, matched) {
+// The entrance the look picks for this statement (look.kinds.statement.entrance: 'letters' or 'lines'), or null when the
+// words keep the per-word entrance of today. It applies on the plain path only: never in a mode that reads from frame 0
+// with ghost words (the hook), never to a hero that arrives matched, never in a look that opens composed.
+function entranceOf(ctx, matched) {
+  const name = ctx.look.kinds?.statement?.entrance;
+  if (name === undefined || matched || ghostWords(ctx) || opensSet(ctx.look)) return null;
+  return name;
+}
+
+// The glyph or line tracks of an entrance (node options), none for null. Letters: a track map per grapheme of each word,
+// from the word's time; lines: one per line of the layout, at the time of its first word. Lines never become glyph tracks.
+function entranceTracks(entry, layout, words, times, { look, unit }) {
+  if (entry === 'letters') return { glyphTracks: words.map((w, i) => letterTracks(look, unit, times[i].at, graphemesOf(w.word.text).length)) };
+  if (entry === 'lines') return { lineTracks: layout.lines.map((line) => lineEntrance(look, unit, times[line.words[0].index].at)) };
+  return {};
+}
+
+// Word tracks: the entrance on each word's time (none for a matched hero, and none where the look's letters or lines
+// entrance, `entry`, brings the word in), and in a recolour look the emphasis (a pulse as well for recolor-scale). In a
+// mode that reads from frame 0 there is no entrance at all (see ghostWords).
+function wordTracksFor(words, times, ctx, matched, entry) {
   const { look, unit, timing } = ctx;
   const style = emphasisOf(look);
   const peaks = pulsePeaks(words, look);
@@ -280,8 +299,9 @@ function wordTracksFor(words, times, ctx, matched) {
     }
     // a look that opens composed (shared.mjs opensSet, ledger) sets every word from frame 0, as a matched hero does; the
     // emphasis still lands on its spoken word
-    const entered = matched || opensSet(look) ? {} : enterTracks(look, unit, at);
-    const lands = scales && !matched && look.moves.enter.scale !== undefined;
+    // (a letters or lines entrance takes the word's own entrance's place: its glyph or line tracks carry the arrival)
+    const entered = matched || opensSet(look) || entry !== null ? {} : enterTracks(look, unit, at);
+    const lands = scales && !matched && entry === null && look.moves.enter.scale !== undefined;
     const tracks = lands ? { ...entered, scale: landing(at, look.moves.enter, word.start, 1) } : entered;
     return style.wordTracks(look, { ...word, tracks }, at, ctx);
   });
@@ -378,11 +398,13 @@ function expandStatement(shot, ctx) {
   const matched = arrivesMatched(shot, ctx);
   const hero = heroId(shot, 'text');
   const span = emphasisOf(look).span?.(placed.layout, times, timing);
+  const entry = entranceOf(ctx, matched);
   const text = node('text', hero, {
     x: placed.x, y: placed.y, layout: placed.layout, font: placed.font, fill: look.palette.ink, role: 'hero', ...(span === undefined ? {} : { highlightLines: span }),
     ...glowStyle(look, placed.font, unit),
   }, {
-    wordTracks: wordTracksFor(words, times, ctx, matched),
+    wordTracks: wordTracksFor(words, times, ctx, matched, entry),
+    ...entranceTracks(entry, placed.layout, words, times, ctx),
   });
   const boxes = boxesFor(placed, words);
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));

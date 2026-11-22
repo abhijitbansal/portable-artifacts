@@ -149,6 +149,10 @@ test('text is written, never faded: no text or path node of a hand shot has an o
     for (const tr of [n.tracks.opacity, ...n.wordTracks.map((w) => w.opacity)].filter(Boolean)) {
       assert.ok(tr.points.every((p) => p.v === 0 || p.v === 1), `${n.id}: opacity keys ${tr.points.map((p) => p.v).join(', ')}`);
     }
+    // a letter or a line is never faded in either: no glyph or line track of hand text has an opacity track (W6 Task 4, R-b)
+    const glyphFades = (n.glyphTracks ?? []).flatMap((glyphs) => (glyphs ?? []).map((g) => g?.opacity)).filter(Boolean);
+    const lineFades = (n.lineTracks ?? []).map((line) => line?.opacity).filter(Boolean);
+    assert.deepEqual([glyphFades.length, lineFades.length], [0, 0], `${n.id}: no glyph or line opacity track on hand text`);
   }
   assert.ok(all(nodes).some((n) => n.id.startsWith('name') && n.tracks.reveal), 'the label is revealed by its clip');
 });

@@ -143,6 +143,9 @@ test('a marker shot is drawn, never faded: no text or path node has a part-way o
       for (const n of drawn) {
         assert.ok((n.tracks.opacity?.points ?? []).every((k) => k.v === 0 || k.v === 1), `${n.id}: opacity steps, never part-way`);
         for (const w of n.wordTracks ?? []) assert.ok((w.opacity?.points ?? []).every((k) => k.v === 0 || k.v === 1), `${n.id}: word opacity steps`);
+        // nor a letter or a line (W6 Task 4, R-b: marker gives letters and lines null)
+        const fades = [...(n.glyphTracks ?? []).flatMap((glyphs) => (glyphs ?? []).map((g) => g?.opacity)), ...(n.lineTracks ?? []).map((line) => line?.opacity)].filter(Boolean);
+        assert.equal(fades.length, 0, `${n.id}: no glyph or line opacity track`);
       }
     }
   }

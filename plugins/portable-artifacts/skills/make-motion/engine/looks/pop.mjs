@@ -59,6 +59,8 @@ export const pop = {
     slam: { ease: 'spring(320,20)', dur: 0.16, scale: 1.6 },
     pop: { ease: 'spring(260,16)', dur: 0.28, scale: 0.6 },
     settle: { ease: 'spring(200,22)', dur: 0.3 },
+    letters: null, // pop is a stack: it sets its own words, a statement entrance would not be read
+    lines: null,
   },
   wordStagger: 0,
   camera: { drift: 0, style: 'locked' },

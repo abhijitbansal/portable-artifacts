@@ -101,7 +101,7 @@ test('a hero whose letters are not on frame 0 is a hook finding, whatever its wo
   const hidden = heroNode({ wordTracks: [{}, {}], glyphTracks: [[{ opacity: hold(0) }], [{ opacity: hold(0) }]] });
   const [found] = hookFindings(filmOf(), {}, zero(hidden));
   assert.equal(found.rule, 'hook');
-  assert.match(found.message, /2 of its 2 words are not on screen yet/);
+  assert.match(found.message, /2 of its 2 words are not on screen yet, or its letters or lines are still moving/);
   const first = heroNode({ glyphTracks: [[{ opacity: hold(1) }, { opacity: hold(0) }]] });
   assert.equal(hookFindings(filmOf(), {}, zero(first)).length, 1, 'the first letter alone is not all of its text');
 });
@@ -109,7 +109,9 @@ test('a hero whose letters are not on frame 0 is a hook finding, whatever its wo
 test('a hero whose line is not on frame 0 is a hook finding, with or without word tracks', () => {
   assert.equal(hookFindings(filmOf(), {}, zero(heroNode({ lineTracks: [{ opacity: hold(0) }] }))).length, 1);
   assert.equal(hookFindings(filmOf(), {}, zero(heroNode({ wordTracks: [{}, {}], lineTracks: [{ opacity: hold(0) }] }))).length, 1);
-  assert.equal(hookFindings(filmOf(), {}, zero(heroNode({ lineTracks: [{ y: hold(30) }] }))).length, 1, 'a line still sliding is not all on screen');
+  const [sliding] = hookFindings(filmOf(), {}, zero(heroNode({ lineTracks: [{ y: hold(30) }] })));
+  assert.ok(sliding, 'a line still sliding is not all on screen');
+  assert.match(sliding.message, /are not on screen yet, or its letters or lines are still moving/, 'the message never claims a visible word is missing');
 });
 
 test('a hero with letters and line at rest on frame 0 is not a hook finding, and a pro film is not held to it', () => {

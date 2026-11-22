@@ -9,7 +9,7 @@
 // word is on screen from the first frame as a ghost (opaque, ink mixed 40% into paper, shared.mjs ghostTracks) and lights as it is spoken (ink, or the accent when emphasised); in any
 // other mode words fade in on their times and an emphasised one turns accent. Nothing scales. Pure and DOM-free.
 import { registries } from '../registry.mjs';
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText, reservedFont } from '../text/layout.mjs';
 import { stackLines, FORCE_MARK, isWeakEnd } from '../text/breaks.mjs';
@@ -481,7 +481,7 @@ export function beatPair(id, beat, rowBoxes, lineNode, line, ctx) {
   const bar = node('path', id, built.props, { tracks: on });
   const wordTracks = lineNode.wordTracks.map(({ fill, ...rest }) => rest); // the copy keeps the words' moves, not their colour
   // the copy stands in for its row while the bar is under it (`beatOf`: that row's line), in the stack's size class
-  const copy = node('text', `${id}.text`, { ...lineNode.props, fill: colourOf(look, look.devices.highlight.text), beatOf: lineNode.id }, { wordTracks, tracks: on });
+  const copy = node('text', `${id}.text`, { ...lineNode.props, fill: colourOf(look, look.devices.highlight.text), beatOf: lineNode.id }, { ...textTracksOf(lineNode), wordTracks, tracks: on });
   return [bar, copy];
 }
 

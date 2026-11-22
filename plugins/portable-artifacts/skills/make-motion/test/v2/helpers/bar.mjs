@@ -195,6 +195,13 @@ export function droppedViolations({ nodes, fields, nodeField, findings }) {
 // Is v strictly between a and b?
 const between = (v, a, b) => typeof v === 'number' && v > Math.min(a, b) + EPS && v < Math.max(a, b) - EPS;
 
+// The glyph and line track maps of a text (a letters or lines entrance: engine/graph/node.mjs), as { name, tracks }; a word's
+// own tracks (wordTracks) are read beside them, so a word whose entrance moved onto its letters or its line is still seen.
+const textMaps = (n) => [
+  ...(n.glyphTracks ?? []).flatMap((glyphs, w) => (glyphs ?? []).map((tracks, k) => ({ name: `word ${w} glyph ${k}`, tracks }))),
+  ...(n.lineTracks ?? []).map((tracks, k) => ({ name: `line ${k}`, tracks })),
+].filter(({ tracks }) => tracks !== undefined);
+
 // The nodes on screen at frame 0 (their accumulated opacity above 0), with the tracks that make them mid-entrance.
 function midEntrances(nodes, alpha = 1) {
   return nodes.flatMap((n) => {
@@ -212,6 +219,7 @@ function midEntrances(nodes, alpha = 1) {
       if (between(at0(name), points[0].v, points.at(-1).v)) mine.push(`${n.id}: ${name} part-way at frame 0`);
     }
     n.wordTracks.forEach((w, i) => { if (w.opacity && between(sample(w.opacity, 0, n.step), 0, 1)) mine.push(`${n.id} word ${i}: opacity part-way at frame 0`); });
+    textMaps(n).forEach(({ name, tracks }) => { if (tracks.opacity && between(sample(tracks.opacity, 0, n.step), 0, 1)) mine.push(`${n.id} ${name}: opacity part-way at frame 0`); });
     return [...mine, ...midEntrances(n.children, a)];
   });
 }
@@ -229,14 +237,15 @@ function settlesAt(tr, duration, step) {
 
 // Does any node's own track (or word track) change after frame 0?
 function changesAfterZero(nodes, duration) {
-  return allNodes(nodes).some((n) => [...Object.values(n.tracks), ...n.wordTracks.flatMap((w) => Object.values(w))]
+  return allNodes(nodes).some((n) => [...Object.values(n.tracks), ...n.wordTracks.flatMap((w) => Object.values(w)), ...textMaps(n).flatMap(({ tracks }) => Object.values(tracks))]
     .some((tr) => timesOf(duration, SAMPLE_STEP).some((t) => JSON.stringify(sample(tr, t, n.step)) !== JSON.stringify(sample(tr, 0, n.step)))));
 }
 
 // The reveal tracks (opacity, draw, reveal, word opacity) that end shown but land later than LANDED_BEFORE_END before the end.
 function lateReveals(nodes, duration) {
   return allNodes(nodes).flatMap((n) => {
-    const tracks = [...REVEAL_TRACKS.filter((k) => n.tracks[k]).map((k) => [k, n.tracks[k]]), ...n.wordTracks.flatMap((w, i) => (w.opacity ? [[`word ${i} opacity`, w.opacity]] : []))];
+    const tracks = [...REVEAL_TRACKS.filter((k) => n.tracks[k]).map((k) => [k, n.tracks[k]]), ...n.wordTracks.flatMap((w, i) => (w.opacity ? [[`word ${i} opacity`, w.opacity]] : [])),
+      ...textMaps(n).flatMap(({ name, tracks: map }) => (map.opacity ? [[`${name} opacity`, map.opacity]] : []))];
     return tracks.flatMap(([name, tr]) => {
       const { end, t } = settlesAt(tr, duration, n.step);
       return end > 0 && t > duration - LANDED_BEFORE_END + EPS ? [`${n.id}: ${name} lands at ${t.toFixed(2)} s, under ${LANDED_BEFORE_END} s before the end (${duration.toFixed(2)} s)`] : [];

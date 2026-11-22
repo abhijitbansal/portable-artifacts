@@ -145,6 +145,71 @@ for (const [look, text, rejected] of [['poster', 'שלום', true], ['poster', '
   });
 }
 
+// ---- the pixels mid-entrance (W6 task 4): cosmos brings a word in letter by letter ----
+
+// The sampled text node of frame i and, from the page's own layout and measure, the x range of the first and the last letter
+// of its first word; then how many pixels of each box differ between the frame as drawn and the same frame with every glyph
+// at opacity 0 (the ground alone: the field and the camera as they are at that frame): the ink each letter really has.
+const lettersAt = (page, frame) => page.evaluate(async (i) => {
+  const find = (nodes) => { for (const n of nodes) { if (n.id === 's.text') return n; const hit = find(n.children); if (hit) return hit; } return null; };
+  const grab = async () => { await window.__seek(i); const c = window.__source; return c.getContext('2d').getImageData(0, 0, c.width, c.height); };
+  const shown = await grab();
+  const text = find(window.__snapshot(i));
+  window.__setGlyphPath(true, { opacity: 0 });
+  const hidden = await grab();
+  window.__setGlyphPath(false);
+  const { font, layout } = text.props, line = layout.lines[0], word = line.words[0];
+  const chars = [...word.text], width = (s) => window.__measure(s, font).width;
+  const left = text.bbox[0] + line.x + word.x; // the box of the words in canvas pixels (the camera's drift included) starts at the word
+  const span = (from, to) => { const w = to - from; return [Math.round(from + 0.2 * w), Math.round(to - 0.2 * w)]; }; // inside the letter, clear of its neighbours
+  const ink = ([x0, x1]) => {
+    const [, y0, , h] = text.bbox;
+    let count = 0;
+    for (let yy = Math.floor(y0); yy < Math.ceil(y0 + h); yy++) for (let xx = x0; xx < x1; xx++) {
+      const k = (yy * shown.width + xx) * 4;
+      if (shown.data[k] !== hidden.data[k] || shown.data[k + 1] !== hidden.data[k + 1] || shown.data[k + 2] !== hidden.data[k + 2]) count++;
+    }
+    return count;
+  };
+  return {
+    first: ink(span(left, left + width(chars[0]))),
+    last: ink(span(left + width(chars.slice(0, -1).join('')), left + width(chars.join('')))),
+    opacities: (text.glyphs?.[0] ?? []).map((g) => g.opacity),
+    rest: text.seen?.[0]?.rest,
+  };
+}, frame);
+
+test('cosmos: a word half way through its letters draws its first letter and not its last, and rests when the last has landed', async (t) => {
+  const film = filmOf('cosmos', 'Orbits');
+  const session = await sessionOrNull(film, { specDir: HERE });
+  if (!session) return t.skip('no browser');
+  try {
+    const { page } = session;
+    // the last frame at which the first letter has landed and the last has not begun, and the first at which every letter
+    // rests: found from the page's own samples
+    let mid = null, settled = null;
+    for (let i = 0; i <= lastFrame(film) && settled === null; i++) {
+      const { opacities, rest } = await lettersAt(page, i);
+      if (opacities.length > 1 && opacities[0] === 1 && opacities.at(-1) === 0) mid = i;
+      if (mid !== null && rest === true) settled = i;
+    }
+    assert.notEqual(mid, null, 'a frame with the first letter in and the last not yet begun');
+    assert.notEqual(settled, null, 'a frame at which every letter rests');
+    const half = await lettersAt(page, mid);
+    assert.equal(half.rest, false, 'the word has not arrived');
+    assert.ok(half.first > 0, `the first letter has ink at frame ${mid} (${half.first} pixels differ from the ground)`);
+    assert.equal(half.last, 0, `the last letter has only the ground at frame ${mid} (${half.last} pixels differ)`);
+    // once every letter rests the picture is the one the whole-word draw makes of that frame
+    const done = await compareFrames(page, settled);
+    assert.ok(done.max <= SAME_PICTURE, `the frame the last letter lands on equals the whole word drawn (max ${done.max} on ${done.differing} channels)`);
+    const during = await compareFrames(page, mid);
+    assert.ok(during.max > SAME_PICTURE, 'half way through, the frame is not the settled word');
+    assert.deepEqual(session.errors, []);
+  } finally {
+    await session.close();
+  }
+});
+
 test('with the seam off nothing changes: the frame equals the frame recorded before this task', async (t) => {
   const film = filmOf('poster', WORDS);
   const session = await sessionOrNull(film, { specDir: HERE });

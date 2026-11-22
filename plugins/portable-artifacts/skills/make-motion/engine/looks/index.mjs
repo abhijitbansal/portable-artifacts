@@ -17,6 +17,7 @@ import '../moves/index.mjs';
 // ...and an entry (an object or null) for every film-level overlay, so the overlays are registered before any look is.
 import '../overlays/index.mjs';
 import { FILL_KEYS, isFillShare } from './fill.mjs';
+import { entranceErrors } from './entrance.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
 import { cosmos } from './cosmos.mjs';
@@ -64,7 +65,9 @@ import { marker } from './marker.mjs';
  *   system is a new entry there
  * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move } & Record<string, Move | null>} moves  the
  *   five the first kinds use, and an entry for every move in registries.moves (engine/moves: rise, wipe, slam, pop, draw,
- *   count, settle), a Move or null where the look does not use it (checked by validateLook as the look registers)
+ *   count, settle, letters, lines), a Move or null where the look does not use it (checked by validateLook as the look
+ *   registers). `letters` and `lines` are entrances that end at rest (engine/looks/entrance.mjs); a statement picks one
+ *   with kinds.statement.entrance
  * @property {Record<string, { experimental?: boolean, experimentalTypes?: string[] }>} [kinds]  see below; a kind entry
  *   with `experimental: true` parks the kind in this look (isParkedKind), `chart.experimentalTypes` parks chart types
  * @property {number} wordStagger  seconds between words that have no spoken time; 0 means words follow their spoken times
@@ -451,7 +454,7 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
   if (caption !== null) throw new RangeError(caption);
   const kinds = kindsErrors(look.name, look.kinds);
   if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
-  const moveErrors = movesErrors(look.name, look.moves, moves.names());
+  const moveErrors = [...movesErrors(look.name, look.moves, moves.names()), ...(isPlainObject(look.moves) ? entranceErrors(look.name, look) : [])];
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
   const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look), ...cutFloodErrors(look.name, look)];
   if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));

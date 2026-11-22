@@ -1,7 +1,9 @@
 // The named moves of the v2 engine. Importing this file registers each in registries.moves (once: a second evaluation
 // leaves the registry as it is). A move is only a name and a summary here; its values are look data (look.moves.<name>:
 // a Move { ease, dur, dist?, step?, scale? }, or null where the look does not use it), which validateLook requires for
-// every registered move and moveOf reads. Kinds name moves; `on` events still place devices. Pure and DOM-free.
+// every registered move and moveOf reads. Kinds name moves; `on` events still place devices. `letters` ({ ease, dur,
+// dist?, stagger }) and `lines` ({ ease, dur, dist? }) are entrances only: no end value, so every track built from them
+// ends at the identity. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 
 export const MOVES = Object.freeze([
@@ -12,6 +14,8 @@ export const MOVES = Object.freeze([
   { name: 'draw', summary: 'A stroke that draws on along its path.' },
   { name: 'count', summary: 'A figure that counts up to its value.' },
   { name: 'settle', summary: 'A slow ease into a new place or size, for parts that move or rank while on screen.' },
+  { name: 'letters', summary: "An entrance that brings a word in one letter after another, the word's spacing kept." },
+  { name: 'lines', summary: 'An entrance that brings each line in as one block.' },
 ].map(Object.freeze));
 
 export const MOVE_NAMES = Object.freeze(MOVES.map((m) => m.name));

@@ -24,8 +24,17 @@ import {
   wordSpans,
 } from './helpers/kinds.mjs';
 
+// desk without its statement entrance (kinds.statement.entrance 'lines', W6 task 4): its words keep their own fade, on
+// their spoken times, which the word-timing tests below read; the line entrance has its own tests (statement-entrance)
+const WORDS = 'desk-words-test';
+if (!registries.looks.has(WORDS)) {
+  const desk = registries.looks.get('desk');
+  const { entrance, ...statement } = desk.kinds.statement;
+  registries.looks.add(WORDS, Object.freeze({ ...desk, name: WORDS, experimental: true, moves: Object.freeze({ ...desk.moves, lines: null }), kinds: Object.freeze({ ...desk.kinds, statement: Object.freeze(statement) }) }));
+}
+
 test('statement words land on their spoken words', () => {
-  const { nodes, timing } = expandSecond({ id: 'a', show: 'statement', say: 'One file. No server.' }, 'desk');
+  const { nodes, timing } = expandSecond({ id: 'a', show: 'statement', say: 'One file. No server.' }, WORDS);
   const words = heroWords(nodes, 'a.text'), spoken = timing.words;
   assert.equal(words.length, spoken.length);
   words.forEach((w, i) => near(lastKey(w.opacity).t, spoken[i].start, `desk word ${i}`));
@@ -400,7 +409,7 @@ test('pop kicker: an accent tag at scale step 2, flush left, 28 units over the f
 const noSayAt = (i) => (i === 0 ? 0 : 0.2 + 0.09 * i);
 
 test('with no say, the first word lands at the shot start and the rest stagger 0.09 s apart from 0.2 s', () => {
-  const { nodes } = expandShot({ id: 'a', show: 'statement', hold: 3, text: 'Three small words' });
+  const { nodes } = expandShot({ id: 'a', show: 'statement', hold: 3, text: 'Three small words' }, WORDS);
   textNode(nodes).wordTracks.forEach((w, i) => near(lastKey(w.opacity).t, noSayAt(i), `word ${i}`));
 });
 
@@ -410,7 +419,7 @@ test('wordTimes with no narration: the first word at 0, the rest from NO_SAY_STA
 });
 
 test('an on-screen word with no spoken match lands with the nearest earlier matched word', () => {
-  const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say: 'Most dashboards cannot tell you where a number came from.', text: 'Where did this | number come from?' });
+  const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say: 'Most dashboards cannot tell you where a number came from.', text: 'Where did this | number come from?' }, WORDS);
   const at = textNode(nodes).wordTracks.map((w) => lastKey(w.opacity).t);
   const spoken = (i) => timing.words[i].start;
   [5, 5, 5, 7, 7, 9].forEach((s, i) => near(at[i], spoken(s), `word ${i}`));
@@ -447,7 +456,7 @@ test('a matched hero is on screen from the first frame', () => {
 });
 
 test('an apostrophe inside a word is set as the typographic one, and the word still lands on its spoken word', () => {
-  const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say: "Dashboards can't say." });
+  const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say: "Dashboards can't say." }, WORDS);
   const text = textNode(nodes);
   assert.ok(text.props.layout.lines.flatMap((l) => l.words).some((w) => w.text === 'can\u2019t'));
   near(lastKey(text.wordTracks[1].opacity).t, timing.words[1].start);
@@ -466,7 +475,7 @@ test('layout follows the look composition, not its emphasis system', () => {
 
 test('on-screen words align to spoken words by longest common subsequence', () => {
   const times = (say, text) => {
-    const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say, text });
+    const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say, text }, WORDS);
     return { at: textNode(nodes).wordTracks.map((w) => lastKey(w.opacity).t), spoken: (i) => timing.words[i].start };
   };
   const repeated = times('The cat saw the dog and the bird.', 'The dog and the bird');

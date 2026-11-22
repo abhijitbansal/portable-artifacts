@@ -25,7 +25,12 @@ export function handLook(name = 'hand-test', extra = {}) {
     const sounds = Object.freeze({ ...desk.sounds, cut: Object.freeze({ ...desk.sounds.cut, ...(registries.cuts.has('erase') ? { erase: 'erase' } : {}) }) });
     // a look drawn by hand draws no progress bar, as marker does not (engine/overlays)
     const overlays = Object.freeze({ ...desk.overlays, progress: null });
-    registries.looks.add(name, Object.freeze({ ...desk, name, experimental: true, hand, cuts, sounds, overlays }));
+    // what is written is never faded in: no letters or lines (validateLook refuses them in a look with a hand), so desk's
+    // `lines` entrance and the statement's choice of it stay behind
+    const moves = Object.freeze({ ...desk.moves, letters: null, lines: null });
+    const { entrance, ...statement } = desk.kinds.statement;
+    const kinds = Object.freeze({ ...desk.kinds, statement: Object.freeze(statement) });
+    registries.looks.add(name, Object.freeze({ ...desk, name, experimental: true, hand, cuts, sounds, overlays, moves, kinds }));
   }
   return name;
 }

@@ -157,9 +157,9 @@ test('the zero-duration exception refuses a timeless entrance and an emphasis th
 test('every move names a curve that parses and has the keys the grammar needs', () => {
   for (const name of lookNames()) {
     const { moves } = registries.looks.get(name);
-    // the five the first kinds use, then the named moves of engine/moves (rise, wipe, slam, pop, settle; draw and count
-    // are among the five)
-    assert.deepEqual(Object.keys(moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle']);
+    // the five the first kinds use, then the named moves of engine/moves (rise, wipe, slam, pop, settle, letters, lines; draw
+    // and count are among the five)
+    assert.deepEqual(Object.keys(moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle', 'letters', 'lines']);
     for (const [key, move] of Object.entries(moves)) {
       if (move === null) continue; // a named move the look does not use
       assert.equal(typeof ease(move.ease), 'function', `${name}.${key}`);

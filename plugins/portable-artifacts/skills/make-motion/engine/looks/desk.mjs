@@ -52,6 +52,10 @@ export const desk = {
     slam: { ease: 'linear', dur: 0 },
     pop: { ease: 'outCubic', dur: 0.5, dist: 24 },
     settle: { ease: 'outCubic', dur: 0.6 },
+    // the statement's entrance (kinds.statement.entrance 'lines'): each line rises into place as one block, on a long
+    // ease-out bezier, landing on its first word's spoken time (W6 task 4); desk does not bring words in letter by letter
+    letters: null,
+    lines: { ease: 'cubic-bezier(0.16,1,0.3,1)', dur: 0.6, dist: 28 },
   },
   wordStagger: 0,
   camera: { drift: 12, style: 'desk' },
@@ -107,7 +111,8 @@ export const desk = {
   kinds: {
     // statement (statement.mjs): a claim of at most `words` words may take `height` of the band (0.64 otherwise) and
     // columns 2 to `toWide` (9 otherwise): a short claim set at the usual share left the right third bare (W2 task 5)
-    statement: { fillShort: { words: 6, height: 0.8, toWide: 11 } },
+    // `entrance` 'lines': each line arrives as one block (moves.lines), where the other looks bring words in one by one
+    statement: { fillShort: { words: 6, height: 0.8, toWide: 11 }, entrance: 'lines' },
     // end: the closing line fitted to columns 2 to `toWide` (`toTall` on vertical formats) from step `fromStep` to `max`,
     // at most `height` of the frame; the ask in the text face `askGap` em of the title under its last baseline, at the
     // largest of `askSteps` the title stays three times; the block centred at `centre` of the height; the mark in the

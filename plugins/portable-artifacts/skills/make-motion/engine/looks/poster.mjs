@@ -106,6 +106,8 @@ export const poster = {
     slam: { ease: 'spring(340,22)', dur: 0.14, scale: 1.5 },
     pop: ENTER,
     settle: { ease: 'outExpo', dur: 0.25 },
+    letters: null, // every shot opens composed and a stack sets its own words: no letter or line entrance here
+    lines: null,
   },
   wordStagger: 0,
   // a region close-up is a cut to a window of the source round the region (ledger's shares), so a ring on the region
