@@ -166,7 +166,7 @@ async function loadCells({ specPath, values, registries, own, shot, index, prepa
     if (entry.status !== 'refused') {
       try {
         cell.loaded = await prepare(loadFilm(specPath, { values, registries, look: entry.look, ...(alone ? { only: shot } : {}) }));
-        cell.at = lateFrameOf(cell.loaded.timeline, alone ? 0 : index);
+        cell.at = lateFrameOf(cell.loaded.timeline, alone ? 0 : index, cell.loaded.film);
         cell.frame = alone ? null : cell.at;
       } catch (err) {
         if (!(err instanceof SpecError)) throw err;

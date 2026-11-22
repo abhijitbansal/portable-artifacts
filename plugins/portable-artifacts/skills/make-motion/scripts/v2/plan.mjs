@@ -9,6 +9,9 @@ import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { shotAtFrame } from '../../engine/review/pacing.mjs';
+import { registries } from '../../engine/registry.mjs';
+import { graphemesOf } from '../../engine/graph/rollup.mjs';
+import { letterStagger } from '../../engine/kinds/shared.mjs';
 
 export const PHONE_TILE_WIDTH = 360;
 const START_OFFSET = 0.1;
@@ -56,17 +59,37 @@ function shotMoments(film, timeline, index) {
   }).sort((a, b) => a.frame - b.frame);
 }
 
-/** The late frame of shot `index` (85% of its length): the phone tile's frame, the board tile's and the compare sheet's. */
-export function lateFrameOf(timeline, index) {
+// Seconds into the shot at which the last letter of its text is at rest, for a statement in a look whose entrance is `letters`
+// (cosmos), where the word at `t` spoken finishes `letterStagger x (letters - 1)` later; 0 where no letter arrives late: another
+// look or kind, a matched hero, and a mode that reads from frame 0 (they play no letters entrance, engine/kinds/statement.mjs).
+function lastLanding(film, shot, index) {
+  const look = film !== undefined && registries.looks.has(film.look) ? registries.looks.get(film.look) : null;
+  if (look?.kinds?.statement?.entrance !== 'letters' || !look.moves?.letters) return 0;
+  const { show, cut } = film.shots[index];
+  if (show !== 'statement' || cut === 'match' || registries.modes.get(film.mode)?.hookFromFrameZero === true) return 0;
+  return Math.max(0, ...shot.words.map((w) => {
+    const letters = graphemesOf(w.text).length;
+    return w.start + (letters - 1) * letterStagger(look, letters);
+  }));
+}
+
+/**
+ * The late frame of shot `index`: the phone tile's frame, the board tile's and the compare sheet's. It is the 85% frame of the
+ * shot, or, when the shot's last letter has not landed by then (a long statement in a look with a letters entrance, given
+ * `film`), the frame it lands on, the last one of the shot at most: the picture never shows a word half arrived.
+ */
+export function lateFrameOf(timeline, index, film) {
   const shot = timeline.shots[index];
-  return frameIn(timeline, shot, shot.start + shot.duration * LATE);
+  const late = frameIn(timeline, shot, shot.start + shot.duration * LATE);
+  const landed = Math.ceil((shot.start + lastLanding(film, shot, index)) * timeline.fps - FRAME_EPSILON);
+  return Math.max(late, Math.min(lastFrameOf(timeline, shot), landed));
 }
 
 function shotSheet(film, timeline, index) {
   const shot = timeline.shots[index];
   const moments = shotMoments(film, timeline, index);
   const tiles = moments.map(({ role, frame }) => tile(timeline, role, frame, shot.id));
-  const late = lateFrameOf(timeline, index);
+  const late = lateFrameOf(timeline, index, film);
   return { name: `${shot.id}.png`, kind: 'shot', shot: shot.id, tiles: [...tiles, tile(timeline, 'phone', late, shot.id, { width: PHONE_TILE_WIDTH })] };
 }
 
@@ -163,7 +186,7 @@ export const BOARD_STRIP_WIDTH = 1920;
  */
 export function planBoard(film, timeline) {
   const tiles = timeline.shots.map((shot, index) => {
-    const { frame, t, label } = tile(timeline, 'phone', lateFrameOf(timeline, index), shot.id);
+    const { frame, t, label } = tile(timeline, 'phone', lateFrameOf(timeline, index, film), shot.id);
     return { frame, t, label };
   });
   return Array.from({ length: Math.ceil(tiles.length / BOARD_PER_STRIP) }, (_, k) => ({

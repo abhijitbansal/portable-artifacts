@@ -290,12 +290,15 @@ function restingEntrance(move, unit, at) {
  * every word of the shipped films alone (the longest, "portable-artifacts", takes 0.595 s at a 0.035 s stagger). */
 export const LETTER_SPREAD_CAP = 0.6;
 
-/** The look's letters move as one track map per glyph of a word of `count` glyphs (graphemes): glyph k lands on `at + k * stagger`,
- * the stagger shrunk so the last letter lands within LETTER_SPREAD_CAP of `at`. */
+/** The seconds between one letter and the next in a word of `count` glyphs: the look's stagger, shrunk so the word's last letter
+ * lands within LETTER_SPREAD_CAP of its spoken time. */
+export const letterStagger = (look, count) => (count > 1 ? Math.min(look.moves.letters.stagger, LETTER_SPREAD_CAP / (count - 1)) : look.moves.letters.stagger);
+
+/** The look's letters move as one track map per glyph of a word of `count` glyphs (graphemes): glyph k lands on `at + k * stagger`
+ * (letterStagger). */
 export function letterTracks(look, unit, at, count) {
-  const move = look.moves.letters;
-  const stagger = count > 1 ? Math.min(move.stagger, LETTER_SPREAD_CAP / (count - 1)) : move.stagger;
-  return Array.from({ length: count }, (_, k) => restingEntrance(move, unit, at + k * stagger));
+  const stagger = letterStagger(look, count);
+  return Array.from({ length: count }, (_, k) => restingEntrance(look.moves.letters, unit, at + k * stagger));
 }
 
 /** The look's lines move as the track map of one line, landing on `at`: the line moves as one block. */

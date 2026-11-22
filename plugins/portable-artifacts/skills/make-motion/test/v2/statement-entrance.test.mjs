@@ -15,8 +15,10 @@ import '../../engine/modes/index.mjs';
 import '../../engine/devices/index.mjs';
 import '../../engine/kinds/index.mjs';
 import '../../engine/cuts/index.mjs';
-import { filmOf, expandIn, expandShot, FILLER, textNode, all, lastKey, near } from './helpers/kinds.mjs';
+import { filmOf, expandIn, expandShot, FILLER, FPS, textNode, all, lastKey, near } from './helpers/kinds.mjs';
 import { frameZeroViolations } from './helpers/bar.mjs';
+import { buildTimeline } from '../../engine/script/timing.mjs';
+import { lateFrameOf } from '../../scripts/v2/plan.mjs';
 
 const LETTER_LOOK = 'cosmos';
 const LINES_LOOK = 'desk';
@@ -83,6 +85,34 @@ test('letters: a statement ending in a 47-character URL is at rest before its sh
     const last = seen.length - 1;
     assert.ok(seen.every((word) => word.rest), `${say}: every word at rest at ${late.toFixed(3)} s, the last one ${JSON.stringify(seen[last])}`);
   }
+});
+
+// R-1: the late frame the compare cell, board tile and phone tile read is the later of the 85% frame and the last landing of the
+// shot's text, still inside the shot. A long statement leaves too little room after its last word for the letters.
+const LONG_LINE = 'Our platform supports internationalization and accessibility for every team that ships software to customers around the world, and accessibility.';
+const frameAt = (film) => lateFrameOf(buildTimeline(film, { fps: FPS }), 0, film);
+
+test('letters: the late frame of a 7 s cosmos statement waits for "accessibility." to land, and shows it at rest', () => {
+  const film = filmOf([{ id: 's', show: 'statement', say: LONG_LINE }], LETTER_LOOK);
+  const out = expandIn(film);
+  const { duration } = out.timing;
+  const frame = frameAt(film), t = frame / FPS;
+  assert.ok(duration >= 7, `the premise: a shot of ${duration} s`);
+  const hero = heroOf(out);
+  const lands = Math.max(...hero.glyphTracks.flat().map((g) => landsAt(g.opacity)));
+  assert.ok(lands > 0.85 * duration, `the premise: the last letter lands at ${lands} s, after the 85% frame ${0.85 * duration}`);
+  assert.ok(t >= lands - 1e-9 && t < duration, `the picked frame ${t} s is at or after ${lands} s and inside the shot (${duration} s)`);
+  const seen = sampledAt(out.nodes, t).find((n) => n.id === 's.text').seen;
+  assert.ok(seen.every((word) => word.rest), 'every word is at rest on the picked frame');
+});
+
+test('the late frame stays the 85% frame where nothing lands after it: a short statement, a desk line, a viral hook', () => {
+  const at85 = (film) => Math.round(0.85 * buildTimeline(film, { fps: FPS }).shots[0].duration * FPS);
+  for (const film of [
+    filmOf([{ id: 's', show: 'statement', say: 'Ship it today.' }], LETTER_LOOK),
+    filmOf([{ id: 's', show: 'statement', say: LONG_LINE }], LINES_LOOK),
+    filmOf([{ id: 's', show: 'statement', say: LONG_LINE }], LETTER_LOOK, '9:16', { mode: 'viral' }),
+  ]) assert.equal(frameAt(film), at85(film), `${film.look} ${film.mode}`);
 });
 
 test('lineEntrance lands at the time given', () => {
