@@ -164,6 +164,20 @@ test('[R2] the shape of a short, honest hooks, tells with their condition, the c
   assert.ok(section(story, 'Narration').includes('not just'));
 });
 
+// ---- the review protocol: reviewing.md ----------------------------------------------------------------------------------------
+
+test('reviewing.md ranks notes P0 to P2, never scores, asks the pictures-alone question and names the four delivery lines', () => {
+  const md = read('references/reviewing.md');
+  assert.deepEqual(headings(md).slice(0, 4), ['Notes', 'Never score', 'Pictures alone', 'Delivery']); // W5 may append a fifth
+  for (const rank of ['P0', 'P1', 'P2']) assert.ok(section(md, 'Notes').includes(rank), rank);
+  assert.ok(section(md, 'Notes').includes('· time · where · problem → change · what stays'));
+  for (const label of ['weakest shot:', 'measured:', 'looked at:', 'not checked:']) assert.ok(section(md, 'Delivery').includes(label), label);
+  for (const phrase of ['text inside a picture', 'between the frames the sheets sample', 'cannot verify']) assert.ok(section(md, 'Delivery').includes(phrase), phrase); // [R2-10]
+  const skill = read('SKILL.md');
+  assert.match(skill, /references\/reviewing\.md/);
+  assert.match(skill, /write `review\.md` next to the film/);
+});
+
 // ---- --list names -------------------------------------------------------------------------------------------------------
 
 /** The names a document gives to `--list <name>`, or `--list=<name>`, that are not in LIST_NAMES. */
