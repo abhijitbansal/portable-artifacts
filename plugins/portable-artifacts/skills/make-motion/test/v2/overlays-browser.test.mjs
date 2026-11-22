@@ -12,6 +12,9 @@ import { pngOf } from './helpers/png.mjs';
 import { readPng } from '../../scripts/v2/png.mjs';
 import { frameDifference, loopFindings } from '../../scripts/v2/loop.mjs';
 import { writePoster } from '../../scripts/v2/poster.mjs';
+import { reviewFilm } from '../../scripts/v2/review.mjs';
+import { failureOutcome } from '../../scripts/v2/run.mjs';
+import { logoOnlySrc } from '../../scripts/v2/logo-finding.mjs';
 
 const FPS = 30;
 const W = 1920;
@@ -200,4 +203,58 @@ test('the same frames in two sessions (--workers 2) are the same pixels', async 
     const [a, b] = [await shown(one, frame, { rows: [BAR_ROW, 68] }), await shown(two, frame, { rows: [BAR_ROW, 68] })];
     assert.deepEqual(a.rows, b.rows, `frame ${frame}`);
   }
+});
+
+// ---- the review (engine/review/overlay.mjs, scripts/v2/review.mjs) ----
+
+const REVIEW_FONT = { family: 'Geist', weight: 600, size: 96 };
+const reviewText = (x, text, y = 400) => ({ type: 'text', id: 'words', props: { x, y, text, font: REVIEW_FONT, maxWidth: 3000, fill: '#ffffff' } });
+const reviewFilmOf = (extra, node = reviewText(200, 'Clear')) => ({ version: 2, mode: 'pro', look: 'desk', fps: FPS, seed: 1, shots: [{ id: 'f', show: 'free', hold: 3, background: GROUND, nodes: [node] }], ...extra });
+const findingsOf = async (t, film) => {
+  const s = await open(t, film);
+  return s === null ? null : reviewFilm({ session: s });
+};
+
+test('a film has the same findings with and without its overlays, when no text meets the logo', async (t) => {
+  const withOverlays = await findingsOf(t, reviewFilmOf({ overlays: ON })); if (!withOverlays) return;
+  const without = await findingsOf(t, reviewFilmOf({}));
+  assert.deepEqual(withOverlays, without);
+  assert.deepEqual(withOverlays.filter((f) => f.rule === 'overlay-covers'), []);
+});
+
+test('a still shot under a moving progress bar still raises still', async (t) => {
+  const bar = { type: 'path', id: 'block', props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' } };
+  const longStill = { version: 2, mode: 'pro', look: 'desk', fps: FPS, seed: 1, overlays: { progress: true }, shots: [{ id: 'long', show: 'free', hold: 8, background: '#f3eee3', nodes: [bar] }, { id: 'end', show: 'free', hold: 1, background: '#f3eee3', nodes: [bar] }] };
+  const found = await findingsOf(t, longStill); if (!found) return;
+  assert.equal(found.filter((f) => f.rule === 'still').length, 1);
+});
+
+test('a landed text under the logo is one overlay-covers finding at overlays.logo, though the shot shows it on every frame', async (t) => {
+  const found = await findingsOf(t, reviewFilmOf({ overlays: { logo: { src: 'assets/logo.png' } } }, reviewText(1750, 'Hi', 20))); if (!found) return;
+  const covers = found.filter((f) => f.rule === 'overlay-covers');
+  assert.equal(covers.length, 1, JSON.stringify(found.map((f) => [f.rule, f.node, f.path])));
+  assert.deepEqual([covers[0].kind, covers[0].path, covers[0].shot, covers[0].node], ['creative', 'overlays.logo', 'f', 'words|overlay.logo']);
+  const clear = await findingsOf(t, reviewFilmOf({ overlays: { logo: { src: 'assets/logo.png' } } }));
+  assert.deepEqual(clear.filter((f) => f.rule === 'overlay-covers'), []);
+});
+
+// ---- a logo the browser cannot decode ----
+
+test('a logo with bytes the browser cannot decode stops the page naming the file, and the run reports it at overlays.logo.src', async (t) => {
+  writeFileSync(path.join(dir, 'assets', 'broken.png'), 'a .png name, but not a picture');
+  const film = filmWith({ overlays: { logo: { src: 'assets/broken.png' } } });
+  let thrown = null;
+  try {
+    const session = await sessionOrNull(film, { specDir: dir });
+    if (!session) return t.skip('no browser');
+    await session.close();
+  } catch (err) {
+    thrown = err;
+  }
+  assert.ok(thrown, 'the page started with an undecodable logo');
+  assert.match(thrown.message, /image "assets\/broken\.png" could not be loaded/);
+  const out = failureOutcome(thrown, undefined, logoOnlySrc(film));
+  assert.equal(out.exitCode, 1);
+  assert.deepEqual([out.finding.kind, out.finding.path], ['mechanical', 'overlays.logo.src']);
+  assert.equal(failureOutcome(thrown, undefined, null).exitCode, 2, 'a picture no logo names stays the machine\'s');
 });

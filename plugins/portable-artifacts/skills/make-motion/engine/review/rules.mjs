@@ -60,6 +60,9 @@ export const RULES = Object.freeze([
     { capped: true, evidence: 'measured', ask: 'Is the empty part of this frame doing a job?' }),
   rule('scale-contrast', [CREATIVE], 'frame', 'The hero leads its neighbours but reaches under 50% of the safe area (45% in ledger).',
     { capped: true, evidence: 'measured', ask: 'Should the hero be the thing the viewer sees first, and is it big enough to be?' }),
+  // frame, from W4: the film's overlays (a logo, a progress bar), which no snapshot holds
+  rule('overlay-covers', [CREATIVE], 'frame', 'A landed text runs under the logo by more than 4 units both ways.',
+    { capped: true, ask: 'Is there a corner of the frame where the logo would not sit under the words?' }),
   // film: what the whole film does
   rule('unsettled', [MECHANICAL], 'film', 'Text never lands within its shot: on every sampled frame it is still arriving or moving.'),
   rule('still', [CREATIVE], 'film', 'The picture holds still for longer than the mode allows.',

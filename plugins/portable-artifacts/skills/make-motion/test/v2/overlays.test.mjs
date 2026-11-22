@@ -23,8 +23,14 @@ import { listEntries } from '../../scripts/v2/list.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { startV2Server } from '../../scripts/v2/server.mjs';
 import { pngOf } from './helpers/png.mjs';
+import { overlayCoverFindings } from '../../engine/review/overlay.mjs';
+import { landedTexts } from '../../engine/review/frame.mjs';
+import { dedupeFindings, overlayCoverItems, restingByShot } from '../../scripts/v2/review.mjs';
+import { RULES } from '../../engine/review/rules.mjs';
+import { CAPPED_HERE } from '../../engine/review/outline.mjs';
+import { logoDecodeFinding, logoOnlySrc } from '../../scripts/v2/logo-finding.mjs';
 
-const SHOT = { id: 'a', show: 'statement', say: 'One short line.' };
+const SHOT ={ id: 'a', show: 'statement', say: 'One short line.' };
 const FPS = 30;
 const WIDE = { w: 1920, h: 1080 };
 const TALL = { w: 1080, h: 1920 };
@@ -312,4 +318,106 @@ test('the logo is one of the pictures the server lists, once, whoever else names
   const second = await startV2Server(loadFilm(file));
   t.after(() => second.close());
   assert.deepEqual((await (await fetch(`${second.url}film.json`)).json()).assets, ['assets/logo.png']);
+});
+
+// ---- the review: a text that runs under the logo (engine/review/overlay.mjs) ----
+
+const COVER_CTX = { canvas: WIDE, shotId: 'a', shotIndex: 0, t: 0.5 };
+const LOGO_BOX = { id: 'overlay.logo', bbox: [1700, 60, 160, 60], props: { overlay: 'logo' } };
+const BAR_BOX = { id: 'overlay.progress.bar', bbox: [0, 1074, 1920, 6], props: { overlay: 'progress' } };
+
+test('a landed text under the logo is one creative finding at overlays.logo', () => {
+  const [f, ...rest] = overlayCoverFindings([{ id: 'hero', ink: [1600, 40, 300, 120], role: 'hero' }], [LOGO_BOX], COVER_CTX);
+  assert.deepEqual(rest, []);
+  assert.deepEqual([f.kind, f.rule, f.node, f.path], ['creative', 'overlay-covers', 'hero|overlay.logo', 'overlays.logo']);
+  assert.equal(f.message, 'text "hero" in shot "a" runs under the logo; move the logo to another corner (overlays.logo.corner) or shorten the text');
+  assert.equal('role' in f, false, 'no role: the path is the logo, whatever field the text is');
+});
+
+test('a text clear of the logo, and a text over the progress bar, are not findings', () => {
+  assert.deepEqual(overlayCoverFindings([{ id: 'hero', ink: [200, 400, 600, 120], role: 'hero' }], [LOGO_BOX, BAR_BOX], COVER_CTX), [], 'clear of the logo');
+  assert.deepEqual(overlayCoverFindings([{ id: 'low', ink: [200, 1060, 600, 20], role: 'caption' }], [LOGO_BOX, BAR_BOX], COVER_CTX), [], 'over the bar only');
+  assert.deepEqual(overlayCoverFindings([{ id: 'hero', ink: [1600, 40, 300, 120], role: 'hero' }], [BAR_BOX], COVER_CTX), [], 'a film with no logo');
+});
+
+test('a text meets the logo by more than OVERLAP_UNITS both ways, or it is not covered', () => {
+  const at = (ink) => overlayCoverFindings([{ id: 't', ink, role: 'hero' }], [LOGO_BOX], COVER_CTX).length;
+  assert.equal(at([1600, 60, 104, 60]), 0, 'across by exactly 4 units');
+  assert.equal(at([1600, 60, 105, 60]), 1, 'across by 5');
+  assert.equal(at([1700, 0, 160, 64]), 0, 'down by exactly 4 units');
+  assert.equal(at([1700, 0, 160, 65]), 1, 'down by 5');
+  assert.equal(at([1700, 200, 160, 60]), 0, 'below the logo');
+});
+
+test('the unit scales with the canvas: a 4 K frame needs 8 pixels', () => {
+  const ctx = { ...COVER_CTX, canvas: { w: 3840, h: 2160 } };
+  assert.equal(overlayCoverFindings([{ id: 't', ink: [1700 - 6, 60, 12, 60], role: 'hero' }], [LOGO_BOX], ctx).length, 0, '6 px is 3 units');
+  assert.equal(overlayCoverFindings([{ id: 't', ink: [1700 - 6, 60, 20, 60], role: 'hero' }], [LOGO_BOX], ctx).length, 1, '14 px is 7 units');
+});
+
+// A text as annotate() reports it (the shape review-settle.test.mjs builds): 96 px words 192 px apart, one line.
+function textNode({ id = 't', x = 200, y = 400, words = 1 } = {}) {
+  const size = 96, width = words * size * 2, height = size * 1.15;
+  const line = { x: 0, y: size * 0.9, width, words: Array.from({ length: words }, (_, k) => ({ text: 'word', index: k, x: k * size * 2, width: size * 2 })) };
+  return {
+    type: 'text', id, depth: 0, props: {}, x, y, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: [],
+    words: Array.from({ length: words }, () => ({ opacity: 1, x: 0, y: 0, scale: 1 })),
+    layout: { size, width, height, overflow: false, lines: [line] }, bbox: [x, y, width, height], spread: 0,
+  };
+}
+const REVIEW_FILM = { version: 2, mode: 'pro', look: 'desk', format: '16:9', fps: 30, overlays: { logo: { src: 'assets/logo.png' } }, shots: [{ id: 'hero', show: 'free', hold: 1 }] };
+const REVIEW_TIMELINE = { fps: 30, frameCount: 30, duration: 1, shots: [{ id: 'hero', index: 0, start: 0, end: 1, duration: 1 }] };
+const snapshotsOf = (tree, whole = true) => [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree(frame), whole }));
+const coverItems = (snapshots) => overlayCoverItems(REVIEW_FILM, REVIEW_TIMELINE, restingByShot(REVIEW_TIMELINE, snapshots), snapshots, [LOGO_BOX], []);
+
+test('landedTexts gives the id, the ink and the role of each text at rest, and nothing for one still arriving', () => {
+  const ctx = { canvas: WIDE };
+  const [one] = landedTexts([textNode({ id: 'hero' })], ctx);
+  assert.equal(one.id, 'hero');
+  assert.ok(Array.isArray(one.ink) && one.ink.length === 4 && one.ink.every(Number.isFinite));
+  assert.ok('role' in one);
+  assert.deepEqual(landedTexts([{ ...textNode(), opacity: 0.5 }], ctx), []);
+});
+
+test('the review reads a text under the logo on whole frames: one finding for the shot, at overlays.logo, though many frames show it', () => {
+  const snapshots = snapshotsOf(() => [textNode({ id: 'hero', x: 1700, y: 60 })]);
+  const found = dedupeFindings(coverItems(snapshots));
+  assert.equal(found.length, 1);
+  assert.deepEqual([found[0].rule, found[0].path, found[0].shot, found[0].kind, found[0].node], ['overlay-covers', 'overlays.logo', 'hero', 'creative', 'hero|overlay.logo']);
+  assert.match(found[0].message, /\(at 0\.00 s\)$/);
+});
+
+test('a text clear of the logo, and a frame inside a cut window (audited alone), give no finding', () => {
+  assert.deepEqual(coverItems(snapshotsOf(() => [textNode({ x: 200, y: 400 })])), []);
+  assert.deepEqual(coverItems(snapshotsOf(() => [textNode({ x: 1700, y: 60 })], false)), []);
+});
+
+test('overlay-covers is a registered creative rule of the frame stage, capped to two a film', () => {
+  const rule = RULES.find((r) => r.id === 'overlay-covers');
+  assert.deepEqual([rule.kinds, rule.stage, rule.capped, rule.suggest, rule.evidence], [['creative'], 'frame', true, null, 'unmeasured']);
+  assert.ok(CAPPED_HERE.includes('overlay-covers'));
+});
+
+// ---- a logo the browser cannot decode: a finding at overlays.logo.src ----
+
+const decodeError = (src, why = 'The source image could not be decoded.') => new Error(`page.evaluate: Error: image "${src}" could not be loaded: ${why}\n    at eval (<anonymous>:1:1)`);
+
+test('logoOnlySrc is the logo\'s src when no shot names the same file, else null', () => {
+  const film = { version: 2, overlays: { logo: { src: 'assets/logo.png' } }, shots: [SHOT] };
+  assert.equal(logoOnlySrc(film), 'assets/logo.png');
+  assert.equal(logoOnlySrc({ version: 2, shots: [SHOT] }), null);
+  assert.equal(logoOnlySrc({ ...film, shots: [{ id: 'p', show: 'media', src: 'assets/logo.png', hold: 2 }] }), null, 'a shot names it too: the page reports the shot\'s picture');
+  assert.equal(logoOnlySrc({ ...film, shots: [{ id: 'u', show: 'no-such-kind' }, SHOT] }), 'assets/logo.png', 'an unregistered kind names nothing');
+});
+
+test('a logo the browser cannot decode is one mechanical finding at overlays.logo.src, naming the file', () => {
+  const found = logoDecodeFinding(decodeError('assets/logo.png'), 'assets/logo.png');
+  assert.deepEqual([found.kind, found.shot, found.path], ['mechanical', null, 'overlays.logo.src']);
+  assert.equal(found.message, 'the picture "assets/logo.png" could not be loaded (The source image could not be decoded); replace it with a PNG, JPEG or WebP picture');
+});
+
+test('any other picture, any other error, or no logo, is not the logo\'s', () => {
+  assert.equal(logoDecodeFinding(decodeError('assets/other.png'), 'assets/logo.png'), null);
+  assert.equal(logoDecodeFinding(new Error('page.evaluate: Target crashed '), 'assets/logo.png'), null);
+  assert.equal(logoDecodeFinding(decodeError('assets/logo.png'), null), null);
 });

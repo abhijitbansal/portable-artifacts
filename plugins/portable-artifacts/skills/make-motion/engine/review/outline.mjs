@@ -13,7 +13,7 @@ export const SAME_RUN = 3;
 /** Findings of one capped rule a film keeps (of one form, for `sameness`); the rest are counted in the last one kept. */
 export const CREATIVE_CAP = 2;
 /** The rules `capCreative` caps. W2's composition rules (`COMPOSITION_RULES`, frame.mjs) are capped by `capComposition`, by measure. A later rule that is capped by time appends its id. */
-export const CAPPED_HERE = Object.freeze(['cut-variety', 'sameness']);
+export const CAPPED_HERE = Object.freeze(['cut-variety', 'sameness', 'overlay-covers']);
 
 const SHARE_EPSILON = 1e-9;
 

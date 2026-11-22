@@ -47,6 +47,16 @@ test('a picture the browser cannot decode is exit 2 with its path, as a missing 
   assert.notEqual(out.error.hint, '');
 });
 
+test('a logo the browser cannot decode is the film\'s: a mechanical finding at overlays.logo.src, exit 1; a shot\'s picture stays exit 2', () => {
+  const bad = thrown('Error: image "assets/logo.png" could not be loaded: The source image could not be decoded.');
+  const out = failureOutcome(bad, undefined, 'assets/logo.png');
+  assert.equal(out.exitCode, 1);
+  assert.equal(out.error, undefined);
+  assert.deepEqual([out.finding.kind, out.finding.shot, out.finding.path], ['mechanical', null, 'overlays.logo.src']);
+  assert.equal(failureOutcome(bad, undefined, null).exitCode, 2, 'the film names no logo of its own');
+  assert.equal(failureOutcome(bad, undefined, 'assets/other.png').exitCode, 2, 'another picture');
+});
+
 test('an error the page did not raise on purpose (a TypeError in its code) is not blamed on the film: exit 2', () => {
   const out = failureOutcome(thrown('TypeError: Cannot read properties of null (reading \'x\')'));
   assert.equal(out.exitCode, 2);

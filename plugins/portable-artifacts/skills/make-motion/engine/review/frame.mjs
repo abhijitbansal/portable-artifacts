@@ -257,6 +257,9 @@ export function textLandings(sampled, ctx) {
   return visibleTexts(sampled, unitOf(ctx.canvas), ctx).texts.map((t) => ({ id: t.node.id, landed: t.landed, role: t.role }));
 }
 
+/** Every landed text on screen as { id, ink, role }: what the overlay review sets against the logo's box (overlay.mjs). */
+export const landedTexts = (sampled, ctx) => visibleTexts(sampled, unitOf(ctx.canvas), ctx).texts.filter((t) => t.landed).map((t) => ({ id: t.node.id, ink: t.ink, role: t.role }));
+
 const pathOf = (ctx) => `shots[${ctx.shotIndex ?? ctx.shotId}]`;
 const finding = (ctx, kind, rule, node, message, role, suggest) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}), ...(suggest ? { suggest } : {}) });
 const units = (n) => Number(n.toFixed(1));
