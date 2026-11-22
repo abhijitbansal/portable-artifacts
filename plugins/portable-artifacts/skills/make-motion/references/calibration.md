@@ -4,7 +4,7 @@ The two composition findings and the two outline findings are the only rules who
 
 ## Method
 
-- The last frame of every shot of ten films from `references/examples/v2` (91 shots): `look-cosmos`, `look-poster`, `gate-ledger`, `gate-keynote`, `gate-marker`, `showreel-pro`, `showreel-viral`, `kinds-desk`, `kinds-pop` and `whats-new` (30 shots).
+- The last frame of every shot of ten films from `references/examples/v2` (91 shots): `look-cosmos`, `look-poster`, `gate-ledger`, `gate-keynote`, `gate-marker`, `showreel-pro`, `showreel-viral`, `kinds-desk`, `kinds-pop` and `whats-new` (30 shots). This is the set the thresholds were chosen on. Task F1b then rewrote `showreel-pro` (9 shots to 11), `showreel-viral` (8 shots, new pictures and cuts) and `look-cosmos` (3 shots to 4, a short statement added): the sweep below was not re-run on the new shots, and the sentence "9 of the 91 shots" under "What fires" is the figure for the 91. What the three films raise now is measured by their draft renders (`make.mjs --json`, 2026-11-22): `showreel-pro` and `showreel-viral` raise no composition finding, and `look-cosmos` raises one in four shots (`close`, `scale-contrast`, hero 0.43, the finding the table below already counts).
 - `band` is the longest empty stretch of the safe rectangle as a share of its side. `extent` is the hero's larger side over the matching safe side. The safe rectangle is 1800 by 960 on a 1920 by 1080 frame (60 px margins).
 - A fixed overlay (a slug, a mark, a rule) is furniture and does not count as an element. A caption's reserved zone is taken out of the safe rectangle first. A kind that lays out equals (`peers`: `list`, `compare`, `timeline`, `feed`) is not judged for `scale-contrast`.
 - Shots were sorted by eye into "fills well" (12 shots) and "reads empty" (10 shots), then each threshold was checked against them, and every shot a threshold flagged was viewed. The two sets cross on both measures (for `band`, the emptiest "fills well" shot is at 0.208 and the fullest "reads empty" shot at 0.159), so no value separates them. 0.35 is the lowest `band` that kept every film at or under a third of its shots flagged, after the `desk` and `ledger` overrides below.
@@ -38,7 +38,7 @@ Band 0.35, hero 0.50, `desk` band 0.40, `ledger` band 0.40 and hero 0.45: 9 of t
 
 | Film | Shots | Firing | Share | Which |
 |---|---|---|---|---|
-| `look-cosmos` | 3 | 1 | 0.33 | `close` (hero 0.43) |
+| `look-cosmos` | 3 (4 after F1b, still 1 firing, 0.25) | 1 | 0.33 | `close` (hero 0.43) |
 | `whats-new` | 30 | 6 | 0.20 | the six `look-*` cutout cards (hero) |
 | `gate-marker` | 6 | 1 | 0.17 | `print` (hero) |
 | `kinds-pop` | 8 | 1 | 0.13 | `hook` (band) |
@@ -56,17 +56,17 @@ Removed from the "reads empty" set after viewing: `look-cosmos` `giants` (empty 
 
 Both rules read the spec alone, so the table is a run of `node scripts/make.mjs references/examples/v2/<film>.json --outline --json` on every example film (29 films), counting the findings of each rule before any cap (`sameness` is capped at 2 a film for each of its three forms, kind, cut and move, which two examples reach, `cuts-pop` and `whats-new`, each with 2 findings of the kind form, and none exceeds). The constants are `MIN_SEAMS` 4 (a film with fewer cuts is never judged: three cuts make any one of them "more than two thirds"), `REPEATED_CUT_SHARE` 2/3 and `SAME_RUN` 3, in `engine/review/outline.mjs`. The plain `cut` has no window and never counts as the repeated cut.
 
-The bound is the one the composition rules use: if more than a third of the films were flagged, the rule would teach the agent to ignore it. Result: `cut-variety` flags 0 of 29 films, `sameness` flags 4 of 29 (14%), so both stay. Only `sameness` is measured by this table: no example flags `cut-variety`, so its 2/3 share is the plan's number, listed as `unmeasured` in the rules page.
+The bound is the one the composition rules use: if more than a third of the films were flagged, the rule would teach the agent to ignore it. Result: `cut-variety` flags 0 of 29 films, `sameness` flags 2 of 29 (7%), so both stay. Only `sameness` is measured by this table: no example flags `cut-variety`, so its 2/3 share is the plan's number, listed as `unmeasured` in the rules page.
+
+The table was first taken before the showreels were rewritten (task F1b): `showreel-pro` (9 shots) then raised 2 findings (5 `clipping` shots in a row, and the same move, `highlight`, on all 5) and `showreel-viral` (8 shots) raised 2 (5 `media` shots in a row, and the same move, `sweep`, on all 5), so `sameness` flagged 4 of 29 films (14%). The rewrite, which has to show the five pictures and every new feature, breaks each run with another kind (pro: the code shot moved between the pictures, a diagram shot and a statement added; viral: a phone-framed screen shot), so neither film raises a finding now and neither is in the table. The rows below are the table as it stands after that rewrite; the 4 of 29 above is the number the rule was kept on.
 
 | Film | Shots | `cut-variety` | `sameness` | Which |
 |---|---|---|---|---|
 | `cuts-pop` | 16 | no | 2 | 4 `statement` shots in a row, then 3 |
-| `showreel-pro` | 9 | no | 2 | 5 `clipping` shots in a row, and the same move (`highlight`) on all 5 |
-| `showreel-viral` | 8 | no | 2 | 5 `media` shots in a row, and the same move (`sweep`) on all 5 |
 | `whats-new` | 30 | no | 3 | 7 `media` shots in a row, then 3 `clipping` shots, which also arrive by one slide (`redrawn-diagram` to `redrawn-scene`) three times running |
-| the other 25 films | 2 to 16 | no | 0 | |
+| the other 27 films, the two showreels among them (11 and 8 shots) | 2 to 16 | no | 0 | |
 
-Each finding is a true one: a run of one kind (in the showreels, with one move too). The films are left as they are, and `test/v2/review-outline.test.mjs` lists the findings (`KNOWN`). `whats-new` is the only example with a run of one windowed cut, so `cut-variety` itself is held by its unit tests and not by an example.
+Each finding is a true one: a run of one kind. The films are left as they are, and `test/v2/review-outline.test.mjs` lists the findings (`KNOWN`). `whats-new` is the only example with a run of one windowed cut, so `cut-variety` itself is held by its unit tests and not by an example.
 
 ## Known limits
 
@@ -74,5 +74,5 @@ Each finding is a true one: a run of one kind (in the showreels, with one move t
 - A resting-frame rule cannot see a frame that reads empty only while its elements arrive.
 - `desk`'s 16:9 statement and 16:9 timeline are let through by the 0.40 band although viewed as sparse; look at them on the sheets even when no finding is printed.
 - Two small far-apart elements in one group union into one large box; measured on 415 elements, it moved no threshold.
-- `SAME_RUN` 3 was kept although both showreels run 5 shots of one kind: raising it to 6 would flag only `whats-new` (1 of 29), 8 would flag none. The showreels are a demonstration of one picture kind on five pictures, which is the case the rule exists to ask about.
+- `SAME_RUN` 3 was kept although both showreels once ran 5 shots of one kind: raising it to 6 would have flagged only `whats-new` (1 of 29), 8 none. The showreels were a demonstration of one picture kind on five pictures, which is the case the rule exists to ask about, and they were rewritten to answer it instead of the rule being loosened.
 - `cut-variety` has never fired on a shipped film, so its 2/3 share is the plan's number, tested only on built films.

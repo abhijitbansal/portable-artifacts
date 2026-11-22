@@ -183,15 +183,13 @@ test('every capped rule is capped by exactly one function', () => {
 const KNOWN = Object.freeze({
   // true finding: 4 and 3 statement shots in a row (a cut demo that names the cuts on plain statements)
   'cuts-pop.json': ['sameness kind:statement shots[2].show', 'sameness kind:statement shots[14].show'],
-  // true finding: 5 clipping shots with one move in a row; F1b rewrites the showreels
-  'showreel-pro.json': ['sameness kind:clipping shots[4].show', 'sameness move:highlight shots[4].on'],
-  // true finding: 5 media shots with one move in a row; F1b rewrites the showreels
-  'showreel-viral.json': ['sameness kind:media shots[4].show', 'sameness move:sweep shots[4].on'],
+  // (the two showreels were here with 5 clipping and 5 media shots in a row; F1b rewrote them with the five pictures
+  // broken up by other kinds, so neither raises a finding and neither is listed)
   // true finding: 7 media shots in a row, then 3 clipping shots that also arrive by one slide three times running
   'whats-new.json': ['sameness kind:media shots[12].show', 'sameness kind:clipping shots[22].show', 'sameness cut:slide shots[22].cut'],
 });
 
-test('the shipped example films raise only the outline findings named in KNOWN, and the two showreels are among them', () => {
+test('the shipped example films raise only the outline findings named in KNOWN, and the two showreels raise none', () => {
   const files = readdirSync(EXAMPLES).filter((name) => name.endsWith('.json')).sort();
   assert.equal(files.length, 29, 'a film added to the examples is calibrated into references/calibration.md first');
   for (const name of files) {
@@ -199,7 +197,7 @@ test('the shipped example films raise only the outline findings named in KNOWN, 
     const found = outlineFindings(f, timeline).map((x) => `${x.rule} ${x.node} ${x.path}`);
     assert.deepEqual(found, KNOWN[name] ?? [], name);
   }
-  assert.ok(KNOWN['showreel-pro.json'] && KNOWN['showreel-viral.json']);
+  assert.ok(!KNOWN['showreel-pro.json'] && !KNOWN['showreel-viral.json'], 'the showreels are the films that show every feature, so they are written without a run of one kind');
 });
 
 test('at most a third of the example films raise an outline finding, so the rules do not teach the agent to ignore them', () => {

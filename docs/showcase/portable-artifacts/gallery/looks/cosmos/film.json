@@ -51,6 +51,11 @@
       "source": "NASA Planetary Fact Sheet"
     },
     {
+      "id": "vast",
+      "show": "statement",
+      "say": "Space is *enormous*."
+    },
+    {
       "id": "close",
       "show": "end",
       "say": "The sky is bigger. (0.8)",

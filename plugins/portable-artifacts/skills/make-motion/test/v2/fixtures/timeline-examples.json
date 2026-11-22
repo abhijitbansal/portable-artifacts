@@ -1541,11 +1541,11 @@
   ]
  },
  "look-cosmos.json": {
-  "sha": "470c411c40af4058cad9fa4cd42c822c2126e8bfe21d1fc20866b9e758d192c7",
+  "sha": "4e5786d6becbb1b8e103eae412d0b27726f20417919253e28f6302d7c387df22",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "4ba162969eb5",
-   "frameCount": "dcb5d6e69e4d",
+   "duration": "b3347f0d3e28",
+   "frameCount": "6bcaea988250",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1568,10 +1568,19 @@
     "sentences": "e573cc760359"
    },
    {
-    "id": "97959247360c",
+    "id": "31ce05a0aa4e",
     "index": "d4735e3a265e",
     "start": "31dcf07f1161",
-    "end": "4ba162969eb5",
+    "end": "3942a636b6b9",
+    "duration": "ad78cfa0ead3",
+    "words": "f8be0a8bc9b4",
+    "sentences": "c852f71353b9"
+   },
+   {
+    "id": "97959247360c",
+    "index": "4e07408562be",
+    "start": "3942a636b6b9",
+    "end": "b3347f0d3e28",
     "duration": "9c7f38a9ac4f",
     "words": "fc335c2e96ca",
     "sentences": "8753a93af0ea"
@@ -1673,11 +1682,11 @@
   ]
  },
  "showreel-pro.json": {
-  "sha": "268f447db77724624867082e5d4d9c79048d3497dc0d9af3204637d576bddeef",
+  "sha": "4262cbf90d8e36284e31aacc2eed0c343ce112d6892ce0e42c0e0cafb795e3f5",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "683d9213b954",
-   "frameCount": "a61c5cdf7828",
+   "duration": "2599dd276320",
+   "frameCount": "495afe547bef",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1685,34 +1694,36 @@
     "id": "addacb98157a",
     "index": "5feceb66ffc8",
     "start": "5feceb66ffc8",
-    "end": "0c4d154c9768",
-    "duration": "0c4d154c9768",
-    "words": "422876c07146",
-    "sentences": "67811ef31bab"
-   },
-   {
-    "id": "b6878fbe3b48",
-    "index": "6b86b273ff34",
-    "start": "0c4d154c9768",
-    "end": "99857838bf92",
-    "duration": "5ecf21708e12",
-    "words": "9dba0f40c41f",
-    "sentences": "fc4e11618b0b"
+    "end": "9a6091c5a9d2",
+    "duration": "9a6091c5a9d2",
+    "words": "b63f3f94b007",
+    "sentences": "efe2d462433a"
    },
    {
     "id": "299584e97507",
+    "index": "6b86b273ff34",
+    "start": "9a6091c5a9d2",
+    "end": "55a55b5e34d9",
+    "duration": "0670b7f61da6",
+    "words": "86d3ce8e6b0b",
+    "sentences": "807c2fec40b4",
+    "narrationAt": "6b86b273ff34"
+   },
+   {
+    "id": "b6878fbe3b48",
     "index": "d4735e3a265e",
-    "start": "99857838bf92",
-    "end": "dde551b3681b",
-    "duration": "0c4d154c9768",
-    "words": "8b1202d9a382",
-    "sentences": "d8f80deb71aa"
+    "start": "55a55b5e34d9",
+    "end": "13d7069945d9",
+    "duration": "9e6dccf291cf",
+    "words": "df6d02ab1fc2",
+    "sentences": "a9e50c96c164",
+    "narrationAt": "1b07b0cffa0b"
    },
    {
     "id": "adc05f6048f4",
     "index": "4e07408562be",
-    "start": "dde551b3681b",
-    "end": "0340d922fbe2",
+    "start": "13d7069945d9",
+    "end": "f649b8912b33",
     "duration": "1416b6898b19",
     "words": "e05b56ccc14f",
     "sentences": "c97a26fbc390"
@@ -1720,44 +1731,64 @@
    {
     "id": "c03dc88b312d",
     "index": "4b227777d4dd",
-    "start": "0340d922fbe2",
-    "end": "b09fa5d337a0",
-    "duration": "96b9eb6b674a",
+    "start": "f649b8912b33",
+    "end": "902d3164b61b",
+    "duration": "ef2d127de37b",
     "words": "bd2554872d5c",
     "sentences": "dcfb65f5f2f4"
    },
    {
-    "id": "e8f625c40b0e",
+    "id": "d070c7ecb482",
     "index": "ef2d127de37b",
-    "start": "b09fa5d337a0",
-    "end": "6a8b7a87c94d",
-    "duration": "a4dff76f1d1a",
-    "words": "dc6e6fe9d85f",
-    "sentences": "a517130e9957"
+    "start": "902d3164b61b",
+    "end": "ad6c565a0059",
+    "duration": "b1133c6354aa",
+    "words": "4c4c2c033edc",
+    "sentences": "449d0414a0a0"
+   },
+   {
+    "id": "e8f625c40b0e",
+    "index": "e7f6c011776e",
+    "start": "ad6c565a0059",
+    "end": "e3e3ee725875",
+    "duration": "b04eefe8bd01",
+    "words": "566e9849597a",
+    "sentences": "54b3a107e46d",
+    "narrationAt": "8139b3395240"
    },
    {
     "id": "807f0525549e",
-    "index": "e7f6c011776e",
-    "start": "6a8b7a87c94d",
-    "end": "a608c945a385",
-    "duration": "25ca93ba934a",
-    "words": "f94cac03ee4d",
-    "sentences": "9480de157d18"
+    "index": "7902699be42c",
+    "start": "e3e3ee725875",
+    "end": "22605208e31e",
+    "duration": "4e07408562be",
+    "words": "dd8a2505ccc4",
+    "sentences": "67bd29ad527a"
+   },
+   {
+    "id": "3d1425b3e5a0",
+    "index": "2c624232cdd2",
+    "start": "22605208e31e",
+    "end": "5af40e97e01f",
+    "duration": "8f65223004a7",
+    "words": "357a747657cb",
+    "sentences": "228a0bd711a3"
    },
    {
     "id": "b5a666eb4586",
-    "index": "7902699be42c",
-    "start": "a608c945a385",
-    "end": "d84988f4cfc8",
+    "index": "19581e27de7c",
+    "start": "5af40e97e01f",
+    "end": "0d9e9c227d71",
     "duration": "b5ead0a5626e",
-    "words": "47dbd44667c6",
-    "sentences": "011ff21b16d7"
+    "words": "9d0a7c0b9875",
+    "sentences": "af6d47d77d6a",
+    "narrationAt": "6b86b273ff34"
    },
    {
     "id": "97959247360c",
-    "index": "2c624232cdd2",
-    "start": "d84988f4cfc8",
-    "end": "683d9213b954",
+    "index": "4a44dc153642",
+    "start": "0d9e9c227d71",
+    "end": "2599dd276320",
     "duration": "bc7a634ca45f",
     "words": "154347448b17",
     "sentences": "18a39bd387ec"
@@ -1765,11 +1796,11 @@
   ]
  },
  "showreel-viral.json": {
-  "sha": "89bab6ffe37a2ffe467e4f6c8354b7d0f5bc9c409d5cfd87d15920fad6119470",
+  "sha": "e595fc91d85802143551177b52abd55e420358d27f438981473eb78bab58e3f1",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "6f4b6612125f",
-   "frameCount": "21900f41ecb7",
+   "duration": "b095c0767fd2",
+   "frameCount": "2099a9b5f777",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1822,16 +1853,16 @@
     "id": "e8f625c40b0e",
     "index": "ef2d127de37b",
     "start": "999839be84d2",
-    "end": "18c8b2b189a1",
-    "duration": "259288ea2f88",
-    "words": "6f14e07c2352",
-    "sentences": "ac5aafdcf3fd"
+    "end": "c549828bf300",
+    "duration": "7bcfa36d3022",
+    "words": "6c616b4ef203",
+    "sentences": "d2dda1dc0094"
    },
    {
     "id": "807f0525549e",
     "index": "e7f6c011776e",
-    "start": "18c8b2b189a1",
-    "end": "0fd8de4de113",
+    "start": "c549828bf300",
+    "end": "dde551b3681b",
     "duration": "cc60e61e2b85",
     "words": "289145957058",
     "sentences": "b051bbe34609"
@@ -1839,8 +1870,8 @@
    {
     "id": "97959247360c",
     "index": "7902699be42c",
-    "start": "0fd8de4de113",
-    "end": "6f4b6612125f",
+    "start": "dde551b3681b",
+    "end": "b095c0767fd2",
     "duration": "67a29a038bec",
     "words": "5915fee78917",
     "sentences": "30d29a59c006"
