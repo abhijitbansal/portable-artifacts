@@ -449,7 +449,7 @@ test('migrating.md names the old model folder, the frame cache and the voice pac
 
 // Every flag the five scripts and the doctor define, read from their own source.
 function knownFlags() {
-  const files = ['scripts/make.mjs', 'scripts/v2/cli.mjs', 'scripts/doctor.mjs', 'scripts/cutout.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/locate.mjs',
+  const files = ['scripts/make.mjs', 'scripts/v2/cli.mjs', 'scripts/doctor.mjs', 'scripts/cutout.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/locate.mjs', 'scripts/measure.mjs',
     'scripts/lib/cutout-cli.mjs', 'scripts/lib/beats.mjs', 'scripts/lib/help.mjs', 'scripts/v2/storyboard.mjs', 'shared/doctor.mjs'];
   const text = files.filter((f) => fs.existsSync(path.join(MOTION, f))).map((f) => read(f)).join('\n');
   return new Set([...text.matchAll(/--[a-z][a-z-]*/g)].map((m) => m[0]));

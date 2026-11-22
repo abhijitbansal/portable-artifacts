@@ -123,3 +123,18 @@ node <skill-dir>/scripts/make.mjs film.json --compare-looks rows
 - **A cell that is not a picture.** A look the film does not validate in is a flat cell with the look's name and the validator's first error: a kind the look excludes (`kind "screen" is not supported by look "marker"`), an overlay it does not draw, a cut or device it lacks. A look that parks the anchor's kind is drawn and stamped `<look> · experimental kind`; `status` in the report says `parked`. When no look can draw the shot the run is exit 1 with one finding at `shots[i]`, and no file is written.
 - **What it refuses.** An id the film lacks is exit 2 with the shots in `error.hint`. `--compare-looks` does not go with `--out`, `--batch`, `--no-render`, `--sheets-only`, `--outline`, `--phonemes`, `--poster`, `--poster-out`, `--inspect`, `--shot`, `--range`, `--subtitles`, `--subtitle-words`, `--workers`, `--exact`, `--no-music`, `--estimated`, `--list` or `--preview`.
 - **The browser.** One browser, with one session per look opened and closed one after another, so no two pages are ever open together.
+
+## Measuring a reference video
+
+`scripts/measure.mjs` turns one video file on this machine into numbers, so a film can be paced and mixed like a reference without guessing what the reference does:
+
+```
+node <skill-dir>/scripts/measure.mjs reference.mp4
+node <skill-dir>/scripts/measure.mjs reference.mp4 --json
+```
+
+- **What it prints.** Two groups under the headings `measured` and `guessed`; `--json` is one object of `{ value, basis }` per field, `basis` being `measured` or `guessed`. Nothing is written to disk and nothing is fetched.
+- **Measured.** `duration` (s), `size` (`[w, h]`), `fps`, `cuts` (how many), `shotMedian`, `shotShortest`, `shotLongest` (s), `lufs` and `truePeakDb` (the integrated loudness and the true peak, from ffmpeg's `ebur128`). The cuts are ffmpeg's `scdet` at its own default threshold of 10, one pass over the picture, so a fade or a whip pan can count as a cut or be missed, and the shot lengths are only as good as the cuts. A file with no sound has `lufs` and `truePeakDb` of `null`, still measured. A digitally silent true peak reads `-inf` in the text form and `null` in `--json`.
+- **Guessed.** `mode` is `viral` when the picture is taller than wide, else `pro`; `pace` is `fast` when `shotMedian` is under 2 s, else `calm`. They are rules of thumb over the measured numbers, not readings: take them as a starting point for `mode` and for how long the shots of the film run.
+- **What it refuses.** Exit 2 with `local files only: give the path of a video file on this machine (mp4, mov, m4v, webm or mkv)` for a URL, a folder, a symbolic link, a file that is not there and any file the clip probe refuses (a playlist, a concat script, an unlisted container or codec). The file is opened as a clip is: the file protocol only, the clip demuxers and decoders only, so a playlist on disk that names a URL is refused by what ffmpeg opens, not just by the argument.
+- **What the numbers are for.** Pacing and loudness only: how often it cuts, how long a shot runs, how loud it is. A creator's footage, music, name or wording is never copied into a film; take the rhythm and write your own film.
