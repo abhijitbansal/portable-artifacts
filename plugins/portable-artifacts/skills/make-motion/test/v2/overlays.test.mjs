@@ -28,7 +28,6 @@ import { landedTexts } from '../../engine/review/frame.mjs';
 import { dedupeFindings, overlayCoverItems, restingByShot } from '../../scripts/v2/review.mjs';
 import { RULES } from '../../engine/review/rules.mjs';
 import { CAPPED_HERE } from '../../engine/review/outline.mjs';
-import { logoDecodeFinding, logoOnlySrc } from '../../scripts/v2/logo-finding.mjs';
 
 const SHOT ={ id: 'a', show: 'statement', say: 'One short line.' };
 const FPS = 30;
@@ -396,28 +395,4 @@ test('overlay-covers is a registered creative rule of the frame stage, capped to
   const rule = RULES.find((r) => r.id === 'overlay-covers');
   assert.deepEqual([rule.kinds, rule.stage, rule.capped, rule.suggest, rule.evidence], [['creative'], 'frame', true, null, 'unmeasured']);
   assert.ok(CAPPED_HERE.includes('overlay-covers'));
-});
-
-// ---- a logo the browser cannot decode: a finding at overlays.logo.src ----
-
-const decodeError = (src, why = 'The source image could not be decoded.') => new Error(`page.evaluate: Error: image "${src}" could not be loaded: ${why}\n    at eval (<anonymous>:1:1)`);
-
-test('logoOnlySrc is the logo\'s src when no shot names the same file, else null', () => {
-  const film = { version: 2, overlays: { logo: { src: 'assets/logo.png' } }, shots: [SHOT] };
-  assert.equal(logoOnlySrc(film), 'assets/logo.png');
-  assert.equal(logoOnlySrc({ version: 2, shots: [SHOT] }), null);
-  assert.equal(logoOnlySrc({ ...film, shots: [{ id: 'p', show: 'media', src: 'assets/logo.png', hold: 2 }] }), null, 'a shot names it too: the page reports the shot\'s picture');
-  assert.equal(logoOnlySrc({ ...film, shots: [{ id: 'u', show: 'no-such-kind' }, SHOT] }), 'assets/logo.png', 'an unregistered kind names nothing');
-});
-
-test('a logo the browser cannot decode is one mechanical finding at overlays.logo.src, naming the file', () => {
-  const found = logoDecodeFinding(decodeError('assets/logo.png'), 'assets/logo.png');
-  assert.deepEqual([found.kind, found.shot, found.path], ['mechanical', null, 'overlays.logo.src']);
-  assert.equal(found.message, 'the picture "assets/logo.png" could not be loaded (The source image could not be decoded); replace it with a PNG, JPEG or WebP picture');
-});
-
-test('any other picture, any other error, or no logo, is not the logo\'s', () => {
-  assert.equal(logoDecodeFinding(decodeError('assets/other.png'), 'assets/logo.png'), null);
-  assert.equal(logoDecodeFinding(new Error('page.evaluate: Target crashed '), 'assets/logo.png'), null);
-  assert.equal(logoDecodeFinding(decodeError('assets/logo.png'), null), null);
 });

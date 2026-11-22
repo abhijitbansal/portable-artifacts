@@ -14,7 +14,6 @@ import { frameDifference, loopFindings } from '../../scripts/v2/loop.mjs';
 import { writePoster } from '../../scripts/v2/poster.mjs';
 import { reviewFilm } from '../../scripts/v2/review.mjs';
 import { failureOutcome } from '../../scripts/v2/run.mjs';
-import { logoOnlySrc } from '../../scripts/v2/logo-finding.mjs';
 
 const FPS = 30;
 const W = 1920;
@@ -253,8 +252,24 @@ test('a logo with bytes the browser cannot decode stops the page naming the file
   }
   assert.ok(thrown, 'the page started with an undecodable logo');
   assert.match(thrown.message, /image "assets\/broken\.png" could not be loaded/);
-  const out = failureOutcome(thrown, undefined, logoOnlySrc(film));
+  const out = failureOutcome(thrown, undefined, film);
   assert.equal(out.exitCode, 1);
   assert.deepEqual([out.finding.kind, out.finding.path], ['mechanical', 'overlays.logo.src']);
-  assert.equal(failureOutcome(thrown, undefined, null).exitCode, 2, 'a picture no logo names stays the machine\'s');
+});
+
+test('a shot picture with bytes the browser cannot decode is a finding at the shot\'s field, as the real page raises it', async (t) => {
+  writeFileSync(path.join(dir, 'assets', 'broken-shot.png'), 'a .png name, but not a picture');
+  const film = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [flat('a', GROUND), { id: 'p', show: 'media', src: 'assets/broken-shot.png', hold: 1 }] };
+  let thrown = null;
+  try {
+    const session = await sessionOrNull(film, { specDir: dir });
+    if (!session) return t.skip('no browser');
+    await session.close();
+  } catch (err) {
+    thrown = err;
+  }
+  assert.ok(thrown, 'the page started with an undecodable picture');
+  const out = failureOutcome(thrown, undefined, film);
+  assert.equal(out.exitCode, 1);
+  assert.deepEqual([out.finding.kind, out.finding.path], ['mechanical', 'shots[1].src']);
 });

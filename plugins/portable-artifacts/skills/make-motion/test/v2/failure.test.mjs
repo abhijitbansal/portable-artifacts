@@ -5,8 +5,9 @@
 //   a crashed renderer    "page.evaluate: Target crashed "
 //   a timeout             "page.goto: Timeout 1ms exceeded." (name "TimeoutError")
 // Only an Error the page raised on purpose (the engine's own throws) is the film's: a mechanical finding, exit 1.
-// A crash, a closed target, a timeout, a lost or broken WebGL context ("post pass: ...") and a picture the browser
-// cannot decode are trouble with the machine or a file: exit 2 and report.error, with a hint.
+// A crash, a closed target, a timeout, a lost or broken WebGL context ("post pass: ...") and a picture the server
+// failed to load (HTTP <n>) are trouble with the machine: exit 2 and report.error, with a hint. A picture the browser
+// cannot decode is the film's file: a finding at the path that names it (picture-finding.mjs), exit 1.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { failureOutcome, reportFindings } from '../../scripts/v2/run.mjs';
@@ -40,21 +41,23 @@ test('a lost or broken WebGL context is the machine\'s, and gets the post pass h
   }
 });
 
-test('a picture the browser cannot decode is exit 2 with its path, as a missing one is', () => {
-  const out = failureOutcome(thrown('Error: image "assets/bad.png" could not be loaded: The source image could not be decoded.'));
-  assert.equal(out.exitCode, 2);
-  assert.match(out.error.message, /^image "assets\/bad\.png" could not be loaded/);
-  assert.notEqual(out.error.hint, '');
-});
-
-test('a logo the browser cannot decode is the film\'s: a mechanical finding at overlays.logo.src, exit 1; a shot\'s picture stays exit 2', () => {
-  const bad = thrown('Error: image "assets/logo.png" could not be loaded: The source image could not be decoded.');
-  const out = failureOutcome(bad, undefined, 'assets/logo.png');
+test('a picture the browser cannot decode is the film\'s file: exit 1 with a finding at the path that names it, as a missing one is', () => {
+  const film = { version: 2, shots: [{ id: 'p', show: 'media', src: 'assets/bad.png', hold: 2 }] };
+  const out = failureOutcome(thrown('Error: image "assets/bad.png" could not be loaded: The source image could not be decoded.'), undefined, film);
   assert.equal(out.exitCode, 1);
   assert.equal(out.error, undefined);
-  assert.deepEqual([out.finding.kind, out.finding.shot, out.finding.path], ['mechanical', null, 'overlays.logo.src']);
-  assert.equal(failureOutcome(bad, undefined, null).exitCode, 2, 'the film names no logo of its own');
-  assert.equal(failureOutcome(bad, undefined, 'assets/other.png').exitCode, 2, 'another picture');
+  assert.deepEqual([out.finding.kind, out.finding.shot, out.finding.path], ['mechanical', null, 'shots[0].src']);
+  assert.match(out.finding.message, /^the picture "assets\/bad\.png" could not be loaded/);
+});
+
+test('a picture load the server failed (HTTP <n>) is the machine\'s: exit 2 with a hint that does not blame the file', () => {
+  const film = { version: 2, shots: [{ id: 'p', show: 'media', src: 'assets/bad.png', hold: 2 }] };
+  const out = failureOutcome(thrown('Error: image "assets/bad.png" could not be loaded: HTTP 500'), undefined, film);
+  assert.equal(out.exitCode, 2);
+  assert.equal(out.finding, undefined);
+  assert.match(out.error.message, /^image "assets\/bad\.png" could not be loaded: HTTP 500/);
+  assert.doesNotMatch(out.error.hint, /decode/);
+  assert.notEqual(out.error.hint, '');
 });
 
 test('an error the page did not raise on purpose (a TypeError in its code) is not blamed on the film: exit 2', () => {

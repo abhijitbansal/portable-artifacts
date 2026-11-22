@@ -33,7 +33,7 @@ import { filmFrame, filmSeconds } from './film-time.mjs';
 import { inspectDir, writeInspect } from './inspect.mjs';
 import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf } from './slice.mjs';
 import { writeSubtitles } from './subtitles.mjs';
-import { logoDecodeFinding, logoOnlySrc } from './logo-finding.mjs';
+import { logoThrowFinding, pictureLoadFinding } from './picture-finding.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
 const MS_PER_SECOND = 1000;
@@ -68,7 +68,7 @@ const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_
 const newState = () => ({
   validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
   frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, timing: null, outline: null, sheetsDir: null, provenance: null,
-  logoSrc: null, // the film's logo when no shot names the same file (logo-finding.mjs): a failure to decode it is a finding, not machine trouble
+  film: null, // the validated film, once known: a picture the browser cannot decode is a finding at the path that names it (picture-finding.mjs)
 });
 
 // Runs fn and records its stage in state.stages whether it returns or throws; each stage is also said to `log`.
@@ -515,7 +515,7 @@ async function execute(options, state, io) {
     return;
   }
   const { film, specDir } = loaded;
-  state.logoSrc = logoOnlySrc(film);
+  state.film = film;
   // a parked look renders as any other; the run says so once, and the report carries it (never a finding)
   const parked = experimentalLook(film);
   if (parked) {
@@ -601,15 +601,15 @@ async function clipStage({ film, specDir }, timeline, state, io, cacheDir) {
 
 /**
  * What an error that stopped the run means: { exitCode, error } or { exitCode, finding }. A stop is an interrupt; the
- * page failing is the film's fault (a finding); a logo it cannot decode, when `logoSrc` (logo-finding.mjs) is the file,
- * is a finding at `overlays.logo.src`; anything else is the machine's.
+ * page failing is the film's fault (a finding); a picture of `film` the browser cannot decode, or a logo with no size, is a
+ * finding at the path that names it (picture-finding.mjs); anything else is the machine's.
  */
-export function failureOutcome(err, signal, logoSrc = null) {
+export function failureOutcome(err, signal, film = null) {
   if (signal?.aborted) return { exitCode: EXIT_INTERRUPTED, error: { message: 'interrupted', hint: '' } };
+  const picture = pictureLoadFinding(err, film);
+  if (picture !== null) return { exitCode: EXIT_NOT_OK, finding: picture };
   const pageMessage = pageErrorMessage(err);
-  if (pageMessage !== null) return { exitCode: EXIT_NOT_OK, finding: pageFinding('mechanical', `page: ${pageMessage}`) };
-  const logo = logoDecodeFinding(err, logoSrc);
-  if (logo !== null) return { exitCode: EXIT_NOT_OK, finding: logo };
+  if (pageMessage !== null) return { exitCode: EXIT_NOT_OK, finding: logoThrowFinding(pageMessage) ?? pageFinding('mechanical', `page: ${pageMessage}`) };
   return { exitCode: EXIT_MACHINE, error: machineError(err) };
 }
 
@@ -635,7 +635,7 @@ export function reportFindings(findings, exitCode) {
 
 // Records what failureOutcome says in the run's state and returns the exit code.
 function settle(state, err, signal) {
-  const { exitCode, error, finding } = failureOutcome(err, signal, state.logoSrc);
+  const { exitCode, error, finding } = failureOutcome(err, signal, state.film);
   if (error) state.error = error;
   if (finding) state.findings = [...state.findings, finding];
   return exitCode;
