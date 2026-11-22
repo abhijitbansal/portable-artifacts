@@ -13,10 +13,10 @@
     "example number desk 9:16": "4a04f182e7e088906649019e74a10aa865093e775ebe4afeee24224e096d5340",
     "example number pop 16:9": "43eadf98fd546ff841a72783caa6e6aef5289e404ca3f204a21aae394f8b120f",
     "example number pop 9:16": "8c824751cd4db6c3cfcf48b012dd9e19f49a21df5e980a657f76ea5b9989e481",
-    "example clipping desk 16:9": "8baa8f65a572ecd0c976ebad60ece660590514503576d09fbede9aefad9311e7",
-    "example clipping desk 9:16": "b2d7f0eab4ca6058101830e1d8b7cb631d0d966c3858fa04e27e11ca2244148d",
-    "example clipping pop 16:9": "a284a63022e9423e4821d053d70cf8cda3958fab8e68fc70a39d6bae9fa161ac",
-    "example clipping pop 9:16": "8d5d674277c157b056f434b925653f59f3bb052f400b1a39220d177fffa6badb",
+    "example clipping desk 16:9": "bb05c275b49694d4b3e7fedc5b585f29f4d26aab9f4be5bad07061d0fd89b4ae",
+    "example clipping desk 9:16": "9aeaa5d8dcc4a87882e0192d42826beba186da2dad433fe5e55008e7878dbfa3",
+    "example clipping pop 16:9": "a09bd0f5e5343edcebf3dd1dfee535210a36c81b5d9c9228e3b349d8c161007e",
+    "example clipping pop 9:16": "0c4410fb5f95ca7ef87c14398f4c19fb6c1c6b8a9e371e321b8a0ae6a326f3ac",
     "example end desk 16:9": "6d9fd7ec19d464eea837498dc94209d8eae9fee53be94e28dde32e6100486e2f",
     "example end desk 9:16": "d310af521880b01081514d53322045ffcff81d191a13e3a0dd99e1d972d98aed",
     "example end pop 16:9": "8623185c08fb37be7b68e4915b675e1bfaa6edc2d23362e9089c21ce02751f6d",
@@ -68,5 +68,5 @@
     "film kinds-pop shot close": "bb660013a36948d36fc6991552fcbab6de05a9916926d8a2a75b4171b7a4f2bf",
     "film kinds-pop frames": "709fe2a358a83ce8d4287e765dbb4be3e700fdcbd61225a987d9ad3fe43bf081"
   },
-  "regenerated": "transitions Task 6 (motion blur on slide, cover and punch in desk and pop): film gate-pop frames; every other entry unchanged"
+  "regenerated": "transitions Task 6 (motion blur on slide, cover and punch in desk and pop): film gate-pop frames; every other entry unchanged. motion-steals W3 (8f9c84b: the clipping example's region box moved to the SQL panel of clipping.png, [0.58, 0.14, 0.37, 0.24]): the four example clipping entries; every other entry unchanged"
 }
