@@ -84,6 +84,9 @@ export const RULES = Object.freeze([
     { capped: true, suggest: 'cuts', evidence: 'measured', ask: 'Does each cut say something different about how the two shots relate?' }),
   rule('sameness', [CREATIVE], 'outline', 'Three or more shots in a row share one kind, one cut or one move.',
     { capped: true, suggest: 'cuts', evidence: 'measured', ask: 'Would a different kind, cut or move show some of these ideas better?' }),
+  // poster: the frame --poster writes, judged as a thumbnail
+  rule('poster-read', [CREATIVE], 'poster', 'The largest text on the poster is under 14 px tall on a 180 px thumbnail (84 units).',
+    { suggest: 'minSize', ask: 'Does the poster\'s biggest line still read when the poster is a thumbnail?' }),
 ]);
 
 /** Every rule id, in registry order. */

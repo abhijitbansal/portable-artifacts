@@ -3,6 +3,8 @@
 // written as JPEG (quality 92) or PNG by the file's extension. No ffmpeg: the browser writes the picture.
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { posterReadFindings } from '../../engine/review/poster.mjs';
+import { frameContext } from './review.mjs';
 
 export const POSTER_JPEG_QUALITY = 92;
 export const DEFAULT_POSTER = 'poster.jpg';
@@ -21,6 +23,18 @@ export function posterFrame(seconds, timeline, label = seconds, flag = '--poster
 
 /** Where the poster goes: --poster-out, else poster.jpg in the folder the MP4 would go to. */
 export const posterPath = (posterOut, videoOut) => posterOut ?? path.join(path.dirname(videoOut), DEFAULT_POSTER);
+
+/**
+ * The poster's own review: the page's snapshot of `frame`, judged as a thumbnail (engine/review/poster.mjs). Creative
+ * findings only, as the report carries them (reviewFinding takes `shot` and `t` beside the finding's own fields), so the
+ * exit code is not touched. A poster with no text of its own gives [].
+ */
+export async function posterFindings({ session, frame }) {
+  const { page, film, timeline, info } = session;
+  const sampled = await page.evaluate((i) => window.__snapshot(i), frame);
+  const ctx = frameContext(film, timeline, new Map(), { frame, whole: false }, info.backgrounds);
+  return posterReadFindings(sampled, ctx).map((finding) => ({ ...finding, shot: ctx.shotId, t: ctx.t }));
+}
 
 /**
  * Draws `frame` on the session's page without captions and writes it to `file` (whole or not at all). ->

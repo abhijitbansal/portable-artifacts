@@ -85,6 +85,42 @@ test('a poster at film time: a shot id is its first frame, shot@end-<s> is insid
   return undefined;
 });
 
+// W4 task 2: the poster is read as a thumbnail (engine/review/poster.mjs), by the layout the page reports.
+const headline = (size) => ({ type: 'text', id: 'headline', props: { x: 300, y: 400, text: 'Plain words', font: { family: 'Geist', weight: 600, size }, maxWidth: 1400, fill: '#15130f' } });
+const textFilm = (size) => ({ version: 2, fps: 30, shots: [{ id: 'a', show: 'free', hold: 1, background: '#f3eee3', nodes: [headline(size)] }] });
+
+test('a poster whose biggest line is small is a creative finding, and the exit code stays 0', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const run = make([writeFilm('small-poster', textFilm(40)), '--poster', '0.5', '--poster-out', path.join(dir, 'small.png'), '--json'], NO_FFMPEG);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  const report = JSON.parse(run.stdout);
+  const found = report.findings.filter((f) => f.rule === 'poster-read');
+  assert.equal(found.length, 1, run.stdout);
+  assert.equal(found[0].kind, 'creative');
+  assert.equal(found[0].shot, 'a');
+  assert.equal(found[0].path, 'shots[0]');
+  assert.deepEqual(found[0].suggest, { minSize: 84, factor: 2.1 });
+  assert.match(found[0].message, /is 6\.7 px tall on a 180 px thumbnail; it needs 14 px \(84 units\).*"headline"/);
+  assert.equal(report.ok, true, 'a creative finding does not fail the run');
+  return undefined;
+});
+
+test('a poster whose biggest line reads at thumbnail size has no poster-read finding', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const run = make([writeFilm('big-poster', textFilm(120)), '--poster', '0.5', '--poster-out', path.join(dir, 'big.png'), '--json'], NO_FFMPEG);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout).findings.filter((f) => f.rule === 'poster-read'), []);
+  return undefined;
+});
+
+test('a poster with no text is a picture poster: not judged', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const run = make([writeFilm('picture-poster', FILM), '--poster', '0.5', '--poster-out', path.join(dir, 'pic.png'), '--json'], NO_FFMPEG);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout).findings.filter((f) => f.rule === 'poster-read'), []);
+  return undefined;
+});
+
 test('a time past the end is exit 2 with the film\'s length', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
   const run = make([writeFilm('past', FILM), '--poster', '40'], NO_FFMPEG);

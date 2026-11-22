@@ -28,7 +28,7 @@ import { sessionFindings } from './review.mjs';
 import { stampTags, tagArgs } from './stamp.mjs';
 import { readBeatsFile } from './sound/beats-file.mjs';
 import { snapFilm } from './sound/snap.mjs';
-import { posterPath, writePoster } from './poster.mjs';
+import { posterFindings, posterPath, writePoster } from './poster.mjs';
 import { filmFrame, filmSeconds } from './film-time.mjs';
 import { inspectDir, writeInspect } from './inspect.mjs';
 import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf } from './slice.mjs';
@@ -403,14 +403,16 @@ async function makeSound(loaded, timeline, state, io, work, clips = []) {
 
 // ---- the poster ----------------------------------------------------------------------------------------------------------
 
-// --poster: one still of the film's frame (poster.mjs) on its timeline (measured for a voiced film), no review, no
-// sound, no ffmpeg. A time past the end is the machine-trouble exit (2) with the film's length.
+// --poster: one still of the film's frame (poster.mjs) on its timeline (measured for a voiced film), no frame review (only
+// the poster-read check, creative), no sound, no ffmpeg. A time past the end is the machine-trouble exit (2) with the film's length.
 async function makePoster(options, loaded, state, io) {
   const frame = filmFrame(options.poster, loaded.film, loaded.timeline);
   const file = posterPath(options.posterOut ?? null, outputPaths(options).out);
   const session = await openSession(loaded, { browser: io.browser });
   try {
     state.poster = await stage(state, io.log, 'poster', () => writePoster({ session, frame, file }));
+    // how the poster reads as a thumbnail: creative findings (poster-read), so the exit code stays 0
+    state.findings = [...state.findings, ...(await posterFindings({ session, frame })).map(reviewFinding)];
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
     await session.close();

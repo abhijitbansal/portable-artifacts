@@ -21,7 +21,7 @@ const MOTION = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..
 // emitted. Never add engine/kinds: a kind's own `finding('creative', 'top', ...)` is advice that review.mjs wraps as the
 // rule `kind`, and its first argument is not a rule id.
 const SCANNED = ['engine/review/frame.mjs', 'engine/review/contrast.mjs', 'engine/review/regions.mjs', 'engine/review/outline.mjs',
-  'engine/hand/index.mjs', 'scripts/v2/review.mjs', 'scripts/v2/loop.mjs'];
+  'engine/review/poster.mjs', 'engine/hand/index.mjs', 'scripts/v2/review.mjs', 'scripts/v2/loop.mjs'];
 // The forms a rule must be written in to be seen: a literal `rule: 'x'` field, and the two helpers' `finding(ctx?, KIND, 'x', ...)`,
 // single-quoted, on one line, with the id in lowercase letters, digits and hyphens. A rule built any other way is invisible here.
 const FORMS = [/rule: '([a-z0-9-]+)'/g, /\bfinding\((?:ctx, )?(?:MECHANICAL|CREATIVE|'mechanical'|'creative'), '([a-z0-9-]+)'/g];
@@ -70,11 +70,11 @@ test('every rule the code emits is registered, and every registered rule is emit
   assert.deepEqual(RULE_IDS.filter((id) => !emittedIds(SCANNED).has(id) && !EXPECTED_LATER.includes(id)), []);
 });
 
-// The scan finds all 38 registered ids (the plan's 38 counts W2's dead-space and scale-contrast and the two outline rules;
-// W1's render-check problems are errors, not findings, so they add none).
-test('the registry holds 38 rules, each id once, each with a summary', () => {
-  assert.equal(RULE_IDS.length, 38);
-  assert.equal(new Set(RULE_IDS).size, 38);
+// The scan finds all 39 registered ids (the plan's 38 counts W2's dead-space and scale-contrast and the two outline rules;
+// W1's render-check problems are errors, not findings, so they add none; W4's poster-read is the 39th).
+test('the registry holds 39 rules, each id once, each with a summary', () => {
+  assert.equal(RULE_IDS.length, 39);
+  assert.equal(new Set(RULE_IDS).size, 39);
   for (const rule of RULES) assert.ok(rule.summary.length > 0, rule.id);
 });
 
@@ -108,7 +108,7 @@ test('the registry is frozen, and its fields are the ones the report and the rul
   }
   assert.deepEqual(RULES.filter((r) => r.capped).map((r) => r.id).sort(), ['cut-variety', 'dead-space', 'sameness', 'scale-contrast']);
   assert.deepEqual(RULES.filter((r) => r.suggest !== null).map((r) => [r.id, r.suggest]).sort(),
-    [['contrast', 'color'], ['cut-variety', 'cuts'], ['min-size', 'minSize'], ['sameness', 'cuts']]);
+    [['contrast', 'color'], ['cut-variety', 'cuts'], ['min-size', 'minSize'], ['poster-read', 'minSize'], ['sameness', 'cuts']]);
   for (const id of ['card-overlap', 'cut-window', 'kind']) assert.deepEqual(ruleOf(id).kinds, ['mechanical', 'creative'], id);
 });
 
@@ -198,7 +198,7 @@ test('references/rules.md says an id is never renamed or reused', () => {
 });
 
 test('every rule an emitter writes sits in the stage its file belongs to', () => {
-  const byFile = { 'engine/hand/index.mjs': 'hand', 'scripts/v2/loop.mjs': 'film', 'scripts/v2/review.mjs': 'film' };
+  const byFile = { 'engine/review/poster.mjs': 'poster', 'engine/hand/index.mjs': 'hand', 'scripts/v2/loop.mjs': 'film', 'scripts/v2/review.mjs': 'film' };
   for (const [rel, stage] of Object.entries(byFile)) {
     for (const id of emittedIds([rel])) assert.equal(ruleOf(id).stage, stage, `${rel}: ${id}`);
   }
