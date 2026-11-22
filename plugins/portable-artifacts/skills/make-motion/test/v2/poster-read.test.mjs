@@ -93,6 +93,14 @@ test('a big line that is barely visible does not hide a small one that is', () =
   assert.deepEqual(posterReadFindings([text('fading', 200, {}, 100, { opacity: 0.9 }), text('small', 40, {}, 500)], CTX), [], 'a line at 0.9 reads');
 });
 
+test('the opacity floor is 0.5 and a text at exactly 0.5 counts: a big line at 0.5 hides a small one, one just under does not', () => {
+  const small = text('small', 40, {}, 500);
+  assert.deepEqual(posterReadFindings([text('half', 200, {}, 100, { opacity: 0.5 }), small], CTX), [], 'at exactly 0.5 the big line is the poster\'s');
+  // inspectNodes reports an opacity to two decimals, so 0.49 is the nearest value under the floor
+  const [f] = posterReadFindings([text('almost', 200, {}, 100, { opacity: 0.49 }), small], CTX);
+  assert.equal(f.node, 'small', 'under 0.5 it is left out');
+});
+
 test('the rule is registered as a creative, uncapped poster rule that suggests a minimum size', () => {
   const rule = ruleOf('poster-read');
   assert.deepEqual([rule.kinds, rule.stage, rule.capped, rule.suggest, rule.evidence], [['creative'], 'poster', false, 'minSize', 'unmeasured']);
