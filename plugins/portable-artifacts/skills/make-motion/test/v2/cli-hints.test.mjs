@@ -118,6 +118,20 @@ test('--poster with no text is a usage error that lists the forms; --poster-out 
   assert.throws(() => parseMakeArgs([FILM, '--poster-out', 'p.png']), (err) => err instanceof UsageError && /--poster <film time>/.test(err.message));
 });
 
+// ---- --no-music renders the film without its music track ----
+
+test('--no-music is a boolean flag: options.noMusic, false without it', () => {
+  assert.equal(parseMakeArgs([FILM, '--no-music']).noMusic, true);
+  assert.equal(parseMakeArgs([FILM]).noMusic, false);
+  assert.ok(FLAGS.includes('--no-music'));
+});
+
+test('--no-music does not go with --outline, --phonemes, --poster, --poster-out, --inspect or --preview', () => {
+  for (const other of [['--outline'], ['--phonemes'], ['--poster', '2'], ['--poster', '2', '--poster-out', 'p.png'], ['--inspect', '2'], ['--preview']]) {
+    assert.throws(() => parseMakeArgs([FILM, '--no-music', ...other]), (err) => err instanceof UsageError && /does not go with/.test(err.message) && err.message.includes('--no-music'), other.join(' '));
+  }
+});
+
 // ---- Step 1 (c): the voices the validator accepts can be listed ----
 
 test('--list voices prints the voices the validator accepts', () => {

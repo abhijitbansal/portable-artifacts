@@ -16,6 +16,8 @@ import { withFilmDefaults } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { planCues } from '../../scripts/v2/sound/cues.mjs';
 import { fitBeatGrid } from '../../scripts/v2/sound/bed.mjs';
+import { writeNoise } from './helpers/clicks.mjs';
+import { writeBeatsFile } from '../../scripts/v2/sound/beats-file.mjs';
 import { NO_VOICE_NOTE } from '../../scripts/v2/voice/master.mjs';
 
 const FPS = 30;
@@ -212,6 +214,56 @@ test('--outline takes no sound stage', async () => {
   const { report, exitCode } = await run(writeFilm('outline', viral({ music: { bed: 'tape' } })), { outline: true, noRender: false });
   assert.equal(exitCode, 0);
   assert.deepEqual(stagesOf(report).map(([name]) => name), ['validate', 'timeline']);
+});
+
+// ---- --no-music: the music is planned (so music.snap still moves the cuts), then left out of the sound ----
+
+const SNAP_FREE = (id, hold, cut) => ({ id, show: 'free', hold, background: '#f3eee3', ...(cut ? { cut } : {}), nodes: [{ type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' } }] });
+const SNAP_BEATS = Array.from({ length: 21 }, (_, k) => k * 0.5); // 120 BPM over 10 s
+// A film with no narration, a music file and a beats file whose beats move three cuts (as sound-snap.test.mjs builds its own).
+function snapFilm(name) {
+  const at = path.join(dir, name);
+  mkdirSync(at, { recursive: true });
+  writeNoise(path.join(at, 'm.wav'), { seconds: 10 });
+  writeBeatsFile(path.join(at, 'm.beats.json'), { source: 'm.wav', bpm: 120, confidence: 1, beats: SNAP_BEATS });
+  const film = { version: 2, fps: FPS, mode: 'pro', shots: [SNAP_FREE('a', 1.9), SNAP_FREE('b', 2.3, 'cut'), SNAP_FREE('c', 2.1, 'cut'), SNAP_FREE('d', 1.7, 'cut')], music: { src: 'm.wav', beats: 'm.beats.json', snap: true } };
+  const specPath = path.join(at, 'film.json');
+  writeFileSync(specPath, JSON.stringify(film));
+  return specPath;
+}
+
+test('--no-music keeps the cuts the snap moved and drops the track', async (t) => {
+  if (!await mediaTools(t)) return;
+  if (!await needsBrowser(t)) return;
+  const specPath = snapFilm('snap-nomusic');
+  const withMusic = await run(specPath);
+  const without = await run(specPath, { noMusic: true });
+  assert.equal(withMusic.exitCode, 0, JSON.stringify(withMusic.report.findings));
+  assert.equal(without.exitCode, 0, JSON.stringify(without.report.findings));
+  assert.ok(withMusic.report.audio.music.moved.length > 0, 'the snap moved a cut');
+  assert.deepEqual(without.report.audio.music.moved, withMusic.report.audio.music.moved);
+  assert.equal(without.report.audio.music.muted, true);
+  assert.equal(withMusic.report.audio.music.muted, undefined);
+});
+
+test('--no-music says the film is rendered without its music, once, on the log', async (t) => {
+  if (!await mediaTools(t)) return;
+  if (!await needsBrowser(t)) return;
+  const lines = [];
+  await run(snapFilm('snap-nomusic-log'), { noMusic: true }, { log: (line) => lines.push(line) });
+  assert.deepEqual(lines.filter((l) => /--no-music/.test(l)), ['make: --no-music: the film is rendered without its music; its cuts stay where the music put them']);
+});
+
+test('a film whose only sound is a bed renders silent with --no-music', async (t) => {
+  if (!await needsBrowser(t)) return;
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const out = path.join(dir, 'out-bed-muted', 'film.mp4');
+  const { report, exitCode } = await runMake({ specPath: writeFilm('bed-muted', pro({ music: { bed: 'pulse', bpm: 120 } })), out, exact: false, noRender: false, outline: false, noMusic: true });
+  assert.equal(exitCode, 0, JSON.stringify(report));
+  assert.equal(report.audio, null);
+  const probe = JSON.parse(spawnSync(tools.ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'json', out], { encoding: 'utf8' }).stdout);
+  assert.equal(probe.streams.filter((s) => s.codec_type === 'audio').length, 0);
 });
 
 test('a full render of a viral film with a bed: one audio stream, the bed and cues in it, the level measured in the file', async (t) => {

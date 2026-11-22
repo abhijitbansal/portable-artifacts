@@ -96,6 +96,8 @@ Sound is opt-in. A film with none of `voice`, `music`, `sound`, `cues` or `audio
 - **`cues`**: `[{ "at": 2.5, "cue": "pop" }]`. `at` is seconds from the start of the film, or an anchor. The cue is one of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`, `swoosh`, `drop`, `ding`, `sub`, `paper`, `marker`, `erase`.
 - **`audio`**: `[{ "src": "sounds/ding.wav", "at": 3 }]`. `at` is seconds from the start, 0 or more.
 
+`--no-music` renders the film without its music, for a second delivery with no bed or track. The music is still planned, so `music.snap` moves the cuts as before and the cues sit on that timeline: the picture is the same film. `report.audio.music` keeps its summary and gains `muted: true`; a film whose only sound was the music renders with no audio stream and `report.audio` is `null`. It does not go with `--outline`, `--phonemes`, `--poster`, `--poster-out`, `--inspect` or `--preview`.
+
 Every `src` is a file inside the film's folder. A URL, an absolute path or a path that leaves the folder is an error.
 
 ## Variables

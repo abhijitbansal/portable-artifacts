@@ -123,6 +123,9 @@ const sliceReport = (slice, film, clips) => ({
   from: slice.from, to: slice.to, frames: slice.to - slice.from + 1, shots: slice.shots, silent: film.voice !== undefined || wantsSound(film, clips), skipped: [...SLICE_SKIPPED],
 });
 
+// The measured audio of a --no-music render still names the music it left out (its summary, with `muted: true`).
+const mutedAudio = (audio, sound) => (audio === null || !sound?.mutedMusic ? audio : { ...audio, music: sound.mutedMusic });
+
 // The stages that need the page: the sheets and the audit, then (unless --no-render, or a slice: its video is made apart) the video.
 async function reviewAndRender({ options, loaded, made, sound, state, io: { signal, log, browser } }) {
   const { out, sheetsDir } = outputPaths(options);
@@ -143,7 +146,7 @@ async function reviewAndRender({ options, loaded, made, sound, state, io: { sign
         return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined, stamp: tagArgs(tags),
           workers: options.workers ?? 1, openPage: () => openSession(loaded, { browser: session.page.context().browser() }) });
       });
-      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, timing: rendered.timing, audio: rendered.audio, provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
+      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, timing: rendered.timing, audio: mutedAudio(rendered.audio, sound), provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
     }
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
@@ -325,7 +328,9 @@ async function musicPlan(steps, film, timeline, specDir, signal) {
 
 // The cue track and the music written into `work` for the render: { cues, music } as renderFilm takes them, or null when
 // there is nothing to put in the film.
-async function soundFiles(steps, { film, timeline, cues, music, tracks = [], work }) {
+// With `mutedMusic` (--no-music) the music is left out: `music` is null, and the plan carries the music's summary so the
+// report still says what the music was.
+async function soundFiles(steps, { film, timeline, cues, music, tracks = [], work, mutedMusic = null }) {
   const seconds = timeline.duration;
   // The count is of the cues the track holds: the plan holds every cue inside the film, so none is dropped today, but
   // the report would say so if one were.
@@ -342,7 +347,8 @@ async function soundFiles(steps, { film, timeline, cues, music, tracks = [], wor
   // The extra audio files duck under the words as the music does.
   const duck = tracks.length === 0 ? [] : steps.duckEnvelope(film.voice === undefined ? [] : steps.heardWordSpans(timeline), { seconds });
   const extra = tracks.map((track) => ({ ...track, duck }));
-  return cueTrack === null && musicTrack === null && extra.length === 0 ? null : { cues: cueTrack, music: musicTrack, tracks: extra };
+  if (cueTrack === null && musicTrack === null && extra.length === 0) return null;
+  return { cues: cueTrack, music: musicTrack, tracks: extra, ...(mutedMusic === null ? {} : { mutedMusic }) };
 }
 
 // A problem musicInput found with an extra audio file, at that file's path (musicInput names music.src).
@@ -375,13 +381,17 @@ async function audioTracks(steps, film, timeline, specDir, signal) {
  * The result's `timeline` is the one to draw: the given one, or its cuts moved onto the music's beats (music.snap); the
  * cues are planned on it.
  */
-async function makeSound(loaded, timeline, state, io, work, clips = []) {
+async function makeSound(loaded, timeline, state, io, work, clips = [], { noMusic = false } = {}) {
   const { film, specDir } = loaded;
   try {
     return await stage(state, io.log, 'sound', async () => {
       io.signal?.throwIfAborted();
       const steps = await soundSteps();
-      const music = await musicPlan(steps, film, timeline, specDir, io.signal);
+      // --no-music: the music is still planned (music.snap moves the cuts, the cues sit on that timeline); only its track is left out
+      const planned = await musicPlan(steps, film, timeline, specDir, io.signal);
+      const muted = noMusic && planned !== null;
+      if (muted) io.log('make: --no-music: the film is rendered without its music; its cuts stay where the music put them');
+      const music = muted ? { ...planned, summary: { ...planned.summary, muted: true } } : planned;
       const drawn = music?.timeline ?? timeline;
       const cues = steps.planCues(film, drawn);
       io.signal?.throwIfAborted();
@@ -391,7 +401,8 @@ async function makeSound(loaded, timeline, state, io, work, clips = []) {
       const tracks = [...await audioTracks(steps, film, drawn, specDir, io.signal), ...clipTracks];
       const extra = tracks.length > 0 ? { tracks: tracks.length } : {}; // the extra audio files, only when the film has some
       if (cues.length > 0 || music !== null || tracks.length > 0) state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null, ...extra };
-      return { timeline: drawn, sound: work === null ? null : await soundFiles(steps, { film, timeline: drawn, cues, music, tracks, work }) };
+      const files = { film, timeline: drawn, cues, tracks, work };
+      return { timeline: drawn, sound: work === null ? null : await soundFiles(steps, muted ? { ...files, music: null, mutedMusic: music.summary } : { ...files, music }) };
     });
   } catch (err) {
     const findings = io.signal?.aborted ? null : soundFindings(err);
@@ -555,7 +566,7 @@ async function soundReviewRender({ options, loaded, timeline, made, clips, state
   const renders = !options.noRender && !isSlice(options); // a slice makes sheets and a review, no video (its MP4 is a later step)
   const work = sounded && renders ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
   try {
-    const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
+    const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips, { noMusic: options.noMusic === true }) : { sound: null };
     if (planned === null) return;
     // --subtitles: the caption file from the timeline the film is drawn with (after music.snap), before the browser starts
     if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out, level: options.subtitleWords ? 'word' : 'sentence' });
