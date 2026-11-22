@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { AGENT_HOSTS, AGENT_NAME, agentFile, INSTRUCTIONS, REVIEWER_HOSTS, REVIEWER_INSTRUCTIONS, REVIEWER_NAME, reviewerFile, tomlString, writeAgentFile } from '../agents.mjs';
+import { AGENT_HOSTS, AGENT_NAME, agentFile, INSTRUCTIONS, REVIEWER_CURRENT_MARKER, REVIEWER_HOSTS, REVIEWER_INSTRUCTIONS, REVIEWER_NAME, reviewerFile, tomlString, writeAgentFile } from '../agents.mjs';
 
 const PHRASES = [
   /already artifact-builder/,
@@ -253,7 +253,81 @@ test('the reviewer brief names no folder to list: Read cannot list one', () => {
   assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /\b(ls|glob|list the folder|list the directory)\b/i);
 });
 
-test('the operator file and CLI are unchanged by the reviewer', () => {
+test('the operator host list and file name are unchanged by the reviewer', () => {
   assert.deepEqual([...AGENT_HOSTS], ['claude', 'copilot', 'codex']);
   assert.equal(agentFile('claude').fileName, 'artifact-builder.md');
+});
+
+// One output format: reviewing.md's text forms (the note line, the four Delivery lines) map onto JSON fields.
+test('the reviewer replies in one format: every part of the note line and the Delivery lines has a JSON field', () => {
+  assert.match(REVIEWER_INSTRUCTIONS, /Never write the text form/i);
+  assert.match(REVIEWER_INSTRUCTIONS, /your reply is the JSON/i);
+  for (const field of ['"level"', '"time"', '"where"', '"problem"', '"change"', '"stays"', '"weakest"', '"measured"', '"looked"', '"unchecked"']) {
+    assert.ok(REVIEWER_INSTRUCTIONS.includes(field), field);
+  }
+});
+
+test('the reviewer keeps reviewing.md\'s measured exception and its quoted, not reworded rule', () => {
+  assert.match(REVIEWER_INSTRUCTIONS, /Measurements outrank the eye/);
+  assert.match(REVIEWER_INSTRUCTIONS, /quoted as written/);
+  assert.match(REVIEWER_INSTRUCTIONS, /leaves the list only when something the report printed measured it/);
+});
+
+test('the reviewer file carries its current marker, so an older file is told apart', () => {
+  assert.equal(typeof REVIEWER_CURRENT_MARKER, 'string');
+  assert.ok(REVIEWER_CURRENT_MARKER.length > 0);
+  assert.ok(reviewerFile('claude').content.includes(REVIEWER_CURRENT_MARKER));
+});
+
+test('the reviewer text never says the agent opens the film (Read cannot decode a video)', () => {
+  assert.doesNotMatch(fs.readFileSync(AGENTS, 'utf8'), /opens the film/i);
+});
+
+test('cli: `write claude <dir>` also writes motion-reviewer.md; copilot and codex write none', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  const r = spawnSync(process.execPath, [AGENTS, 'write', 'claude', dir], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'artifact-builder.md'), 'utf8'), agentFile('claude').content);
+  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), reviewerFile('claude').content);
+  assert.match(r.stdout, /agent: .*motion-reviewer\.md/);
+  for (const host of ['copilot', 'codex']) {
+    const d = path.join(tmpDir(), 'agents');
+    assert.equal(spawnSync(process.execPath, [AGENTS, 'write', host, d], { encoding: 'utf8' }).status, 0, host);
+    assert.deepEqual(fs.readdirSync(d).filter((f) => f.startsWith('motion-reviewer')), [], host);
+  }
+});
+
+test('cli: `write claude <dir>` keeps an existing motion-reviewer.md, and still writes the builder', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'motion-reviewer.md'), 'hand edited');
+  const r = spawnSync(process.execPath, [AGENTS, 'write', 'claude', dir], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /kept existing .*motion-reviewer\.md/);
+  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), 'hand edited');
+  assert.ok(fs.existsSync(path.join(dir, 'artifact-builder.md')));
+});
+
+test('cli: `write-reviewer claude <dir> --force` replaces a stale reviewer and touches nothing else; without --force it keeps it', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'motion-reviewer.md'), 'stale');
+  fs.writeFileSync(path.join(dir, 'artifact-builder.md'), 'hand edited builder');
+  const keep = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir], { encoding: 'utf8' });
+  assert.equal(keep.status, 0, keep.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), 'stale');
+  const force = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(force.status, 0, force.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), reviewerFile('claude').content);
+  assert.equal(fs.readFileSync(path.join(dir, 'artifact-builder.md'), 'utf8'), 'hand edited builder');
+});
+
+test('cli: write-reviewer refuses a host with no reviewer, an unknown flag and a missing dir (exit 2, nothing written)', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  for (const args of [['write-reviewer', 'codex', dir], ['write-reviewer', 'claude', dir, '--frob'], ['write-reviewer', 'claude']]) {
+    const r = spawnSync(process.execPath, [AGENTS, ...args], { encoding: 'utf8' });
+    assert.equal(r.status, 2, args.join(' '));
+    assert.match(r.stderr, /usage: /);
+  }
+  assert.equal(fs.existsSync(dir), false);
 });

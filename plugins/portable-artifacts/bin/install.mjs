@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Install the portable-artifacts skills into another agent host's skill dir (--help prints the usage).
 //   node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps]
-//   node bin/install.mjs <host> [--project <dir>] --agents-only [--force]   (agent file only: no skills, no preflight, no npm)
+//   node bin/install.mjs <host> [--project <dir>] --agents-only [--force]   (agent files only: no skills, no preflight, no npm)
 // claude, codex, copilot and agents also get the cheap-model artifact-builder agent file (kept if present unless --force).
 // claude also gets the read-only motion-reviewer agent file, the same way.
 // Each host reads SKILL.md folders from its own documented locations; the
@@ -37,9 +37,10 @@ export function targetsFor(host, scope, { home, proj }) {
   };
 }
 
-// Custom-agent folders: the artifact-builder agent file goes where Claude Code, Copilot and Codex read agents.
+// Custom-agent folders: the artifact-builder agent file goes where Claude Code, Copilot and Codex read agents, and
+// the read-only motion-reviewer file goes beside it for Claude Code only (installAgents).
 // gemini gets none; the shared "agents" host gets the Copilot and Codex files (Claude Code has its own host).
-// The plugin install gets its builder from the plugin's own agents/ folder instead; this is the path for installs without the plugin.
+// The plugin install gets both from the plugin's own agents/ folder instead; this is the path for installs without the plugin.
 const AGENT_DIRS = {
   claude: { user: '.claude/agents', project: '.claude/agents' },
   copilot: { user: '.copilot/agents', project: '.github/agents' },

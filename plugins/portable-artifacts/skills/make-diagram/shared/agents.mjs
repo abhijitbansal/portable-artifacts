@@ -4,6 +4,8 @@
 // `doctor --fix builder_agent` runs it as a CLI, which is how an install made with the skills CLI
 // (skill folders only, no bin/) gets the agent file.
 //   node agents.mjs write <claude|copilot|codex> <agents-dir>     writes the file, keeps an existing one
+//                                                                 (claude also writes motion-reviewer.md)
+//   node agents.mjs write-reviewer claude <agents-dir> [--force]  writes only motion-reviewer.md
 // The Claude Code text is also shipped as the plugin's agents/artifact-builder.md; a test holds the two equal.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,19 +41,23 @@ const REVIEWER_DESCRIPTION =
 // Must not contain three single quotes in a row.
 export const REVIEWER_INSTRUCTIONS = `You are already motion-reviewer. Never delegate: do not hand this work to another agent or to motion-reviewer again.
 
-The brief gives you the skill directory, the film path, and the path of the report saved as a JSON file. The report has a "sheets" array that names every sheet PNG: open each one with Read, by the path it names. Do exactly this:
-1. Read <skill-dir>/references/reviewing.md first. It is your checklist: follow its note form, P0, P1 and P2 ranks, "Never score" rule, "Pictures alone" question and "Delivery" lines.
-2. Read the report, then open every sheet it names. Describe each shot in one sentence as a stranger would see it, then judge it by pictures alone: with the narration hidden, does the picture still make the shot's point?
-3. Quote any number the report printed instead of judging over it. You cannot listen: the sound is never yours to judge, so put it in "unchecked". Do the same for text inside a picture, motion between sampled frames, and taste.
+The brief gives you the skill directory, the film path (context only: you cannot play or decode a film), and the path of the report saved as a JSON file. The report has a "sheets" array that names every sheet PNG: open each one with Read, by the path it names. Do exactly this:
+1. Read <skill-dir>/references/reviewing.md first. It is your checklist: use its P0, P1 and P2 ranks, its "Never score" rule and its "Pictures alone" question. Its text forms (the note line of rank, time, where, problem, change and what stays; the four labelled Delivery lines) are not your reply. Never write the text form: your reply is the JSON below, and the checklist maps onto it field by field. Rank is "level", time is "time", where is "where", problem is "problem", change is "change", what stays is "stays". The weakest shot is "weakest", measured is "measured", looked at is "looked", not checked is "unchecked".
+2. Read the report, then open every sheet it names. Describe each shot in one sentence as a stranger would see it, then judge it by pictures alone: with the narration hidden, does the picture still make the shot's point? Name each sheet you opened by file name in "looked".
+3. Measurements outrank the eye. When the report printed a number for a thing, copy that number into "measured" and do not write a judgment over it. You cannot listen: the sound is never yours to judge. Text inside a picture or a clip, motion between the sampled frames, and taste are never yours to judge either.
 4. Change nothing. You have no tool to write, edit or run anything, so do not write review.md: your reply is the notes. Never score: no mark out of ten, no percentage.
 5. If something you need is missing (a sheet that will not open, a report with no "sheets"), write "cannot verify" in "unchecked" and name what is missing. Never guess.
 
-Reply with only this JSON and no other text:
-{"verdict": "pass" | "fail", "notes": [{"level": "P0" | "P1" | "P2", "shot": "<shot id>", "time": <film seconds>, "problem": "<what a stranger sees>", "change": "<the field to change>"}], "weakest": "<shot id>", "unchecked": ["<what you could not judge>"]}
-"verdict" is "fail" when any note is P0 or P1, otherwise "pass". "weakest" is the id of the weakest shot. "unchecked" lists what you could not judge, and always carries the four things the checklist names.`;
+Reply with only this JSON (reply format 2) and no other text:
+{"verdict": "pass" | "fail", "notes": [{"level": "P0" | "P1" | "P2", "shot": "<shot id>", "time": <film seconds>, "where": "<where in the frame>", "problem": "<what a stranger sees>", "change": "<the field to change>", "stays": "<what stays>"}], "weakest": "<shot id>", "measured": ["<what the report printed, copied>"], "looked": ["<sheet file name>"], "unchecked": ["<what you could not judge>"]}
+"verdict" is "fail" when any note is P0 or P1, otherwise "pass". "weakest" is the id of the weakest shot. "unchecked" always carries the checklist's four not-checked lines, quoted as written and not reworded: the sound, text inside a picture or a clip, motion between the frames the sheets sample, and taste. A line leaves the list only when something the report printed measured it, and then you name that measurement in "measured".`;
+
+// A reviewer file without this text is an older or foreign one (the doctor reports it as outdated).
+export const REVIEWER_CURRENT_MARKER = 'reply format 2';
 
 const REVIEWER_BUILDERS = {
-  // tools: Read only. It opens the film, the report and the sheet PNGs; it cannot write, edit, run a command or delegate.
+  // tools: Read only. It reads the report and the sheet PNGs (Read cannot decode a film, so the film path is context
+  // only); it cannot write, edit, run a command or delegate.
   claude: () => ({
     fileName: `${REVIEWER_NAME}.md`,
     content: `---
@@ -146,28 +152,44 @@ export function writeAgentFile(dir, file, content, force) {
 // The doctor uses it to tell an outdated file from a current one.
 export const CURRENT_MARKER = 'make.mjs';
 
-const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-dir>`;
+// `write claude` also writes the reviewer (the doctor's auto fix runs it, so a skills-CLI install gets both agents).
+// `write-reviewer <host> <dir> [--force]` writes only the reviewer: the doctor's fix for a stale reviewer file.
+const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-dir>
+       node agents.mjs write-reviewer <${REVIEWER_HOSTS.join('|')}> <agents-dir> [--force]`;
+
+// Writes each { fileName, content } into dir and prints one line per file. Returns 1 if any could not be written.
+function writeFiles(dir, files, force) {
+  let status = 0;
+  for (const { fileName, content } of files) {
+    const file = path.join(path.resolve(dir), fileName);
+    try {
+      const result = writeAgentFile(path.resolve(dir), file, content, force);
+      if (result === 'not-file') {
+        process.stderr.write(`agent: ${file} is not a file\n`);
+        status = 1;
+      } else process.stdout.write(result === 'kept' ? `agent: kept existing ${file}\n` : `agent: ${file}\n`);
+    } catch (e) {
+      process.stderr.write(`agent: could not write ${file} (${e.message})\n`);
+      status = 1;
+    }
+  }
+  return status;
+}
 
 function cli(argv) {
   const [command, host, dir, ...rest] = argv;
-  if (command !== 'write' || !AGENT_HOSTS.includes(host) || !dir || dir.startsWith('-') || rest.length) {
-    process.stderr.write(`${USAGE}\n`);
-    return 2;
+  const validDir = Boolean(dir) && !dir.startsWith('-');
+  if (command === 'write' && AGENT_HOSTS.includes(host) && validDir && !rest.length) {
+    const files = [agentFile(host)];
+    if (REVIEWER_HOSTS.includes(host)) files.push(reviewerFile(host));
+    return writeFiles(dir, files, false);
   }
-  const { fileName, content } = agentFile(host);
-  const file = path.join(path.resolve(dir), fileName);
-  try {
-    const result = writeAgentFile(path.resolve(dir), file, content, false);
-    if (result === 'not-file') {
-      process.stderr.write(`agent: ${file} is not a file\n`);
-      return 1;
-    }
-    process.stdout.write(result === 'kept' ? `agent: kept existing ${file}\n` : `agent: ${file}\n`);
-    return 0;
-  } catch (e) {
-    process.stderr.write(`agent: could not write ${file} (${e.message})\n`);
-    return 1;
+  const forced = rest.length === 1 && rest[0] === '--force';
+  if (command === 'write-reviewer' && REVIEWER_HOSTS.includes(host) && validDir && (!rest.length || forced)) {
+    return writeFiles(dir, [reviewerFile(host)], forced);
   }
+  process.stderr.write(`${USAGE}\n`);
+  return 2;
 }
 
 // Run the CLI only when this file is the entry point. argv[1] can name a path that does not exist

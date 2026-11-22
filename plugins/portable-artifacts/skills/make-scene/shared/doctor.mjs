@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
-import { CURRENT_MARKER } from './agents.mjs';
+import { CURRENT_MARKER, REVIEWER_CURRENT_MARKER } from './agents.mjs';
 import { missingPackages } from './missing-packages.mjs';
 
 const REPO = 'abhijitbansal/portable-artifacts';
@@ -526,6 +526,7 @@ export const cutout = () => optionalPackage({
 // A file without CURRENT_MARKER (make.mjs) predates the one-command operator and is reported as outdated, with
 // the command that replaces it. The doctor never overwrites it: the writer keeps an existing file.
 // Limit: project level means the current folder, not the git root.
+// The Claude Code motion-reviewer file is checked too (see REVIEWER_PLACES below): the writer for `claude` writes both files.
 const BUILDER_AGENT_HOST_DIRS = ['.claude', '.copilot', '.codex'];
 const BUILDER_AGENT_FILE_FOR = { claude: 'artifact-builder.md', copilot: 'artifact-builder.agent.md', codex: 'artifact-builder.toml' };
 const BUILDER_AGENT_HOST_OF = Object.fromEntries(Object.entries(BUILDER_AGENT_FILE_FOR).map(([host, file]) => [file, host]));
@@ -555,6 +556,29 @@ function outdatedBuilderAgents(ctx) {
   });
 }
 
+// The read-only motion-reviewer file (Claude Code only), user level and project level. It has no copilot or codex form.
+// A file without REVIEWER_CURRENT_MARKER is an older or foreign one: reported as outdated like a stale builder, and
+// (unlike the builder) rewritten by --fix through the writer's write-reviewer --force, because only this file is touched.
+// A missing reviewer is not reported: it would turn every builder-only machine yellow.
+const REVIEWER_PLACES = [['home', '.claude/agents'], ['cwd', '.claude/agents']];
+function reviewerAgentFiles(ctx) {
+  const P = pp(ctx);
+  const base = { home: ctx.homedir ?? os.homedir(), cwd: ctx.cwd ?? process.cwd() };
+  return REVIEWER_PLACES
+    .map(([where, rel]) => ({ file: P.join(base[where], ...rel.split('/'), 'motion-reviewer.md'), host: 'claude', project: where === 'cwd' }))
+    .filter(({ file }) => ctx.exists(file));
+}
+
+function outdatedReviewerAgents(ctx) {
+  return reviewerAgentFiles(ctx).filter(({ file }) => {
+    try {
+      return !ctx.readFile(file).includes(REVIEWER_CURRENT_MARKER);
+    } catch {
+      return false;
+    }
+  });
+}
+
 const pluginBuilderAgent = (ctx) => pp(ctx).join(ctx.skillDir, '..', '..', 'agents', BUILDER_AGENT_FILE_FOR.claude);
 // The plugin file serves Claude Code only. It satisfies the requirement only on a machine that has no
 // ~/.copilot or ~/.codex, and the writer then skips the claude file (the plugin already ships that agent).
@@ -568,14 +592,18 @@ export function builderAgent() {
     rank: RANK.other,
     why: (ctx) => {
       const old = outdatedBuilderAgents(ctx).map((f) => f.file);
+      const oldReviewers = outdatedReviewerAgents(ctx).map((f) => f.file);
       const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
-      return old.length ? `${base}; ${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)` : base;
+      const parts = [];
+      if (old.length) parts.push(`${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)`);
+      if (oldReviewers.length) parts.push(`${oldReviewers.join(' and ')} is outdated (an older or foreign motion-reviewer file)`);
+      return parts.length ? `${base}; ${parts.join('; ')}` : base;
     },
     required: false,
     size: '≈2 KB',
     // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
-    check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0,
+    check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0 && outdatedReviewerAgents(ctx).length === 0,
     // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
     // exists (user level; an existing file is kept). That works for an install made with the skills CLI,
     // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
@@ -586,21 +614,33 @@ export function builderAgent() {
     fix: (ctx) => {
       const P = pp(ctx);
       const old = outdatedBuilderAgents(ctx);
+      const oldReviewers = outdatedReviewerAgents(ctx);
+      const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
       if (old.length) {
         const cwd = ctx.cwd ?? process.cwd();
-        const cmds = old.map(({ host, project }) => `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''}`);
+        const all = [...old, ...oldReviewers];
+        const cmds = [...new Set(all.map(({ host, project }) => `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''}`))];
         return {
           auto: null,
-          outdated: old.map((f) => f.file),
+          outdated: all.map((f) => f.file),
           manual: manualAll(`${cmds.join(' ; ')} (replaces the outdated file; <path-to-portable-artifacts> is a local checkout, or clone the repo)`),
-          notes: `${old.map((f) => f.file).join(' and ')} predates make.mjs; the doctor never overwrites an agent file, so run the command yourself`,
+          notes: `${all.map((f) => f.file).join(' and ')} is outdated; the doctor never overwrites a builder agent file, so run the command yourself`,
+        };
+      }
+      if (oldReviewers.length) {
+        // Only the reviewer file is stale: rewrite just that file, in its own folder (the builder is never touched).
+        return {
+          auto: oldReviewers.map(({ file }) => [ctx.execPath ?? process.execPath, writer, 'write-reviewer', 'claude', P.join(file, '..'), '--force']),
+          outdated: oldReviewers.map((f) => f.file),
+          manual: manualAll(`${oldReviewers.map(({ project }) => `${install} claude --agents-only --force${project ? ` --project ${ctx.cwd ?? process.cwd()}` : ''}`).join(' ; ')} (replaces the outdated file; <path-to-portable-artifacts> is a local checkout, or clone the repo)`),
+          notes: `rewrites ${oldReviewers.map((f) => f.file).join(' and ')} (an older or foreign motion-reviewer file); the artifact-builder file is left alone`,
         };
       }
       const home = ctx.homedir ?? os.homedir();
-      const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
       const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ host, dotDir }) => ctx.exists(P.join(home, dotDir)) && !(host === 'claude' && pluginServes(ctx)));
       const auto = hosts.map(({ host, dotDir }) => [ctx.execPath ?? process.execPath, writer, 'write', host, P.join(home, dotDir, 'agents')]);
-      const files = hosts.map(({ host, dotDir }) => P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]));
+      // `write claude` also writes motion-reviewer.md beside the builder.
+      const files = hosts.flatMap(({ host, dotDir }) => [P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]), ...(host === 'claude' ? [P.join(home, dotDir, 'agents', 'motion-reviewer.md')] : [])]);
       const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
       return {
         auto: auto.length ? auto : null,

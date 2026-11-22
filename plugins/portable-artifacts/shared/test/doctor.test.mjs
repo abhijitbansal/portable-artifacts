@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { roundTrip } from './helpers/cmdsim.mjs';
-import { nodeVersion, nodeModules, devDeps, sisterSkill, builderAgent, ffmpeg, browser, kokoro, cutout, OPTIONAL, optionalInstallArgv, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
+import { nodeVersion, nodeModules, devDeps, sisterSkill, builderAgent, ffmpeg, browser, kokoro, cutout, OPTIONAL, optionalInstallArgv, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote, defaultCtx } from '../doctor.mjs';
+import { agentFile, reviewerFile } from '../agents.mjs';
 
 const ctx = (over = {}) => ({
   platform: 'darwin', env: {}, skillDir: '/s/make-motion', nodeVersion: '24.7.0',
@@ -959,6 +960,102 @@ test("builderAgent: --fix with no host folder has no automatic fix and runs noth
   assert.equal(res[0].refused, "no automatic fix");
   assert.match(res[0].manual, /install\.mjs copilot --agents-only/);
   assert.doesNotMatch(res[0].manual, /this skill's own writer/);
+});
+
+// --- builderAgent also knows the motion-reviewer file (Claude Code only) ---
+
+const REVIEWER_STALE = "---\nname: motion-reviewer\nmodel: opus\ntools: Read\n---\n\nYou are already motion-reviewer. Reply with only this JSON.\n";
+
+test("builderAgent: a stale or foreign motion-reviewer.md is reported as outdated, like a stale builder", async () => {
+  const file = "/h/.claude/agents/motion-reviewer.md";
+  const builder = "/h/.claude/agents/artifact-builder.md";
+  for (const text of [REVIEWER_STALE, "something else entirely"]) {
+    const c = ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", exists: (p) => [file, builder, "/h/.claude"].includes(p), readFile: readerOf({ [file]: text, [builder]: CURRENT_TEXT }) });
+    assert.equal(await builderAgent().check(c), false);
+    const { ok, missing } = await diagnose([builderAgent()], c);
+    assert.equal(ok, true);
+    assert.equal(missing[0].id, "builder_agent");
+    assert.deepEqual(missing[0].outdated, [file]);
+    assert.match(missing[0].why, /motion-reviewer\.md/);
+    assert.match(missing[0].why, /outdated/);
+  }
+});
+
+test("builderAgent: a current motion-reviewer.md, a project-level one and an unreadable one are not outdated", async () => {
+  const builder = "/h/.claude/agents/artifact-builder.md";
+  const cur = reviewerFile("claude").content;
+  for (const where of ["/h/.claude/agents/motion-reviewer.md", "/p/.claude/agents/motion-reviewer.md"]) {
+    const c = ctx({ homedir: "/h", cwd: "/p", exists: (p) => [where, builder, "/h/.claude"].includes(p), readFile: readerOf({ [where]: cur, [builder]: CURRENT_TEXT }) });
+    assert.deepEqual(await diagnose([builderAgent()], c), { ok: true, missing: [] }, where);
+  }
+  const bad = "/h/.claude/agents/motion-reviewer.md";
+  const unreadable = ctx({ homedir: "/h", cwd: "/p", exists: (p) => [bad, builder, "/h/.claude"].includes(p), readFile: (p) => { if (p === builder) return CURRENT_TEXT; throw new Error("EACCES"); } });
+  assert.deepEqual(await diagnose([builderAgent()], unreadable), { ok: true, missing: [] });
+});
+
+test("builderAgent: a stale reviewer next to a stale builder is listed too, and the manual line names the installer with --force", async () => {
+  const rev = "/h/.claude/agents/motion-reviewer.md";
+  const builder = "/h/.claude/agents/artifact-builder.md";
+  const c = ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", exists: (p) => [rev, builder, "/h/.claude"].includes(p), readFile: readerOf({ [rev]: REVIEWER_STALE, [builder]: OLD_TEXT }) });
+  const m = (await diagnose([builderAgent()], c)).missing[0];
+  assert.deepEqual(m.outdated.sort(), [builder, rev].sort());
+  assert.match(m.fix.manual.linux, /install\.mjs claude --agents-only --force/);
+});
+
+test("builderAgent: a stale reviewer has an automatic fix that forces only the reviewer writer, in the file's own folder", () => {
+  const rev = "/p/.claude/agents/motion-reviewer.md";
+  const builder = "/h/.claude/agents/artifact-builder.md";
+  const c = ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", exists: (p) => [rev, builder, "/h/.claude"].includes(p), readFile: readerOf({ [rev]: REVIEWER_STALE, [builder]: CURRENT_TEXT }) });
+  const fix = builderAgent().fix(c);
+  assert.deepEqual(fix.auto, [["/n/node", "/s/make-motion/shared/agents.mjs", "write-reviewer", "claude", "/p/.claude/agents", "--force"]]);
+  assert.deepEqual(fix.outdated, [rev]);
+});
+
+test("builderAgent: the writer for a missing claude file is still `write claude <dir>`, and the notes name the reviewer too", () => {
+  const withClaude = builderAgent().fix(agentCtx([], ["/h/.claude"]));
+  assert.deepEqual(withClaude.auto.map((s) => s.slice(1)), [["/s/make-motion/shared/agents.mjs", "write", "claude", "/h/.claude/agents"]]);
+  assert.match(withClaude.notes, /\/h\/\.claude\/agents\/artifact-builder\.md/);
+  assert.match(withClaude.notes, /\/h\/\.claude\/agents\/motion-reviewer\.md/);
+});
+
+// End to end with a fake HOME and a fake plugin folder: the real writer, the real files.
+const AGENTS_SRC = fileURLToPath(new URL("../agents.mjs", import.meta.url));
+function fakeMachine(reviewerText) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pa-doctor-agents-"));
+  const home = path.join(root, "home");
+  const skillDir = path.join(root, "plug", "skills", "make-motion");
+  fs.mkdirSync(path.join(home, ".claude", "agents"), { recursive: true });
+  fs.mkdirSync(path.join(skillDir, "shared"), { recursive: true });
+  fs.copyFileSync(AGENTS_SRC, path.join(skillDir, "shared", "agents.mjs"));
+  const agents = path.join(home, ".claude", "agents");
+  fs.writeFileSync(path.join(agents, "artifact-builder.md"), "---\n---\nmake.mjs hand edited builder\n");
+  fs.writeFileSync(path.join(agents, "motion-reviewer.md"), reviewerText);
+  const cwd = path.join(root, "proj");
+  fs.mkdirSync(cwd);
+  return { agents, c: { ...defaultCtx(skillDir), homedir: home, cwd } };
+}
+
+for (const [label, text] of [["an older", REVIEWER_STALE], ["a foreign", "not our reviewer at all\n"]]) {
+  test(`builderAgent: doctor --fix rewrites ${label} motion-reviewer.md in a fake HOME, and leaves the builder alone`, async () => {
+    const { agents, c } = fakeMachine(text);
+    const before = await diagnose([builderAgent()], c);
+    assert.deepEqual(before.missing[0].outdated, [path.join(agents, "motion-reviewer.md")]);
+    const res = await runFixes(["builder_agent"], [builderAgent()], c);
+    assert.equal(res[0].ok, true, JSON.stringify(res));
+    assert.equal(fs.readFileSync(path.join(agents, "motion-reviewer.md"), "utf8"), reviewerFile("claude").content);
+    assert.equal(fs.readFileSync(path.join(agents, "artifact-builder.md"), "utf8"), "---\n---\nmake.mjs hand edited builder\n");
+    assert.deepEqual(await diagnose([builderAgent()], c), { ok: true, missing: [] });
+  });
+}
+
+test("builderAgent: doctor --fix on a fake HOME with no agent files writes both claude files through the shared writer", async () => {
+  const { agents, c } = fakeMachine("x");
+  fs.rmSync(path.join(agents, "artifact-builder.md"));
+  fs.rmSync(path.join(agents, "motion-reviewer.md"));
+  const res = await runFixes(["builder_agent"], [builderAgent()], c);
+  assert.equal(res[0].ok, true, JSON.stringify(res));
+  assert.equal(fs.readFileSync(path.join(agents, "artifact-builder.md"), "utf8"), agentFile("claude").content);
+  assert.equal(fs.readFileSync(path.join(agents, "motion-reviewer.md"), "utf8"), reviewerFile("claude").content);
 });
 
 // --- kokoro and cutout: each is its own locked package under <skill>/optional/, installed with npm ci ---
