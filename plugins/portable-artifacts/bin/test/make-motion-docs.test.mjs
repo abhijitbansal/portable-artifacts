@@ -178,6 +178,12 @@ test('reviewing.md ranks notes P0 to P2, never scores, asks the pictures-alone q
   assert.match(skill, /write `review\.md` next to the film/);
 });
 
+test('broll.md: no text in the picture, one slow motion, trim with out, an honest credit within the cap, and no generator call', () => {
+  const md = read('references/broll.md');
+  for (const phrase of ['`out`', '`credit`', 'AI-generated', '40 characters', 'never calls a generator']) assert.ok(md.includes(phrase), phrase);
+  assert.match(read('engine/kinds/media.mjs'), /const CREDIT_MAX = 40;/);
+});
+
 // ---- --list names -------------------------------------------------------------------------------------------------------
 
 /** The names a document gives to `--list <name>`, or `--list=<name>`, that are not in LIST_NAMES. */

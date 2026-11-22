@@ -154,6 +154,14 @@ test('README Quick start mentions the intake round', () => {
   assert.match(quick, /defaults/i);
 });
 
+test('the voice option recommends captions in viral and does not flip the default; the mode option folds in the film type', () => {
+  const section = intakeSection(read('SKILL.md'));
+  assert.match(optionLine(section, 'voice'), /Captions are a separate switch, `"captions": true`, off by default\. In `viral`, recommend them/);
+  assert.equal(registries.modes.get('viral').captions, false);
+  assert.match(optionLine(section, 'mode'), /references\/types\//);
+  assert.deepEqual(OPTIONS, ['mode', 'look', 'format', 'length', 'assets', 'voice', 'music', 'sound', 'ask']);
+});
+
 test('guardrail: a missing option, a missing default, a missing look, a size or a missing fallback is caught', () => {
   const section = intakeSection(read('SKILL.md'));
   assert.ok(section.includes('**voice**'));
