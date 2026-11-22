@@ -6,24 +6,39 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RULES, RULE_IDS, ruleOf } from '../../engine/review/rules.mjs';
+import { MIN_TEXT_UNITS, MAX_TEXT_SIZES, MIN_HERO_RATIO, OVERLAP_UNITS, WORD_OVERLAP_UNITS, CAPTION_LATE_SECONDS } from '../../engine/review/frame.mjs';
+import { MIN_CONTRAST } from '../../engine/review/contrast.mjs';
+import { COVER_SECONDS } from '../../engine/hand/index.mjs';
+import { DEFAULT_FILL } from '../../engine/looks/fill.mjs';
+import { registries } from '../../engine/registry.mjs';
+import '../../engine/looks/index.mjs';
 
 const MOTION = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+// Every file that raises a review finding. A later wave that adds a file that emits a rule (a poster check, say) adds it
+// here: a file not listed is never scanned, so its ids would be neither checked against the registry nor required to be
+// emitted. Never add engine/kinds: a kind's own `finding('creative', 'top', ...)` is advice that review.mjs wraps as the
+// rule `kind`, and its first argument is not a rule id.
 const SCANNED = ['engine/review/frame.mjs', 'engine/review/contrast.mjs', 'engine/review/regions.mjs', 'engine/review/outline.mjs',
   'engine/hand/index.mjs', 'scripts/v2/review.mjs', 'scripts/v2/loop.mjs'];
-// The three forms a rule is written in: a literal `rule: 'x'` field, and the two helpers' `finding(ctx?, KIND, 'x', ...)`.
-const FORMS = [/rule: '([a-z-]+)'/g, /\bfinding\((?:ctx, )?(?:MECHANICAL|CREATIVE|'mechanical'|'creative'), '([a-z-]+)'/g];
+// The forms a rule must be written in to be seen: a literal `rule: 'x'` field, and the two helpers' `finding(ctx?, KIND, 'x', ...)`,
+// single-quoted, on one line, with the id in lowercase letters, digits and hyphens. A rule built any other way is invisible here.
+const FORMS = [/rule: '([a-z0-9-]+)'/g, /\bfinding\((?:ctx, )?(?:MECHANICAL|CREATIVE|'mechanical'|'creative'), '([a-z0-9-]+)'/g];
 // Rules registered before the file that emits them exists: Task 3 creates engine/review/outline.mjs and empties this.
 const EXPECTED_LATER = ['cut-variety', 'sameness'];
+
+/** `source` without its block and line comments (a JSDoc `@returns {{ rule: 'x' }}` is not an emission). */
+const withoutComments = (source) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
+
+/** Every rule id any of FORMS finds in `source`, comments left out. */
+const idsIn = (source) => FORMS.flatMap((form) => [...withoutComments(source).matchAll(form)].map((m) => m[1]));
 
 /** Every rule id any of FORMS finds in the scanned files that exist. */
 function emittedIds(files) {
   const found = new Set();
   for (const rel of files) {
     const file = path.join(MOTION, rel);
-    if (!fs.existsSync(file)) continue;
-    const source = fs.readFileSync(file, 'utf8');
-    for (const form of FORMS) for (const m of source.matchAll(form)) found.add(m[1]);
+    if (fs.existsSync(file)) for (const id of idsIn(fs.readFileSync(file, 'utf8'))) found.add(id);
   }
   return found;
 }
@@ -33,11 +48,15 @@ const unregistered = (emitted) => [...emitted].filter((id) => !RULE_IDS.includes
 /** The ids of `ids` that have no row among `rows`. */
 const missingRows = (ids, rows) => ids.filter((id) => !rows.some((row) => row.id === id));
 
+const DOC_COLUMNS = 7;
+
 /** The rows of references/rules.md's table: { id, kind, checked, meaning, ask, fix, evidence }. */
 function docRows() {
   const lines = fs.readFileSync(path.join(MOTION, 'references/rules.md'), 'utf8').split('\n');
   return lines.filter((line) => line.startsWith('| `')).map((line) => {
-    const [rule, kind, checked, meaning, ask, fix, evidence] = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    assert.equal(cells.length, DOC_COLUMNS, `a row of rules.md has ${cells.length} cells, not ${DOC_COLUMNS} (a "|" inside a cell?): ${line.slice(0, 60)}`);
+    const [rule, kind, checked, meaning, ask, fix, evidence] = cells;
     return { id: rule.replaceAll('`', ''), kind, checked, meaning, ask, fix, evidence };
   });
 }
@@ -47,8 +66,8 @@ test('every rule the code emits is registered, and every registered rule is emit
   assert.deepEqual(RULE_IDS.filter((id) => !emittedIds(SCANNED).has(id) && !EXPECTED_LATER.includes(id)), []);
 });
 
-// 38 is what the scan finds at HEAD (W2 added dead-space and scale-contrast to the plan's 36 at W3 start; W1 added render-check
-// errors, which are errors and not findings).
+// The scan finds 36 emitted ids at HEAD; the two outline rules in EXPECTED_LATER make 38 (the plan's 38 already counts W2's
+// dead-space and scale-contrast; W1's render-check problems are errors, not findings, so they add none).
 test('the registry holds 38 rules, each id once, each with a summary', () => {
   assert.equal(RULE_IDS.length, 38);
   assert.equal(new Set(RULE_IDS).size, 38);
@@ -102,13 +121,58 @@ test('[R2-12] every rule states its evidence, and every creative rule asks a que
   }
 });
 
-test('[R2-12] a measured row names its table and commits, a convention row names its standard', () => {
+// A path a cell cites: a file under references/ or engine/ (the shipped skill), never a scratch folder or a commit.
+const CITED = /\b(?:references|engine)\/[\w./-]*\w\.(?:md|mjs)/g;
+
+test('[R2-12] a measured row cites files that ship, a convention row names its standard', () => {
   const rows = new Map(docRows().map((row) => [row.id, row]));
   for (const id of ['dead-space', 'scale-contrast']) {
-    for (const part of ['calibration.md', '04f1a1e', '6794ae9', '0786f60']) assert.ok(rows.get(id).evidence.includes(part), `${id}: ${part}`);
+    const cell = rows.get(id).evidence;
+    const cited = cell.match(CITED) ?? [];
+    for (const rel of ['references/calibration.md', 'engine/looks/fill.mjs']) assert.ok(cited.includes(rel), `${id} cites ${rel}`);
+    for (const rel of cited) assert.ok(fs.existsSync(path.join(MOTION, rel)), `${id} cites ${rel}, which does not exist`);
+    assert.ok(cell.includes('DEFAULT_FILL'), id);
+    assert.doesNotMatch(cell, /\.scratch|\b[0-9a-f]{7}\b/, `${id}: a scratch path or a commit does not survive a squash merge`);
   }
   assert.match(rows.get('contrast').evidence, /^convention: WCAG 2/);
   for (const row of rows.values()) if (row.evidence === 'unmeasured') assert.equal(ruleOf(row.id).evidence, 'unmeasured', row.id);
+});
+
+const percent = (share) => Math.round(share * 100);
+
+// A threshold a summary or a Fix value states is the one in the code: change a constant and one of these goes red.
+test('[R2-12] the numbers rules.md and the registry state are the ones the code holds', () => {
+  const desk = registries.looks.get('desk').fill, ledger = registries.looks.get('ledger').fill;
+  assert.equal(desk.band, ledger.band, 'the summary says "in desk and ledger" for one number');
+  const checks = [
+    ['min-size', ['summary', 'fix'], `${MIN_TEXT_UNITS} units`],
+    ['overlap', ['summary'], `by more than ${OVERLAP_UNITS} units`],
+    ['word-overlap', ['summary'], `more than ${WORD_OVERLAP_UNITS} unit`],
+    ['sizes', ['summary'], `More than ${MAX_TEXT_SIZES} distinct`],
+    ['sizes', ['fix'], `${MAX_TEXT_SIZES} sizes or fewer`],
+    ['hero', ['summary', 'fix'], `${MIN_HERO_RATIO} times`],
+    ['dropped', ['summary'], `${MIN_HERO_RATIO} times`],
+    ['contrast', ['summary', 'fix', 'evidence'], `${MIN_CONTRAST}:1`],
+    ['caption-late', ['summary', 'fix'], `${CAPTION_LATE_SECONDS} s`],
+    ['hand-covered', ['summary'], `${COVER_SECONDS} s`],
+    ['dead-space', ['summary'], `reaches ${percent(DEFAULT_FILL.band)}% of`],
+    ['dead-space', ['summary'], `(${percent(desk.band)}% in desk and ledger)`],
+    ['scale-contrast', ['summary'], `under ${percent(DEFAULT_FILL.hero)}% of the safe area`],
+    ['scale-contrast', ['summary'], `(${percent(ledger.hero)}% in ledger)`],
+  ];
+  const rows = new Map(docRows().map((row) => [row.id, row]));
+  for (const [id, fields, text] of checks) {
+    for (const field of fields) {
+      const cell = field === 'summary' ? ruleOf(id).summary : rows.get(id)[field];
+      assert.ok(cell.includes(text), `${id} ${field} says "${cell}", not "${text}"`);
+    }
+  }
+});
+
+test('guardrail: a rule named only in a comment is not an emission', () => {
+  const source = "// rule: 'a-comment'\n/** @returns {{ rule: 'in-jsdoc' }} */\n/* rule: 'block' */\nconst f = { rule: 'real' }; // rule: 'trailing'\n";
+  assert.deepEqual(idsIn(source), ['real']);
+  assert.deepEqual(idsIn("const g = finding(ctx, MECHANICAL, 'two2', id, 'm');"), ['two2']);
 });
 
 test('references/rules.md says an id is never renamed or reused', () => {

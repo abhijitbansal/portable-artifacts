@@ -23,7 +23,7 @@ export { handPose } from './pose.mjs';
 export { handNodes } from './shape.mjs';
 
 const FPS = 30;
-const COVER_SECONDS = 0.3;
+export const COVER_SECONDS = 0.3;
 const TEXT_UP = 0.74; // em above the baseline a written line's ink reaches (capitals) and below it (descenders): the board's text boxes
 const TEXT_DOWN = 0.22;
 // a word's entrance, and the colour a word not yet spoken is given (the ghost grey of a recolour look): what is written is

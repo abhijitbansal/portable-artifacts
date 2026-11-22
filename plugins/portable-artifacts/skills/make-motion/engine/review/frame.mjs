@@ -63,7 +63,7 @@ export const MIN_TEXT_UNITS = 28;
 export const MAX_TEXT_SIZES = 3;
 export const MIN_HERO_RATIO = 3;
 export const OVERLAP_UNITS = 4;
-const WORD_OVERLAP_UNITS = 1; // neighbouring words of a line may not meet by more than this
+export const WORD_OVERLAP_UNITS = 1; // neighbouring words of a line may not meet by more than this
 // Two sizes within this ratio of each other (a camera drift scales every text a little) count as one size.
 const SAME_SIZE_RATIO = 1.1;
 // A text stands settled within 0.2% of its resting scale. A camera punch (8% in pop) takes a frame or two to come home,

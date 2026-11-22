@@ -58,7 +58,7 @@ export const RULES = Object.freeze([
   // frame, from W2: how a shot fills its frame, on its resting frame
   rule('dead-space', [CREATIVE], 'frame', 'The longest empty band of the safe area reaches 35% of its width or height (40% in desk and ledger).',
     { capped: true, evidence: 'measured', ask: 'Is the empty part of this frame doing a job?' }),
-  rule('scale-contrast', [CREATIVE], 'frame', 'The hero leads its neighbours but reaches under half of the safe area (45% in ledger).',
+  rule('scale-contrast', [CREATIVE], 'frame', 'The hero leads its neighbours but reaches under 50% of the safe area (45% in ledger).',
     { capped: true, evidence: 'measured', ask: 'Should the hero be the thing the viewer sees first, and is it big enough to be?' }),
   // film: what the whole film does
   rule('unsettled', [MECHANICAL], 'film', 'Text never lands within its shot: on every sampled frame it is still arriving or moving.'),
