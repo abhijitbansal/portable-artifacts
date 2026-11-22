@@ -70,6 +70,42 @@ function wordInset(ctx, word, tracks, font, reserve, first) {
   return inset;
 }
 
+// Tests only (window.__setGlyphPath): with `force`, every word of every text goes through drawGlyphs with identity values.
+const glyphPath = { force: false };
+export const setGlyphPath = (force) => { glyphPath.force = force === true; };
+
+const isIdentityGlyph = (g) => g === undefined || (g.opacity ?? 1) === 1 && (g.x ?? 0) === 0 && (g.y ?? 0) === 0 && (g.scale ?? 1) === 1;
+
+// The glyph values a word is drawn with, one per glyph (code point), or null when the word is drawn whole: it has no glyph
+// values, or every one is the identity (the whole word keeps its ligatures and contextual forms).
+function glyphsOf(word, tracks) {
+  const count = Array.from(word.text).length;
+  if (glyphPath.force) return Array.from({ length: count }, (_, k) => ({ ...WORD_IDENTITY, ...tracks.glyphs?.[k] }));
+  if (!tracks.glyphs || tracks.glyphs.every(isIdentityGlyph)) return null;
+  return Array.from({ length: count }, (_, k) => ({ ...WORD_IDENTITY, ...tracks.glyphs[k] }));
+}
+
+// A word's glyphs one by one, each with its own { opacity, x, y, scale } (scaled about its own centre on the baseline).
+// Glyph k starts at `left` plus the advance the word gives the k glyphs before it, measured with the font and letter spacing
+// already on the context, so the gap between two letters is the gap the whole word has, kerning included: the prefix of k + 1
+// glyphs less glyph k alone (a kern pair's adjustment sits on the first glyph's advance).
+function drawGlyphs(ctx, word, glyphs, left) {
+  const chars = Array.from(word.text);
+  chars.forEach((char, k) => {
+    const g = glyphs[k];
+    const opacity = unit01(g.opacity);
+    if (opacity <= 0) return;
+    const own = ctx.measureText(char).width;
+    const origin = left + ctx.measureText(chars.slice(0, k + 1).join('')).width - own;
+    ctx.save();
+    ctx.globalAlpha *= opacity;
+    ctx.translate(origin + own / HALF + g.x, g.y);
+    ctx.scale(g.scale, g.scale);
+    ctx.fillText(char, -own / HALF, 0);
+    ctx.restore();
+  });
+}
+
 function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   const opacity = unit01(tracks.opacity);
   if (opacity <= 0) return;
@@ -81,7 +117,9 @@ function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   const left = -word.width / HALF + wordInset(ctx, word, tracks, type.font, type.reserve, word === line.words[0] || word === line.words.at(-1));
   const share = unit01(tracks.glow ?? 0);
   if (glow && share > 0) drawGlow(ctx, word.text, left, glow, share);
-  ctx.fillText(word.text, left, 0);
+  const glyphs = glyphsOf(word, tracks);
+  if (glyphs) drawGlyphs(ctx, word, glyphs, left);
+  else ctx.fillText(word.text, left, 0);
   ctx.restore();
 }
 

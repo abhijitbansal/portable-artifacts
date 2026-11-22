@@ -14,7 +14,7 @@ import '../fields/index.mjs';
 import { buildFilm, resolveLook, shotTime } from '../graph/film.mjs';
 import { stateKey } from '../graph/sample.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../formats.mjs';
-import { drawFrame, resetContext } from './draw.mjs';
+import { drawFrame, resetContext, setGlyphPath } from './draw.mjs';
 import { annotate } from './bounds.mjs';
 import { applyFont, createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
@@ -183,6 +183,7 @@ function installApi({ fps, draw, post, source, measure, frameState, keys, setGra
     post.setStrengths(next);
     if (next.grain !== undefined) setGrain(next.grain);
   };
+  window.__setGlyphPath = setGlyphPath; // true: every word is drawn glyph by glyph with identity values, for tests
   window.__stampFamily = STAMP_FAMILY;
   window.__measure = measure; // the layout measure, for tests
   // a smeared frame is audited at its own progress, without the smear (engine/graph/film.mjs smear.whole)
