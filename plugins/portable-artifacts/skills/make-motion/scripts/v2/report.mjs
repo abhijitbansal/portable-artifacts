@@ -110,7 +110,7 @@ function postText({ post, cuts }) {
 // The timing part of the frames line: where the render's time went, in ms; nothing when no render ran.
 const timingText = (timing) => (timing ? `, draw ${timing.drawMs} capture ${timing.captureMs} encode ${timing.encodeMs} check ${timing.checkMs} ms` : '');
 
-/** The report of a run in its state `state` (see run.mjs), with every key present (`inspect` only for --inspect, `slice` only for --shot or --range, `board` only for --estimated, `look` only for an experimental look,
+/** The report of a run in its state `state` (see run.mjs), with every key present (`inspect` only for --inspect, `slice` only for --shot or --range, `board` only for --estimated, `compare` only for --compare-looks, `look` only for an experimental look,
  *  `kinds` only for a film that uses a parked kind, `cuts` only for a film with shader cuts). */
 export function reportOf(state) {
   const mechanical = state.findings.some((f) => f.kind === 'mechanical');
@@ -137,6 +137,7 @@ export function reportOf(state) {
     ...(state.inspect ? { inspect: state.inspect } : {}), // --inspect: { png, json, frame, seconds, shot }
     ...(state.slice ? { slice: state.slice } : {}), // --shot, --range: { from, to, frames, shots, silent, skipped }
     ...(state.board ? { board: state.board } : {}), // --estimated: the board strips' paths, in order
+    ...(state.compare ? { compare: state.compare } : {}), // --compare-looks: { file, shot, frame, looks }
     ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
     ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed, level }
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
@@ -150,7 +151,7 @@ const absolute = (file, cwd) => (typeof file === 'string' ? path.resolve(cwd, fi
 
 /**
  * The report with every file path absolute, resolved against `cwd` (the folder make.mjs ran in): `output`, `sheets`, `board`,
- * `poster.file`, `inspect.png` and `.json`, `subtitles.file`. The --json form uses it, because the second reviewer has only
+ * `poster.file`, `inspect.png` and `.json`, `subtitles.file`, `compare.file`. The --json form uses it, because the second reviewer has only
  * Read, which needs absolute paths, and is handed a report saved from a run it did not see. Inside a run, and in the text
  * form, paths stay as the user gave them. A new report is returned; keys the report lacks stay absent.
  */
@@ -160,6 +161,7 @@ export function absolutePaths(report, cwd = process.cwd()) {
   if (report.poster) out.poster = { ...report.poster, file: absolute(report.poster.file, cwd) };
   if (report.inspect) out.inspect = { ...report.inspect, png: absolute(report.inspect.png, cwd), json: absolute(report.inspect.json, cwd) };
   if (report.subtitles) out.subtitles = { ...report.subtitles, file: absolute(report.subtitles.file, cwd) };
+  if (report.compare) out.compare = { ...report.compare, file: absolute(report.compare.file, cwd) };
   return out;
 }
 
@@ -216,6 +218,9 @@ function verdict(report) {
 // The slice line of the text form: which frames and shots were reviewed, and which rules a slice does not run.
 const sliceLine = ({ from, to, frames, shots, silent, skipped }) => `slice: frames ${from} to ${to} (${plural(frames, 'frame')}; ${shots.length === 1 ? 'shot' : 'shots'} ${shots.join(', ')}); ${skipped.join(', ').replace(/, ([^,]*)$/, ' and $1')} are not run${silent ? '; silent: the film\'s sound is mastered for the whole film' : ''}`;
 
+// The compare line of the text form: the sheet, the anchor shot, and the looks on it (a parked or refused look says so).
+const compareLine = ({ file, shot, looks }) => `compare: ${file} (shot ${shot}; ${looks.map((l) => (l.status === 'drawn' ? l.look : `${l.look} (${l.status})`)).join(', ')})`;
+
 /** One finding as a line of the text form: `<kind>: <path>: <message>`. */
 export const findingLine = (f) => `${f.kind}: ${f.path}: ${f.message}`;
 
@@ -237,6 +242,7 @@ export function formatText(report, { sheetsDir }) {
   const lines = [verdict(report)];
   for (const f of report.findings) lines.push(findingLine(f));
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
+  if (report.compare) return [...lines, compareLine(report.compare)].join('\n'); // a comparison writes one picture: no sheets, no video
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   if (report.board) lines.push(report.board.length === 0 ? 'board: none written' : `board: ${path.dirname(report.board[0])} (${plural(report.board.length, 'strip')})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);

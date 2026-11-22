@@ -19,8 +19,9 @@ const STAMP_SHARE = 34; // the stamp is a tile's width / this many px tall, but 
 const STAMP_MIN = 11;
 const STAMP_PAD = 0.4; // of the stamp size
 
-// Runs in the page (Playwright sends its source), so it names only page globals and its own argument.
-async function composeInPage({ width, height, placements, colours, format }) {
+// Runs in the page (Playwright sends its source), so it names only page globals and its own argument. Exported for the
+// compare sheet (compare.mjs), which stamps its tiles the same way.
+export async function composeInPage({ width, height, placements, colours, format }) {
   const sheet = document.createElement('canvas');
   sheet.width = width;
   sheet.height = height;
@@ -46,9 +47,9 @@ async function composeInPage({ width, height, placements, colours, format }) {
   return sheet.toDataURL(format.mime, format.quality).split(',')[1];
 }
 
-const PNG = Object.freeze({ mime: 'image/png' });
+export const PNG = Object.freeze({ mime: 'image/png' });
 
-const COLOURS = Object.freeze({ sheet: SHEET_BACKGROUND, stampBackground: STAMP_BACKGROUND, stampInk: STAMP_INK, stampShare: STAMP_SHARE, stampMin: STAMP_MIN, pad: STAMP_PAD });
+export const COLOURS = Object.freeze({ sheet: SHEET_BACKGROUND, stampBackground: STAMP_BACKGROUND, stampInk: STAMP_INK, stampShare: STAMP_SHARE, stampMin: STAMP_MIN, pad: STAMP_PAD });
 
 async function writeOne(session, sheet, dir, canvas, signal) {
   signal?.throwIfAborted();
@@ -59,7 +60,7 @@ async function writeOne(session, sheet, dir, canvas, signal) {
 }
 
 // The file appears whole or not at all: written under a temp name beside it, then renamed.
-function writeAtomically(file, bytes) {
+export function writeAtomically(file, bytes) {
   const temp = path.join(path.dirname(file), `.${path.basename(file)}.tmp-${process.pid}`);
   try {
     writeFileSync(temp, bytes);
