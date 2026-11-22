@@ -7,7 +7,7 @@ import path from 'node:path';
 import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
-import { planSheets } from './plan.mjs';
+import { planSheets, planBoard, BOARD_COLUMNS, BOARD_JPEG_QUALITY, BOARD_STRIP_WIDTH } from './plan.mjs';
 import { sliceSheets } from './slice.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from './layout.mjs';
 import { reviewFilm } from './review.mjs';
@@ -20,7 +20,7 @@ const STAMP_MIN = 11;
 const STAMP_PAD = 0.4; // of the stamp size
 
 // Runs in the page (Playwright sends its source), so it names only page globals and its own argument.
-async function composeInPage({ width, height, placements, colours }) {
+async function composeInPage({ width, height, placements, colours, format }) {
   const sheet = document.createElement('canvas');
   sheet.width = width;
   sheet.height = height;
@@ -43,8 +43,10 @@ async function composeInPage({ width, height, placements, colours }) {
     ctx.fillStyle = colours.stampInk;
     ctx.fillText(p.label, p.x + pad, p.y + pad);
   }
-  return sheet.toDataURL('image/png').split(',')[1];
+  return sheet.toDataURL(format.mime, format.quality).split(',')[1];
 }
+
+const PNG = Object.freeze({ mime: 'image/png' });
 
 const COLOURS = Object.freeze({ sheet: SHEET_BACKGROUND, stampBackground: STAMP_BACKGROUND, stampInk: STAMP_INK, stampShare: STAMP_SHARE, stampMin: STAMP_MIN, pad: STAMP_PAD });
 
@@ -52,7 +54,7 @@ async function writeOne(session, sheet, dir, canvas, signal) {
   signal?.throwIfAborted();
   const columns = sheet.kind === 'cut' ? CUT_COLUMNS : shotColumns(canvas);
   const { width, height, placements } = layoutSheet({ tiles: sheet.tiles, canvas, columns });
-  const png = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS });
+  const png = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS, format: PNG });
   return writeAtomically(path.join(dir, sheet.name), Buffer.from(png, 'base64'));
 }
 
@@ -73,6 +75,39 @@ function writeAtomically(file, bytes) {
 function clearOwnSheets(dir) {
   mkdirSync(dir, { recursive: true });
   for (const name of readdirSync(dir)) if (name.toLowerCase().endsWith('.png')) rmSync(path.join(dir, name), { force: true });
+}
+
+const BOARD_DIR = 'board';
+const BOARD_FILE_RE = /^board-\d+\.jpg$/;
+const PERCENT = 100;
+const BOARD_FORMAT = Object.freeze({ mime: 'image/jpeg', quality: BOARD_JPEG_QUALITY / PERCENT });
+
+// The folder's own board-N.jpg files are the last run's strips: they go before the new ones are made, so a strip the film no
+// longer needs cannot linger. Any other file in it stays.
+function clearOwnBoard(dir) {
+  mkdirSync(dir, { recursive: true });
+  for (const name of readdirSync(dir)) if (BOARD_FILE_RE.test(name)) rmSync(path.join(dir, name), { force: true });
+}
+
+/**
+ * The board (--estimated): the film's shots, BOARD_COLUMNS to a row and BOARD_PER_STRIP to a strip, each tile stamped as a
+ * sheet tile is, written as JPEGs (BOARD_JPEG_QUALITY) at most BOARD_STRIP_WIDTH px wide.
+ * @param {{ session: object, dir: string, signal?: AbortSignal }} opts `dir` is the sheets folder: the strips go in its `board/`
+ * @returns {Promise<string[]>} the strip paths, in order
+ */
+export async function writeBoard({ session, dir, signal }) {
+  const boardDir = path.join(dir, BOARD_DIR);
+  signal?.throwIfAborted();
+  clearOwnBoard(boardDir);
+  const [w, h] = canvasSize(session.film);
+  const files = [];
+  for (const strip of planBoard(session.film, session.timeline)) {
+    signal?.throwIfAborted();
+    const { width, height, placements } = layoutSheet({ tiles: strip.tiles, canvas: { w, h }, columns: BOARD_COLUMNS, maxWidth: BOARD_STRIP_WIDTH });
+    const jpeg = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS, format: BOARD_FORMAT });
+    files.push(writeAtomically(path.join(boardDir, strip.name), Buffer.from(jpeg, 'base64')));
+  }
+  return files;
 }
 
 /**

@@ -22,7 +22,7 @@ import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
 import { openSession, pageErrorMessage, machineMessage, canvasSize } from './session.mjs';
 import { clipUses, prepareClips, clipAudioTracks } from './clips.mjs';
-import { writeSheets } from './sheets.mjs';
+import { writeBoard, writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
 import { stampTags, tagArgs } from './stamp.mjs';
@@ -136,6 +136,7 @@ async function reviewAndRender({ options, loaded, made, sound, state, io: { sign
     const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal, slice }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);
+    if (options.estimated === true) state.board = await stage(state, log, 'board', () => writeBoard({ session, dir: sheetsDir, signal }));
     if (!options.noRender && slice === null) {
       const tags = stampTags({ generatedBy: loaded.film.generatedBy, flags: options.provenance ?? {}, provenance: loaded.film.provenance });
       const rendered = await stage(state, log, 'render', () => {
@@ -513,8 +514,10 @@ async function execute(options, state, io) {
   const reference = options.poster ?? options.inspect;
   if (typeof reference === 'string') filmSeconds(reference, film, loaded.timeline); // the timeline loadFilm built: estimated for a voiced film
   checkSlice(options, film, loaded.timeline); // --shot and --range likewise: a shot the film lacks, a reference that names nothing
-  // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
-  const voiced = film.voice !== undefined && options.outline !== true;
+  // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so. So does --estimated
+  // (with --sheets-only): its sheets and board are drawn on the estimate, whose times the render later measures.
+  const voiced = film.voice !== undefined && options.outline !== true && options.estimated !== true;
+  if (film.voice !== undefined && options.estimated === true) io.log('make: --estimated: no voice was made; the sheets and the board use estimated timing');
   const made = !voiced ? null
     : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
   if (voiced && made === null) return;

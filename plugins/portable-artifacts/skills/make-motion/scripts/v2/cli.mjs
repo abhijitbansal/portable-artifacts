@@ -6,7 +6,7 @@ import { MAX_WORKERS, autoWorkers } from './workers.mjs';
 import { rangeParts } from './range-form.mjs';
 
 export const LIST_NAMES = Object.freeze(['kinds', 'looks', 'modes', 'devices', 'moves', 'cuts', 'fields', 'voices']);
-export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--inspect', '--shot', '--range', '--batch', '--subtitles', '--workers', '--preview', '--open']);
+export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--inspect', '--shot', '--range', '--batch', '--subtitles', '--workers', '--preview', '--open', '--estimated']);
 const USAGE = `node scripts/make.mjs <film.json>; accepted flags: ${FLAGS.join(', ')}; exit codes: 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted`;
 const OPTIONS = Object.freeze({
   out: { type: 'string' },
@@ -32,6 +32,7 @@ const OPTIONS = Object.freeze({
   workers: { type: 'string' },
   preview: { type: 'boolean' },
   open: { type: 'boolean' },
+  estimated: { type: 'boolean' },
 });
 const SUBTITLE_FORMATS = Object.freeze(['srt', 'vtt']);
 const POSTER_EXTENSIONS = Object.freeze(['.jpg', '.jpeg', '.png']);
@@ -45,6 +46,9 @@ const MODE_CONFLICTS = Object.freeze({
   range: ['shot', 'batch', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'subtitles', 'workers'],
   batch: ['poster', 'outline', 'phonemes', 'subtitles'],
   subtitles: ['outline', 'phonemes', 'poster', 'batch'],
+  // --estimated writes the sheets and the board of the whole film: not a slice, an outline or a batch (the modes that refuse
+  // --sheets-only say so from their own side: --estimated needs it)
+  estimated: ['shot', 'range', 'outline', 'batch', 'phonemes'],
   preview: ['out', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'shot', 'range', 'batch', 'subtitles', 'workers', 'exact'],
 });
 const BATCH_KEYS_RE = /\{(index|[a-zA-Z][a-zA-Z0-9]*)\}/;
@@ -142,8 +146,9 @@ function workersFlag(text) {
   return Number(text);
 }
 
-// The mode flags: --phonemes, --poster (and --poster-out), --inspect, --batch (with an --out template), --subtitles srt|vtt.
+// The mode flags: --phonemes, --estimated (with --sheets-only), --poster (and --poster-out), --inspect, --batch (with an --out template), --subtitles srt|vtt.
 function modeFlags(values) {
+  if (values.estimated === true && values['sheets-only'] !== true) throw new UsageError('--estimated needs --sheets-only: it writes the sheets on estimated timing, with no voice');
   checkConflicts(values);
   if (values.batch !== undefined && (values.out === undefined || !BATCH_KEYS_RE.test(values.out))) {
     throw new UsageError('--batch needs --out with a {index} or {<var>} in it, such as --out "renders/{name}.mp4"');
@@ -152,14 +157,14 @@ function modeFlags(values) {
     throw new UsageError(`--subtitles takes one of: ${SUBTITLE_FORMATS.join(', ')}; got ${JSON.stringify(values.subtitles)}`);
   }
   if (values.open === true && values.preview !== true) throw new UsageError('--open needs --preview: it opens the preview page in your browser');
-  return { phonemes: values.phonemes === true, preview: values.preview === true, open: values.open === true, ...posterFlags(values), inspect: inspectFlag(values), ...sliceFlags(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, workers: workersFlag(values.workers) };
+  return { phonemes: values.phonemes === true, estimated: values.estimated === true, preview: values.preview === true, open: values.open === true, ...posterFlags(values), inspect: inspectFlag(values), ...sliceFlags(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, workers: workersFlag(values.workers) };
 }
 
 /**
  * @param {string[]} argv the arguments after the script name
  * @returns {{ specPath: string | null, out: string | null, json: boolean, noRender: boolean, outline: boolean, list: string | null, exact: boolean, all: boolean,
  *   provenance: { model?: string, effort?: string, agent?: string, noProvenance: boolean }, phonemes: boolean,
- *   poster: string | null, posterOut: string | null, inspect: string | null, shot: string | null, range: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null }}
+ *   estimated: boolean, poster: string | null, posterOut: string | null, inspect: string | null, shot: string | null, range: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null }}
  * @throws {UsageError} for a removed version 1 flag (with `hint`: what to do instead), an unknown or misspelled flag, a
  *   bad --list value, a missing or extra film path, an --out that is not .mp4, or a stamp flag that is refused
  */
