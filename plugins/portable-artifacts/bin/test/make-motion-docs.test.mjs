@@ -117,6 +117,53 @@ test('guardrail: a reference file SKILL.md does not name is caught', () => {
   assert.deepEqual(referenceDocs().filter((rel) => !md.includes(rel)), ['references/tells.md']);
 });
 
+// ---- the story doctrine: story.md, the three type files, tells.md ----------------------------------------------------------
+
+const headings = (md) => [...md.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+
+test('story.md is built around the one thing, three storylines as three films and the five-line teaching check', () => {
+  const md = read('references/story.md');
+  assert.deepEqual(headings(md), ['The one thing', 'Claims', 'Three storylines', 'Write for the picture', 'Narration', 'The teaching check', 'Tells every look shares', 'What the review tells you']);
+  const three = section(md, 'Three storylines');
+  for (const phrase of ['three different films', 'first two seconds', 'storylines.md', '`claude -p`', 'pick the first']) assert.ok(three.includes(phrase), phrase);
+  assert.equal(section(md, 'The teaching check').split('\n').filter((l) => /^\d\. /.test(l)).length, 5);
+  for (const mode of ['pro', 'viral']) assert.ok(md.includes(`${registries.modes.get(mode).wpm} words a minute`), `${mode} pace`);
+  assert.deepEqual([registries.modes.get('pro').wpm, registries.modes.get('viral').wpm], [150, 175]);
+});
+
+test('each type file has its four sections, and offers only devices the kinds, cuts and devices can draw', () => {
+  const drawable = new Set([...listedKinds(), ...registries.cuts.names(), ...registries.devices.names(), 'music.snap', 'captions', 'say', 'hold', 'on']);
+  for (const type of ['explainer', 'data', 'vertical']) {
+    const md = read(`references/types/${type}.md`);
+    assert.deepEqual(headings(md), ['When', 'Shape', 'Devices', 'Check'], type);
+    for (const word of ticks(section(md, 'Devices'))) assert.ok(drawable.has(word), `${type}: \`${word}\` is not something the engine draws`);
+  }
+});
+
+test('tells.md has one section per look, never a banned list', () => {
+  const md = read('references/tells.md');
+  assert.deepEqual(sorted(headings(md)), sorted(registries.looks.names()));
+  for (const look of registries.looks.names()) assert.ok(section(md, look).split('\n').filter((l) => l.startsWith('- ')).length >= 2, look);
+  assert.ok(!/\bbanned\b/i.test(md));
+});
+
+test('guardrail: a device no kind draws, and a look with no section, are caught', () => {
+  assert.ok(!new Set([...listedKinds(), ...registries.cuts.names()]).has('endless-zoom'));
+  const md = read('references/tells.md').replace('## ledger', '## lodger');
+  assert.notDeepEqual(sorted(headings(md)), sorted(registries.looks.names()));
+});
+
+test('[R2] the shape of a short, honest hooks, tells with their condition, the cue pass, machine-written lines, demo data', () => {
+  const story = read('references/story.md'); const vertical = read('references/types/vertical.md'); const tells = read('references/tells.md');
+  for (const phrase of ['who the short is for', 'one ask']) assert.ok(section(vertical, 'Shape').includes(phrase), phrase);
+  assert.ok(section(vertical, 'Check').includes('on screen in the first shot'));
+  assert.ok(section(story, 'Claims').includes('the brief did not give'));
+  for (const look of registries.looks.names()) assert.ok(section(tells, look).split('\n').filter((l) => l.startsWith('- ') && /works when|never/.test(l)).length >= 2, look);
+  assert.ok(section(story, 'Three storylines').includes('not a pace, a look or a shot order to copy'));
+  for (const phrase of ['not printed as a caption', 'made-up, realistic data']) assert.ok(section(story, 'Write for the picture').includes(phrase), phrase);
+  assert.ok(section(story, 'Narration').includes('not just'));
+});
+
 // ---- --list names -------------------------------------------------------------------------------------------------------
 
 /** The names a document gives to `--list <name>`, or `--list=<name>`, that are not in LIST_NAMES. */

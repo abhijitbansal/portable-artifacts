@@ -1,6 +1,20 @@
 # Writing a film
 
-How to write the script before you write the JSON. The craft here is advice. The numbers it quotes (pace, the longest a picture may sit still) come from `node scripts/make.mjs --list modes`.
+How to write the script before you write the JSON. The craft here is advice. The numbers it quotes (pace, the longest a picture may sit still) come from `node scripts/make.mjs --list modes`. A `pro` film runs at 150 words a minute, so a shot of 3 to 6 seconds holds about 8 to 15 words, and a picture may sit still for 6 seconds. A `viral` short runs at 175 words a minute, and a picture may sit still for 3 seconds. How each type of film is shaped is on its own page (the first step of the workflow names them).
+
+## The one thing
+
+Before any shot, write one sentence a viewer could repeat after the film. Put it at the top of the storyline. Every shot serves it or is cut. A film with two things to say is two films.
+
+## Claims
+
+Every number and every claim in a `say` comes from the brief or from the user's material. Anything else is marked as an assumption in the storyline and asked about, or cut. A hook is a claim too: a number, a result or a deadline the brief did not give stays out of it, however well it would land.
+
+## Three storylines
+
+For a film over 15 seconds, when a person is there to answer, offer three storylines before you write shots, and make them three different films, not three phrasings of one. Each gives four things: the first two seconds written out (the opening shot's kind and its exact `say`), the worked example, the arc in one line per shot, and the closing ask. Two storylines that share both their opening kind and their worked example are one storyline: replace one. Write the three to `storylines.md` beside the film, and the user picks one.
+
+When nobody can answer (`claude -p`, `codex exec`, an eval), pick the first and say so in the report. The example films show the shape of the fields; they are not a pace, a look or a shot order to copy.
 
 ## Write for the picture
 
@@ -8,17 +22,10 @@ Every line of narration names what is on screen while it is said. If a line has 
 
 - A `number` shot says the number and what it counts. A `chart` shot says the claim the highlighted mark proves. A `clipping` shot says what to look at in the picture, and an `on` event circles it on the word that names it.
 - One idea per shot. If a shot needs "and also", it is two shots.
+- Cue pass, before the shots are written: mark each line's cue. A number is drawn as a quantity (a `number`, a `chart` mark, a count of things), not printed as a caption. An abstract noun gets one concrete thing from the subject's own world, not the stock picture of its category.
+- A turn word (but, instead, until) is where a cut or a `compare` goes. Not every word goes on screen.
+- A page you screenshot for a `screen` or `clipping` shot holds made-up, realistic data before the capture: never a real customer's, never filler text, never an empty state.
 - Settle the script before the design. Write every shot with only `id`, `show` and `say`, then run `node scripts/make.mjs film.json --outline`. It prints each shot with its start, end and narration, timed from the word count, with no voice and no browser. Read it aloud. Fix the script, then add the other fields.
-
-## Two arcs
-
-**A professional film** (`"mode": "pro"`): problem, the idea, proof, ask. The pace is 150 words a minute, so a shot of 3 to 6 seconds holds about 8 to 15 words. A picture may sit still for 6 seconds. Open with the problem in the viewer's words, not the product's. End with one ask.
-
-**A short for Reels, TikTok and Shorts** (`"mode": "viral"`): the first shot reads from frame 0, so open on the hook, not a title. Keep it to a few words. Promise the payoff early, change what is on screen at least every 3 seconds (the mode flags a picture that sits still longer), and pay off one open question before the end. Put a soft ask last. The pace is 175 words a minute.
-
-## Storylines first
-
-For a film over 15 seconds, when a person is there to answer, offer three storylines before you write shots: a few lines each, each a different angle on the same facts. The user picks one. When nobody can answer (`claude -p`, `codex exec`, an eval), pick the first and say so in the report.
 
 ## Narration
 
@@ -27,19 +34,29 @@ For a film over 15 seconds, when a person is there to answer, offer three storyl
 - Star the words that carry the point (`*sources*`), a few per film. A film where every line is starred has no emphasis left.
 - Mark a pause with `(0.4)` where the picture needs a beat, such as before a number lands.
 - Use `--phonemes` on a word with more than one reading (resume, lead, read, live, record) and respell it in `say` until the reading is the one you want.
+- Lines that read as machine-written: a "not just this, but that" turn; three one-word sentences in a row; a product told to "unlock" or "meet" something; a figure the brief did not give. Each is right when the picture shows the real contrast it claims.
 
-## Tells to avoid
+## The teaching check
 
-These make a film look generated.
+Fill these five lines in before you write the shots. If one will not fill, the film is not ready.
 
-- A bullet list read aloud word for word. Use `list` with one sentence for each item, or cut to the point.
+1. The one thing: the sentence a viewer could repeat.
+2. The worked example the whole film follows.
+3. The shot where the picture shows the idea, and the kind that draws it.
+4. What the film leaves out.
+5. A question the viewer can answer after the film and could not before.
+
+## Tells every look shares
+
+These make a film look generated. Each look also has tells of its own, and the content it suits, in `references/tells.md`.
+
+- A bullet list read aloud word for word. Use `list` with one sentence for each item, or cut to the point; it is right when the list is the thing being read, such as a checklist the viewer follows.
 - A chart with no highlighted mark, so nothing says what to see.
 - Every shot a `statement`. Mix the kinds: a figure, a picture, a comparison.
 - The same cut on every shot. Let a cut mean something: `match` carries a shared node across, `slide` moves on, a plain `cut` is a change of subject.
 - A closing shot that repeats the opening. End on the ask.
 - Starred words in every line.
-- A look that does not suit the content. `ledger` suits data, `keynote` a product launch, `marker` a whiteboard talk, `cosmos` a science explainer, `poster` a loud claim, `desk` an editorial walk-through, `pop` a fast short.
 
 ## What the review tells you
 
-`make.mjs` reads every shot back after it draws it. A `mechanical` finding is a fault with a path: change that field and run again. A `creative` finding is a call for you. Open the sheets, look at every one, and write what a stranger would see. Measurements outrank the eye. You cannot listen to the audio, so write only what the report printed about it.
+`make.mjs` reads every shot back after it draws it. A `mechanical` finding is a fault with a path: change that field and run again. A `creative` finding is a call for you. Open the sheets, look at every one, and write what a stranger would see. Measurements outrank the eye. You cannot listen to the audio, so write only what the report printed about it. The protocol is in `references/reviewing.md`.
