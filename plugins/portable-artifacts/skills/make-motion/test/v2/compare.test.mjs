@@ -177,27 +177,33 @@ test('with one look drawn, a creative page finding is a note naming the look', (
   assert.deepEqual(notes.map((f) => f.message), [`look "desk": ${NOTE.message}`]);
 });
 
-// R-2: "WebGL was unavailable" is about the machine, not the film or the look. Even with one look drawn it is a note, and it never
-// refuses a cell (it would leave no look and fail the whole comparison).
-const NO_WEBGL = { info: { postNotice: { failed: true, reason: 'no WebGL2 context', dropped: ['grain'] } }, errors: [], blocked: [] };
+// The post pass's two notices (engine/page/post.mjs): a browser with no WebGL2 is `failed: false`, which the review words as a
+// creative `post: ...` note; a shader that would not build (a ShaderError) is `failed: true`, the mechanical "WebGL was unavailable".
+// The first is the machine's and refuses nothing; the second is a real failure of that look's page, so it refuses that look's cell.
+const SHADER_ERROR = { info: { postNotice: { failed: true, reason: 'the shader would not build', dropped: ['grain'] } }, errors: [], blocked: [] };
+const NO_WEBGL2 = { info: { postNotice: { failed: false, reason: 'this browser has no WebGL2', dropped: ['grain'] } }, errors: [], blocked: [] };
 
-test('a machine without WebGL never refuses a cell: one look on a no-WebGL stub keeps its picture and gets a note', () => {
-  const findings = sessionFindings(NO_WEBGL);
-  assert.equal(findings[0].kind, 'mechanical', 'the premise: the review calls it mechanical');
-  const cell = cellOf('desk', findings);
-  const { notes, refused } = settleFindings([cell]);
-  assert.deepEqual(refused, []);
-  assert.equal(cell.status, 'drawn');
-  assert.equal(notes.length, 1);
-  assert.match(notes[0].message, /WebGL was unavailable/);
+test('a shader that fails to build in one look refuses that look\'s cell, and the other looks still draw', () => {
+  const findings = sessionFindings(SHADER_ERROR);
+  assert.equal(findings[0].kind, 'mechanical', 'the premise: the review calls a ShaderError mechanical');
+  const [desk, pop, keynote] = [cellOf('desk', findings), cellOf('pop', []), cellOf('keynote', [])];
+  const { refused } = settleFindings([desk, pop, keynote]);
+  assert.deepEqual(refused.map((c) => c.look), ['desk']);
+  assert.equal(desk.status, 'refused');
+  assert.match(desk.note, /WebGL was unavailable/);
+  assert.deepEqual([pop.status, keynote.status], ['drawn', 'drawn']);
 });
 
-test('with the machine notice and a console error on one look, only the console error refuses it', () => {
-  const both = cellOf('desk', [...sessionFindings(NO_WEBGL), ...sessionFindings({ errors: ['boom'] })]);
-  const { refused, notes } = settleFindings([both, cellOf('pop', sessionFindings(NO_WEBGL))]);
-  assert.deepEqual(refused.map((c) => c.look), ['desk']);
-  assert.match(both.note, /^page: boom/);
-  assert.equal(notes.filter((n) => /WebGL was unavailable/.test(n.message)).length, 1, 'both looks have it, so it is one shared note');
+test('a browser with no WebGL2 is a creative note that refuses nothing, with one look or every look', () => {
+  const findings = sessionFindings(NO_WEBGL2);
+  assert.equal(findings[0].kind, 'creative', 'the premise: the review calls a missing WebGL2 creative');
+  const lone = cellOf('desk', findings);
+  assert.deepEqual(settleFindings([lone]).refused, []);
+  assert.equal(lone.status, 'drawn');
+  const [desk, pop] = [cellOf('desk', findings), cellOf('pop', findings)];
+  const { notes, refused } = settleFindings([desk, pop]);
+  assert.deepEqual(refused, []);
+  assert.equal(notes.length, 1, 'both looks have it: one shared note');
 });
 
 // R-6

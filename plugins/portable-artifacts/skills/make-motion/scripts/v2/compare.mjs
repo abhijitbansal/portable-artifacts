@@ -194,9 +194,9 @@ const keyOf = (finding) => `${finding.kind}\u0000${finding.message}`;
 
 // What the pages said, after every look has been drawn: a finding every look that drew shares (no WebGL, a font; at least two looks
 // drew, or every finding of a lone look would count as shared) is one note,
-// creative whatever it was, and refuses nobody; a page fault one look alone has (a console error, a blocked request: the mechanical
-// findings that start `page: `) refuses that look's cell; any other finding of a single look, the machine's own notice that WebGL
-// was unavailable included, is a note naming the look, never a refusal. -> the notes, as findings; `refused`: the cells.
+// creative whatever it was, and refuses nobody; a mechanical finding one look alone has (a console error, a blocked request, a shader
+// that would not build) refuses that look's cell; a creative one of a single look (a browser with no WebGL2 is one) is a note naming
+// the look. -> the notes, as findings; `refused`: the cells.
 export function settleFindings(cells) {
   const sampled = cells.filter((cell) => cell.status !== 'refused' && cell.pageFindings !== null);
   const shared = sampled.length < 2 ? [] : sampled[0].pageFindings.filter((f) => sampled.every((cell) => cell.pageFindings.some((g) => keyOf(g) === keyOf(f))));
@@ -204,7 +204,7 @@ export function settleFindings(cells) {
   const refused = [];
   for (const cell of sampled) {
     const own = cell.pageFindings.filter((f) => !shared.some((g) => keyOf(g) === keyOf(f)));
-    const mechanical = own.find((f) => f.kind === 'mechanical' && f.message.startsWith(PAGE_PREFIX));
+    const mechanical = own.find((f) => f.kind === 'mechanical');
     if (mechanical !== undefined) {
       refuse(cell, mechanical.message);
       refused.push(cell);

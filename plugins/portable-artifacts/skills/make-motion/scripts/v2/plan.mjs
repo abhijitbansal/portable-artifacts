@@ -10,8 +10,9 @@ import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { shotAtFrame } from '../../engine/review/pacing.mjs';
 import { registries } from '../../engine/registry.mjs';
-import { graphemesOf } from '../../engine/graph/rollup.mjs';
-import { letterStagger } from '../../engine/kinds/shared.mjs';
+import { lookOfShot } from '../../engine/graph/film.mjs';
+import { lettersLanding } from '../../engine/kinds/statement.mjs';
+import { DEFAULT_MODE } from './spec.mjs';
 
 export const PHONE_TILE_WIDTH = 360;
 const START_OFFSET = 0.1;
@@ -59,18 +60,13 @@ function shotMoments(film, timeline, index) {
   }).sort((a, b) => a.frame - b.frame);
 }
 
-// Seconds into the shot at which the last letter of its text is at rest, for a statement in a look whose entrance is `letters`
-// (cosmos), where the word at `t` spoken finishes `letterStagger x (letters - 1)` later; 0 where no letter arrives late: another
-// look or kind, a matched hero, and a mode that reads from frame 0 (they play no letters entrance, engine/kinds/statement.mjs).
+// Seconds into the shot at which the last letter of its text is at rest (the statement kind's own lettersLanding, on the context the
+// kind would get: the look the shot draws with, the film's mode and the timeline's entry of the shot); 0 where no letters play, and
+// without a film to read the look from.
 function lastLanding(film, shot, index) {
-  const look = film !== undefined && registries.looks.has(film.look) ? registries.looks.get(film.look) : null;
-  if (look?.kinds?.statement?.entrance !== 'letters' || !look.moves?.letters) return 0;
-  const { show, cut } = film.shots[index];
-  if (show !== 'statement' || cut === 'match' || registries.modes.get(film.mode)?.hookFromFrameZero === true) return 0;
-  return Math.max(0, ...shot.words.map((w) => {
-    const letters = graphemesOf(w.text).length;
-    return w.start + (letters - 1) * letterStagger(look, letters);
-  }));
+  if (film === undefined) return 0;
+  const ctx = { look: lookOfShot(film, index), mode: registries.modes.get(film.mode ?? DEFAULT_MODE), timing: shot };
+  return lettersLanding(film.shots[index], ctx);
 }
 
 /**

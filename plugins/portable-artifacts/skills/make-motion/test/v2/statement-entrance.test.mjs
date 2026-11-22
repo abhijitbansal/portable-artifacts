@@ -18,7 +18,11 @@ import '../../engine/cuts/index.mjs';
 import { filmOf, expandIn, expandShot, FILLER, FPS, textNode, all, lastKey, near } from './helpers/kinds.mjs';
 import { frameZeroViolations } from './helpers/bar.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { lateFrameOf } from '../../scripts/v2/plan.mjs';
+import { lateFrameOf, planBoard } from '../../scripts/v2/plan.mjs';
+import { loadFilm } from '../../scripts/v2/pipeline.mjs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 const LETTER_LOOK = 'cosmos';
 const LINES_LOOK = 'desk';
@@ -90,7 +94,10 @@ test('letters: a statement ending in a 47-character URL is at rest before its sh
 // R-1: the late frame the compare cell, board tile and phone tile read is the later of the 85% frame and the last landing of the
 // shot's text, still inside the shot. A long statement leaves too little room after its last word for the letters.
 const LONG_LINE = 'Our platform supports internationalization and accessibility for every team that ships software to customers around the world, and accessibility.';
-const frameAt = (film) => lateFrameOf(buildTimeline(film, { fps: FPS }), 0, film);
+const frameAt = (film, index = 0) => lateFrameOf(buildTimeline(film, { fps: FPS }), index, film);
+// the 85% frame of shot `index`, as the pick takes it where nothing lands later
+const at85 = (film, index = 0) => { const s = buildTimeline(film, { fps: FPS }).shots[index]; return Math.round((s.start + 0.85 * s.duration) * FPS); };
+const restOn = (out, frame) => sampledAt(out.nodes, frame / FPS).find((n) => n.id === 's.text').seen.every((word) => word.rest);
 
 test('letters: the late frame of a 7 s cosmos statement waits for "accessibility." to land, and shows it at rest', () => {
   const film = filmOf([{ id: 's', show: 'statement', say: LONG_LINE }], LETTER_LOOK);
@@ -106,8 +113,52 @@ test('letters: the late frame of a 7 s cosmos statement waits for "accessibility
   assert.ok(seen.every((word) => word.rest), 'every word is at rest on the picked frame');
 });
 
+// F-1 of the follow-up review: a statement with `text` and no `say` has no spoken words; its words land at the no-narration times
+// of words.mjs, which the pick must read from the same place the kind does.
+test('a say-less 40-word cosmos statement (hold 4): the picked frame has every word at rest, or is the last frame of the shot', () => {
+  const text = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
+  const film = filmOf([{ id: 's', show: 'statement', hold: 4, text }], LETTER_LOOK);
+  const out = expandIn(film);
+  const last = Math.round(out.timing.duration * FPS) - 1, frame = frameAt(film);
+  const lands = Math.max(...heroOf(out).glyphTracks.flat().map((g) => landsAt(g.opacity)));
+  assert.ok(lands > 0.85 * out.timing.duration, `the premise: the last letter lands at ${lands} s, after 85% of ${out.timing.duration} s`);
+  assert.ok(frame > at85(film), `the pick ${frame} moved past the 85% frame ${at85(film)}`);
+  assert.ok(frame === last || restOn(out, frame), `frame ${frame} (of ${last}) shows every word at rest`);
+  assert.ok(frame <= last);
+});
+
+// F-4: the kind's own conditions. A match cut written as an object plays no letters (resolveCut); the pick keeps the 85% frame.
+test('a shot that arrives on a match cut, written as a name or as an object, keeps the 85% frame', () => {
+  for (const cut of ['match', { type: 'match' }]) {
+    const film = filmOf([FILLER, { id: 's', show: 'statement', say: LONG_LINE, cut }], LETTER_LOOK);
+    assert.equal(heroOf(expandIn(film, 1)).glyphTracks, undefined, 'the premise: a matched hero plays no letters');
+    assert.equal(frameAt(film, 1), at85(film, 1), JSON.stringify(cut));
+  }
+});
+
+test('the board tile of a long cosmos statement is its late frame, with every word at rest', () => {
+  const film = filmOf([{ id: 's', show: 'statement', say: LONG_LINE }], LETTER_LOOK);
+  const timeline = buildTimeline(film, { fps: FPS });
+  const [strip] = planBoard(film, timeline);
+  assert.equal(strip.tiles[0].frame, frameAt(film));
+  assert.ok(strip.tiles[0].frame > at85(film));
+  assert.ok(restOn(expandIn(film), strip.tiles[0].frame));
+});
+
+// F-4: --compare-looks draws an anchor with a failing neighbour alone, as shot 0 of a one-shot film, where letters play.
+test('an anchor drawn alone (index 0 of its own film) counts its letters landing', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mm-late-'));
+  const spec = path.join(dir, 'film.json');
+  writeFileSync(spec, JSON.stringify(filmOf([FILLER, { id: 'b', show: 'statement', say: LONG_LINE }], LETTER_LOOK)));
+  const alone = loadFilm(spec, { only: 'b' });
+  assert.equal(alone.film.shots.length, 1);
+  const frame = lateFrameOf(alone.timeline, 0, alone.film);
+  assert.ok(frame > at85(alone.film), `the pick ${frame} is past the 85% frame ${at85(alone.film)}`);
+  const out = expandIn({ ...alone.film, fps: FPS });
+  assert.ok(sampledAt(out.nodes, frame / FPS).find((n) => n.id === 'b.text').seen.every((word) => word.rest));
+});
+
 test('the late frame stays the 85% frame where nothing lands after it: a short statement, a desk line, a viral hook', () => {
-  const at85 = (film) => Math.round(0.85 * buildTimeline(film, { fps: FPS }).shots[0].duration * FPS);
   for (const film of [
     filmOf([{ id: 's', show: 'statement', say: 'Ship it today.' }], LETTER_LOOK),
     filmOf([{ id: 's', show: 'statement', say: LONG_LINE }], LINES_LOOK),

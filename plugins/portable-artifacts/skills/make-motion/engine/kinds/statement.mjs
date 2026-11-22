@@ -27,7 +27,7 @@ import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes, widerKeyword } from './stack.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
-import { unmarked, opensSet, letterTracks, lineEntrance } from './shared.mjs';
+import { unmarked, opensSet, letterTracks, letterStagger, lineEntrance } from './shared.mjs';
 import { graphemesOf } from '../graph/rollup.mjs';
 
 const TEXT_MAX = 200;
@@ -267,6 +267,31 @@ function entranceOf(ctx, matched) {
   const name = ctx.look.kinds?.statement?.entrance;
   if (name === undefined || matched || ctx.mode.hookFromFrameZero === true || opensSet(ctx.look)) return null;
   return name;
+}
+
+/**
+ * Seconds into the shot at which the last letter of the statement's text is at rest, or 0 where no letters entrance plays
+ * (entranceOf: a matched hero, a mode that reads from frame 0, a look that opens composed, stacks or takes another entrance).
+ * Read from the words, word times and letter counts expandStatement hands letterTracks, with no layout, so the review's late
+ * frame (scripts/v2/plan.mjs) waits for what the kind draws. `ctx` is the kind's own: { look, mode, timing }, the look the shot
+ * draws with and the timeline's entry of the shot. A statement the validator refuses (no words) lands at 0.
+ */
+export function lettersLanding(shot, ctx) {
+  if (shot.show !== 'statement' || ctx.look.composition === 'stack') return 0;
+  if (entranceOf(ctx, arrivesMatched(shot, ctx)) !== 'letters') return 0;
+  let text;
+  try {
+    text = sourceText(shot, ctx.look);
+  } catch (err) {
+    if (err instanceof SayError || err.message.startsWith('statement: shot')) return 0; // the validator reports it
+    throw err;
+  }
+  const texts = wordsOf(text);
+  const times = wordTimes(texts, ctx.timing, cutReveal(shot, ctx));
+  return Math.max(0, ...texts.map((word, i) => {
+    const letters = graphemesOf(word).length;
+    return times[i].at + (letters - 1) * letterStagger(ctx.look, letters);
+  }));
 }
 
 // The glyph or line tracks of an entrance (node options), none for null. Letters: a track map per grapheme of each word,
