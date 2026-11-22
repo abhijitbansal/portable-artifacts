@@ -284,13 +284,17 @@ test('--no-music leaves the cue plan and the timeline of a film with cues as the
   assert.equal(without.report.audio.music.muted, true);
 });
 
-test('--no-music says the film is rendered without its music, once, on the log', async (t) => {
+test('--no-music says what the run did, once, on the log: planned on --no-render, rendered when a video is', async (t) => {
   if (!await mediaTools(t)) return;
   if (!await needsBrowser(t)) return;
-  const lines = [];
-  const { report, exitCode } = await run(snapFilm('snap-nomusic-log'), { noMusic: true }, { log: (line) => lines.push(line) });
-  assert.equal(exitCode, 0, JSON.stringify(report.findings));
-  assert.deepEqual(lines.filter((l) => /--no-music/.test(l)), ['make: --no-music: the film is rendered without its music; its cuts stay where the music put them']);
+  const said = async (name, flags) => {
+    const lines = [];
+    const { report, exitCode } = await run(snapFilm(name), { noMusic: true, ...flags }, { log: (line) => lines.push(line) });
+    assert.equal(exitCode, 0, JSON.stringify(report.findings));
+    return lines.filter((l) => /--no-music/.test(l));
+  };
+  assert.deepEqual(await said('snap-nomusic-log-plan', {}), ['make: --no-music: the film is planned without its music, and this run renders no video; its cuts stay where the music put them']);
+  assert.deepEqual(await said('snap-nomusic-log', { noRender: false }), ['make: --no-music: the film is rendered without its music; its cuts stay where the music put them']);
 });
 
 test('--no-music on a film with no music says there is no music to leave out, once, in a film with and without sound', async (t) => {

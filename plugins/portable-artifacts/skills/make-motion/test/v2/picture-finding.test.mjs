@@ -4,8 +4,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import '../../engine/kinds/index.mjs';
-import { pictureLoadFinding, normalSrc } from '../../scripts/v2/picture-finding.mjs';
+import { pictureLoadFinding, logoThrowFinding, normalSrc } from '../../scripts/v2/picture-finding.mjs';
 import { failureOutcome } from '../../scripts/v2/run.mjs';
+import { startV2Server } from '../../scripts/v2/server.mjs';
+import { buildTimeline } from '../../engine/script/timing.mjs';
+import { tmpdir } from 'node:os';
 
 const loadError = (src, why = 'The source image could not be decoded.') => new Error(`page.evaluate: Error: image "${src}" could not be loaded: ${why}\n    at eval (<anonymous>:1:1)`);
 const FILM = {
@@ -22,7 +25,7 @@ const FILM = {
 test('an undecodable shot picture is one mechanical finding at the field that names it', () => {
   const found = pictureLoadFinding(loadError('assets/photo.png'), FILM);
   assert.deepEqual([found.kind, found.shot, found.path], ['mechanical', null, 'shots[1].src']);
-  assert.equal(found.message, 'the picture "assets/photo.png" could not be loaded (The source image could not be decoded); replace it with a PNG, JPEG or WebP picture');
+  assert.equal(found.message, 'the picture "assets/photo.png" could not be loaded (The source image could not be decoded); replace it with a PNG, JPEG, WebP or GIF picture');
 });
 
 test('an array field names the picture by its index, and a dotted field by its path', () => {
@@ -76,4 +79,28 @@ test('a logo with no size reports at overlays.logo.src, not at the page', () => 
   assert.equal(out.exitCode, 1);
   assert.deepEqual([out.finding.kind, out.finding.path], ['mechanical', 'overlays.logo.src']);
   assert.match(out.finding.message, /^the picture "assets\/logo\.png" has no size \(0 by 0\); it could not be decoded$/);
+});
+
+test('the page\'s internal "no loaded picture" throw is not blamed on the logo file: no finding at overlays.logo.src', () => {
+  const internal = 'overlays.logo.src: no loaded picture for "assets/logo.png"';
+  assert.equal(logoThrowFinding(internal), null);
+  assert.notEqual(logoThrowFinding('overlays.logo.src: the picture "a.png" has no size (0 by 0); it could not be decoded'), null);
+  const thrown = new Error(`page.evaluate: Error: ${internal}\n    at eval (<anonymous>:1:1)`);
+  const out = failureOutcome(thrown, undefined, FILM);
+  // the asset list and the film disagree: the machine's trouble (exit 2, an error), not a finding on the film
+  assert.equal(out.exitCode, 2);
+  assert.equal(out.finding, undefined);
+  assert.match(out.error.message, /no loaded picture/);
+});
+
+test('a logo that pushes a film past 64 images is named in the error: it counts', async () => {
+  const shots = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, show: 'media', src: `assets/missing-${i}.png`, hold: 1 }));
+  const serve = (film) => startV2Server({ film, timeline: buildTimeline(film, { fps: 30 }), specDir: tmpdir() });
+  const withLogo = { version: 2, fps: 30, overlays: { logo: { src: 'assets/logo.png' } }, shots: shots(64) };
+  await assert.rejects(() => serve(withLogo), /a film may use at most 64 images; this one names 65 \(the logo counts as one\)/);
+  await assert.rejects(() => serve({ version: 2, fps: 30, shots: shots(65) }), (err) => /this one names 65$/.test(err.message));
+});
+
+test('the message that lists the picture types names GIF, which a film accepts', () => {
+  assert.match(pictureLoadFinding(loadError('assets/photo.png'), FILM).message, /replace it with a PNG, JPEG, WebP or GIF picture$/);
 });

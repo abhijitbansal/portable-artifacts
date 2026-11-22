@@ -45,7 +45,6 @@ const HINTS = Object.freeze([
   [/has been closed/, 'the browser closed while drawing the film; run again'],
   [/^Timeout \d+ms exceeded/, 'the browser did not answer in time; run again, and check that the machine is not overloaded'],
   [/^image ".*" could not be loaded: HTTP \d+/, 'the page server could not read the picture; check that the file is still in the film folder, and run again'],
-  [/^image ".*" could not be loaded/, 'the file is not a picture the browser can decode; replace it with a PNG, JPEG or WebP image'],
 ]);
 
 /** { message, hint } for an error's first line: whole with its hint when HINTS knows it (a path in it may hold ". "),

@@ -2,10 +2,10 @@
 // for a film with sound: cues planned from its events, a bed fitted to its cuts, a music file checked), review (the
 // sheets and the audit), render. One browser session serves review and render. runMake always returns a report
 // (report.mjs) and an exit code: 0 ok, 1 not ok (the film does not validate, its anchors fall outside their shots on
-// its measured timeline, a mechanical finding exists, or the page raised an error about it), 2 for trouble with the
-// machine (a missing film file, a voice that cannot be made, no browser, no ffmpeg, ffmpeg failing, a crashed or closed
-// browser page, a timeout, a lost WebGL context, a picture the browser cannot decode: `report.error` says which and how
-// to fix it),
+// its measured timeline, a mechanical finding exists (a picture the browser cannot decode is one, at the path that names
+// it), or the page raised an error about it), 2 for trouble with the machine (a missing film file, a voice that cannot be
+// made, no browser, no ffmpeg, ffmpeg failing, a crashed or closed browser page, a timeout, a lost WebGL context, a picture
+// the server failed to serve: HTTP n: `report.error` says which and how to fix it),
 // 130 when stopped through `signal`. What was done before a stop stays in the report. It always closes what it opened,
 // never prints to stdout and never waits for input.
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -564,19 +564,29 @@ async function execute(options, state, io) {
 const clipCacheDir = (options) => path.join(path.dirname(outputPaths(options).out), '.clips');
 
 const NO_MUSIC_LINE = 'make: --no-music: the film is rendered without its music; its cuts stay where the music put them';
+const NO_MUSIC_PLANNED_LINE = 'make: --no-music: the film is planned without its music, and this run renders no video; its cuts stay where the music put them';
 const NO_MUSIC_NONE_LINE = 'make: --no-music: the film has no music; nothing to leave out';
+
+/** Does the run render a video? Not with --no-render or --sheets-only, nor for a slice (--shot, --range: sheets and a review). */
+export const rendersVideo = (options) => !options.noRender && !isSlice(options);
+
+/** The log line --no-music prints, by what the run did: `muted` (the film had music to leave out), `renders` (rendersVideo). */
+export const noMusicLine = ({ muted, renders }) => {
+  if (!muted) return NO_MUSIC_NONE_LINE;
+  return renders ? NO_MUSIC_LINE : NO_MUSIC_PLANNED_LINE;
+};
 
 // The sound stage, the subtitles, then the page's stages (review, render).
 async function soundReviewRender({ options, loaded, timeline, made, clips, state, io }) {
   const { film, specDir } = loaded;
   const sounded = wantsSound(film, clips);
   // The cue and bed WAVs live in a work folder of this run only, removed on every way out of it.
-  const renders = !options.noRender && !isSlice(options); // a slice makes sheets and a review, no video (its MP4 is a later step)
+  const renders = rendersVideo(options); // a slice makes sheets and a review, no video (its MP4 is a later step)
   const work = sounded && renders ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
   try {
     const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips, { noMusic: options.noMusic === true }) : { sound: null };
     if (planned === null) return;
-    if (options.noMusic === true) io.log(planned.mutedMusic ? NO_MUSIC_LINE : NO_MUSIC_NONE_LINE);
+    if (options.noMusic === true) io.log(noMusicLine({ muted: Boolean(planned.mutedMusic), renders }));
     // --subtitles: the caption file from the timeline the film is drawn with (after music.snap), before the browser starts
     if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out, level: options.subtitleWords ? 'word' : 'sentence' });
     if (renders) await findFfmpeg(); // fail before the browser starts, naming how to fix it

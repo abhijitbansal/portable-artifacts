@@ -206,7 +206,9 @@ function distinctSrcs(film) {
   }
   const logo = film.overlays?.logo?.src;
   if (typeof logo === 'string' && !seen.has(logo)) seen.set(logo, 'overlays.logo');
-  if (seen.size > MAX_IMAGES) throw new Error(`a film may use at most ${MAX_IMAGES} images; this one names ${seen.size}`);
+  // the logo is one of the images when no shot names the same file: say so, as it is the film's one picture outside its shots
+  const logoCounts = seen.get(logo) === 'overlays.logo';
+  if (seen.size > MAX_IMAGES) throw new Error(`a film may use at most ${MAX_IMAGES} images; this one names ${seen.size}${logoCounts ? ' (the logo counts as one)' : ''}`);
   return seen;
 }
 

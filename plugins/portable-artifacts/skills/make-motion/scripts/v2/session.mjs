@@ -19,7 +19,8 @@ const PAGE_THROWN = /^page\.evaluate: Error: ([^\n]*)/;
 // Thrown on purpose by the page but not the film's fault: a WebGL context lost or broken (engine/page/post.mjs), and a
 // picture the server failed to serve (engine/page/stage.mjs: HTTP <n>). A picture the browser cannot decode is the film's
 // own file: a finding at the path that names it (scripts/v2/picture-finding.mjs).
-const NOT_THE_FILM = /^(?:post pass: |image ".*" could not be loaded: HTTP \d+)/;
+// The page's own `overlays.logo.src: no loaded picture` is one too: the asset list and the film disagree, whatever the file.
+const NOT_THE_FILM = /^(?:post pass: |image ".*" could not be loaded: HTTP \d+|overlays\.logo\.src: no loaded picture)/;
 // Playwright's call prefix ("page.evaluate: ") and an error class name before the message.
 const CALL_PREFIX = /^(?:(?:page|frame|browser|browserContext|locator)\.\w+: )?(?:[A-Za-z]*Error: )?/;
 

@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE } from './helpers/session.mjs';
 import { FLAGS, REMOVED_FLAGS, parseMakeArgs } from '../../scripts/v2/cli.mjs';
+import { noMusicLine, rendersVideo } from '../../scripts/v2/run.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { ACCEPTED_VOICES } from '../../scripts/v2/voice/kokoro.mjs';
 import { requirementsFor } from '../../scripts/lib/requirements.mjs';
@@ -130,6 +131,21 @@ test('--no-music does not go with --outline, --phonemes, --poster, --poster-out,
   for (const other of [['--outline'], ['--phonemes'], ['--poster', '2'], ['--poster', '2', '--poster-out', 'p.png'], ['--inspect', '2'], ['--preview']]) {
     assert.throws(() => parseMakeArgs([FILM, '--no-music', ...other]), (err) => err instanceof UsageError && /does not go with/.test(err.message) && err.message.includes('--no-music'), other.join(' '));
   }
+});
+
+test('the --no-music log line says what the run did: rendered only when a video is, planned otherwise', () => {
+  const lineFor = (...flags) => {
+    const options = parseMakeArgs([FILM, '--no-music', ...flags]);
+    return noMusicLine({ muted: true, renders: rendersVideo(options) });
+  };
+  assert.match(lineFor(), /the film is rendered without its music/);
+  for (const flags of [['--no-render'], ['--sheets-only'], ['--shot', 'a'], ['--range', '0..1']]) {
+    const line = lineFor(...flags);
+    assert.doesNotMatch(line, /rendered/, flags.join(' '));
+    assert.match(line, /the film is planned without its music/, flags.join(' '));
+    assert.match(line, /cuts stay where the music put them/, flags.join(' '));
+  }
+  assert.equal(noMusicLine({ muted: false, renders: false }), 'make: --no-music: the film has no music; nothing to leave out');
 });
 
 // ---- Step 1 (c): the voices the validator accepts can be listed ----

@@ -2,7 +2,9 @@
 // decode stops it with `image "<src>" could not be loaded: <why>`. The file is the film's, so the run reports a mechanical
 // finding (exit 1) at the path that names it (`shots[i].<field>`, `overlays.logo.src`), as a picture that is missing or outside
 // the film folder already is. A load the server failed (`HTTP <n>`) is the machine's: the error stays an exit 2.
-// A logo with no size (it decoded to nothing) is the page's own `overlays.logo.src: ...` throw, put at the same path.
+// A logo with no size (it decoded to nothing) is the page's own `overlays.logo.src: the picture "<src>" has no size ...`
+// throw, put at the same path. The page's other `overlays.logo.src: ...` throw (no loaded picture: the asset list and the film
+// disagree) is not the file's fault and is not put there.
 import path from 'node:path';
 import { registries } from '../../engine/registry.mjs';
 import { fieldAt } from '../../engine/assets.mjs';
@@ -12,7 +14,7 @@ import { machineMessage } from './session.mjs';
 const LOGO_PATH = 'overlays.logo.src';
 const LOAD_FAILURE = /^image "(.*)" could not be loaded(?:: (.*))?$/;
 const SERVER_FAILURE = /^HTTP \d+/;
-const LOGO_THROW = new RegExp(`^${LOGO_PATH.replaceAll('.', '\\.')}: (.*)$`);
+const LOGO_THROW = new RegExp(`^${LOGO_PATH.replaceAll('.', '\\.')}: (the picture ".*" has no size.*)$`);
 
 /** A src as one file: `./assets/logo.png` and `assets/logo.png` are the same picture. */
 export const normalSrc = (src) => path.posix.normalize(src);
@@ -52,10 +54,10 @@ export function pictureLoadFinding(err, film) {
   const at = ownersOf(film).get(normalSrc(src));
   if (at === undefined) return null;
   const why = reason.replace(/\.$/, '');
-  return finding(at, `the picture "${src}" could not be loaded${why === '' ? '' : ` (${why})`}; replace it with a PNG, JPEG or WebP picture`);
+  return finding(at, `the picture "${src}" could not be loaded${why === '' ? '' : ` (${why})`}; replace it with a PNG, JPEG, WebP or GIF picture`);
 }
 
-/** The finding for the page's own `overlays.logo.src: <what is wrong>` throw (a logo with no size), at that path; else null. */
+/** The finding for the page's own `overlays.logo.src: the picture "<src>" has no size ...` throw, at that path; else null. */
 export function logoThrowFinding(pageMessage) {
   const match = LOGO_THROW.exec(pageMessage);
   return match === null ? null : finding(LOGO_PATH, match[1]);
