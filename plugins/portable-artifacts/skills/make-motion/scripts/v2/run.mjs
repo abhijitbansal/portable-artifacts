@@ -535,6 +535,8 @@ async function execute(options, state, io) {
   // --poster and --inspect: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.
   const reference = options.poster ?? options.inspect;
   if (typeof reference === 'string') filmSeconds(reference, film, loaded.timeline); // the timeline loadFilm built: estimated for a voiced film
+  // a film with no voice and no music.snap is drawn on exactly that timeline: a time past its end is refused now, before a clip is decoded
+  if (typeof reference === 'string' && film.voice === undefined && film.music?.snap !== true) filmFrame(reference, film, loaded.timeline, typeof options.inspect === 'string' ? '--inspect' : '--poster');
   checkSlice(options, film, loaded.timeline); // --shot and --range likewise: a shot the film lacks, a reference that names nothing
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
   const voiced = film.voice !== undefined && options.outline !== true;

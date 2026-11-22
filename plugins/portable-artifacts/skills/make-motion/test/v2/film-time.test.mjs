@@ -3,14 +3,15 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE } from './helpers/session.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
-import { FilmTimeError, filmFrame, filmSeconds, wholeFilmShot } from '../../scripts/v2/film-time.mjs';
+import { FilmTimeError, filmFrame, filmSeconds } from '../../scripts/v2/film-time.mjs';
+import { wholeFilmShot } from '../../engine/script/film-anchor.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FPS = 30;
@@ -81,6 +82,13 @@ test('wholeFilmShot: the film as one shot, its words as heard', () => {
   assert.equal(whole.duration, shiftedTimeline.duration);
   assert.equal(whole.words.length, shiftedTimeline.shots.flatMap((s) => s.words).length);
   near(whole.words[3].start, shiftedTimeline.shots[1].start - 0.5);
+});
+
+test('the sound layer reads the whole-film shot from the engine, and imports no CLI mode (film-time.mjs reaches poster.mjs)', () => {
+  const cues = readFileSync(path.resolve(HERE, '../../../scripts/v2/sound/cues.mjs'), 'utf8');
+  const imports = [...cues.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
+  assert.ok(imports.includes('../../../engine/script/film-anchor.mjs'), imports.join(', '));
+  assert.deepEqual(imports.filter((spec) => /film-time|poster|cli\.mjs|run\.mjs|make\.mjs/.test(spec)), []);
 });
 
 test('an unknown shot lists the shots and the forms', () => {

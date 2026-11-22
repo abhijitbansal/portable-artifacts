@@ -13,7 +13,7 @@ import { outlineText } from '../../scripts/v2/report.mjs';
 import { RULES } from '../../engine/review/rules.mjs';
 import { COMPOSITION_RULES } from '../../engine/review/frame.mjs';
 import {
-  MIN_SEAMS, REPEATED_CUT_SHARE, SAME_RUN, CREATIVE_CAP, CAPPED_HERE, cutVarietyFindings, samenessFindings, outlineFindings, capCreative,
+  MIN_SEAMS, REPEATED_CUT_SHARE, SAME_RUN, CREATIVE_CAP, CAPPED_HERE, cutVarietyFindings, samenessFindings, outlineFindings, capCreative, cutPath,
 } from '../../engine/review/outline.mjs';
 
 const FPS = 30;
@@ -59,6 +59,15 @@ test('a film with no cut named at all (the hard cut everywhere) is not a finding
 test('a root cut that every seam takes is found at "cut", on the first shot that uses it', () => {
   const [f] = cutsOf(film([null, null, null, null, null], [], { cut: 'slide' }));
   assert.equal(f.path, 'cut'); assert.equal(f.shot, 's1'); assert.equal(f.node, 'slide');
+});
+
+test('the path of a cut finding: the shot\'s own cut, or the root cut only when the film names one (a cut the look picks is set on the shot)', () => {
+  const own = film(['slide', null, null]); // shot 1 names its cut; shots 2 and 3 take the film's or the look's
+  assert.equal(cutPath(own, 1), 'shots[1].cut');
+  assert.equal(cutPath(own, 2), 'shots[2].cut', 'no root cut: the repeated cut is the look\'s pick, so the shot is where to change it');
+  const rooted = film([null, null, null], [], { cut: 'slide' });
+  assert.equal(cutPath(rooted, 2), 'cut', 'a root cut that the shot takes is changed at the root');
+  assert.equal(cutPath(film(['crossfade', null, null], [], { cut: 'slide' }), 1), 'shots[1].cut');
 });
 
 test('three shots of one kind running is a finding at the third; two is not', () => {

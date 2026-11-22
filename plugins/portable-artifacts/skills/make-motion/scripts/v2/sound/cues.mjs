@@ -6,7 +6,7 @@ import { validateLook } from '../../../engine/looks/index.mjs';
 import '../../../engine/modes/index.mjs';
 import { anchorSeconds, AnchorError } from '../../../engine/script/anchors.mjs';
 import { DEFAULT_MODE } from '../spec.mjs';
-import { wholeFilmShot } from '../film-time.mjs';
+import { wholeFilmShot } from '../../../engine/script/film-anchor.mjs';
 import { soundEvents } from './events.mjs';
 import { KNOWN_CUES } from './synth.mjs';
 

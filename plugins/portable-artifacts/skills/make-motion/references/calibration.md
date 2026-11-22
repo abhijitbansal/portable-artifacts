@@ -54,9 +54,9 @@ Removed from the "reads empty" set after viewing: `look-cosmos` `giants` (empty 
 
 ## The outline rules, `cut-variety` and `sameness`
 
-Both rules read the spec alone, so the table is a run of `node scripts/make.mjs references/examples/v2/<film>.json --outline --json` on every example film (29 films), counting the findings of each rule before any cap (`sameness` is capped at 2 a film for each of its three forms, kind, cut and move, which no example reaches). The constants are `MIN_SEAMS` 4 (a film with fewer cuts is never judged: three cuts make any one of them "more than two thirds"), `REPEATED_CUT_SHARE` 2/3 and `SAME_RUN` 3, in `engine/review/outline.mjs`. The plain `cut` has no window and never counts as the repeated cut.
+Both rules read the spec alone, so the table is a run of `node scripts/make.mjs references/examples/v2/<film>.json --outline --json` on every example film (29 films), counting the findings of each rule before any cap (`sameness` is capped at 2 a film for each of its three forms, kind, cut and move, which two examples reach, `cuts-pop` and `whats-new`, each with 2 findings of the kind form, and none exceeds). The constants are `MIN_SEAMS` 4 (a film with fewer cuts is never judged: three cuts make any one of them "more than two thirds"), `REPEATED_CUT_SHARE` 2/3 and `SAME_RUN` 3, in `engine/review/outline.mjs`. The plain `cut` has no window and never counts as the repeated cut.
 
-The bound is the one the composition rules use: if more than a third of the films were flagged, the rule would teach the agent to ignore it. Result: `cut-variety` flags 0 of 29 films, `sameness` flags 4 of 29 (14%), so both stay.
+The bound is the one the composition rules use: if more than a third of the films were flagged, the rule would teach the agent to ignore it. Result: `cut-variety` flags 0 of 29 films, `sameness` flags 4 of 29 (14%), so both stay. Only `sameness` is measured by this table: no example flags `cut-variety`, so its 2/3 share is the plan's number, listed as `unmeasured` in the rules page.
 
 | Film | Shots | `cut-variety` | `sameness` | Which |
 |---|---|---|---|---|

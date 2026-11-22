@@ -10,9 +10,9 @@
 // An anchor is start, end, word:<n>, word:<text> or sentence:<n>, with an optional +<s> or -<s> (engine/script/anchors.mjs).
 // Pure: no clock, no randomness, no browser.
 import { AnchorError, anchorSeconds, echoValue } from '../../engine/script/anchors.mjs';
+import { wholeFilmShot } from '../../engine/script/film-anchor.mjs';
 import { posterFrame } from './poster.mjs';
 
-const FILM_SHOT_ID = 'film';
 const NUMBER_RE = /^\d+(\.\d+)?$/;
 const SHOT_SEPARATOR = '@';
 const END_ZERO_RE = /^end(?:[+-](?:0+(?:\.0+)?|\.0+))?$/; // "end", or "end" with an offset of zero
@@ -27,22 +27,6 @@ export class FilmTimeError extends Error {
     this.hint = `use a number of seconds, "<shot-id>", "<shot-id>@<anchor>" or a film-wide anchor; the shots are: ${shotIds.join(', ')}; `
       + 'an anchor is start, end, word:<n>, word:<text> or sentence:<n>, with an optional +<s> or -<s>';
   }
-}
-
-/**
- * The whole film as one shot, for a film-level anchor: word and sentence indexes count across the film, in film seconds.
- * Each word as it is heard (soundStart, soundEnd), in film seconds; a sentence from its first word's heard start to its
- * last word's heard end. A cue is a sound, so it follows the voice, not the picture's start for a shot's first word.
- */
-export function wholeFilmShot(timeline) {
-  const heard = (s) => s.words.map((w) => ({ ...w, start: s.start + (w.soundStart ?? w.start), end: s.start + (w.soundEnd ?? w.end) }));
-  const sentences = (s, words) => s.sentences.map((x) => ({ ...x, start: words[x.first]?.start ?? s.start + x.start, end: words[x.last]?.end ?? s.start + x.end }));
-  return {
-    id: FILM_SHOT_ID,
-    duration: timeline.duration,
-    words: timeline.shots.flatMap(heard),
-    sentences: timeline.shots.flatMap((s) => sentences(s, heard(s))),
-  };
 }
 
 const shotIdsOf = (film, timeline) => (film?.shots ?? timeline.shots).map((s) => s.id);

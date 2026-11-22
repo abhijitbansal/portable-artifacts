@@ -3,6 +3,10 @@
 // inspect-browser.test.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { HERE } from './helpers/session.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { inspectNodes } from '../../engine/review/inspect-nodes.mjs';
@@ -13,6 +17,7 @@ import { registries } from '../../engine/registry.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { cutAt } from '../../scripts/v2/inspect.mjs';
 import { safeRectFor } from '../../scripts/v2/review.mjs';
+import { runMake } from '../../scripts/v2/run.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
 const FPS = 30;
@@ -202,6 +207,28 @@ test('a time past the end is worded under the flag it came from', () => {
   const timeline = buildTimeline(film, { fps: FPS });
   assert.throws(() => filmFrame('40', film, timeline), /^Error: --poster 40: past the end \(the film is 2\.0 s\)/);
   assert.throws(() => filmFrame('40', film, timeline, '--inspect'), /^Error: --inspect 40: past the end \(the film is 2\.0 s\)/);
+});
+
+test('on a silent film with a clip a time past the end is refused before the clip is decoded, so it needs no ffmpeg to be said', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mm-inspect-clip-'));
+  const saved = { path: process.env.PATH, ffmpeg: process.env.FFMPEG_PATH };
+  try {
+    copyFileSync(path.resolve(HERE, '../../../references/examples/v2/media-clip.mp4'), path.join(dir, 'clip.mp4'));
+    const specPath = path.join(dir, 'film.json');
+    writeFileSync(specPath, JSON.stringify({ version: 2, mode: 'pro', fps: FPS, shots: [{ id: 'reel', show: 'media', src: 'clip.mp4', hold: 1 }] }));
+    process.env.PATH = '/nonexistent'; // the clip decode looks ffmpeg up on PATH: if it ran first, its error would be said, not the length
+    delete process.env.FFMPEG_PATH;
+    for (const flag of [{ inspect: '999' }, { poster: '999' }]) {
+      const { report, exitCode } = await runMake({ specPath, out: null, ...flag });
+      assert.equal(exitCode, 2, JSON.stringify(flag));
+      assert.match(report.error.message, /past the end \(the film is 1\.0 s\)/, JSON.stringify(flag));
+    }
+    assert.equal(existsSync(path.join(dir, 'out')), false, 'nothing was written');
+  } finally {
+    process.env.PATH = saved.path;
+    if (saved.ffmpeg !== undefined) process.env.FFMPEG_PATH = saved.ffmpeg;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('--inspect takes a film time and reads as the mode it is', () => {

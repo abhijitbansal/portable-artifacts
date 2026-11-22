@@ -117,7 +117,9 @@ test('[R2-12] every rule states its evidence, and every creative rule asks a que
     assert.ok(['measured', 'convention', 'unmeasured'].includes(rule.evidence), rule.id);
     assert.equal(rule.kinds.includes('creative'), typeof rule.ask === 'string' && rule.ask.endsWith('?'), rule.id);
   }
-  assert.deepEqual(RULES.filter((r) => r.evidence === 'measured').map((r) => r.id).sort(), ['cut-variety', 'dead-space', 'sameness', 'scale-contrast']);
+  // cut-variety is not here: no example film is flagged by it, so its 2/3 share is the plan's number (references/calibration.md)
+  assert.deepEqual(RULES.filter((r) => r.evidence === 'measured').map((r) => r.id).sort(), ['dead-space', 'sameness', 'scale-contrast']);
+  assert.equal(ruleOf('cut-variety').evidence, 'unmeasured');
   assert.deepEqual(RULES.filter((r) => r.evidence === 'convention').map((r) => r.id), ['contrast']);
   for (const row of docRows()) {
     assert.equal(row.evidence.split(':')[0], ruleOf(row.id).evidence, row.id);

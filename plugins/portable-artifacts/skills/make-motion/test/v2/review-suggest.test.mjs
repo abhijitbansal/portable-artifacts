@@ -9,6 +9,7 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { contrastRatio, nearestPassing } from '../../engine/review/contrast.mjs';
 import { RULES, SUGGEST_KEYS } from '../../engine/review/rules.mjs';
+import { minSizeSuggest } from '../../engine/review/suggest.mjs';
 import { safeRectFor, dedupeFindings } from '../../scripts/v2/review.mjs';
 import { reviewFinding } from '../../scripts/v2/report.mjs';
 
@@ -113,6 +114,16 @@ test('the factor rounds up, so scaling by it reaches the floor', () => {
   const [f] = ruled(auditFrame(treeWith({ sizeUnits: 27 }), ctxWith()), 'min-size');
   assert.equal(f.suggest.factor, 1.04); // 28 / 27 = 1.0370..., up to 2 decimals
   assert.ok(27 * f.suggest.factor >= 28);
+});
+
+test('a word with no size has no factor to reach the floor: the key is left out, so the JSON never says null', () => {
+  for (const smallest of [0, -1, NaN]) {
+    const suggest = minSizeSuggest(28, smallest);
+    assert.deepEqual(suggest, { minSize: 28 }, `smallest ${smallest}`);
+    assert.deepEqual(JSON.parse(JSON.stringify(suggest)), { minSize: 28 });
+  }
+  const [f] = ruled(auditFrame(treeWith({ sizeUnits: 0 }), ctxWith()), 'min-size');
+  if (f !== undefined) assert.ok(!('factor' in f.suggest) || Number.isFinite(f.suggest.factor), JSON.stringify(f.suggest));
 });
 
 test('the report keeps rule and suggest, and drops node and role', () => {

@@ -17,8 +17,12 @@ export const CAPPED_HERE = Object.freeze(['cut-variety', 'sameness']);
 
 const SHARE_EPSILON = 1e-9;
 
-/** `cut` on the film, or on the shot that names it: where the author changes a cut (a shot with no cut of its own takes the film's, or the look's pick). */
-const cutPath = (film, index) => (film.shots[index].cut === undefined ? 'cut' : `shots[${index}].cut`);
+/**
+ * Where the author changes shot `index`'s cut: its own `cut`, or the root `cut` when the shot has none and the film names
+ * one (every such shot takes it). With no root cut the shot's cut is the look's pick, and the shot's own `cut` is the field
+ * to set: a root `cut` the film does not have would give every seam that cut.
+ */
+export const cutPath = (film, index) => (film.shots[index].cut === undefined && film.cut !== undefined ? 'cut' : `shots[${index}].cut`);
 
 /** The cuts the look allows but `name`: what a finding suggests in its place. */
 const cutsInstead = (film, name) => (filmLook(film)?.cuts ?? []).filter((cut) => cut !== name);
