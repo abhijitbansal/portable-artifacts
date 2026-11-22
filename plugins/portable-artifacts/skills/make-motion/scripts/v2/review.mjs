@@ -457,10 +457,11 @@ export function capComposition(findings, cap = COMPOSITION_CAP) {
 
 /**
  * The film's review findings: every audit moment is snapshotted and judged, and the film-wide rules run. With `slice`
- * (slice.mjs: --shot, --range) the audit frames of every shot it touches are snapshotted, as the full run does, but only
- * those inside it are judged; what is read across a shot (rest scales, `match`, `unsettled`) reads the same frames, and a
- * finding is reported only when its time is inside the slice, so the result is the full review's, cut down to the slice.
- * `still` is read over the slice's frames alone, and `loop`, `cut-variety` and `sameness` (slice.SLICE_SKIPPED) are not run.
+ * (slice.mjs: --shot, --range) every audit frame of each shot it touches is snapshotted and judged, as the full run does (so
+ * rest scales, the findings kept once per shot, `match` and `unsettled` are the full run's), and only the findings whose
+ * time is inside the slice are reported: the result is the full review cut down to the slice, but for the caps, which count
+ * the findings of the touched shots. `still` is read over the slice's frames alone, and `loop`, `cut-variety` and
+ * `sameness` (slice.SLICE_SKIPPED) are not run.
  * @param {{ session: object, signal?: AbortSignal, slice?: object | null }} opts session from openSession
  * @returns {Promise<{ kind: 'mechanical' | 'creative', shot: string, path: string, message: string, t: number, rule: string, node: string }[]>}
  */
@@ -468,11 +469,9 @@ export async function reviewFilm({ session, signal, slice = null }) {
   const { film, timeline } = session;
   const planned = slice === null ? null : sliceAuditPlan(film, timeline, slice);
   const snapshots = await snapshotsOf(session, auditPlan(film, timeline, planned?.map((p) => p.frame)), signal);
-  const judgedFrames = planned === null ? null : new Set(planned.filter((p) => p.judged).map((p) => p.frame));
-  const judged = judgedFrames === null ? snapshots : snapshots.filter((snap) => judgedFrames.has(snap.frame));
   const restingOf = restingByShot(timeline, snapshots, captionsHoldRoom(film));
   const backgrounds = session.info?.backgrounds ?? [];
-  const audited = judged.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
+  const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
   const deduped = capComposition(dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots));
   const still = pacingFindings(film, timeline, await heldFlags(session, signal, slice));
   const loop = slice === null ? await loopFindings(session) : []; // root loop: true (loop.mjs)

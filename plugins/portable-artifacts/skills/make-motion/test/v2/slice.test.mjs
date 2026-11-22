@@ -223,7 +223,8 @@ test('a backwards range is refused before the voice when its references are in d
       assert.deepEqual([calls, exitCode], [[], 2], backwards);
       assert.match(report.error.message, /--range takes <from>\.\.<to>/, backwards);
     }
-    for (const waits of ['hook@1..hook@0.5', 'rows@end+3..hook', 'rows..rows@0.5', '0..99']) {
+    // a plain seconds anchor is not clamped to its shot: `hook@3` may lie in a later shot, so `rows..hook@3` is a valid range
+    for (const waits of ['hook@1..hook@0.5', 'rows@end+3..hook', 'rows..rows@0.5', '0..99', 'rows..hook@3', 'rows..hook@99']) {
       assert.deepEqual((await run(waits)).calls, ['voice'], `${waits}: the order or the length needs the measured timeline`);
     }
   } finally {
@@ -326,7 +327,7 @@ test('without a slice reviewFilm still snapshots every audit moment and asks the
   assert.deepEqual(calls.held, [[0, 149], [150, 179]], 'in chunks of 150 frames');
 });
 
-test('a frame that is only snapshotted for its shot\'s rest is not judged: a small card judged at b\'s last frame says nothing when the slice ends before it', async () => {
+test('a finding on a frame outside the slice is not reported: a small card judged at b\'s last frame says nothing when the slice ends before it', async () => {
   const small = [bar('card', [864, 486, 192, 108])]; // dead-space and scale-contrast at a shot's resting frame
   const full = await reviewFilm({ session: recordingSession(film, small).session });
   assert.ok(full.some((f) => f.shot === 'b' && (f.rule === 'dead-space' || f.rule === 'scale-contrast')), 'control: the full review judges b');
@@ -408,18 +409,67 @@ test('a match compares the incoming shot\'s first frame drawn alone, even when t
   assert.deepEqual(await found(differsAtFirstSharesAtEnd, ends), ['b'], 'the slice finds it too');
 });
 
-test('a finding about a frame outside the slice is not reported: cut-window, kind and hook are kept by their time', async () => {
-  const wide = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [
-    { id: 'a', show: 'free', hold: 2 },
-    { id: 'b', show: 'free', hold: 2, cut: { type: 'slide', duration: 1.5 } },
-    { id: 'c', show: 'free', hold: 2 },
-  ] };
-  const tl = buildTimeline(wide, { fps: FPS });
+// A text node as annotate() reports it (see review.test.mjs textNode): enough for the frame rules and the hook rule.
+const ASCENT = 0.9, DESCENT = 0.25;
+function textNode({ id = 't', size = 44, x = 200, y = 300, words = 3, scale = 1, wordOpacity = 1, role } = {}) {
+  const lines = [{ x: 0, y: size * ASCENT, width: words * size * 2, words: Array.from({ length: words }, (_, k) => ({ text: 'word', index: k, x: k * size * 2, width: size * 2 })) }];
+  const width = words * size * 2, height = lines[0].y + size * DESCENT;
+  return {
+    type: 'text', id, depth: 0, props: role === undefined ? {} : { role }, x, y, scale, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: [],
+    words: Array.from({ length: words }, () => ({ opacity: wordOpacity, x: 0, y: 0, scale: 1 })),
+    layout: { size, width, height, overflow: false, lines }, bbox: [x, y, width * scale, height * scale], spread: 0,
+  };
+}
+
+const wideFilm = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [
+  { id: 'a', show: 'free', hold: 2 },
+  { id: 'b', show: 'statement', say: 'Most dashboards can\'t tell you *where a number came from*.', hold: 2, cut: { type: 'slide', duration: 3 } }, // b lasts 5.2 s (its say): a 3 s window is more than half of it
+  { id: 'c', show: 'free', hold: 2 },
+] };
+
+test('a finding about a frame outside the slice is not reported: cut-window and a kind\'s finding are kept by their time', async () => {
+  const tl = buildTimeline(wideFilm, { fps: FPS });
   const tree = [bar('block', [96, 96, 1728, 800])];
-  const rules = async (spec) => (await reviewFilm({ session: recordingSession(wide, tree).session, slice: sliceOf(spec, wide, tl) })).map((f) => `${f.rule}@${f.t}`);
-  assert.ok((await rules({ shot: 'b' })).includes('cut-window@2'), 'control: the window opens at 2.0 s, inside the shot');
-  assert.deepEqual((await rules({ range: 'b@1..b@1.5' })).filter((r) => r.startsWith('cut-window')), [], 'b\'s window opened at 2.0 s, before frame 90');
-  assert.deepEqual((await rules({ range: 'b@1..b@1.5' })).filter((r) => r.startsWith('hook')), []);
+  const rules = async (spec) => (await reviewFilm({ session: recordingSession(wideFilm, tree).session, slice: sliceOf(spec, wideFilm, tl) })).map((f) => `${f.rule}@${f.t}`);
+  const whole = await rules({ shot: 'b' });
+  assert.ok(whole.includes('cut-window@2'), 'control: the window opens at 2.0 s, inside the shot');
+  assert.ok(whole.includes('kind@2'), 'control: the statement\'s emphasis finding is at the shot\'s say, 2.0 s');
+  const later = await rules({ range: 'b@1..b@1.5' });
+  assert.deepEqual(later.filter((r) => r.startsWith('cut-window') || r.startsWith('kind')), [], 'both are about frame 60, before frame 90');
+});
+
+test('the hook finding belongs to frame 0: a slice that starts after it does not report it', async () => {
+  const viral = { version: 2, mode: 'viral', fps: FPS, shots: [{ id: 'a', show: 'statement', text: 'Hello there friend', hold: 2 }, { id: 'b', show: 'statement', text: 'Second one', hold: 2 }] };
+  const tl = buildTimeline(viral, { fps: FPS });
+  const hidden = (frame) => [textNode({ id: 'hero', role: 'hero', size: 132, wordOpacity: frame === 0 ? 0 : 1 })]; // no word on screen on frame 0
+  const hooks = async (spec) => (await reviewFilm({ session: recordingSession(viral, hidden).session, slice: spec === null ? null : sliceOf(spec, viral, tl) })).filter((f) => f.rule === 'hook');
+  assert.equal((await hooks(null)).length, 1, 'control: the full review finds it');
+  assert.equal((await hooks({ shot: 'a' })).length, 1, 'frame 0 is in --shot a');
+  assert.deepEqual(await hooks({ range: 'a@1..a@1.5' }), [], 'frame 0 is drawn for shot a but is not in 30 to 45');
+  assert.deepEqual(await hooks({ shot: 'b' }), []);
+});
+
+test('a frame finding first seen before the slice is reported where the full run reports it, so not inside the slice', async () => {
+  const off = () => [textNode({ id: 'off', size: 132, x: 10 })]; // outside the safe area on every frame
+  const tl = buildTimeline(film, { fps: FPS });
+  const safeOf = async (slice) => (await reviewFilm({ session: recordingSession(film, off).session, slice })).filter((f) => f.rule === 'safe-area').map((f) => `${f.shot}@${f.t}`);
+  const full = await safeOf(null);
+  assert.deepEqual(full.map((x) => x.split('@')[0]), ['a', 'b', 'c'], 'control: one finding a shot, at its first audit frame');
+  const inside = (spec) => { const s = sliceOf(spec, film, tl); return full.filter((x) => Number(x.split('@')[1]) * FPS >= s.from && Number(x.split('@')[1]) * FPS < s.to + 1); };
+  for (const spec of [{ range: 'b@1..b@1.9' }, { shot: 'b' }, { range: 'a@1..b@0.5' }]) {
+    assert.deepEqual(await safeOf(sliceOf(spec, film, tl)), inside(spec), JSON.stringify(spec));
+  }
+  assert.deepEqual(await safeOf(sliceOf({ range: 'b@1..b@1.9' }, film, tl)), [], 'b\'s first sighting is at frame 60, before frame 90');
+});
+
+test('a slice reads a shot\'s rest scale from all its frames: a pulse at the start of a slice is not taken for its rest', async () => {
+  const sizeOf = (frame, scale) => [textNode({ id: 't', size: 30, scale: frame >= 60 && frame < 70 ? scale : 1 })]; // 30 x 0.9 = 27, under the 28 floor
+  const minSize = async (treeOf, slice) => (await reviewFilm({ session: recordingSession(film, treeOf).session, slice })).filter((f) => f.rule === 'min-size');
+  const pulse = (frame) => sizeOf(frame, 0.9);
+  const slice = sliceOf({ range: 'b@0..b@0.3' }, film, timeline); // frames 60 to 69, every one at 0.9
+  assert.deepEqual(await minSize(pulse, null), [], 'control: in the full run the text rests at 1, the 0.9 frames are not at rest');
+  assert.deepEqual(await minSize(pulse, slice), [], 'the slice reads the same rest scale and judges none of them');
+  assert.ok((await minSize(() => [textNode({ id: 't', size: 30, scale: 0.9 })], slice)).length > 0, 'a text that rests at 0.9 is a finding (the test can fail)');
 });
 
 test('cut-window and match findings are judged only for the shots in the slice', async () => {

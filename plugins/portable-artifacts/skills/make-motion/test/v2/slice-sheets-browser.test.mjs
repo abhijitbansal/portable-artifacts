@@ -64,3 +64,12 @@ test('--range names its frames in the report, writes the sheets of the shots it 
   assert.ok(part.report.stages.some((s) => s.name === 'review' && s.ok));
   return undefined;
 });
+
+test('a full run empties the folder of its PNGs, the partial sheets of older slices included', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  assert.ok(sheetNames().some((n) => n.includes('.partial-')), 'the fixture: the slice left partial sheets');
+  const full = await run({});
+  assert.equal(full.exitCode, 0, JSON.stringify(full.report.findings));
+  assert.deepEqual(sheetNames(), ['a.png', 'b.png', 'c.png', 'cut-a-b.png', 'cut-b-c.png']);
+  return undefined;
+});

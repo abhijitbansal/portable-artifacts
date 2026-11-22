@@ -59,13 +59,16 @@ const PLAIN_SECONDS_RE = /^\d+(\.\d+)?$/;
 const SHOT_SEPARATOR = '@';
 const ANCHOR_OFFSET_RE = /[+-]/;
 
-// The index of the shot a reference names outright (`<id>` or `<id>@<anchor>` with no +/- offset, which could leave the
-// shot), or -1: such a reference is in that shot whatever the timeline's times turn out to be.
+// The index of the shot a reference names outright (`<id>`, or `<id>@<anchor>` where the anchor cannot leave the shot), or
+// -1: such a reference is in that shot whatever the timeline's times turn out to be. An anchor with a +/- offset can leave
+// it, and so can a plain number of seconds, which is not clamped to the shot (`hook@3` may be in a later shot).
 function shotIndexOf(ref, timeline) {
   if (PLAIN_SECONDS_RE.test(ref)) return -1;
   const at = ref.indexOf(SHOT_SEPARATOR);
+  const anchor = at < 0 ? '' : ref.slice(at + 1);
   const index = timeline.shots.findIndex((s) => s.id === (at < 0 ? ref : ref.slice(0, at)));
-  return index >= 0 && (at < 0 || !ANCHOR_OFFSET_RE.test(ref.slice(at + 1))) ? index : -1;
+  const staysInShot = at < 0 || !(ANCHOR_OFFSET_RE.test(anchor) || PLAIN_SECONDS_RE.test(anchor));
+  return index >= 0 && staysInShot ? index : -1;
 }
 
 // Does the range run backwards however the film comes to be timed? Two plain seconds, or two references in different shots
@@ -114,10 +117,10 @@ export function sliceSheets(sheets, slice) {
 
 /**
  * The frames the review snapshots for a slice, in order, each once: every audit frame of each shot the slice touches, and of
- * the shot before each shot whose cut window opens inside it (a `match` is compared with that shot's last picture). Only the
- * audit frames inside the slice are `judged`; the others are snapshotted so that what is read across a shot (the rest
- * scales, the first picture of a matched shot drawn alone, whether a text ever settles) is read from the frames the full
- * run reads, and nothing is reported for them.
+ * the shot before each shot whose cut window opens inside it (a `match` is compared with that shot's last picture). `judged`
+ * marks the audit frames inside the slice; the others are snapshotted so that what is read across a shot (the rest scales,
+ * the first picture of a matched shot drawn alone, whether a text ever settles, the first frame a finding shows on) is read
+ * from the frames the full run reads. reviewFilm audits them all and reports a finding only for a time inside the slice.
  * @returns {{ frame: number, judged: boolean }[]}
  */
 export function sliceAuditPlan(film, timeline, slice) {
