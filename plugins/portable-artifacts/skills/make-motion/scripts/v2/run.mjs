@@ -409,6 +409,23 @@ async function makeSound(loaded, timeline, state, io, work, clips = []) {
 
 // ---- the poster ----------------------------------------------------------------------------------------------------------
 
+// The timeline a still (--poster, --inspect) reads film time on: the one the render draws, so with music.snap the cuts are
+// moved onto the beats first (as makeSound does; fileMusicPlan), and a frame of the still is the frame of the video. Only the
+// snap is made: no cue plan, no WAV. A music file with no beats file is read for its beats by ffmpeg. -> the timeline, or
+// null when the film is at fault (its errors become findings: exit 1).
+async function drawnTimeline(loaded, timeline, clips, state, io) {
+  const { film, specDir } = loaded;
+  if (film.music?.snap !== true || !wantsSound(film, clips)) return timeline;
+  try {
+    return await stage(state, io.log, 'sound', async () => (await fileMusicPlan(await soundSteps(), film, timeline, specDir, io.signal)).timeline);
+  } catch (err) {
+    const findings = io.signal?.aborted ? null : soundFindings(err);
+    if (findings === null) throw err;
+    state.findings = findings;
+    return null;
+  }
+}
+
 // --poster: one still of the film's frame (poster.mjs) on its timeline (measured for a voiced film), no review, no
 // sound, no ffmpeg. A time past the end is the machine-trouble exit (2) with the film's length.
 async function makePoster(options, loaded, state, io) {
@@ -537,12 +554,10 @@ async function execute(options, state, io) {
   // A film's video clips are probed, and their frames taken from (or decoded into) the cache beside the video (clips.mjs).
   const clips = clipUses(film).length === 0 ? [] : await clipStage(loaded, timeline, state, io, clipCacheDir(options));
   if (clips === null) return;
-  if (typeof options.poster === 'string') {
-    await makePoster(options, { film, timeline, specDir, prepared: loaded.prepared, clips }, state, io);
-    return;
-  }
-  if (typeof options.inspect === 'string') {
-    await makeInspect(options, { film, timeline, specDir, prepared: loaded.prepared, clips }, state, io);
+  if (typeof options.poster === 'string' || typeof options.inspect === 'string') {
+    const drawn = await drawnTimeline(loaded, timeline, clips, state, io); // music.snap moves the cuts the render draws
+    if (drawn === null) return;
+    await (typeof options.poster === 'string' ? makePoster : makeInspect)(options, { film, timeline: drawn, specDir, prepared: loaded.prepared, clips }, state, io);
     return;
   }
   await soundReviewRender({ options, loaded, timeline, made, clips, state, io });
