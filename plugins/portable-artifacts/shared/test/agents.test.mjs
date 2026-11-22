@@ -283,14 +283,36 @@ test('the reviewer file carries a dedicated marker comment line, never a phrase 
   assert.match(content, /^---\nname: motion-reviewer\ndescription: [^\n]+\nmodel: opus\ntools: Read\n---\n/);
 });
 
-test('reviewerFileState: current, ours but older, and foreign (no fingerprint line) are told apart', () => {
+test('reviewerFileState: current, older, newer and foreign (no fingerprint line) are told apart', () => {
   const cur = reviewerFile('claude').content;
+  const withFormat = (n) => cur.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format ${n} -->`);
   assert.equal(reviewerFileState(cur), 'current');
-  assert.equal(reviewerFileState(cur.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 1 -->`)), 'ours');
+  assert.equal(reviewerFileState(withFormat(1)), 'older');
+  assert.equal(reviewerFileState(withFormat(3)), 'newer', 'a higher number is a newer file: never downgraded');
+  assert.equal(reviewerFileState(withFormat(10)), 'newer', 'the number is compared as a number, not as text');
   assert.equal(reviewerFileState(cur.replace(`${REVIEWER_CURRENT_MARKER}\n`, '')), 'foreign', 'our text without the marker line is not fingerprinted');
   assert.equal(reviewerFileState('---\nname: motion-reviewer\n---\nmy own team reviewer\n'), 'foreign');
   assert.equal(reviewerFileState(`my notes mention ${REVIEWER_CURRENT_MARKER} inline\n`), 'foreign', 'the line must stand alone');
   assert.equal(reviewerFileState(''), 'foreign');
+});
+
+test('reviewerFileState: the bare fingerprint with no format number, or a malformed number, is foreign', () => {
+  const cur = reviewerFile('claude').content;
+  for (const bad of [`${REVIEWER_FINGERPRINT} -->`, `${REVIEWER_FINGERPRINT} format -->`, `${REVIEWER_FINGERPRINT} format 02 -->`, `${REVIEWER_FINGERPRINT} format 0 -->`, `${REVIEWER_FINGERPRINT} format 2x -->`]) {
+    assert.equal(reviewerFileState(cur.replace(REVIEWER_CURRENT_MARKER, bad)), 'foreign', bad);
+  }
+});
+
+test('reviewerFileState: the marker counts only on the first non-blank line after the frontmatter', () => {
+  const cur = reviewerFile('claude').content;
+  const body = cur.slice(cur.indexOf('\n---\n', 4) + 5);
+  const front = cur.slice(0, cur.indexOf('\n---\n', 4) + 5);
+  assert.equal(reviewerFileState(`${front}\n\n\n${REVIEWER_CURRENT_MARKER}\nrest\n`), 'current', 'blank lines before it are fine');
+  assert.equal(reviewerFileState(cur.replace(/\n/g, '\r\n')), 'current', 'CRLF line endings are fine');
+  assert.equal(reviewerFileState(`${front}\nMy own notes first.\n\n${REVIEWER_CURRENT_MARKER}\n`), 'foreign', 'after other text');
+  assert.equal(reviewerFileState(`${front}\n\`\`\`\n${REVIEWER_CURRENT_MARKER}\n\`\`\`\n`), 'foreign', 'inside a code fence');
+  assert.equal(reviewerFileState(`${REVIEWER_CURRENT_MARKER}\n${front}${body.replace(REVIEWER_CURRENT_MARKER, '')}`), 'foreign', 'before the frontmatter');
+  assert.equal(reviewerFileState(`${REVIEWER_CURRENT_MARKER}\nbody only, no frontmatter\n`), 'foreign', 'no frontmatter');
 });
 
 test('the reviewer carries the why of the weakest shot, and says to quote the not-checked line from reviewing.md', () => {
@@ -328,18 +350,46 @@ test('cli: `write claude <dir>` keeps an existing motion-reviewer.md, and still 
   assert.ok(fs.existsSync(path.join(dir, 'artifact-builder.md')));
 });
 
-test('cli: `write-reviewer claude <dir> --force` replaces a stale reviewer and touches nothing else; without --force it keeps it', () => {
+const OURS_OLD = () => reviewerFile('claude').content.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 1 -->`);
+
+test('cli: `write-reviewer claude <dir> --force` replaces our own older reviewer and touches nothing else; without --force it keeps it', () => {
   const dir = path.join(tmpDir(), 'agents');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'motion-reviewer.md'), 'stale');
+  fs.writeFileSync(path.join(dir, 'motion-reviewer.md'), OURS_OLD());
   fs.writeFileSync(path.join(dir, 'artifact-builder.md'), 'hand edited builder');
   const keep = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir], { encoding: 'utf8' });
   assert.equal(keep.status, 0, keep.stderr);
-  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), 'stale');
+  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), OURS_OLD());
   const force = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
   assert.equal(force.status, 0, force.stderr);
   assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), reviewerFile('claude').content);
   assert.equal(fs.readFileSync(path.join(dir, 'artifact-builder.md'), 'utf8'), 'hand edited builder');
+});
+
+test('cli: write-reviewer --force refuses a foreign file unless --replace-foreign is also given', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  const mine = '# my own reviewer é\n';
+  fs.writeFileSync(file, mine);
+  const refused = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /not a portable-artifacts file/);
+  assert.match(refused.stderr, /--replace-foreign/);
+  assert.equal(fs.readFileSync(file, 'utf8'), mine, 'nothing written');
+  const replaced = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force', '--replace-foreign'], { encoding: 'utf8' });
+  assert.equal(replaced.status, 0, replaced.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+});
+
+test('cli: write-reviewer --replace-foreign needs --force, and an absent file is simply written', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  const alone = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--replace-foreign'], { encoding: 'utf8' });
+  assert.equal(alone.status, 2);
+  assert.equal(fs.existsSync(dir), false);
+  const fresh = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(fresh.status, 0, fresh.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), reviewerFile('claude').content);
 });
 
 test('cli: write-reviewer refuses a host with no reviewer, an unknown flag and a missing dir (exit 2, nothing written)', () => {

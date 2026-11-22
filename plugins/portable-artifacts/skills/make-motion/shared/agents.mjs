@@ -5,7 +5,7 @@
 // (skill folders only, no bin/) gets the agent file.
 //   node agents.mjs write <claude|copilot|codex> <agents-dir>     writes the file, keeps an existing one
 //                                                                 (claude also writes motion-reviewer.md)
-//   node agents.mjs write-reviewer claude <agents-dir> [--force]  writes only motion-reviewer.md
+//   node agents.mjs write-reviewer claude <agents-dir> [--force [--replace-foreign]]  writes only motion-reviewer.md
 // The Claude Code text is also shipped as the plugin's agents/artifact-builder.md; a test holds the two equal.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,18 +52,30 @@ Reply with only this JSON and no other text:
 {"verdict": "pass" | "fail", "notes": [{"level": "P0" | "P1" | "P2", "shot": "<shot id>", "time": <film seconds>, "where": "<where in the frame>", "problem": "<what a stranger sees>", "change": "<the field to change>", "stays": "<what stays>"}], "weakest": "<shot id>", "why": "<why that shot is the weakest>", "measured": ["<what the report printed, copied>"], "looked": ["<sheet file name>"], "unchecked": ["<what you could not judge>"]}
 "verdict" is "fail" when any note is P0 or P1, otherwise "pass". "weakest" is the id of the weakest shot and "why" says why it is the weakest. "unchecked" always carries the four not-checked lines of reviewing.md's Delivery section, quoted as written from the not-checked line in that file and not reworded. A line leaves the list only when something the report printed measured it, and then you name that measurement in "measured".`;
 
-// The reviewer file's own marker lines, outside the prose so a reworded instruction can never change them.
-// REVIEWER_FINGERPRINT starts a comment line that only a file we wrote carries; the line with the format number is the
-// current marker. The doctor rewrites a file only when it carries the fingerprint but not the current marker, and never
-// touches a file without the fingerprint (it is the user's own). Bump the number when the reply contract changes.
+// The reviewer file's own marker line, outside the prose so a reworded instruction can never change it.
+// REVIEWER_FINGERPRINT starts a comment line that only a file we wrote carries, followed by the format number. The
+// marker counts only as the first non-blank line after the frontmatter. The doctor rewrites a file only when its format
+// number is LOWER than REVIEWER_FORMAT, never a newer one (an older skill must not downgrade it) and never a file without
+// the marker (it is the user's own). Bump REVIEWER_FORMAT when the reply contract changes.
+export const REVIEWER_FORMAT = 2;
 export const REVIEWER_FINGERPRINT = '<!-- portable-artifacts: motion-reviewer';
-export const REVIEWER_CURRENT_MARKER = `${REVIEWER_FINGERPRINT} format 2 -->`;
+export const REVIEWER_CURRENT_MARKER = `${REVIEWER_FINGERPRINT} format ${REVIEWER_FORMAT} -->`;
 
-// 'current' (our file, current format), 'ours' (our file, another format) or 'foreign' (no fingerprint line).
+const REVIEWER_MARKER_LINE = /^<!-- portable-artifacts: motion-reviewer format ([1-9]\d*) -->$/;
+
+// 'current' (our file, this format), 'older' (our file, a lower format), 'newer' (our file, a higher format, written by
+// a newer skill) or 'foreign' (no marker line right after the frontmatter, or no number).
 export function reviewerFileState(text) {
-  const line = String(text).split(/\r?\n/).find((l) => /^<!-- portable-artifacts: motion-reviewer( format \d+)? -->$/.test(l));
-  if (line === undefined) return 'foreign';
-  return line === REVIEWER_CURRENT_MARKER ? 'current' : 'ours';
+  const lines = String(text).split(/\r?\n/);
+  if (lines[0] !== '---') return 'foreign';
+  const close = lines.indexOf('---', 1);
+  if (close < 0) return 'foreign';
+  const first = lines.slice(close + 1).find((l) => l.trim() !== '');
+  const m = first === undefined ? null : REVIEWER_MARKER_LINE.exec(first);
+  if (!m) return 'foreign';
+  const n = Number(m[1]);
+  if (n === REVIEWER_FORMAT) return 'current';
+  return n < REVIEWER_FORMAT ? 'older' : 'newer';
 }
 
 const REVIEWER_BUILDERS = {
@@ -166,9 +178,23 @@ export function writeAgentFile(dir, file, content, force) {
 export const CURRENT_MARKER = 'make.mjs';
 
 // `write claude` also writes the reviewer (the doctor's auto fix runs it, so a skills-CLI install gets both agents).
-// `write-reviewer <host> <dir> [--force]` writes only the reviewer: the doctor's fix for a stale reviewer file.
+// `write-reviewer <host> <dir> [--force [--replace-foreign]]` writes only the reviewer: the doctor's fix for an older
+// reviewer file of ours. --force never replaces a file that is not ours (no marker line) unless --replace-foreign is
+// also given, so the doctor is not the only gate.
 const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-dir>
-       node agents.mjs write-reviewer <${REVIEWER_HOSTS.join('|')}> <agents-dir> [--force]`;
+       node agents.mjs write-reviewer <${REVIEWER_HOSTS.join('|')}> <agents-dir> [--force [--replace-foreign]]`;
+
+// The reason --force must be refused for this file, or null: it exists as a readable file and is not ours.
+function foreignReviewerReason(dir, fileName) {
+  const file = path.join(path.resolve(dir), fileName);
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return null; // absent, a directory or unreadable: the writer decides
+  }
+  return reviewerFileState(text) === 'foreign' ? `${file} is not a portable-artifacts file; to replace it anyway pass --force --replace-foreign (keep a copy first)` : null;
+}
 
 // Writes each { fileName, content } into dir and prints one line per file. Returns 1 if any could not be written.
 function writeFiles(dir, files, force) {
@@ -197,9 +223,16 @@ function cli(argv) {
     if (REVIEWER_HOSTS.includes(host)) files.push(reviewerFile(host));
     return writeFiles(dir, files, false);
   }
-  const forced = rest.length === 1 && rest[0] === '--force';
-  if (command === 'write-reviewer' && REVIEWER_HOSTS.includes(host) && validDir && (!rest.length || forced)) {
-    return writeFiles(dir, [reviewerFile(host)], forced);
+  const flags = new Set(rest);
+  const flagsOk = flags.size === rest.length && rest.every((f) => f === '--force' || f === '--replace-foreign') && (!flags.has('--replace-foreign') || flags.has('--force'));
+  if (command === 'write-reviewer' && REVIEWER_HOSTS.includes(host) && validDir && flagsOk) {
+    const file = reviewerFile(host);
+    const refusal = flags.has('--force') && !flags.has('--replace-foreign') ? foreignReviewerReason(dir, file.fileName) : null;
+    if (refusal) {
+      process.stderr.write(`agent: ${refusal}\n`);
+      return 1;
+    }
+    return writeFiles(dir, [file], flags.has('--force'));
   }
   process.stderr.write(`${USAGE}\n`);
   return 2;

@@ -568,20 +568,27 @@ function reviewerAgentFiles(ctx) {
   const base = { home: ctx.homedir ?? os.homedir(), cwd: ctx.cwd ?? process.cwd() };
   return REVIEWER_PLACES
     .map(([where, rel]) => ({ file: P.join(base[where], ...rel.split('/'), 'motion-reviewer.md'), host: 'claude', project: where === 'cwd' }))
-    .filter(({ file }) => ctx.exists(file));
+    .filter(({ file }) => ctx.exists(file))
+    // When the project folder is the home folder both places are one file: list it once, at user level (it comes first).
+    .filter((r, i, all) => all.findIndex((x) => x.file === r.file) === i);
 }
 
-// The existing reviewer files that are not current, with their state. An unreadable file counts as current: nothing to compare.
-function reviewerProblems(ctx) {
+// Every existing reviewer file with its state ('current', 'older', 'newer' or 'foreign'). An unreadable file is left out:
+// nothing to compare, so it counts as current.
+function reviewerStates(ctx) {
   return reviewerAgentFiles(ctx).flatMap((r) => {
     try {
-      const state = reviewerFileState(ctx.readFile(r.file));
-      return state === 'current' ? [] : [{ ...r, state }];
+      return [{ ...r, state: reviewerFileState(ctx.readFile(r.file)) }];
     } catch {
       return [];
     }
   });
 }
+
+// The ones to report: our own older files and foreign files. A newer file is not a problem (see reviewerNewer).
+const reviewerProblems = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'older' || r.state === 'foreign');
+// Our files written by a newer skill: never rewritten, only noted.
+const reviewerNewer = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'newer');
 
 const pluginBuilderAgent = (ctx) => pp(ctx).join(ctx.skillDir, '..', '..', 'agents', BUILDER_AGENT_FILE_FOR.claude);
 // The plugin file serves Claude Code only. It satisfies the requirement only on a machine that has no
@@ -597,7 +604,7 @@ export function builderAgent() {
     why: (ctx) => {
       const old = outdatedBuilderAgents(ctx).map((f) => f.file);
       const problems = reviewerProblems(ctx);
-      const ours = problems.filter((r) => r.state === 'ours').map((r) => r.file);
+      const ours = problems.filter((r) => r.state === 'older').map((r) => r.file);
       const foreign = problems.filter((r) => r.state === 'foreign').map((r) => r.file);
       const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
       const parts = [];
@@ -612,10 +619,15 @@ export function builderAgent() {
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
     check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0 && reviewerProblems(ctx).length === 0,
     // A Claude Code builder with no motion-reviewer.md at either level (and no plugin shipping the agents): one note, never a failure.
+    // A motion-reviewer.md written by a newer skill is also a note here: it is never downgraded, and this skill's copy is the old one.
     presentInfo: (ctx) => {
+      const P = pp(ctx);
+      const newer = reviewerNewer(ctx);
+      if (newer.length) {
+        return { note: `${newer.map((r) => r.file).join(' and ')} was written by a newer portable-artifacts than this skill's copy: left alone (this skill's copy is older; update it, or run the doctor from the newer one)` };
+      }
       const builder = builderAgentFiles(ctx).find((f) => f.host === 'claude');
       if (!builder || reviewerAgentFiles(ctx).length > 0 || pluginServes(ctx)) return null;
-      const P = pp(ctx);
       const dir = P.join(builder.file, '..');
       return { note: `${P.join(dir, 'motion-reviewer.md')} is not installed (the optional read-only second reviewer for Claude Code, from this skill's own writer: node ${P.join(ctx.skillDir, 'shared', 'agents.mjs')} write claude ${dir}; it keeps every existing file)` };
     },
@@ -630,19 +642,26 @@ export function builderAgent() {
       const P = pp(ctx);
       const old = outdatedBuilderAgents(ctx);
       const problems = reviewerProblems(ctx);
-      const ours = problems.filter((r) => r.state === 'ours');
+      const ours = problems.filter((r) => r.state === 'older');
       const foreign = problems.filter((r) => r.state === 'foreign');
+      const stateOf = new Map(reviewerStates(ctx).map((r) => [r.file, r.state]));
       const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
       const tail = '<path-to-portable-artifacts> is a local checkout, or clone the repo';
-      // The reviewer-only command: replaces just that one file, never the builder.
-      const reviewerCmd = (r) => `node ${writer} write-reviewer claude ${P.join(r.file, '..')} --force (replaces only ${r.file}${r.state === 'foreign' ? ', which is not a portable-artifacts file: keep a copy first' : ''})`;
+      const keepCopy = 'is not a portable-artifacts file: keep a copy first';
+      // The reviewer-only command: replaces just that one file, never the builder. A foreign file also needs --replace-foreign,
+      // which the writer demands, and the line carries the warning.
+      const reviewerCmd = (r) => `node ${writer} write-reviewer claude ${P.join(r.file, '..')} --force${r.state === 'foreign' ? ' --replace-foreign' : ''} (replaces only ${r.file}${r.state === 'foreign' ? `, which ${keepCopy}` : ''})`;
       if (old.length) {
         const cwd = ctx.cwd ?? process.cwd();
-        // The installer command writes every agent file of its host in that folder: say which ones it replaces.
+        // The installer command writes every agent file of its host in that folder: say which ones it replaces, and
+        // warn about a reviewer file it would destroy (not ours) or downgrade (newer than this skill's copy).
         const cmds = [...new Map(old.map(({ file, host, project }) => {
           const dir = P.join(file, '..');
-          const files = [file, ...(host === 'claude' ? [P.join(dir, 'motion-reviewer.md')] : [])];
-          return [`${host}|${project}`, `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''} (replaces ${files.join(' and ')})`];
+          const reviewer = P.join(dir, 'motion-reviewer.md');
+          const files = [file, ...(host === 'claude' ? [reviewer] : [])];
+          const state = host === 'claude' ? stateOf.get(reviewer) : undefined;
+          const warn = state === 'foreign' ? `; ${reviewer} ${keepCopy}` : state === 'newer' ? `; ${reviewer} is newer than this skill's copy` : '';
+          return [`${host}|${project}`, `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''} (replaces ${files.join(' and ')}${warn})`];
         })).values()];
         return {
           auto: null,

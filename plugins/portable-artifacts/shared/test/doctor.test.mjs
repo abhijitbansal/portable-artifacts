@@ -1002,7 +1002,7 @@ test("builderAgent: a motion-reviewer.md without our fingerprint is foreign: rep
   assert.equal(missing[0].outdated, undefined, "foreign is not outdated");
   assert.equal(missing[0].fix.auto, null);
   assert.match(missing[0].why, /not a portable-artifacts/);
-  assert.match(missing[0].fix.manual.linux, /write-reviewer claude \/h\/\.claude\/agents --force \(replaces only \/h\/\.claude\/agents\/motion-reviewer\.md, which is not a portable-artifacts file: keep a copy first\)/);
+  assert.match(missing[0].fix.manual.linux, /write-reviewer claude \/h\/\.claude\/agents --force --replace-foreign \(replaces only \/h\/\.claude\/agents\/motion-reviewer\.md, which is not a portable-artifacts file: keep a copy first\)/);
   const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
   assert.equal(human.code, 0);
   assert.match(human.out, /foreign \(optional\): builder_agent — /);
@@ -1036,8 +1036,52 @@ test("builderAgent: a stale builder with a foreign reviewer: no auto fix, and th
   assert.deepEqual(m.outdated, [BUILDER_USER]);
   assert.deepEqual(m.foreign, [REVIEWER_USER]);
   assert.equal(m.fix.auto, null);
-  assert.match(m.fix.manual.linux, /install\.mjs claude --agents-only --force \(replaces \/h\/\.claude\/agents\/artifact-builder\.md and \/h\/\.claude\/agents\/motion-reviewer\.md\)/);
-  assert.match(m.fix.manual.linux, /write-reviewer claude \/h\/\.claude\/agents --force \(replaces only/);
+  // The line that would destroy the foreign file carries the warning itself.
+  assert.match(m.fix.manual.linux, /install\.mjs claude --agents-only --force \(replaces \/h\/\.claude\/agents\/artifact-builder\.md and \/h\/\.claude\/agents\/motion-reviewer\.md; \/h\/\.claude\/agents\/motion-reviewer\.md is not a portable-artifacts file: keep a copy first\)/);
+  assert.match(m.fix.manual.linux, /write-reviewer claude \/h\/\.claude\/agents --force --replace-foreign \(replaces only/);
+});
+
+test("builderAgent: a stale builder with our own older reviewer: the installer line replaces both and carries no foreign warning", async () => {
+  const c = rctx({ [BUILDER_USER]: OLD_TEXT, [REVIEWER_USER]: REVIEWER_OURS_OLD });
+  const m = (await diagnose([builderAgent()], c)).missing[0];
+  assert.deepEqual(m.outdated.sort(), [BUILDER_USER, REVIEWER_USER].sort());
+  assert.doesNotMatch(m.fix.manual.linux, /keep a copy first/);
+});
+
+// A higher format number is a newer file written by a newer skill: never downgraded, never reported as a problem.
+const REVIEWER_NEWER = REVIEWER_CURRENT.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 3 -->`);
+
+test("builderAgent: a newer reviewer file (format 3 against 2) is left alone: no failure, no auto fix, an info line that this skill is older", async () => {
+  for (const where of [REVIEWER_USER, REVIEWER_PROJECT]) {
+    const c = rctx({ [BUILDER_USER]: CURRENT_TEXT, [where]: REVIEWER_NEWER });
+    assert.equal(await builderAgent().check(c), true, where);
+    const r = await diagnose([builderAgent()], c);
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.missing, []);
+    assert.equal(r.info.length, 1);
+    assert.match(r.info[0].note, new RegExp(where.replace(/\//g, "\\/").replace(/\./g, "\\.")));
+    assert.match(r.info[0].note, /newer/);
+    assert.match(r.info[0].note, /this skill's copy is older/);
+    assert.doesNotMatch(r.info[0].note, /is not installed/, "a newer reviewer is installed");
+  }
+});
+
+test("builderAgent: a newer reviewer is never rewritten even when the fix runs for another reason (a stale builder)", async () => {
+  const c = rctx({ [BUILDER_USER]: OLD_TEXT, [REVIEWER_USER]: REVIEWER_NEWER });
+  const m = (await diagnose([builderAgent()], c)).missing[0];
+  assert.deepEqual(m.outdated, [BUILDER_USER]);
+  assert.equal(m.fix.auto, null);
+  assert.doesNotMatch(m.fix.manual.linux, /write-reviewer/);
+  assert.match(m.fix.manual.linux, /install\.mjs claude --agents-only --force \(replaces \/h\/\.claude\/agents\/artifact-builder\.md and \/h\/\.claude\/agents\/motion-reviewer\.md; \/h\/\.claude\/agents\/motion-reviewer\.md is newer than this skill's copy\)/);
+});
+
+test("builderAgent: when cwd is the home folder, the one reviewer file is listed once, at user level", () => {
+  const same = ctx({ homedir: "/h", cwd: "/h", execPath: "/n/node", exists: (p) => [BUILDER_USER, REVIEWER_USER, "/h/.claude"].includes(p), readFile: readerOf({ [BUILDER_USER]: CURRENT_TEXT, [REVIEWER_USER]: REVIEWER_OURS_OLD }) });
+  const fix = builderAgent().fix(same);
+  assert.deepEqual(fix.auto, [WRITE_REVIEWER_USER]);
+  assert.deepEqual(fix.outdated, [REVIEWER_USER]);
+  assert.equal(fix.manual.linux.split("write-reviewer").length - 1, 1, "one reviewer line");
+  assert.doesNotMatch(fix.notes, /is left alone \(not ours/, "not also listed as a project file left alone");
 });
 
 test("builderAgent: a current reviewer (user or project) and an unreadable one are fine, and a reviewer file means no info note", async () => {
@@ -1130,6 +1174,25 @@ test("builderAgent: doctor --fix never rewrites a project-level reviewer, even o
   const res = await runFixes(["builder_agent"], [builderAgent()], c);
   assert.equal(res[0].refused, "no automatic fix");
   assert.equal(read(projectAgents, "motion-reviewer.md"), REVIEWER_OURS_OLD);
+});
+
+test("builderAgent: doctor --fix on a fake HOME never downgrades a newer reviewer file (format 3), and says this skill is older", async () => {
+  const { agents, c } = fakeMachine({ user: REVIEWER_NEWER });
+  const r = await diagnose([builderAgent()], c);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.missing, []);
+  assert.match(r.info[0].note, /this skill's copy is older/);
+  const res = await runFixes(["builder_agent"], [builderAgent()], c);
+  assert.equal(res[0].ok, true, JSON.stringify(res));
+  assert.equal(read(agents, "motion-reviewer.md"), REVIEWER_NEWER, "byte for byte");
+});
+
+test("builderAgent: a foreign file with the bare fingerprint (no format number) is foreign on a fake HOME, so it survives", async () => {
+  const bare = `---\nname: motion-reviewer\n---\n\n${REVIEWER_FINGERPRINT} -->\nmine\n`;
+  const { agents, c } = fakeMachine({ user: bare });
+  const res = await runFixes(["builder_agent"], [builderAgent()], c);
+  assert.equal(res[0].refused, "no automatic fix");
+  assert.equal(read(agents, "motion-reviewer.md"), bare);
 });
 
 test("builderAgent: a fake HOME with a builder and no reviewer reports the info note; --fix of the missing files writes both claude files", async () => {
