@@ -21,12 +21,12 @@ A resumed session reads this table first, then `git log --oneline origin/main..H
 | W0 measurements | done | 1914642, f75d40a, 6b14b80 |
 | W1 doctrine and colour | done (gate passed) | 135d064..dbafdea |
 | W2 composition and cut craft | done (gate passed) | 6bb53aa..13493b4 (merged origin/main 2.2.1 at 173fcb2) |
-| W3 inspection tools | not started | |
-| W4 shorts, sound, overlays | not started | |
-| W5 evidence loop II | not started | |
-| W6 type and look | not started | |
-| make-explainer (alongside) | not started | |
-| Final phase | not started | |
+| W3 inspection tools | done (gate passed) | merged with W4 and W5 at 8f9b75a |
+| W4 shorts, sound, overlays | done (gate passed) | merged at d5065b4 |
+| W5 evidence loop II | done (gate passed) | merged at 8f9b75a |
+| W6 type and look | done (gate passed) | 99a5ef2..6b17a48 |
+| make-explainer (alongside) | done | merged at 0837bd3 |
+| Final phase | in progress (F1 done) | |
 
 ## Global Constraints
 
