@@ -54,6 +54,7 @@ import { contrastFindings } from './contrast.mjs';
 import { markBoxes, showsItself } from './marks.mjs';
 import { regionFindings } from './regions.mjs';
 import { registries } from '../registry.mjs';
+import { GROUND_ID } from '../looks/grounds.mjs';
 import '../modes/index.mjs';
 
 export const MIN_TEXT_UNITS = 28;
@@ -581,7 +582,8 @@ function showsContent(sampled) {
     if (o <= 0 || n.depth > 0) return false;
     return showsItself(n) || (n.children ?? []).some((child) => walk(child, o));
   };
-  return (Array.isArray(sampled) ? sampled : []).some((n) => walk(n, 1));
+  // the ground sheet of a grounded look (poster) is the background colour as a node, not content
+  return (Array.isArray(sampled) ? sampled : []).filter((n) => n.id !== GROUND_ID).some((n) => walk(n, 1));
 }
 
 /**
@@ -611,8 +613,11 @@ const PERCENT = 100;
 const WHERE = Object.freeze({ left: 'the left', right: 'the right', top: 'the top', bottom: 'the bottom', middle: 'a band through the middle' });
 const SIDE = Object.freeze({ x: 'width', y: 'height' });
 
-/** The fill thresholds of a look: DEFAULT_FILL with the look's optional `fill` laid over it. */
-export const fillOf = (look) => ({ ...DEFAULT_FILL, ...look?.fill });
+const isShare = (v) => Number.isFinite(v) && v >= 0 && v <= 1;
+
+/** The fill thresholds of a look: DEFAULT_FILL with the look's optional `fill` laid over it; a key that is not a number
+ *  from 0 to 1 is ignored (looks/index.mjs validates look data), so it cannot switch a rule off. */
+export const fillOf = (look) => ({ ...DEFAULT_FILL, ...Object.fromEntries(Object.entries(look?.fill ?? {}).filter(([key, v]) => key in DEFAULT_FILL && isShare(v))) });
 
 // A box cut to the canvas, or null when none of it is on the canvas.
 function clipToCanvas([x, y, w, h], canvas) {
@@ -620,16 +625,13 @@ function clipToCanvas([x, y, w, h], canvas) {
   return right > left && bottom > top ? [left, top, right - left, bottom - top] : null;
 }
 
-// What a node shows in canvas pixels: a text by its ink, anything else by its bbox; null when it has no usable box.
+// What a node shows in canvas pixels: a text with a layout by its ink, anything else by its bbox; null when it has no
+// usable box. A layout the ink cannot be read from is a defect in the snapshot, not a case to hide: it throws.
 function ownBox(n) {
   if (!isBox(n.bbox)) return null;
   if (n.type !== 'text' || !hasWords(n.layout)) return n.bbox;
-  try {
-    const ink = inkBox(n, hiddenNow(n));
-    return isBox(ink) ? ink : n.bbox;
-  } catch {
-    return n.bbox;
-  }
+  const ink = inkBox(n, hiddenNow(n));
+  return isBox(ink) ? ink : n.bbox;
 }
 
 // The boxes of the nodes in a subtree that show themselves at an accumulated opacity above 0.
@@ -640,10 +642,12 @@ function shownBoxes(n, opacity) {
   return [...own, ...(n.children ?? []).flatMap((child) => shownBoxes(child, o))];
 }
 
-// The top-level nodes that show something, as { id, box, area }: not behind the picture plane, not the shot's captions.
+// The top-level nodes that show something, as { id, box, area }: not behind the picture plane, not the ground sheet of a
+// grounded look, not the shot's captions (the page's own boundary, page/stage.mjs captionFilter).
 function elementsOf(sampled, ctx) {
   const captions = `${ctx.shotId}.captions`;
-  const tops = (Array.isArray(sampled) ? sampled : []).filter((n) => !(n.depth > 0) && !String(n.id ?? '').startsWith(captions));
+  const isCaption = (id) => id === captions || id.startsWith(`${captions}.`);
+  const tops = (Array.isArray(sampled) ? sampled : []).filter((n) => !(n.depth > 0) && n.id !== GROUND_ID && !isCaption(String(n.id ?? '')));
   return tops.flatMap((n) => {
     const boxes = shownBoxes(n, 1);
     const box = boxes.length > 0 ? clipToCanvas(union(boxes), ctx.canvas) : null;
@@ -667,8 +671,12 @@ function bandAlong(gap, lo, hi, axis, [before, after]) {
   return { share: gap.size / (hi - lo), axis, where: gap.from === lo && gap.to === hi ? 'middle' : touches };
 }
 
-// The larger of the empty band across the safe width and down its height, `x` on a tie.
-function bandOf(elements, safe) {
+const entersSafe = ({ box: [x, y, w, h] }, safe) => x < safe.right && x + w > safe.left && y < safe.bottom && y + h > safe.top;
+
+// The larger of the empty band across the safe width and down its height, `x` on a tie. An element that does not enter
+// the safe rectangle (a slug in the margin) splits neither axis.
+function bandOf(all, safe) {
+  const elements = all.filter((e) => entersSafe(e, safe));
   const across = bandAlong(longestGap(elements.map((e) => [e.box[0], e.box[0] + e.box[2]]), safe.left, safe.right), safe.left, safe.right, 'x', ['left', 'right']);
   const down = bandAlong(longestGap(elements.map((e) => [e.box[1], e.box[1] + e.box[3]]), safe.top, safe.bottom), safe.top, safe.bottom, 'y', ['top', 'bottom']);
   return down.share > across.share ? down : across;
@@ -704,7 +712,9 @@ export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
   if (c.ground) return [];
   const out = [];
   if (c.band.share >= fill.band) {
-    out.push({ ...finding(ctx, CREATIVE, 'dead-space', '', `the frame leaves ${Math.round(c.band.share * PERCENT)}% of its ${SIDE[c.band.axis]} empty (${WHERE[c.band.where]}); let the hero take more of the frame, add a second element, or use a look that fills with type`), measure: c.band.share - fill.band });
+    const percent = Math.round(c.band.share * PERCENT), side = SIDE[c.band.axis];
+    const said = c.elements.length === 0 ? `the frame shows nothing: ${percent}% of its ${side} is empty` : `the frame leaves ${percent}% of its ${side} empty (${WHERE[c.band.where]})`;
+    out.push({ ...finding(ctx, CREATIVE, 'dead-space', '', `${said}; let the hero take more of the frame, add a second element, or use a look that fills with type`), measure: c.band.share - fill.band });
   }
   if (c.hero && c.hero.extent < fill.hero) {
     const rest = c.next ? `, and the next largest thing, "${c.next.id}", is smaller still` : ' and stands alone';

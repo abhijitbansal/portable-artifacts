@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';
-import { auditFrame, compositionOf, compositionFindings, fillOf, DEFAULT_FILL, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
+import { auditFrame, openingFindings, compositionOf, compositionFindings, fillOf, DEFAULT_FILL, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
 const SAFE = { left: 96, top: 96, right: 1824, bottom: 984 }; // 1728 by 888
@@ -74,7 +74,42 @@ test('a text is boxed by its ink (cap line to baseline), not its whole ascent-to
   const [bare] = compositionOf([{ ...text, layout: undefined }], ctx()).elements;
   assert.deepEqual(bare.box, [300, 300, 200, 120]);
 });
-test('an empty frame: dead-space fires, scale-contrast does not; a caption box over a group child counts the child only', () => {
+test('a poster ground sheet (id ground, full canvas, depth 0) is not an element: the sheet plus a small card gives both findings', () => {
+  const sheet = box('ground', [0, 0, 1920, 1080], { fixed: true });
+  const tree = [sheet, box('card', [864, 486, 192, 108])];
+  const c = compositionOf(tree, ctx());
+  assert.deepEqual([c.ground, c.elements.map((e) => e.id)], [false, ['card']]);
+  assert.deepEqual(rules(compositionFindings(tree, ctx(), DEFAULT_FILL)), ['dead-space', 'scale-contrast']);
+});
+test('a shot with only its ground sheet on screen opens on an empty frame; with a card it does not', () => {
+  const sheet = box('ground', [0, 0, 1920, 1080]);
+  assert.deepEqual(openingFindings([sheet], ctx()).map((f) => f.rule), ['empty-first-frame']);
+  assert.deepEqual(openingFindings([sheet, box('card', [864, 486, 192, 108])], ctx()), []);
+});
+test('an element wholly outside the safe rectangle does not split the band on the other axis', () => {
+  const tree = [box('card', [864, 100, 192, 108]), box('slug', [10, 600, 60, 40])];
+  const { band } = compositionOf(tree, ctx());
+  assert.deepEqual([band.axis, band.where], ['y', 'bottom']);
+  assert.ok(Math.abs(band.share - (984 - 208) / 888) < 1e-9);
+});
+test('the caption boundary is the page\'s: <shot>.captions and <shot>.captions.<n> are captions, <shot>.captionsCard is not', () => {
+  const tree = [box('hero.captions', [200, 800, 1500, 120]), box('hero.captions.3', [200, 800, 1500, 120]), box('hero.captionsCard', [864, 486, 192, 108])];
+  assert.deepEqual(compositionOf(tree, ctx()).elements.map((e) => e.id), ['hero.captionsCard']);
+});
+test('a text whose ink cannot be measured is not swallowed: a layout that throws propagates', () => {
+  const text = { ...box('title', [300, 300, 200, 120]), type: 'text', props: {}, layout: { size: 100, height: 120, lines: [{ x: 0, y: 100, words: [null] }] } };
+  assert.throws(() => compositionOf([text], ctx()));
+});
+test('fillOf ignores a key that is not a finite number from 0 to 1', () => {
+  assert.deepEqual(fillOf({ fill: { band: undefined, hero: 2 } }), DEFAULT_FILL);
+  assert.deepEqual(fillOf({ fill: { band: 0, hero: 0.25 } }), { band: 0, hero: 0.25 });
+  assert.deepEqual(fillOf({ fill: { band: Number.NaN, hero: '0.3' } }), DEFAULT_FILL);
+});
+test('an empty frame says it is empty, not "a band through the middle"', () => {
+  const [found] = compositionFindings([], ctx(), DEFAULT_FILL);
+  assert.match(found.message, /^the frame shows nothing: 100% of its width is empty;/);
+});
+test('an empty frame: dead-space fires, scale-contrast does not; an opacity-0 group child is left out of the group\'s box', () => {
   assert.deepEqual(rules(compositionFindings([], ctx(), DEFAULT_FILL)), ['dead-space']);
   const group = { ...box('stack', [0, 0, 0, 0]), type: 'group', props: {}, children: [box('stack.a', [300, 200, 600, 200]), box('stack.b', [300, 450, 600, 100], { opacity: 0 })] };
   const [element] = compositionOf([group], ctx()).elements;
