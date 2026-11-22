@@ -78,6 +78,10 @@ test('a poster at film time: a shot id is its first frame, shot@end-<s> is insid
   assert.deepEqual(shot.poster, { file: path.join(dir, 'b.png'), frame: 30, seconds: 1 });
   const inside = JSON.parse(make([film, '--poster', 'b@end-0.5', '--poster-out', path.join(dir, 'b-end.png'), '--json'], NO_FFMPEG).stdout);
   assert.deepEqual(inside.poster, { file: path.join(dir, 'b-end.png'), frame: 45, seconds: 1.5 });
+  const last = JSON.parse(make([film, '--poster', 'end', '--poster-out', path.join(dir, 'last.png'), '--json'], NO_FFMPEG).stdout);
+  assert.equal(last.poster.frame, 59, 'the film\'s end is its last frame (60 frames)');
+  const aEnd = JSON.parse(make([film, '--poster', 'a@end', '--poster-out', path.join(dir, 'a-end.png'), '--json'], NO_FFMPEG).stdout);
+  assert.equal(aEnd.poster.frame, 29, 'a@end is a\'s last frame, not b\'s first');
   return undefined;
 });
 

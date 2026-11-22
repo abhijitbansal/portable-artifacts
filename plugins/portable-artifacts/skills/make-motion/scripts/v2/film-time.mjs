@@ -1,20 +1,23 @@
 // Film time: one grammar that names a moment of the film, read by --poster (and by --inspect, --shot and --range as they
 // arrive). The forms, tried in this order:
 //   <number>            seconds from the film's start ("1.5")
-//   <shot-id>@<anchor>  a place inside that shot, as a device's `at` reads it: a word is where the picture shows it
-//   <shot-id>           that shot's start (a shot called "end" is the shot, never the film's end)
+//   <shot-id>@<anchor>  a place inside that shot, as a device's `at` reads it: a word is where the picture shows it, and
+//                       "@end" is the shot's own last frame (one frame before the next shot begins)
+//   <shot-id>           that shot's start (a shot called "end" or "end-1" is the shot, never the film's end)
 //   <anchor>            an anchor across the whole film, as a cue's `at` reads it: word:<n> and sentence:<n> count across
 //                       the film, and a word is where it is heard (shot.start + soundStart; a narration lead or trail can
 //                       put it outside its own shot)
 // An anchor is start, end, word:<n>, word:<text> or sentence:<n>, with an optional +<s> or -<s> (engine/script/anchors.mjs).
 // Pure: no clock, no randomness, no browser.
-import { buildTimeline, PlacementError } from '../../engine/script/timing.mjs';
 import { AnchorError, anchorSeconds, echoValue } from '../../engine/script/anchors.mjs';
 import { posterFrame } from './poster.mjs';
 
 const FILM_SHOT_ID = 'film';
 const NUMBER_RE = /^\d+(\.\d+)?$/;
 const SHOT_SEPARATOR = '@';
+const END_ANCHOR = 'end';
+const LENGTH_DECIMALS = 1;
+const END_EPSILON = 1e-6; // anchors are rounded to a microsecond, so a time at the end may sit that far past it
 
 /** A reference that names no moment of the film. `hint` lists the forms and the film's shot ids (the report's error.hint). */
 export class FilmTimeError extends Error {
@@ -63,6 +66,13 @@ function inShot(ref, timeline) {
   return shot === undefined ? null : { shot, anchor: ref.slice(at + SHOT_SEPARATOR.length) };
 }
 
+// The shot-local second of `<shot-id>@<anchor>`. "@end" alone is the shot's own last frame (one frame before its end,
+// which is the next shot's first frame); "@end-0.5" and the like are measured from the end itself.
+function inShotSeconds({ shot, anchor }, timeline, ref, ids) {
+  const seconds = anchorIn(anchor, shot, ref, ids);
+  return anchor === END_ANCHOR ? seconds - 1 / timeline.fps : seconds;
+}
+
 /**
  * The film second `ref` names (a string, or a number of seconds), not clamped: a number, `<shot-id>@<anchor>`, a shot id,
  * or an anchor across the whole film, in that order. An unreadable reference or one that names nothing in the film is a
@@ -74,7 +84,7 @@ export function filmSeconds(ref, film, timeline) {
   if (typeof ref !== 'string' || ref === '') throw new FilmTimeError(`cannot read film time ${JSON.stringify(echoValue(ref))}: it is empty`, ids);
   if (NUMBER_RE.test(ref)) return Number(ref);
   const named = inShot(ref, timeline);
-  if (named !== null) return named.shot.start + anchorIn(named.anchor, named.shot, ref, ids);
+  if (named !== null) return named.shot.start + inShotSeconds(named, timeline, ref, ids);
   const alone = timeline.shots.find((s) => s.id === ref);
   if (alone !== undefined) return alone.start;
   try {
@@ -87,27 +97,14 @@ export function filmSeconds(ref, film, timeline) {
 }
 
 /**
- * The frame `ref` names: round(seconds * fps). Before the first frame, or past the last (an error naming the film's
- * length, as poster.mjs words it), is refused.
+ * The frame `ref` names: round(seconds * fps), at most the last frame. The film's end (duration is frameCount / fps) is
+ * the last frame, so `end` and `end-0.01` name it; only a time strictly past the end is refused, with an error naming the
+ * film's length (as poster.mjs words it). A time before the start is refused with the same length.
  */
 export function filmFrame(ref, film, timeline) {
   const seconds = filmSeconds(ref, film, timeline);
-  if (seconds < 0) throw new FilmTimeError(`film time ${JSON.stringify(echoValue(ref))} is before the start of the film (${seconds.toFixed(1)} s)`, shotIdsOf(film, timeline));
-  return posterFrame(seconds, timeline, ref) + 0; // + 0: a frame that rounds to -0 is frame 0
-}
-
-/**
- * Reads `ref` on the film's estimated timeline (no voice made), so a reference that cannot name anything is refused
- * before a voice is made. Past the end is not judged here: a measured voice changes the film's length. A film whose
- * timeline cannot be built is left to the stage that reports it.
- */
-export function checkFilmTime(ref, film) {
-  let timeline;
-  try {
-    timeline = buildTimeline(film, { fps: film.fps });
-  } catch (err) {
-    if (err instanceof PlacementError) return;
-    throw err;
-  }
-  filmSeconds(ref, film, timeline);
+  const length = timeline.duration.toFixed(LENGTH_DECIMALS);
+  if (seconds < 0) throw new FilmTimeError(`film time ${JSON.stringify(echoValue(ref))} is before the start of the film (${seconds.toFixed(LENGTH_DECIMALS)} s; the film is ${length} s)`, shotIdsOf(film, timeline));
+  if (seconds > timeline.duration + END_EPSILON) return posterFrame(seconds, timeline, ref); // past the last frame: it throws, naming the length
+  return Math.min(Math.round(seconds * timeline.fps), timeline.frameCount - 1) + 0; // + 0: a frame that rounds to -0 is frame 0
 }

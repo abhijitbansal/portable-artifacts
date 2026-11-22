@@ -10,7 +10,7 @@ import { HERE } from './helpers/session.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
-import { FilmTimeError, checkFilmTime, filmFrame, filmSeconds, wholeFilmShot } from '../../scripts/v2/film-time.mjs';
+import { FilmTimeError, filmFrame, filmSeconds, wholeFilmShot } from '../../scripts/v2/film-time.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FPS = 30;
@@ -71,7 +71,7 @@ test('shot@word is where the picture shows the word (the shot\'s own anchor), no
 test('a shot called end is the shot, not the film end', () => {
   assert.equal(filmSeconds('end', calledEnd, calledEndTimeline), calledEndTimeline.shots[1].start);
   assert.notEqual(filmSeconds('end', calledEnd, calledEndTimeline), calledEndTimeline.duration);
-  near(filmSeconds('end@end', calledEnd, calledEndTimeline), calledEndTimeline.shots[1].start + 2);
+  near(filmSeconds('end@end', calledEnd, calledEndTimeline), calledEndTimeline.shots[1].start + 2 - 1 / FPS, '@end is the shot\'s last frame');
   near(filmSeconds('end-0.5', calledEnd, calledEndTimeline), calledEndTimeline.duration - 0.5, 'only the bare id is the shot');
 });
 
@@ -104,7 +104,7 @@ test('an anchor that names nothing in its shot is a film-time error with the anc
 test('past the end names the film length; before the start is refused too', () => {
   assert.throws(() => filmFrame('99', film, timeline), /past the end \(the film is \d+\.\d s\)/);
   assert.throws(() => filmFrame('end+3', film, timeline), /past the end/);
-  assert.throws(() => filmFrame('rows@start-9', film, timeline), (err) => err instanceof FilmTimeError && /before the start/.test(err.message));
+  assert.throws(() => filmFrame('rows@start-9', film, timeline), (err) => err instanceof FilmTimeError && /before the start .*the film is \d+\.\d s/.test(err.message));
 });
 
 test('filmFrame is round(seconds * fps), and the last frame is allowed', () => {
@@ -115,11 +115,34 @@ test('filmFrame is round(seconds * fps), and the last frame is allowed', () => {
   assert.equal(filmFrame(String((timeline.frameCount - 1) / FPS), film, timeline), timeline.frameCount - 1);
 });
 
-test('checkFilmTime reads the reference on the estimated timeline and throws what filmSeconds would', () => {
-  assert.doesNotThrow(() => checkFilmTime('rows@end-0.5', film));
-  assert.doesNotThrow(() => checkFilmTime('99', film), 'past the end is judged on the measured timeline, not the estimate');
-  assert.throws(() => checkFilmTime('nope', film), FilmTimeError);
-  assert.throws(() => checkFilmTime('hook@word:9', film), FilmTimeError);
+// ---- the film's end, and a shot's end ----
+
+const THREE = { version: 2, mode: 'pro', fps: FPS, shots: ['a', 'b', 'c'].map((id) => ({ id, show: 'statement', text: `Shot ${id}.`, hold: 2 })) };
+const threeTimeline = buildTimeline(THREE, { fps: FPS });
+const LAST_FRAME = timeline.frameCount - 1;
+
+test('a time at the film\'s end is its last frame: end, end-0, <last>@end and end-0.01 (only strictly past is refused)', () => {
+  assert.equal(timeline.duration * FPS, timeline.frameCount, 'the fixture\'s duration is frameCount / fps: the end is one frame past the last');
+  for (const ref of ['end', 'end-0', 'rows@end', 'end-0.01']) assert.equal(filmFrame(ref, film, timeline), LAST_FRAME, ref);
+  assert.equal(filmFrame(String(timeline.duration), film, timeline), LAST_FRAME);
+  assert.throws(() => filmFrame('end+0.05', film, timeline), /past the end \(the film is \d+\.\d s\)/);
+});
+
+test('<shot>@end is that shot\'s own last frame, never the next shot\'s first', () => {
+  const [a, b, c] = threeTimeline.shots;
+  assert.equal(filmFrame('b@end', THREE, threeTimeline), Math.round(c.start * FPS) - 1, 'the middle shot\'s last frame');
+  assert.equal(filmFrame('a@end', THREE, threeTimeline), Math.round(b.start * FPS) - 1);
+  assert.equal(filmFrame('c@end', THREE, threeTimeline), threeTimeline.frameCount - 1);
+  near(filmSeconds('b@end', THREE, threeTimeline), c.start - 1 / FPS);
+  assert.equal(filmFrame('b@end-0.5', THREE, threeTimeline), Math.round((c.start - 0.5) * FPS), 'an offset from end is still measured from the end');
+});
+
+test('a shot id that looks like an anchor is the shot: end-1 and start-2 as well as end', () => {
+  const odd = { version: 2, mode: 'pro', fps: FPS, shots: [{ id: 'end-1', show: 'statement', text: 'One.', hold: 2 }, { id: 'start-2', show: 'statement', text: 'Two.', hold: 2 }, { id: 'tail', show: 'statement', text: 'Three.', hold: 2 }] };
+  const oddTimeline = buildTimeline(odd, { fps: FPS });
+  assert.equal(filmSeconds('end-1', odd, oddTimeline), oddTimeline.shots[0].start);
+  assert.equal(filmSeconds('start-2', odd, oddTimeline), oddTimeline.shots[1].start);
+  assert.equal(filmSeconds('tail', odd, oddTimeline), oddTimeline.shots[2].start);
 });
 
 test('make.mjs --poster nope exits 2 with the accepted list and starts no browser', () => {
@@ -163,4 +186,10 @@ test('a good reference on a voiced film reaches the voice (the spy proves the ch
   assert.equal(exitCode, 2);
   assert.deepEqual(calls, ['voice']);
   assert.match(report.error.message, /voice package is not installed/);
+});
+
+test('a time past the end is judged on the measured timeline, after the voice: the estimate cannot know the film\'s length', async () => {
+  const calls = [];
+  await runMake(options(writeFilm('voiced-late', voiced), '99'), { synthesise: spy(calls) });
+  assert.deepEqual(calls, ['voice']);
 });

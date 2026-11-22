@@ -29,7 +29,7 @@ import { stampTags, tagArgs } from './stamp.mjs';
 import { readBeatsFile } from './sound/beats-file.mjs';
 import { snapFilm } from './sound/snap.mjs';
 import { posterPath, writePoster } from './poster.mjs';
-import { checkFilmTime, filmFrame } from './film-time.mjs';
+import { filmFrame, filmSeconds } from './film-time.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
@@ -486,7 +486,7 @@ async function execute(options, state, io) {
   // an emphasis device the look does not draw takes the look's own emphasis: one info line per event, never a finding
   for (const entry of withLookEmphasis(film).moved) io.log(fallbackNotice(resolveLook(film).name, entry));
   // --poster: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.
-  if (typeof options.poster === 'string') checkFilmTime(options.poster, film);
+  if (typeof options.poster === 'string') filmSeconds(options.poster, film, loaded.timeline); // the timeline loadFilm built: estimated for a voiced film
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
   const voiced = film.voice !== undefined && options.outline !== true;
   const made = !voiced ? null
