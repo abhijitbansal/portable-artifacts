@@ -125,7 +125,7 @@ node plugins/portable-artifacts/bin/install.mjs claude
 node plugins/portable-artifacts/bin/install.mjs claude --agents-only
 ```
 
-The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way. An existing agent file is kept unless you pass `--force`. A plugin install on Claude Code already carries the file, so `claude` is for the other ways of installing there.
+The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way. An existing agent file is kept unless you pass `--force`, which replaces `artifact-builder` (a name this plugin owns). On Claude Code the installer also writes the optional `motion-reviewer` agent; its name is generic, so `--force` never replaces a `motion-reviewer.md` you wrote, a newer one, or a symbolic link there (it says so and keeps it) unless you also pass `--replace-foreign`. A `motion-reviewer.md` of ours that is replaced is first copied to `motion-reviewer.md.bak` beside it (`.bak.1`, `.bak.2` when one exists). A plugin install on Claude Code already carries the file, so `claude` is for the other ways of installing there.
 
 Installed with `npx skills add`, which copies skill folders only (no `bin/install.mjs`)? Use the doctor instead:
 
@@ -134,7 +134,7 @@ node <skill-dir>/scripts/doctor.mjs
 node <skill-dir>/scripts/doctor.mjs --fix builder_agent
 ```
 
-The doctor reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists. `--fix builder_agent` runs the skill's own copy of `shared/agents.mjs`, which writes `~/.copilot/agents/artifact-builder.agent.md` and/or `~/.codex/agents/artifact-builder.toml` (user level, outside the project; an existing file is kept, never overwritten). The skill's workflow already tells the agent to ask you before running a doctor fix. Project-level install (`.github/agents`, `.codex/agents`) still needs `install.mjs --project`. A host may need a new session before it lists the new agent.
+The doctor reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists. `--fix builder_agent` runs the skill's own copy of `shared/agents.mjs`, which writes `~/.copilot/agents/artifact-builder.agent.md` and/or `~/.codex/agents/artifact-builder.toml` (user level, outside the project; an existing `artifact-builder` file is kept, never overwritten). On Claude Code it also writes `~/.claude/agents/artifact-builder.md` and the optional `motion-reviewer.md`, and a `motion-reviewer.md` that is an older file of ours is rewritten, after the old text is copied to `motion-reviewer.md.bak` (`.bak.1`, `.bak.2` when one exists); the doctor says so. A `motion-reviewer.md` you wrote or a newer one is never touched: it shows as one note, not a failure, and a missing builder is still written beside it. (The writer also refuses a symbolic link there; the doctor reads through a link, so for a link to an older file of ours its fix fails with that refusal.) The skill's workflow already tells the agent to ask you before running a doctor fix. Project-level install (`.github/agents`, `.codex/agents`) still needs `install.mjs --project`. A host may need a new session before it lists the new agent.
 
 **What was measured, and on which scheme.** Two records on two schemes. Do not read one as the other.
 

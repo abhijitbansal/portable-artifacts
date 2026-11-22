@@ -6,6 +6,7 @@
 //   node agents.mjs write <claude|copilot|codex> <agents-dir>     writes the file, keeps an existing one
 //                                                                 (claude also writes motion-reviewer.md)
 //   node agents.mjs write-reviewer claude <agents-dir> [--force [--replace-foreign]]  writes only motion-reviewer.md
+//                                                                 (--force copies a file it replaces to motion-reviewer.md.bak first)
 // The Claude Code text is also shipped as the plugin's agents/artifact-builder.md; a test holds the two equal.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -190,34 +191,101 @@ export const CURRENT_MARKER = 'make.mjs';
 const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-dir>
        node agents.mjs write-reviewer <${REVIEWER_HOSTS.join('|')}> <agents-dir> [--force [--replace-foreign]]`;
 
-// The refusal for a path whose read gave ENOENT, or null when nothing is there (lstat does not follow a link).
-function danglingRefusal(file) {
+// The reason --force must be refused for this file, or null. It fails closed: only an absent file is clear to write. A
+// symbolic link is never clear, even one to a file of ours: replacing it would swap the user's own arrangement for a plain
+// file. A file the writer cannot read (EACCES, EISDIR, ELOOP...) is not known to be ours, a file with no marker is not
+// ours, and one written by a newer skill would be downgraded. --replace-foreign overrides all of these.
+// The installer and the writer CLI both call it, so neither is the only gate.
+export function reviewerRefusal(dir, fileName) {
+  const file = path.join(path.resolve(dir), fileName);
+  let link;
   try {
-    fs.lstatSync(file);
+    link = fs.lstatSync(file).isSymbolicLink();
   } catch (e) {
     if (e.code === 'ENOENT') return null;
     return `cannot look at ${file} to check it is ours (${e.code ?? e.message}); to replace it anyway pass --force --replace-foreign (keep a copy first)`;
   }
-  return `${file} is a symbolic link to nothing; to replace the link anyway pass --force --replace-foreign`;
-}
-
-// The reason --force must be refused for this file, or null. It fails closed: only an absent file is clear to write. A read
-// that gives ENOENT is looked at with lstat too, because a dangling symbolic link reads as ENOENT and something is there. A
-// file the writer cannot read (EACCES, EISDIR, ELOOP...) is not known to be ours, a file with no marker is not ours, and one
-// written by a newer skill would be downgraded. --replace-foreign overrides all of these.
-function reviewerRefusal(dir, fileName) {
-  const file = path.join(path.resolve(dir), fileName);
+  if (link) {
+    const dangling = !fs.existsSync(file);
+    return `${file} is a symbolic link${dangling ? ' to nothing' : ''}; to replace the link anyway pass --force --replace-foreign`;
+  }
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (e) {
-    if (e.code === 'ENOENT') return danglingRefusal(file);
     return `cannot read ${file} to check it is ours (${e.code ?? e.message}); to replace it anyway pass --force --replace-foreign (keep a copy first)`;
   }
   const state = reviewerFileState(text);
   if (state === 'foreign') return `${file} is not a portable-artifacts file; to replace it anyway pass --force --replace-foreign (keep a copy first)`;
   if (state === 'newer') return `${file} is newer than this skill's copy (format ${reviewerFormatOf(text)}, this skill writes format ${REVIEWER_FORMAT}); to downgrade it anyway pass --force --replace-foreign`;
   return null;
+}
+
+// Before a rewrite of a regular file whose text differs from what will be written: copy it beside itself as <file>.bak, or
+// .bak.1, .bak.2 ... when that name is taken (COPYFILE_EXCL: an earlier copy is never overwritten). Returns the copy's path,
+// or null when there is nothing to keep (no file, a link, or the same text). Throws when the copy cannot be made.
+const MAX_BACKUPS = 1000;
+function backupBeforeRewrite(file, content) {
+  let st;
+  try {
+    st = fs.lstatSync(file);
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw e;
+  }
+  if (!st.isFile()) return null;
+  try {
+    if (fs.readFileSync(file, 'utf8') === content) return null;
+  } catch {
+    // unreadable: fall through, the copy below fails with the real reason
+  }
+  for (let n = 0; n < MAX_BACKUPS; n += 1) {
+    const copy = n === 0 ? `${file}.bak` : `${file}.bak.${n}`;
+    try {
+      fs.copyFileSync(file, copy, fs.constants.COPYFILE_EXCL);
+      return copy;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+    }
+  }
+  throw new Error(`more than ${MAX_BACKUPS} backups of ${file} already exist`);
+}
+
+// The one way to write the reviewer file, for the writer CLI and the installer. Without force an existing file is kept.
+// With force it applies the gate (reviewerRefusal) unless replaceForeign, copies the old text to a .bak first, then
+// replaces the file. Returns { result: 'written' | 'kept' | 'not-file' | 'refused', reason?, backup?, backupError? }.
+// A failed copy refuses the rewrite, except under replaceForeign where the owner asked to replace it anyway.
+export function writeReviewerFile(dir, file, content, { force = false, replaceForeign = false } = {}) {
+  if (!force) return { result: writeAgentFile(dir, file, content, false) };
+  if (!replaceForeign) {
+    const reason = reviewerRefusal(dir, path.basename(file));
+    if (reason) return { result: 'refused', reason };
+  }
+  let backup = null;
+  let backupError;
+  try {
+    backup = backupBeforeRewrite(file, content);
+  } catch (e) {
+    if (!replaceForeign) return { result: 'refused', reason: `could not copy ${file} to a backup first (${e.code ?? e.message}), so it is left as it is` };
+    backupError = `could not copy ${file} to a backup first (${e.code ?? e.message})`;
+  }
+  return { result: writeAgentFile(dir, file, content, true), ...(backup ? { backup } : {}), ...(backupError ? { backupError } : {}) };
+}
+
+// Prints the lines for one reviewer write (stdout for the facts, stderr for a refusal or a warning).
+function reportReviewer(file, r) {
+  if (r.backup) process.stdout.write(`agent: backed up ${file} to ${r.backup}\n`);
+  if (r.backupError) process.stderr.write(`agent: ${r.backupError}\n`);
+  if (r.result === 'refused') {
+    process.stderr.write(`agent: ${r.reason}\n`);
+    return 1;
+  }
+  if (r.result === 'not-file') {
+    process.stderr.write(`agent: ${file} is not a file\n`);
+    return 1;
+  }
+  process.stdout.write(r.result === 'kept' ? `agent: kept existing ${file}\n` : `agent: ${file}\n`);
+  return 0;
 }
 
 // Writes each { fileName, content } into dir and prints one line per file. Returns 1 if any could not be written.
@@ -250,13 +318,14 @@ function cli(argv) {
   const flags = new Set(rest);
   const flagsOk = flags.size === rest.length && rest.every((f) => f === '--force' || f === '--replace-foreign') && (!flags.has('--replace-foreign') || flags.has('--force'));
   if (command === 'write-reviewer' && REVIEWER_HOSTS.includes(host) && validDir && flagsOk) {
-    const file = reviewerFile(host);
-    const refusal = flags.has('--force') && !flags.has('--replace-foreign') ? reviewerRefusal(dir, file.fileName) : null;
-    if (refusal) {
-      process.stderr.write(`agent: ${refusal}\n`);
+    const { fileName, content } = reviewerFile(host);
+    const target = path.join(path.resolve(dir), fileName);
+    try {
+      return reportReviewer(target, writeReviewerFile(path.resolve(dir), target, content, { force: flags.has('--force'), replaceForeign: flags.has('--replace-foreign') }));
+    } catch (e) {
+      process.stderr.write(`agent: could not write ${target} (${e.message})\n`);
       return 1;
     }
-    return writeFiles(dir, [file], flags.has('--force'));
   }
   process.stderr.write(`${USAGE}\n`);
   return 2;

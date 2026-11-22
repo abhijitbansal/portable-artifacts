@@ -3,7 +3,9 @@
 //   node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps]
 //   node bin/install.mjs <host> [--project <dir>] --agents-only [--force]   (agent files only: no skills, no preflight, no npm)
 // claude, codex, copilot and agents also get the cheap-model artifact-builder agent file (kept if present unless --force).
-// claude also gets the read-only motion-reviewer agent file, the same way.
+// claude also gets the read-only motion-reviewer agent file, the same way, except that --force never replaces a file the
+// user wrote, a newer file of ours or a symbolic link there unless --replace-foreign is also given (a replaced file is
+// first copied to motion-reviewer.md.bak).
 // Each host reads SKILL.md folders from its own documented locations; the
 // skill itself is the slash command there (/name, or $name in Codex).
 // A skill's package.json "portableArtifacts": {"requires": [...]} pulls in sibling skills first.
@@ -12,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { agentFile, REVIEWER_HOSTS, reviewerFile, writeAgentFile } from '../shared/agents.mjs';
+import { agentFile, REVIEWER_HOSTS, reviewerFile, writeAgentFile, writeReviewerFile } from '../shared/agents.mjs';
 import { parseCli, UsageError, exitUsage } from '../shared/cli.mjs';
 import { cmdLine } from '../shared/doctor.mjs';
 
@@ -55,12 +57,13 @@ export function agentTargetsFor(host, scope, { home, proj }) {
 
 export { UsageError };
 
-const USAGE = 'node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps] [--agents-only]';
+const USAGE = 'node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force [--replace-foreign]] [--no-deps] [--agents-only]';
 const OPTIONS = {
   project: { type: 'string' },
   skills: { type: 'string' },
   link: { type: 'boolean', default: false },
   force: { type: 'boolean', default: false },
+  'replace-foreign': { type: 'boolean', default: false },
   'no-deps': { type: 'boolean', default: false },
   'agents-only': { type: 'boolean', default: false },
 };
@@ -231,6 +234,7 @@ function parse(argv) {
   if (!Object.hasOwn(HOSTS, host)) throw new UsageError(`unknown host "${host ?? ''}"; use one of: ${Object.keys(HOSTS).join(', ')}`);
   const all = fs.readdirSync(SKILLS_SRC).filter((d) => fs.existsSync(path.join(SKILLS_SRC, d, 'SKILL.md')));
   if (parsed.values.project === '') throw new UsageError('--project needs a directory');
+  if (parsed.values['replace-foreign'] && !parsed.values.force) throw new UsageError('--replace-foreign needs --force');
   if (parsed.values['agents-only']) {
     const clash = [parsed.values.skills !== undefined && '--skills', parsed.values.link && '--link', parsed.values['no-deps'] && '--no-deps'].filter(Boolean);
     if (clash.length) throw new UsageError(`--agents-only cannot be combined with ${clash.join(', ')}`);
@@ -258,17 +262,27 @@ function preflight(plan, dstRoot, { force }) {
   });
 }
 
-// Write each agent file; an existing one is kept unless force. Returns true if any write failed (main decides whether that is fatal).
-function installAgents(targets, { force }) {
+// Write each agent file; an existing one is kept unless force. The builder file is ours by name, so --force replaces it. The
+// reviewer's name is generic, so --force goes through the same gate as `agents.mjs write-reviewer`: a file the user wrote, a
+// newer file of ours or a symbolic link is kept (and said so) unless --replace-foreign is also given, and a file it does
+// replace is copied to motion-reviewer.md.bak first. Returns true if any write failed (main decides whether that is fatal).
+function installAgents(targets, { force, replaceForeign = false }) {
   let failed = false;
   for (const { host, dir } of targets) {
-    const files = [agentFile(host)];
-    if (REVIEWER_HOSTS.includes(host)) files.push(reviewerFile(host));
-    for (const { fileName, content } of files) {
+    const files = [{ ...agentFile(host), isReviewer: false }];
+    if (REVIEWER_HOSTS.includes(host)) files.push({ ...reviewerFile(host), isReviewer: true });
+    for (const { fileName, content, isReviewer } of files) {
       const file = path.join(dir, fileName);
       try {
-        const result = writeAgentFile(dir, file, content, force);
-        if (result === 'kept') process.stdout.write(`agent: kept existing ${file}\n`);
+        const r = isReviewer ? writeReviewerFile(dir, file, content, { force, replaceForeign }) : { result: writeAgentFile(dir, file, content, force) };
+        if (r.backup) process.stdout.write(`agent: backed up ${file} to ${r.backup}\n`);
+        if (r.backupError) process.stderr.write(`install: agent: ${r.backupError}\n`);
+        const result = r.result;
+        if (result === 'refused') {
+          // The user's file is safe: say why it was kept, and do not fail the install.
+          process.stdout.write(`agent: kept existing ${file}\n`);
+          process.stderr.write(`install: agent: ${r.reason}\n`);
+        } else if (result === 'kept') process.stdout.write(`agent: kept existing ${file}\n`);
         else if (result === 'not-file') {
           failed = true;
           process.stderr.write(`install: agent: ${file} is not a file\n`);
@@ -295,7 +309,7 @@ function main() {
       return;
     }
     // The agent file is the whole job here, so a failed write is a failed run.
-    if (installAgents(targets, { force: opts.force })) process.exitCode = 1;
+    if (installAgents(targets, { force: opts.force, replaceForeign: opts['replace-foreign'] })) process.exitCode = 1;
     return;
   }
   const plan = preflight(expandRequires(opts.skills), dirs.skills, { force: opts.force });
@@ -313,7 +327,7 @@ function main() {
     }
     process.stdout.write(`installed ${skill} -> ${dst}\n  invoke: ${h.invoke(skill)} <what to make>\n`);
   }
-  installAgents(agentTargetsFor(opts.host, scope, ctx), { force: opts.force });
+  installAgents(agentTargetsFor(opts.host, scope, ctx), { force: opts.force, replaceForeign: opts['replace-foreign'] });
   if (plan.some((p) => p.skill === 'make-motion')) {
     process.stdout.write('make-motion also needs ffmpeg on PATH and, once: npx playwright install chromium (run in the skill folder)\n');
   }

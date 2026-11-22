@@ -503,6 +503,61 @@ test('cli: write-reviewer --replace-foreign needs --force, and an absent file is
   assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md'), 'utf8'), reviewerFile('claude').content);
 });
 
+// A rewrite of an older file of ours first copies it beside itself, never over an earlier copy.
+test('cli: write-reviewer --force copies our older file to .bak, then .bak.1, then .bak.2, and says so', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  const olds = [1, 2, 3].map((n) => `${OURS_OLD()}\nedit ${n}\n`);
+  const names = ['motion-reviewer.md.bak', 'motion-reviewer.md.bak.1', 'motion-reviewer.md.bak.2'];
+  olds.forEach((old, i) => {
+    fs.writeFileSync(file, old);
+    const r = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, new RegExp(`backed up .*motion-reviewer\\.md to .*${names[i].replace(/\./g, '\\.')}`), r.stdout);
+    assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+  });
+  names.forEach((n, i) => assert.equal(fs.readFileSync(path.join(dir, n), 'utf8'), olds[i], n));
+});
+
+test('cli: write-reviewer --force makes no backup when the file is already current', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'motion-reviewer.md'), reviewerFile('claude').content);
+  const r = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(fs.readdirSync(dir), ['motion-reviewer.md']);
+});
+
+test('cli: write-reviewer --force --replace-foreign copies the foreign file to .bak before replacing it', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'motion-reviewer.md'), 'mine é\n');
+  const r = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force', '--replace-foreign'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'motion-reviewer.md.bak'), 'utf8'), 'mine é\n');
+});
+
+// A symlink to a file of ours must not be swapped for a plain file: the link may be the user's own arrangement.
+test('cli: write-reviewer --force refuses a symlink to a file of ours, and replaces it only with --replace-foreign', { skip: process.platform === 'win32' && 'symbolic links need a privilege on Windows' }, () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  const target = path.join(dir, 'elsewhere.md');
+  fs.writeFileSync(target, OURS_OLD());
+  fs.symlinkSync(target, file);
+  const refused = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+  assert.match(refused.stderr, /symbolic link/);
+  assert.match(refused.stderr, /--force --replace-foreign/);
+  assert.ok(fs.lstatSync(file).isSymbolicLink(), 'the link is untouched');
+  assert.equal(fs.readFileSync(target, 'utf8'), OURS_OLD(), 'its target is untouched');
+  const replaced = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force', '--replace-foreign'], { encoding: 'utf8' });
+  assert.equal(replaced.status, 0, replaced.stderr);
+  assert.ok(fs.lstatSync(file).isFile());
+  assert.equal(fs.readFileSync(target, 'utf8'), OURS_OLD(), 'its target was never written');
+});
+
 test('cli: write-reviewer refuses a host with no reviewer, an unknown flag and a missing dir (exit 2, nothing written)', () => {
   const dir = path.join(tmpDir(), 'agents');
   for (const args of [['write-reviewer', 'codex', dir], ['write-reviewer', 'claude', dir, '--frob'], ['write-reviewer', 'claude']]) {
