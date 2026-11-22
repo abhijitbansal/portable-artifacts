@@ -22,6 +22,7 @@ import '../../engine/looks/index.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { SAME_PICTURE } from '../../engine/page/glyph-draw.mjs';
 import { sessionOrNull, HERE } from './helpers/session.mjs';
+import { LETTER_LOOKS, requiredPlainWords } from './helpers/glyph-pins.mjs';
 
 const FPS = 30;
 const WORDS = "Typography office AVATAR fjord waffle L'été 10,000"; // fi, ff, fl, kerned pairs, an accent, figures
@@ -32,16 +33,8 @@ const WORD_SETS = Object.freeze({
   rtl: 'שלום עולם مرحبا',
   mixed: WORDS,
 });
-// The looks the test asserts: every look measured equal on every word set (a word the glyph path cannot draw faithfully is
-// drawn whole, so a look's face cannot break it), and sending at least one word of the plain set through the glyph path, so a
-// check that rejected every word cannot pass. marker is not in it: its script face has contextual forms, so the check sends
-// most of its words to the whole-word draw (measured: 3 of 5 plain words, 5 of 5 ligature words), and a letters entrance would
-// run some words letter by letter and the rest as one block; Task 4 gives marker `letters: null`. It stays in the table,
-// reported.
-const LETTER_LOOKS = ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote'];
-// DISTINCT words of the plain set (5: Typography, AVATAR, fjord, L'été, 10,000) each look sends through the glyph path, as measured
-// on macOS: all five in every asserted look. A check that wrongly rejects some words fails here, not only one that rejects all.
-const PLAIN_WORDS_BY_GLYPH = Object.freeze({ desk: 5, pop: 5, cosmos: 5, ledger: 5, poster: 5, keynote: 5 });
+// The asserted looks and the plain words each must send through the glyph path (exact on darwin, where they were measured; at
+// least 1 elsewhere, whose rasteriser may send some words whole) are in helpers/glyph-pins.mjs. The counts print on every platform.
 // sha256 of the poster statement's last frame (16:9, seed 3, WORDS) with the seam off, taken at the base commit (before this
 // task) on darwin. Font rasterisation differs between platforms, so other platforms only print theirs.
 const BASE_SOURCE_SHA256 = { darwin: '15ced09e237d9768d67ac49bfd7e1a3580127556053b95945557abc2da262b1d' };
@@ -86,7 +79,8 @@ for (const look of registries.looks.names()) {
         counts.set(`${look} / ${set}`, stats);
         assert.deepEqual(session.errors, []);
         if (LETTER_LOOKS.includes(look)) assert.ok(max <= SAME_PICTURE, `no channel differs by more than ${SAME_PICTURE} (it differs by ${max}, on ${differing} channels)`);
-        if (LETTER_LOOKS.includes(look) && set === 'plain') assert.ok(stats.glyph >= PLAIN_WORDS_BY_GLYPH[look], `${look}: ${stats.glyph} distinct plain words took the glyph path, at least ${PLAIN_WORDS_BY_GLYPH[look]} should (drawn whole: ${stats.rejectedWords.join(', ')})`);
+        if (set === 'plain') t.diagnostic(`${look} on ${process.platform}: ${stats.glyph} of 5 plain words took the glyph path (drawn whole: ${stats.rejectedWords.join(', ') || 'none'})`);
+        if (LETTER_LOOKS.includes(look) && set === 'plain') assert.ok(stats.glyph >= requiredPlainWords(look), `${look}: ${stats.glyph} distinct plain words took the glyph path, at least ${requiredPlainWords(look)} should on ${process.platform} (drawn whole: ${stats.rejectedWords.join(', ')})`);
       } finally {
         await session.close();
       }
@@ -185,6 +179,12 @@ test('cosmos: a word half way through its letters draws its first letter and not
   if (!session) return t.skip('no browser');
   try {
     const { page } = session;
+    // The pixels below hold only if "Orbits" takes the glyph path. On macOS it does (asserted); another platform's rasteriser
+    // may draw it whole, which is a valid result: then there are no letters to read, so the test says so and skips.
+    const { stats } = await compareFrames(page, lastFrame(film));
+    t.diagnostic(`cosmos "Orbits" on ${process.platform}: ${stats.glyph} word by glyph, ${stats.rejected} whole`);
+    if (process.platform !== 'darwin' && stats.glyph === 0) return t.skip(`"Orbits" is drawn whole on ${process.platform}`);
+    assert.equal(stats.glyph, 1, '"Orbits" takes the glyph path');
     // the last frame at which the first letter has landed and the last has not begun, and the first at which every letter
     // rests: found from the page's own samples
     let mid = null, settled = null;

@@ -95,7 +95,7 @@ Each look serves the modes it names, and some kinds are not drawn in some looks.
 
 `--inspect`, `--shot` and `--range` check one part of a film without a whole-film pass. They read film time, the one way a moment is named (a number of seconds, `rows@end`, `rows@word:3`; [`references/tools.md`](references/tools.md)). `--inspect <film time>` writes one frame as a PNG and a JSON dump of its nodes. `--shot <id>` and `--range <from>..<to>` review and write the sheets of that slice, and a silent MP4 of it beside the film's own. A film with `music.snap` is read on the timeline its render draws.
 
-Two renders of the same film and media give the same frames. The MP4's `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set. A version 1 spec is refused with a pointer to [`references/migrating.md`](references/migrating.md), which maps each version 1 feature to version 2 or says it is not in 2.0.
+Two renders of the same film and media give the same frames on the same machine, browser build and fonts (the browser draws the text, so another system can set some words differently). The MP4's `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set. A version 1 spec is refused with a pointer to [`references/migrating.md`](references/migrating.md), which maps each version 1 feature to version 2 or says it is not in 2.0.
 
 ## Security
 
