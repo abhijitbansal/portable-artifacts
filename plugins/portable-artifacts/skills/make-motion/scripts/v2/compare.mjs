@@ -40,7 +40,12 @@ const CELL_COLOURS = Object.freeze({ ...COLOURS, flat: REFUSED_BACKGROUND, noteL
 /** Where the sheet goes: the video path's stem with `.looks.png`, in the folder the MP4 would go to. */
 export const comparePath = (videoOut) => path.join(path.dirname(videoOut), `${path.basename(videoOut, path.extname(videoOut))}.looks.png`);
 
-const firstProblem = (errors) => `${errors[0].path}: ${errors[0].message}`;
+// The first error as `path: message`. A film of the anchor alone has the anchor at shots[0]: `anchorIndex` (when it is that film's
+// error) maps the path back to the anchor's own index in the real film.
+const firstProblem = (errors, anchorIndex) => {
+  const at = anchorIndex === undefined ? errors[0].path : errors[0].path.replace(/^shots\[0\]/, `shots[${anchorIndex}]`);
+  return `${at}: ${errors[0].message}`;
+};
 
 function parkedNote(look, anchor) {
   if (anchor === undefined) return null;
@@ -79,7 +84,7 @@ export function comparableLooks(film, { shot, specDir = process.cwd(), registrie
     if (ours.length > 0 || (!whole.ok && anchor === undefined)) return { look, status: 'refused', note: firstProblem(ours.length > 0 ? ours : whole.errors) };
     const alone = whole.ok ? whole : validateFilm({ ...film, look, shots: [anchor] }, options);
     const faults = whole.ok ? 0 : whole.errors.length;
-    if (!alone.ok) return { look, status: 'refused', note: `fault in another shot (${plural(faults, 'error')}); the anchor alone does not validate: ${firstProblem(alone.errors)}` };
+    if (!alone.ok) return { look, status: 'refused', note: `fault in another shot (${plural(faults, 'error')}); the anchor alone does not validate: ${firstProblem(alone.errors, anchorIndex)}` };
     const parked = parkedNote(registries.looks.get(look), anchor);
     const notes = [parked, faults > 0 ? `other shots do not validate in this look (${plural(faults, 'problem')}); the anchor is drawn alone` : null].filter(Boolean);
     return { look, status: parked === null ? 'drawn' : 'parked', note: notes.length === 0 ? null : notes.join('; '), ...(faults > 0 ? { otherFaults: faults } : {}) };
@@ -88,13 +93,13 @@ export function comparableLooks(film, { shot, specDir = process.cwd(), registrie
 
 /**
  * `steps` (run.mjs soundSteps) with musicInput asked once per music file however many looks ask: a music.snap film with no beats
- * file is decoded and beat-detected by ffmpeg, and every look would do it again. The first ask's `seconds` (the film's length
- * for the silence check) stands for the rest; a refusal is remembered too.
+ * file is decoded and beat-detected by ffmpeg, and every look would do it again. A look that lengthens the film asks with its own
+ * `seconds` (the film's length, for the silence check), so the film's length is part of the key; a refusal is remembered too.
  */
 export function memoiseMusicInput(steps) {
   const seen = new Map();
   return { ...steps, musicInput: (film, specDir, options) => {
-    const key = `${film.music.src}\u0000${film.music.beats ?? ''}`;
+    const key = `${film.music.src}\u0000${film.music.beats ?? ''}\u0000${options?.seconds ?? ''}`;
     if (!seen.has(key)) seen.set(key, steps.musicInput(film, specDir, options));
     return seen.get(key);
   } };
@@ -165,7 +170,7 @@ async function loadCells({ specPath, values, registries, own, shot, index, prepa
         cell.frame = alone ? null : cell.at;
       } catch (err) {
         if (!(err instanceof SpecError)) throw err;
-        Object.assign(cell, { status: 'refused', note: firstProblem(err.errors), loaded: null });
+        Object.assign(cell, { status: 'refused', note: firstProblem(err.errors, alone ? index : undefined), loaded: null });
       }
     }
     cells.push(cell);
@@ -187,12 +192,13 @@ const refuse = (cell, message) => Object.assign(cell, { status: 'refused', note:
 
 const keyOf = (finding) => `${finding.kind}\u0000${finding.message}`;
 
-// What the pages said, after every look has been drawn: a finding every look that drew shares (no WebGL, a font) is one note,
+// What the pages said, after every look has been drawn: a finding every look that drew shares (no WebGL, a font; at least two looks
+// drew, or every finding of a lone look would count as shared) is one note,
 // creative whatever it was, and refuses nobody; a mechanical finding one look alone has (a console error, a blocked request) refuses
 // that look's cell; a creative one of a single look is a note naming the look. -> the notes, as findings; `refused`: the cells.
-function settleFindings(cells) {
+export function settleFindings(cells) {
   const sampled = cells.filter((cell) => cell.status !== 'refused' && cell.pageFindings !== null);
-  const shared = sampled.length === 0 ? [] : sampled[0].pageFindings.filter((f) => sampled.every((cell) => cell.pageFindings.some((g) => keyOf(g) === keyOf(f))));
+  const shared = sampled.length < 2 ? [] : sampled[0].pageFindings.filter((f) => sampled.every((cell) => cell.pageFindings.some((g) => keyOf(g) === keyOf(f))));
   const notes = shared.map((f) => pageFinding('creative', f.message));
   const refused = [];
   for (const cell of sampled) {

@@ -12,6 +12,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
 import { measure, canvasOf, viralOf } from './helpers/kinds.mjs';
 import { liveWindowKeys } from './helpers/live-window.mjs';
+import { liveWindowFixture } from './helpers/live-window-fixture.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '../..');
@@ -27,6 +28,12 @@ test('the fixture pins every layer and shader window of the film, each with a li
     assert.match(w.sha, /^[0-9a-f]{64}$/, name);
     assert.ok(w.frames >= 12, `${name}: a window of at least 0.4 s at 30 fps`);
   }
+});
+
+// F-11: the generator used to stamp a fixed reason, so the next regeneration, for any cause, would have recorded a false one.
+test('the generator records the reason it is given and refuses to run without one', () => {
+  assert.equal(liveWindowFixture('a stated reason').regenerated, 'a stated reason');
+  for (const none of [undefined, '', '  ']) assert.throws(() => liveWindowFixture(none), /give the reason/);
 });
 
 test('every frame inside the layer and shader windows of cuts-desk is the frame it was: the outgoing shot keeps moving', () => {

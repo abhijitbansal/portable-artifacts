@@ -12,7 +12,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { FAST_SHOT_SECONDS, SCENE_THRESHOLD, measureReport, parseScdet, reportJson, shotStats } from '../../scripts/lib/measure.mjs';
 import { fail, run as runTool } from '../../scripts/measure.mjs';
-import { CLIP_DECODERS, CLIP_DEMUXERS } from '../../scripts/v2/clips.mjs';
+import { CLIP_DECODERS, CLIP_DEMUXERS, probeClip } from '../../scripts/v2/clips.mjs';
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -64,7 +64,11 @@ after(async () => {
 const measure = (args, env = {}) => execFileAsync(process.execPath, [MEASURE, ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
   .then((r) => ({ status: 0, ...r }), (e) => ({ status: e.code, stdout: e.stdout, stderr: e.stderr }));
 
-const realBinary = (name) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [name], { encoding: 'utf8' }).stdout.split('\n')[0].trim();
+function realBinary(name) {
+  const found = spawnSync(process.platform === 'win32' ? 'where' : 'which', [name], { encoding: 'utf8' }).stdout.split('\n')[0].trim();
+  if (found === '') throw new Error(`${name} is not on PATH: the recording wrappers run the real one (a test that needs them skips without ffmpeg)`);
+  return found;
+}
 let toolCount = 0;
 // A node script that stands in for ffmpeg or ffprobe: `body` is its source (CommonJS), run with the argv as `args`.
 function fakeTool(name, body) {
@@ -149,6 +153,12 @@ test('a run that passes its time limit says so, with the limit, instead of "exit
   assert.match(fail('ffprobe could not read the frame rate', { code: 1, timedOut: false, kept: ['boom'] }, 10_000).message, /: boom$/);
 });
 
+// F-9: tools.md promises `did not finish within <n> s` for the ffprobe checks as well as the scan.
+test('a clip probe that passes its time limit says so with the limit, as the scan and the frame rate do', async () => {
+  const hang = fakeTool('ffprobe', 'setTimeout(() => {}, 10000);');
+  await assert.rejects(probeClip({ file: plainFile, ffprobe: hang, timeout: 200 }), (e) => /^ffprobe did not finish within 0\.2 s reading plain\.mp4$/.test(e.message));
+});
+
 test('a URL, a folder, a link and a named pipe each exit 2 with the local-files message, and no ffmpeg is started for them', async () => {
   const marker = path.join(dir, 'ffmpeg-started');
   const fake = fakeTool('marker', `require('node:fs').appendFileSync(${JSON.stringify(marker)}, 'started\\n'); process.exit(1);`);
@@ -179,6 +189,24 @@ test('a playlist, an HLS file named .mp4 and a concat script that name a URL are
     assertWhitelisted(calls(), arg);
   }
   assert.deepEqual(hits, [], 'the local server saw no request');
+});
+
+// F-10 (R-3): a recorder that cannot find the real binary used to spawn '' and fail with an unrelated exit 1.
+test('realBinary says which tool is missing instead of giving an empty path', () => {
+  assert.throws(() => realBinary('no-such-tool-for-measure-test'), /no-such-tool-for-measure-test is not on PATH/);
+});
+
+// F-10 (R-2): the same three calls, answered by stand-ins that need no ffmpeg, so the whitelists are checked on every machine.
+test('the probe, the frame rate and the pass are each opened behind the whitelists, with no ffmpeg installed', async () => {
+  const log = path.join(dir, `calls-${toolCount++}.jsonl`);
+  const note = (tool) => `require('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify({ tool: ${JSON.stringify(tool)}, argv: args }) + '\\n');`;
+  const ffprobe = fakeTool('ffprobe', `${note('ffprobe')}\nif (args.includes('-select_streams')) console.log(JSON.stringify({ streams: [{ avg_frame_rate: '30/1', r_frame_rate: '30/1' }] }));\nelse console.log(${JSON.stringify(probeAnswer(320))});`);
+  const ffmpeg = fakeTool('ffmpeg', `${note('ffmpeg')}\nconsole.error('[Parsed_scdet_0 @ 0x1] lavfi.scd.score: 15.6, lavfi.scd.time: 1');`);
+  const result = await measure([plainFile, '--json'], { FFMPEG_PATH: ffmpeg, FFPROBE_PATH: ffprobe });
+  assert.equal(result.status, 0, result.stderr);
+  const calls = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  assert.deepEqual(calls.map((c) => c.tool), ['ffprobe', 'ffprobe', 'ffmpeg']);
+  assertWhitelisted(calls, plainFile);
 });
 
 test('a measured file is read by three calls, the probe, the frame rate and the pass, each behind the whitelists', { skip: !hasFfmpeg }, async () => {

@@ -15,11 +15,12 @@ import { encodePng } from '../../scripts/lib/png-write.mjs';
 import { readPng } from '../../scripts/v2/png.mjs';
 import { SpecError, validateFilm } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
+import { composeInPage } from '../../scripts/v2/sheets.mjs';
 import { FilmTimeError } from '../../scripts/v2/film-time.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { absolutePaths, formatText, reportOf } from '../../scripts/v2/report.mjs';
-import { COMPARE_COLUMNS, COMPARE_MAX, COMPARE_TILE_WIDTH, assembleSheet, comparableLooks, comparePath, memoiseMusicInput, writeComparison } from '../../scripts/v2/compare.mjs';
+import { COMPARE_COLUMNS, COMPARE_MAX, COMPARE_TILE_WIDTH, assembleSheet, comparableLooks, comparePath, memoiseMusicInput, settleFindings, writeComparison } from '../../scripts/v2/compare.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FILM_PATH = 'film.json';
@@ -34,6 +35,13 @@ function withPicture(dir) {
   writeFileSync(path.join(dir, 'dash.png'), encodePng({ width: 2, height: 2, channels: 3, data: Buffer.alloc(12, 200) }));
   return dir;
 }
+
+// F-12: the page function is sent to the browser as source, so its helpers live inside it; it still stays within the 50-line limit.
+test('composeInPage is under 50 lines, and carries its own note wrapping to the page', () => {
+  const source = composeInPage.toString();
+  assert.ok(source.split('\n').length < 50, `composeInPage is ${source.split('\n').length} lines`);
+  assert.match(source, /wrapNote/, 'the wrapping is an inner function, so it travels with the source');
+});
 
 test('the constants of the sheet', () => assert.deepEqual([COMPARE_MAX, COMPARE_COLUMNS, COMPARE_TILE_WIDTH], [16, 4, 480]));
 
@@ -114,6 +122,18 @@ test('a parked anchor kind and a fault on another shot are both on the entry', (
   assert.match(keynote.note, /^experimental kind; other shots do not validate/);
 });
 
+// F-6: a film of the anchor alone has the anchor at shots[0], so its error paths must be mapped back to the anchor's own index.
+test('when the anchor alone does not validate, the note names the anchor\'s own index, not shots[0]', () => {
+  const underline = { on: [{ at: 'start', do: 'underline', target: 'value' }] };
+  const number = (id, extra) => ({ id, show: 'number', say: 'One.', value: 1, label: 'x', hero: 'h', ...extra });
+  const film = { version: 2, mode: 'pro', look: 'desk', shots: [number('a', underline), number('b', { cut: 'match' })] };
+  assert.equal(validateFilm(film, { specDir: process.cwd() }).ok, true, 'the premise: the film is valid in desk');
+  const keynote = comparableLooks(film, { shot: 'b' }).find((c) => c.look === 'keynote');
+  assert.equal(keynote.status, 'refused');
+  assert.match(keynote.note, /fault in another shot \(1 error\); the anchor alone does not validate: shots\[1\]\.cut: /);
+  assert.doesNotMatch(keynote.note, /shots\[0\]/);
+});
+
 test('memoiseMusicInput asks for a music file once, however many looks ask', async () => {
   let calls = 0;
   const steps = { other: 1, musicInput: async (film) => { calls += 1; return { file: film.music.src }; } };
@@ -125,6 +145,48 @@ test('memoiseMusicInput asks for a music file once, however many looks ask', asy
   assert.equal(memo.other, 1, 'the other steps are untouched');
   await memo.musicInput({ music: { src: 'n.wav' } }, '/d', {});
   assert.equal(calls, 2, 'another file is another call');
+});
+
+// F-8: a look that lengthens the film asks with its own length, so the silence check is not run on the first look's.
+test('memoiseMusicInput keys on the film\'s length too: another length is another ask', async () => {
+  const lengths = [];
+  const memo = memoiseMusicInput({ musicInput: async (film, specDir, { seconds }) => { lengths.push(seconds); return { seconds }; } });
+  const film = { music: { src: 'm.wav' } };
+  assert.deepEqual(await Promise.all([9, 9, 12].map((seconds) => memo.musicInput(film, '/d', { seconds }))), [{ seconds: 9 }, { seconds: 9 }, { seconds: 12 }]);
+  assert.deepEqual(lengths, [9, 12]);
+});
+
+// F-5: a finding is "shared" only when two or more looks drew and each reported it. With one look drawn, every finding of that
+// look would trivially be shared, and a mechanical page fault (a console error) would become a creative note and refuse nobody.
+const cellOf = (look, findings) => ({ look, status: 'drawn', note: null, frame: 3, at: 3, loaded: {}, png: 'x', pageFindings: findings });
+const FAULT = { kind: 'mechanical', message: 'a console error' };
+const NOTE = { kind: 'creative', message: 'no WebGL' };
+
+test('with one look drawn, its mechanical page fault refuses it and is not a shared note', () => {
+  const cell = cellOf('desk', [FAULT]);
+  const { notes, refused } = settleFindings([cell, { look: 'pop', status: 'refused', note: 'x', pageFindings: null }]);
+  assert.deepEqual(refused.map((c) => c.look), ['desk']);
+  assert.equal(cell.status, 'refused');
+  assert.deepEqual(notes, []);
+});
+
+test('with one look drawn, a creative page finding is a note naming the look', () => {
+  const { notes, refused } = settleFindings([cellOf('desk', [NOTE])]);
+  assert.deepEqual(refused, []);
+  assert.deepEqual(notes.map((f) => f.message), [`look "desk": ${NOTE.message}`]);
+});
+
+test('two looks that both report a finding share it: one plain note, nobody refused', () => {
+  const { notes, refused } = settleFindings([cellOf('desk', [FAULT]), cellOf('pop', [FAULT])]);
+  assert.deepEqual(refused, []);
+  assert.deepEqual(notes.map((f) => f.message), [FAULT.message]);
+});
+
+test('a fault one of two looks alone reports refuses that look only', () => {
+  const [desk, pop] = [cellOf('desk', [FAULT, NOTE]), cellOf('pop', [NOTE])];
+  const { notes, refused } = settleFindings([desk, pop]);
+  assert.deepEqual(refused.map((c) => c.look), ['desk']);
+  assert.deepEqual(notes.map((f) => f.message), [NOTE.message]);
 });
 
 test('a film that does not validate in a look for any other reason (here a cut) is a refused entry too, never a throw', () => {

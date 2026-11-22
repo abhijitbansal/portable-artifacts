@@ -110,6 +110,24 @@ test('a look drawn by hand may not set letters or lines: what is written is neve
   assert.equal(registries.looks.get('marker').moves.lines, null);
 });
 
+// F-15: the engine reads `look.hand` as true or false (kinds/shared.mjs), so validateLook does too: `hand: null` is no hand.
+test('a look with hand: null is not drawn by hand, and may use letters and lines', () => {
+  assert.doesNotThrow(() => validateLook(withEntrance({ hand: null, moves: { letters: LETTERS, lines: LINES } })));
+  assert.throws(() => validateLook(withEntrance({ hand: { rest: 0.8 }, moves: { letters: LETTERS } })), /a look drawn by hand cannot use moves\.letters/);
+});
+
+// F-26: a look's chart grow ease is parsed with the look, as a move's ease is, so a typo fails at registration and not when a
+// chart is first drawn.
+test('kinds.chart.growEase must be an ease that parses', () => {
+  const cosmos = registries.looks.get('cosmos');
+  const withGrow = (growEase) => ({ ...cosmos, name: 'grow-test', kinds: { ...cosmos.kinds, chart: { ...cosmos.kinds.chart, growEase } } });
+  assert.doesNotThrow(() => validateLook(withGrow('outCubic')));
+  assert.doesNotThrow(() => validateLook(withGrow('cubic-bezier(0.2,0.8,0.2,1)')));
+  assert.throws(() => validateLook(withGrow('outCubc')), /look "grow-test": kinds\.chart\.growEase: unknown ease "outCubc"; did you mean "outCubic"/);
+  assert.throws(() => validateLook(withGrow('cubic-bezier(2,0,0,1)')), /kinds\.chart\.growEase: bad ease/);
+  assert.throws(() => validateLook(withGrow(3)), /kinds\.chart\.growEase must be an ease name/);
+});
+
 test('a stack look takes no statement entrance, because a stack sets its own words', () => {
   assert.throws(() => validateLook(withEntrance({ look: registries.looks.get('pop'), moves: { lines: LINES }, statement: { entrance: 'lines' } })), /look "entrance-test": kinds\.statement\.entrance "lines" is not read by a stack composition/);
 });

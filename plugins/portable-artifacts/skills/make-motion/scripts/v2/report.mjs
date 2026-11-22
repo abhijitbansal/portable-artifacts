@@ -137,7 +137,7 @@ export function reportOf(state) {
     ...(state.inspect ? { inspect: state.inspect } : {}), // --inspect: { png, json, frame, seconds, shot }
     ...(state.slice ? { slice: state.slice } : {}), // --shot, --range: { from, to, frames, shots, silent, skipped }
     ...(state.board ? { board: state.board } : {}), // --estimated: the board strips' paths, in order
-    ...(state.compare ? { compare: state.compare } : {}), // --compare-looks: { file, shot, frame, looks }
+    ...(state.compare ? { compare: state.compare } : {}), // --compare-looks: { file, shot, frame, frameLook, looks }
     ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
     ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed, level }
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }

@@ -35,7 +35,7 @@ export function entranceErrors(name, look) {
   for (const key of ENTRANCES) {
     const move = look.moves?.[key];
     if (!isPlainObject(move)) continue; // null: unused; a malformed one is the moves check's
-    if (look.hand !== undefined) errors.push(`look "${name}": a look drawn by hand cannot use moves.${key}: what it writes is never faded in`);
+    if (look.hand) errors.push(`look "${name}": a look drawn by hand cannot use moves.${key}: what it writes is never faded in`);
     else errors.push(...moveErrors(name, key, move));
   }
   const statement = look.kinds?.statement;

@@ -24,10 +24,25 @@ const STAMP_PAD = 0.4; // of the stamp size
 // a flat cell (colours.flat) with the stamp and the note wrapped under it (compare.mjs: a look that cannot draw the shot), which
 // needs no film page: the stamp face falls back to a monospace one.
 export async function composeInPage({ width, height, placements, colours, format }) {
-  const sheet = document.createElement('canvas');
-  sheet.width = width;
-  sheet.height = height;
-  const ctx = sheet.getContext('2d');
+  // The lines of `text` within `maxWidth` in ctx's font (a word wider than that is broken). Inside, as the page gets the source of this function only.
+  const wrapNote = (ctx, text, maxWidth) => {
+    const fits = (t) => ctx.measureText(t).width <= maxWidth;
+    const lines = [];
+    let line = '';
+    for (const word of text.split(' ')) {
+      const joined = line === '' ? word : `${line} ${word}`;
+      if (fits(joined)) { line = joined; continue; }
+      if (line !== '') lines.push(line);
+      line = word;
+      for (let k = line.length - 1; !fits(line) && line.length > 1; k = line.length - 1) { // k: the longest piece that fits, 1 at least
+        while (k > 1 && !fits(line.slice(0, k))) k -= 1;
+        lines.push(line.slice(0, k));
+        line = line.slice(k);
+      }
+    }
+    return [...lines, line];
+  };
+  const ctx = Object.assign(document.createElement('canvas'), { width, height }).getContext('2d');
   ctx.fillStyle = colours.sheet;
   ctx.fillRect(0, 0, width, height);
   ctx.imageSmoothingQuality = 'high';
@@ -50,30 +65,12 @@ export async function composeInPage({ width, height, placements, colours, format
     ctx.fillStyle = colours.stampInk;
     ctx.fillText(p.label, p.x + pad, p.y + pad);
     if (p.note === undefined) continue;
-    const fits = (text) => ctx.measureText(text).width <= p.w - 2 * pad;
-    const lines = [];
-    let line = '';
-    for (const word of p.note.split(' ')) {
-      if (line === '' ? fits(word) : fits(`${line} ${word}`)) {
-        line = line === '' ? word : `${line} ${word}`;
-        continue;
-      }
-      if (line !== '') lines.push(line);
-      line = word;
-      while (!fits(line) && line.length > 1) { // a word wider than the cell is broken
-        let k = line.length - 1;
-        while (k > 1 && !fits(line.slice(0, k))) k -= 1;
-        lines.push(line.slice(0, k));
-        line = line.slice(k);
-      }
-    }
-    lines.push(line);
-    lines.forEach((text, i) => {
+    wrapNote(ctx, p.note, p.w - 2 * pad).forEach((text, i) => {
       const y = p.y + size + colours.noteTop * pad + i * Math.round(size * colours.noteLine);
       if (y + size <= p.y + p.h) ctx.fillText(text, p.x + pad, y);
     });
   }
-  return sheet.toDataURL(format.mime, format.quality).split(',')[1];
+  return ctx.canvas.toDataURL(format.mime, format.quality).split(',')[1];
 }
 
 export const PNG = Object.freeze({ mime: 'image/png' });

@@ -278,8 +278,10 @@ function entranceTracks(entry, layout, words, times, { look, unit }) {
 }
 
 // Word tracks: the entrance on each word's time (none for a matched hero, and none where the look's letters or lines
-// entrance, `entry`, brings the word in), and in a recolour look the emphasis (a pulse as well for recolor-scale). In a
-// mode that reads from frame 0 there is no entrance at all (see ghostWords).
+// entrance, `entry`, brings the word in), and in a recolour look the emphasis (a pulse as well for recolor-scale). Where
+// ghostWords holds (a mode that reads from frame 0, with a recolour look) the words are on screen from the start and lit as
+// spoken, so there is no entrance; a viral film in a look that does not recolour has no ghosts, and its words take the
+// per-word entrance (or the look's letters or lines, entranceOf).
 function wordTracksFor(words, times, ctx, matched, entry) {
   const { look, unit, timing } = ctx;
   const style = emphasisOf(look);
@@ -299,8 +301,8 @@ function wordTracksFor(words, times, ctx, matched, entry) {
       return style.hookTracks(look, { ...word, tracks: lit }, at);
     }
     // a look that opens composed (shared.mjs opensSet, ledger) sets every word from frame 0, as a matched hero does; the
-    // emphasis still lands on its spoken word
-    // (a letters or lines entrance takes the word's own entrance's place: its glyph or line tracks carry the arrival)
+    // emphasis still lands on its spoken word. A letters or lines entrance (`entry`, from entranceOf, which never applies to
+    // either of those nor on the hook path) takes the word's own entrance's place: its glyph or line tracks carry the arrival.
     const entered = matched || opensSet(look) || entry !== null ? {} : enterTracks(look, unit, at);
     const lands = scales && !matched && entry === null && look.moves.enter.scale !== undefined;
     const tracks = lands ? { ...entered, scale: landing(at, look.moves.enter, word.start, 1) } : entered;

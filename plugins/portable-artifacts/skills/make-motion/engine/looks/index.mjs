@@ -196,12 +196,24 @@ function captionsError(name, style, captions) {
 
 const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+// The errors of one kind's field named `...Ease` (kinds.chart.growEase): an ease that parses, as a move's ease must.
+function easeFieldErrors(name, kind, data) {
+  return Object.entries(data).filter(([key]) => key.endsWith('Ease')).flatMap(([key, value]) => {
+    const at = `look "${name}": kinds.${kind}.${key}`;
+    if (typeof value !== 'string') return [`${at} must be an ease name, got ${JSON.stringify(value) ?? 'undefined'}`];
+    const problem = easeProblem(value);
+    return problem === null ? [] : [`${at}: ${problem}`];
+  });
+}
+
 // The errors of a look's `kinds` (absent, or an object of kind names to objects of composition data).
 function kindsErrors(name, kinds) {
   if (kinds === undefined) return [];
   if (!isPlainObject(kinds)) return [`look "${name}": kinds must be an object of kind names to their data, got ${String(kinds)}`];
-  return Object.entries(kinds).filter(([, data]) => !isPlainObject(data))
+  const shape = Object.entries(kinds).filter(([, data]) => !isPlainObject(data))
     .map(([kind, data]) => `look "${name}": kinds.${kind} must be an object, got ${String(data)}`);
+  const eases = Object.entries(kinds).filter(([, data]) => isPlainObject(data)).flatMap(([kind, data]) => easeFieldErrors(name, kind, data));
+  return [...shape, ...eases];
 }
 
 // A look's entry for a named move: a Move ({ ease, dur >= 0, ... }) or null (the look does not use it).
