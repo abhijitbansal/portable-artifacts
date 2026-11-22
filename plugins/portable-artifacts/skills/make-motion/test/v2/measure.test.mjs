@@ -17,7 +17,8 @@ import { CLIP_DECODERS, CLIP_DEMUXERS, probeClip } from '../../scripts/v2/clips.
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MEASURE = path.resolve(HERE, '../../scripts/measure.mjs');
-const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0 && spawnSync('ffprobe', ['-version']).status === 0;
+const toolOf = (name) => process.env[`${name.toUpperCase()}_PATH`] || name; // as the tools find ffmpeg and ffprobe: the variable, else PATH
+const hasFfmpeg = spawnSync(toolOf('ffmpeg'), ['-version']).status === 0 && spawnSync(toolOf('ffprobe'), ['-version']).status === 0;
 if (!hasFfmpeg && process.env.PA_REQUIRE_BROWSER === '1') throw new Error('ffmpeg and ffprobe are required (PA_REQUIRE_BROWSER=1)');
 const LOCAL_ONLY = /local files only: give the path of a video file on this machine \(mp4, mov, m4v, webm or mkv\)/;
 
@@ -36,7 +37,7 @@ before(async () => {
   serverUrl = `http://127.0.0.1:${server.address().port}/seg.mp4`;
   fixture = path.join(dir, 'fixture.mp4');
   if (hasFfmpeg) { // red 1 s, blue 1 s, green 1 s, 320x180 at 30 fps, a 440 Hz tone
-    spawnSync('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=320x180:r=30:d=1', '-f', 'lavfi', '-i', 'color=c=blue:s=320x180:r=30:d=1',
+    spawnSync(toolOf('ffmpeg'), ['-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=320x180:r=30:d=1', '-f', 'lavfi', '-i', 'color=c=blue:s=320x180:r=30:d=1',
       '-f', 'lavfi', '-i', 'color=c=green:s=320x180:r=30:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3',
       '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]', '-map', '[v]', '-map', '3:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', fixture]);
   }
@@ -64,9 +65,13 @@ after(async () => {
 const measure = (args, env = {}) => execFileAsync(process.execPath, [MEASURE, ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
   .then((r) => ({ status: 0, ...r }), (e) => ({ status: e.code, stdout: e.stdout, stderr: e.stderr }));
 
-function realBinary(name) {
+// The tool `name` the recording wrappers run: the path in FFMPEG_PATH / FFPROBE_PATH when set (as the tools themselves find
+// it), else the first on PATH; an error that names the tool when there is neither.
+function realBinary(name, env = process.env) {
+  const set = env[`${name.toUpperCase()}_PATH`];
+  if (typeof set === 'string' && set !== '') return set;
   const found = spawnSync(process.platform === 'win32' ? 'where' : 'which', [name], { encoding: 'utf8' }).stdout.split('\n')[0].trim();
-  if (found === '') throw new Error(`${name} is not on PATH: the recording wrappers run the real one (a test that needs them skips without ffmpeg)`);
+  if (found === '') throw new Error(`${name} is not on PATH and ${name.toUpperCase()}_PATH is not set: the recording wrappers run the real one (a test that needs them skips without ffmpeg)`);
   return found;
 }
 let toolCount = 0;
@@ -194,6 +199,15 @@ test('a playlist, an HLS file named .mp4 and a concat script that name a URL are
 // F-10 (R-3): a recorder that cannot find the real binary used to spawn '' and fail with an unrelated exit 1.
 test('realBinary says which tool is missing instead of giving an empty path', () => {
   assert.throws(() => realBinary('no-such-tool-for-measure-test'), /no-such-tool-for-measure-test is not on PATH/);
+});
+
+// R-4: a machine whose ffmpeg is found only through FFMPEG_PATH or FFPROBE_PATH runs the recorder tests, not errors in them.
+test('realBinary honours FFMPEG_PATH and FFPROBE_PATH when set, and falls back to PATH when they are empty', () => {
+  assert.equal(realBinary('ffmpeg', { FFMPEG_PATH: '/opt/x/ffmpeg' }), '/opt/x/ffmpeg');
+  assert.equal(realBinary('ffprobe', { FFPROBE_PATH: '/opt/x/ffprobe' }), '/opt/x/ffprobe');
+  if (!hasFfmpeg) return;
+  assert.equal(realBinary('ffmpeg', { FFPROBE_PATH: '/opt/x/ffprobe' }), realBinary('ffmpeg', {}), 'the other tool\'s variable is not read');
+  assert.equal(realBinary('ffmpeg', { FFMPEG_PATH: '' }), realBinary('ffmpeg', {}), 'an empty variable is not a path');
 });
 
 // F-10 (R-2): the same three calls, answered by stand-ins that need no ffmpeg, so the whitelists are checked on every machine.

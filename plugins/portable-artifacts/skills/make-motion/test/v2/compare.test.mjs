@@ -20,7 +20,8 @@ import { FilmTimeError } from '../../scripts/v2/film-time.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { absolutePaths, formatText, reportOf } from '../../scripts/v2/report.mjs';
-import { COMPARE_COLUMNS, COMPARE_MAX, COMPARE_TILE_WIDTH, assembleSheet, comparableLooks, comparePath, memoiseMusicInput, settleFindings, writeComparison } from '../../scripts/v2/compare.mjs';
+import { COMPARE_COLUMNS, COMPARE_MAX, COMPARE_TILE_WIDTH, assembleSheet, comparableLooks, comparePath, firstProblem, memoiseMusicInput, settleFindings, writeComparison } from '../../scripts/v2/compare.mjs';
+import { sessionFindings } from '../../scripts/v2/review.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FILM_PATH = 'film.json';
@@ -159,7 +160,7 @@ test('memoiseMusicInput keys on the film\'s length too: another length is anothe
 // F-5: a finding is "shared" only when two or more looks drew and each reported it. With one look drawn, every finding of that
 // look would trivially be shared, and a mechanical page fault (a console error) would become a creative note and refuse nobody.
 const cellOf = (look, findings) => ({ look, status: 'drawn', note: null, frame: 3, at: 3, loaded: {}, png: 'x', pageFindings: findings });
-const FAULT = { kind: 'mechanical', message: 'a console error' };
+const FAULT = { kind: 'mechanical', message: 'page: a console error' }; // as sessionFindings words a page error
 const NOTE = { kind: 'creative', message: 'no WebGL' };
 
 test('with one look drawn, its mechanical page fault refuses it and is not a shared note', () => {
@@ -174,6 +175,35 @@ test('with one look drawn, a creative page finding is a note naming the look', (
   const { notes, refused } = settleFindings([cellOf('desk', [NOTE])]);
   assert.deepEqual(refused, []);
   assert.deepEqual(notes.map((f) => f.message), [`look "desk": ${NOTE.message}`]);
+});
+
+// R-2: "WebGL was unavailable" is about the machine, not the film or the look. Even with one look drawn it is a note, and it never
+// refuses a cell (it would leave no look and fail the whole comparison).
+const NO_WEBGL = { info: { postNotice: { failed: true, reason: 'no WebGL2 context', dropped: ['grain'] } }, errors: [], blocked: [] };
+
+test('a machine without WebGL never refuses a cell: one look on a no-WebGL stub keeps its picture and gets a note', () => {
+  const findings = sessionFindings(NO_WEBGL);
+  assert.equal(findings[0].kind, 'mechanical', 'the premise: the review calls it mechanical');
+  const cell = cellOf('desk', findings);
+  const { notes, refused } = settleFindings([cell]);
+  assert.deepEqual(refused, []);
+  assert.equal(cell.status, 'drawn');
+  assert.equal(notes.length, 1);
+  assert.match(notes[0].message, /WebGL was unavailable/);
+});
+
+test('with the machine notice and a console error on one look, only the console error refuses it', () => {
+  const both = cellOf('desk', [...sessionFindings(NO_WEBGL), ...sessionFindings({ errors: ['boom'] })]);
+  const { refused, notes } = settleFindings([both, cellOf('pop', sessionFindings(NO_WEBGL))]);
+  assert.deepEqual(refused.map((c) => c.look), ['desk']);
+  assert.match(both.note, /^page: boom/);
+  assert.equal(notes.filter((n) => /WebGL was unavailable/.test(n.message)).length, 1, 'both looks have it, so it is one shared note');
+});
+
+// R-6
+test('the anchor-index remap also fixes a shots[0] named in the message text', () => {
+  assert.equal(firstProblem([{ path: 'shots[0].cut', message: 'needs the shot before shots[0]' }], 3), 'shots[3].cut: needs the shot before shots[3]');
+  assert.equal(firstProblem([{ path: 'shots[2].cut', message: 'see shots[0]' }]), 'shots[2].cut: see shots[0]', 'a full film\'s errors are left as they are');
 });
 
 test('two looks that both report a finding share it: one plain note, nobody refused', () => {

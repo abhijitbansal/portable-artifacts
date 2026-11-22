@@ -146,7 +146,7 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 | `looks` | The looks |
 | `modes` | The modes, with their pace |
 | `devices` | The devices an `on` event can place |
-| `moves` | The motion values each look gives each move, with how far it passes its end (`bounce`, a percent, only when above 0) and how long a viewer sees it move (`visible`, in seconds: a spring or an `outExpo` is visible for less than its `dur`). `--json` carries both as `facts` beside `looks`, `null` where a look does not use the move. `letters` reports one letter's curve and its `stagger`: a word's own length depends on its letter count |
+| `moves` | The motion values each look gives each move, with how far it passes its end (`bounce`, a percent, only when above 0) and how long a viewer sees it move (`visible`, in seconds: a spring or an `outExpo` is visible for less than its `dur`). `--json` carries both as `facts` beside `looks`, `null` where a look does not use the move. `letters` reports one letter's curve, its `stagger` and `maxSpread` (the most a word's letters may spread, 0.6 s: a longer word is staggered closer): a word's own length depends on its letter count |
 | `cuts` | The cuts, their directions and lengths |
 | `fields` | The backgrounds a look can draw |
 | `voices` | The voices `voice.name` accepts |

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { registries, createRegistry } from '../../engine/registry.mjs';
 import { MOVE_NAMES, moveOf, motionFacts } from '../../engine/moves/index.mjs';
 import { validateLook } from '../../engine/looks/index.mjs';
+import { LETTER_SPREAD_CAP } from '../../engine/kinds/shared.mjs';
 import { listEntries, formatList } from '../../scripts/v2/list.mjs';
 
 const MAKE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/make.mjs');
@@ -193,14 +194,15 @@ test('a bounce prints as a percent; a look that does not use a move has null fac
   assert.equal(slam.facts[unused[0]], null);
   assert.match(formatList('moves', entries), new RegExp(`^ {2}${unused[0]}: not used$`, 'm'));
 });
-test('letters report one letter plus the stagger, and the text prints the stagger', () => {
+test('letters report one letter plus the stagger and the cap on a word\'s spread, and the text prints both', () => {
   const letters = listEntries('moves').find((m) => m.name === 'letters');
-  assert.deepEqual(letters.facts.cosmos, { ...motionFacts({ ease: 'steps(3)', dur: 0.18 }), stagger: 0.035 });
+  assert.deepEqual(letters.facts.cosmos, { ...motionFacts({ ease: 'steps(3)', dur: 0.18 }), stagger: 0.035, maxSpread: LETTER_SPREAD_CAP });
   assert.equal(letters.facts.cosmos.visible, 0.18);
   assert.equal(letters.facts.desk, null);
-  assert.match(formatList('moves', listEntries('moves')), /^ {2}cosmos: steps\(3\) 0\.18 s, visible 0\.18 s, stagger 0\.035 s$/m);
+  assert.match(formatList('moves', listEntries('moves')), /^ {2}cosmos: steps\(3\) 0\.18 s, visible 0\.18 s, stagger 0\.035 s, spread at most 0\.6 s$/m);
   const lines = listEntries('moves').find((m) => m.name === 'lines');
   assert.equal(Object.hasOwn(lines.facts.desk, 'stagger'), false);
+  assert.equal(Object.hasOwn(lines.facts.desk, 'maxSpread'), false);
 });
 
 test('make --list moves exits 0; --list movs exits 2 naming the accepted lists', () => {

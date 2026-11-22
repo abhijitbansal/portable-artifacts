@@ -3,6 +3,7 @@
 import { registries } from '../../engine/registry.mjs';
 import { allLookNames, listedKinds, listedLooksOf } from '../../engine/looks/index.mjs';
 import { motionFacts } from '../../engine/moves/index.mjs';
+import { LETTER_SPREAD_CAP } from '../../engine/kinds/shared.mjs';
 import '../../engine/modes/index.mjs';
 import '../../engine/kinds/index.mjs';
 import '../../engine/cuts/index.mjs';
@@ -48,11 +49,12 @@ function kindEntry(entry, def, name) {
 const moveLooks = (name) => Object.fromEntries(registries.looks.names().map((look) => [look, registries.looks.get(look).moves?.[name] ?? null]));
 
 // A move's facts in each look: its bounce and visible length (motionFacts), null where the look does not use it. `letters`
-// reports one letter's curve and carries the look's stagger: a word's own length depends on its letter count.
+// reports one letter's curve and carries the look's stagger and the most a word's letters may spread (LETTER_SPREAD_CAP): a
+// word's own length depends on its letter count, and a long word is staggered closer.
 const moveFacts = (name) => Object.fromEntries(registries.looks.names().map((look) => {
   const move = registries.looks.get(look).moves?.[name] ?? null;
   if (move === null) return [look, null];
-  return [look, { ...motionFacts(move), ...(move.stagger !== undefined ? { stagger: move.stagger } : {}) }];
+  return [look, { ...motionFacts(move), ...(move.stagger !== undefined ? { stagger: move.stagger, maxSpread: LETTER_SPREAD_CAP } : {}) }];
 }));
 
 // A cut's entry: its family, its directions (the first the default, or null), its default length, whether it takes
@@ -112,6 +114,7 @@ function moveText(move, facts) {
     if (facts.bounce > 0) parts.push(`bounce ${Math.round(facts.bounce * 100)}%`);
     parts.push(`visible ${facts.visible} s`);
     if (facts.stagger !== undefined) parts.push(`stagger ${facts.stagger} s`);
+    if (facts.maxSpread !== undefined) parts.push(`spread at most ${facts.maxSpread} s`);
   }
   return parts.join(', ');
 }
