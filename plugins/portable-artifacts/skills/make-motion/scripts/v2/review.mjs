@@ -17,6 +17,7 @@
 import { registries } from '../../engine/registry.mjs';
 import { shotTime, lookOfShot } from '../../engine/graph/film.mjs';
 import { auditFrame, textStatesIn, textLandings, landedTexts, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
+import { seenWords } from '../../engine/review/seen.mjs';
 import { overlayCoverFindings } from '../../engine/review/overlay.mjs';
 import { regionMarkIds } from '../../engine/review/regions.mjs';
 import { outlineFindings, capCreative } from '../../engine/review/outline.mjs';
@@ -167,13 +168,14 @@ function modalScales(trees, lastTree) {
 function modalWordScales(trees, lastTree) {
   const counts = new Map();
   trees.forEach((tree) => textStatesIn(tree).forEach(({ opacity, node }, id) => {
-    if (opacity < 1 || !Array.isArray(node.words)) return;
+    const words = seenWords(node);
+    if (opacity < 1 || words.length === 0) return;
     const perWord = counts.get(id) ?? [];
-    node.words.forEach((w, i) => { if ((w.opacity ?? 1) >= 1) perWord[i] = tally(perWord[i], w.scale ?? 1); });
+    words.forEach((w, i) => { if (w.opacity >= 1) perWord[i] = tally(perWord[i], w.scale); });
     counts.set(id, perWord);
   }));
   const last = textStatesIn(lastTree);
-  return new Map([...last].filter(([, s]) => Array.isArray(s.node.words)).map(([id, s]) => [id, s.node.words.map((w, i) => modal(counts.get(id)?.[i], w.scale ?? 1))]));
+  return new Map([...last].filter(([, s]) => seenWords(s.node).length > 0).map(([id, s]) => [id, seenWords(s.node).map((w, i) => modal(counts.get(id)?.[i], w.scale))]));
 }
 
 /**

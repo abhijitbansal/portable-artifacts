@@ -21,11 +21,11 @@
 //
 // Landed. A word at opacity 0 on a frame is not on screen on that frame (the number kind stacks every step of its
 // count as a word and shows one at a time; a word may also leave before its shot ends); every word shown on a frame is
-// judged on it. A text has landed on a frame when every word on screen is at opacity 1 and at its rest scale (not
-// mid-pulse), the text itself (with the groups it sits in) is at opacity 1 (a text still fading in is still arriving)
-// and it is settled: at the scale it rests at in its shot (not mid-spring, mid-pulse or mid-push). Size, safe-area and
-// overlap checks apply to a landed text, using only its words on screen. A text that lands on no sampled frame of its
-// shot is reported by the film review (scripts/v2/review.mjs settleFindings).
+// judged on it, read through wordSeen (seen.mjs: its letters and line counted). A text has landed on a frame when every
+// word on screen is at opacity 1 and at its rest scale (not mid-pulse), the text itself (with the groups it sits in) is at
+// opacity 1 (a text still fading in is still arriving) and it is settled: at the scale it rests at in its shot (not
+// mid-spring, mid-pulse or mid-push). Size, safe-area and overlap checks apply to a landed text, using only its words on
+// screen. A text that lands on no sampled frame of its shot is reported by the film review (scripts/v2/review.mjs settleFindings).
 //
 // Roles. A text node's props.role (set by the kinds: hero, affix, label, kicker, caption, tag, body; none means body)
 // says what the text is for. An `affix` (prefix, suffix, unit) and a `tag` are small by design: the scale-contrast rule
@@ -53,6 +53,7 @@ import { CAP_HEIGHT, WORD_DESCENT, unionBox as union } from '../kinds/shared.mjs
 import { contrastFindings } from './contrast.mjs';
 import { minSizeSuggest } from './suggest.mjs';
 import { markBoxes, showsItself } from './marks.mjs';
+import { WORD_IDENTITY, hasVisibleWord, seenWords, wordSeen } from './seen.mjs';
 import { regionFindings } from './regions.mjs';
 import { droppedMessage } from './dropped.mjs';
 import { registries } from '../registry.mjs';
@@ -89,7 +90,7 @@ const NO_WORDS = new Set();
 const DESCENDER_RE = /[gjpqyQ,;()[\]{}|@Ççурдцщ]/;
 // An accented capital or a combining mark: the glyph rises above the cap line.
 const ACCENT_RE = /[À-ÞĀ-ſ̀-ͯ]/;
-const WORD_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1 });
+export { hasVisibleWord, wordSeen }; // how the review reads a word's opacity and scale (review/seen.mjs)
 
 // The accumulated scale of a node: its own scale (the camera's zoom is folded into the top-level nodes) times its
 // non-uniform scale, which counts as the geometric mean of the two axes.
@@ -184,11 +185,9 @@ function wordInks(n) {
 // The words of a text at opacity 0 on this frame: not on screen, so neither in its ink nor waited for. A word shown on
 // any other frame is judged there. (A text with every word at 0 is not on screen at all: visibleTexts skips it.)
 function hiddenNow(n) {
-  const hidden = (Array.isArray(n.words) ? n.words : []).flatMap((w, i) => ((w?.opacity ?? 1) <= 0 ? [i] : []));
+  const hidden = seenWords(n).flatMap((w, i) => (w.opacity <= 0 ? [i] : []));
   return hidden.length === 0 ? NO_WORDS : new Set(hidden);
 }
-
-export const hasVisibleWord = (n) => !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => w.opacity > 0);
 
 /** text node id -> { scale, opacity, node } in a sampled tree: its accumulated scale (its own, its groups' and the
  *  camera's), how big it stands, and its accumulated opacity, how much of it shows. */
@@ -218,12 +217,12 @@ const isSettled = (id, scale, resting) => !resting?.has(id) || Math.abs(scale / 
 export function measured(n, o, s, unit, ctx) {
   const hidden = hiddenNow(n);
   const rests = ctx.restWords?.get(n.id);
-  const wordsIn = !Array.isArray(n.words) || wordsOf(n.layout).every((w) => hidden.has(w.index) || isWordAtRest(n.words[w.index], rests?.[w.index]));
+  const wordsIn = seenWords(n).length === 0 || wordsOf(n.layout).every((w) => hidden.has(w.index) || isWordAtRest(wordSeen(n, w.index), rests?.[w.index]));
   const landed = wordsIn && o >= 1 && isSettled(n.id, s, ctx.restScales);
   try {
     const size = (n.layout.size * s) / unit, ink = inkBox(n, hidden);
     // the smallest a word on screen stands: a word resting at its own smaller scale reads at that size (the size floor)
-    const smallest = size * Math.min(1, ...wordsOf(n.layout).filter((w) => !hidden.has(w.index)).map((w) => Math.abs(n.words?.[w.index]?.scale ?? 1)));
+    const smallest = size * Math.min(1, ...wordsOf(n.layout).filter((w) => !hidden.has(w.index)).map((w) => Math.abs(wordSeen(n, w.index).scale)));
     return Number.isFinite(size) && isBox(ink) && isBox(n.bbox) ? { node: n, size, smallest, role: roleOf(n), ink, landed, opacity: o } : null;
   } catch {
     return null;
@@ -310,7 +309,7 @@ function overlapRules(texts, ctx, unit) {
 // scaled about its own centre by its track (a pulse) and moved by it.
 function lineSpans(n) {
   return n.layout.lines.map((line) => line.words
-    .filter((word) => (n.words?.[word.index]?.opacity ?? 1) > 0)
+    .filter((word) => wordSeen(n, word.index).opacity > 0)
     .map((word) => {
       const t = { ...WORD_IDENTITY, ...n.words?.[word.index] };
       const half = (word.width * Math.abs(t.scale)) / HALF, centre = line.x + word.x + word.width / HALF + t.x;
@@ -381,7 +380,7 @@ function hierarchyRules(all, ctx) {
 }
 
 // The words of a line a viewer can see: a word at opacity 0 is not there.
-const shownWords = (node, words) => words.filter((word) => (node.words?.[word.index]?.opacity ?? 1) > 0);
+const shownWords = (node, words) => words.filter((word) => wordSeen(node, word.index).opacity > 0);
 
 // A highlight is a pointer: one run of emphasised words laid out over more than one line (props.highlightLines, set by
 // the statement kind in a highlight look) is a creative finding.

@@ -100,6 +100,24 @@ function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   ctx.restore();
 }
 
+// A line with tracks of its own ({ opacity, x, y, scale }, props lineTracks) moves as one block around the drawing of its
+// words: faded and moved, scaled about the line's centre on its baseline. False when the line is not on screen. A line with
+// no tracks, or every one at its rest value, is drawn untouched (no transform that could round a position).
+function enterLine(ctx, line, tracks) {
+  if (!tracks) return true;
+  const opacity = unit01(tracks.opacity);
+  if (opacity <= 0) return false;
+  if (opacity < 1) ctx.globalAlpha *= opacity;
+  if (tracks.x !== 0 || tracks.y !== 0) ctx.translate(tracks.x, tracks.y);
+  if (tracks.scale !== 1) {
+    const centre = line.x + line.width / HALF;
+    ctx.translate(centre, line.y);
+    ctx.scale(tracks.scale, tracks.scale);
+    ctx.translate(-centre, -line.y);
+  }
+  return true;
+}
+
 function drawText(ctx, n) {
   const { layout, font, fill = DEFAULT_TEXT_FILL, glow } = n.props;
   if (!layout || !font) throw new Error(`text node "${n.id}" needs props.layout and props.font`);
@@ -107,10 +125,16 @@ function drawText(ctx, n) {
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   const type = { font, reserve: layout.reserve };
-  for (const line of layout.lines) {
-    // words has an entry only for each wordTracks entry; a word beyond them is untouched (opacity 1, no offset)
-    for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index] }, fill, glow, type);
-  }
+  layout.lines.forEach((line, k) => {
+    const lineTracks = n.lines?.[k];
+    if (lineTracks) ctx.save();
+    // words has an entry only for each wordTracks entry; a word beyond them is untouched (opacity 1, no offset). A word's
+    // glyph values (n.glyphs, a letter-by-letter entrance) go beside them; a line's tracks never become glyph values.
+    if (enterLine(ctx, line, lineTracks)) {
+      for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index], glyphs: n.glyphs?.[word.index] }, fill, glow, type);
+    }
+    if (lineTracks) ctx.restore();
+  });
 }
 
 // ---- paths ----

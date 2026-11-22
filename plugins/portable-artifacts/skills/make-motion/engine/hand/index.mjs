@@ -51,7 +51,8 @@ function wobbled(n, look, seed, unit) {
 
 // A text's words without their entrances or ghost colours (what is written is never faded in or greyed); other word tracks
 // stay. An opacity that only
-// steps (0 or 1: the number's digits shown a step at a time) is not a fade and stays.
+// steps (0 or 1: the number's digits shown a step at a time) is not a fade and stays. A text the hand writes carries no
+// glyph or line tracks either (a letter-by-letter or line-by-line entrance is a fade): the nodes below are built without them.
 const isStep = (tr) => tr.points.every((k) => k.v === 0 || k.v === 1);
 // A text whose words come on a step at a time (the number's `steps`) keeps those; any other text is written whole by its reveal, so
 // a word is never held back to its spoken time (it showed as a grey half-word on the end kind's first sheet).

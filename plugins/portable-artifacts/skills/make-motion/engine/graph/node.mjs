@@ -12,6 +12,11 @@ export const TRACK_NAMES = Object.freeze(['x', 'y', 'scale', 'scaleX', 'scaleY',
 // `weight` (a CSS weight) and `width` (a stretch keyword) set the whole word's weight and width; layout reserves room
 // for them (text/layout.mjs reserve), so a change never re-flows the line (graph/sample.mjs rounds and checks them).
 export const WORD_TRACK_NAMES = Object.freeze(['opacity', 'x', 'y', 'scale', 'fill', 'ghost', 'glow', 'weight', 'width']);
+// A text may also carry a track map per glyph of a word (`glyphTracks[wordIndex][glyphIndex]`, a glyph being a grapheme: a
+// letter-by-letter entrance) and one per line (`lineTracks[lineIndex]`, a line that moves as one block). Opacity, offset
+// and scale only.
+export const GLYPH_TRACK_NAMES = Object.freeze(['opacity', 'x', 'y', 'scale']);
+export const LINE_TRACK_NAMES = GLYPH_TRACK_NAMES;
 
 const COLOUR_WORD_TRACKS = Object.freeze(['fill']);
 const KEYWORD_WORD_TRACKS = Object.freeze(['width']); // stepped keyword strings
@@ -58,6 +63,29 @@ function checkWordTracks(words, type) {
   words.forEach((entry, i) => checkTrackMap(entry, WORD_TRACK_NAMES, `wordTracks[${i}]`, COLOUR_WORD_TRACKS, KEYWORD_WORD_TRACKS));
 }
 
+// A hole (an undefined entry or a missing one) is a word with no glyph tracks, a glyph with none, a line with none.
+function checkGlyphTracks(words, type) {
+  if (!Array.isArray(words)) throw new Error('glyphTracks must be an array, one entry per word index (an array of track maps, one per glyph)');
+  if (words.length > 0 && type !== 'text') throw new Error(`glyphTracks only apply to a text node, not '${type}'`);
+  words.forEach((glyphs, w) => {
+    if (glyphs === undefined) return;
+    if (!Array.isArray(glyphs)) throw new Error(`glyphTracks[${w}] must be an array, one track map per glyph`);
+    glyphs.forEach((entry, k) => {
+      if (entry !== undefined) checkTrackMap(entry, GLYPH_TRACK_NAMES, `glyphTracks[${w}][${k}]`);
+    });
+  });
+}
+
+function checkLineTracks(lines, type) {
+  if (!Array.isArray(lines)) throw new Error('lineTracks must be an array, one track map per line');
+  if (lines.length > 0 && type !== 'text') throw new Error(`lineTracks only apply to a text node, not '${type}'`);
+  lines.forEach((entry, k) => {
+    if (entry !== undefined) checkTrackMap(entry, LINE_TRACK_NAMES, `lineTracks[${k}]`);
+  });
+}
+
+const freezeEntry = (entry) => (entry === undefined ? undefined : Object.freeze({ ...entry }));
+
 function checkChildren(children) {
   if (!Array.isArray(children)) throw new Error('children must be an array of nodes');
   children.forEach((child, i) => {
@@ -73,10 +101,12 @@ function checkOptions({ depth, step }) {
 export function node(type, id, props = {}, opts = {}) {
   if (!NODE_TYPES.includes(type)) throw new Error(`unknown node type '${type}'; accepted: ${list(NODE_TYPES)}`);
   if (typeof id !== 'string' || id.length === 0) throw new Error(`node id must be a non-empty string, got ${JSON.stringify(id)}`);
-  const { tracks = {}, children = [], depth = 0, step, wordTracks = [] } = opts;
+  const { tracks = {}, children = [], depth = 0, step, wordTracks = [], glyphTracks = [], lineTracks = [] } = opts;
   checkStaticProps(props);
   checkTrackMap(tracks, TRACK_NAMES, 'tracks');
   checkWordTracks(wordTracks, type);
+  checkGlyphTracks(glyphTracks, type);
+  checkLineTracks(lineTracks, type);
   checkChildren(children);
   checkOptions({ depth, step });
   const made = Object.freeze({
@@ -88,6 +118,9 @@ export function node(type, id, props = {}, opts = {}) {
     depth,
     step,
     wordTracks: Object.freeze(wordTracks.map((entry) => Object.freeze({ ...entry }))),
+    // present only when there are some, so a node without them is the object it was before they existed
+    ...(glyphTracks.length === 0 ? {} : { glyphTracks: Object.freeze(glyphTracks.map((glyphs) => (glyphs === undefined ? undefined : Object.freeze(glyphs.map(freezeEntry))))) }),
+    ...(lineTracks.length === 0 ? {} : { lineTracks: Object.freeze(lineTracks.map(freezeEntry)) }),
   });
   created.add(made);
   return made;

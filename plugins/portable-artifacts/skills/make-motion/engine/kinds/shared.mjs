@@ -417,7 +417,7 @@ function spokenWindow(n) {
 
 /** A copy of a top-level node with props.fixed: the camera leaves it where it stands (a slug or a caption pinned to the
  *  frame stays put while a picture is pushed in). */
-export const pinned = (n) => node(n.type, n.id, { ...n.props, fixed: true }, { tracks: n.tracks, children: n.children, depth: n.depth, step: n.step, wordTracks: n.wordTracks });
+export const pinned = (n) => node(n.type, n.id, { ...n.props, fixed: true }, { tracks: n.tracks, children: n.children, depth: n.depth, step: n.step, wordTracks: n.wordTracks, glyphTracks: n.glyphTracks, lineTracks: n.lineTracks });
 
 /** A card's children with its paper (id `<card id>.paper`) marked props.textCard: a card that holds text (a slug, a
  *  caption card), which the frame review keeps other texts off. */

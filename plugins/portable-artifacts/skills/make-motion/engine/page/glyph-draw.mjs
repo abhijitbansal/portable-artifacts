@@ -16,7 +16,12 @@
 // emphasised word settles in), never on the font a sweep happens to be at, so it cannot change while the word moves, sweeps
 // or settles. It is cached on that font, the shaping settings and the text. It reads how this browser rasterises, so which
 // words are drawn letter by letter can differ between systems.
-import { applyFont, trackingPx, WORD_IDENTITY } from './text-style.mjs';
+import { applyFont, trackingPx } from './text-style.mjs';
+import { glyphRollup, graphemesOf, normaliseGlyph as normalise, unit01 } from '../graph/rollup.mjs';
+
+// The roll-up and the grapheme split are pure and shared with the scene graph and the review (graph/rollup.mjs), which read
+// a word by the same mean the draw uses; they are exported from here too.
+export { glyphRollup, graphemesOf };
 
 const HALF = 2;
 const CACHE_MAX = 4096; // distinct (font, word) pairs a film can hold; far above any film, a bound against a runaway
@@ -24,23 +29,6 @@ const SCRATCH_PAD = 4; // px of margin on every side of the scratch picture, ove
 // Hebrew, Arabic, Syriac, Thaana, N'Ko, Samaritan, Mandaic and the presentation forms; the right-to-left marks and
 // embeddings; Phoenician and the other right-to-left scripts of the supplementary planes.
 const RTL = /[֐-ࣿ‏‫‮⁧יִ-﷿ﹰ-﻿]|[\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
-const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
-
-// Sampled values are not clamped (an overshoot ease can leave 0..1), so opacity is clamped here.
-const unit01 = (v) => Math.min(1, Math.max(0, v));
-const finite = (v, fallback) => (Number.isFinite(v) ? v : fallback);
-
-/** The grapheme clusters of `text`. */
-export const graphemesOf = (text) => Array.from(segmenter.segment(text), (s) => s.segment);
-
-// One glyph's values with a missing or non-finite field read as the identity.
-const normalise = (g) => ({
-  opacity: finite(g?.opacity, WORD_IDENTITY.opacity),
-  x: finite(g?.x, WORD_IDENTITY.x),
-  y: finite(g?.y, WORD_IDENTITY.y),
-  scale: finite(g?.scale, WORD_IDENTITY.scale),
-});
-
 // Tests only (window.__setGlyphPath, engine/page/stage.mjs): with `force`, every word is drawn through the glyph path with
 // `values` for every glyph (the identity unless given). A film is JSON and reaches no page global, so this cannot be set
 // from a spec. `stats` collects, while forced, the DISTINCT words that took the glyph path and those the check rejected
@@ -61,18 +49,6 @@ export const glyphStats = () => ({
 
 /** Whether a normalised glyph is drawn untouched. */
 export const isIdentityGlyph = (g) => g.opacity === 1 && g.x === 0 && g.y === 0 && g.scale === 1;
-
-/**
- * The one roll-up of a word's glyph values: what a word drawn whole stands for its letters by (and what the review reads a
- * word by): the mean of the glyphs' opacity (each clamped to 0..1), x offset, y offset and scale. The word is then invisible
- * while every glyph is, fades in as they arrive, and ends untouched when they all rest.
- * @param {{ opacity: number, x: number, y: number, scale: number }[]} glyphs normalised glyph values, at least one
- * @returns {{ opacity: number, dx: number, dy: number, scale: number }}
- */
-export function glyphRollup(glyphs) {
-  const mean = (pick) => glyphs.reduce((sum, g) => sum + pick(g), 0) / glyphs.length;
-  return { opacity: mean((g) => unit01(g.opacity)), dx: mean((g) => g.x), dy: mean((g) => g.y), scale: mean((g) => g.scale) };
-}
 
 // Each glyph at its origin, with its own values, in one pass; `paint(char, x)` runs inside the glyph's transform. A scaled
 // glyph pivots on the centre of its ink: its advance less the letter spacing the advance carries after it.

@@ -27,6 +27,7 @@
 import { colourChannels } from '../time/track.mjs';
 import { GLOW_EDGE } from '../devices/glow.mjs';
 import { toOklab } from '../color/oklab.mjs';
+import { wordSeen } from './seen.mjs';
 
 export const MIN_CONTRAST = 3;
 const BLACK = '#000000', WHITE = '#ffffff';
@@ -182,7 +183,7 @@ const wordIndices = (node) => node.layout.lines.flatMap((line) => line.words.map
 function wordColours(node, only = null) {
   const base = node.props?.fill ?? DEFAULT_TEXT_FILL;
   const indices = wordIndices(node).filter((i) => only === null || only.includes(i));
-  const shown = indices.map((i) => node.words?.[i] ?? {}).filter((w) => (w.opacity ?? 1) >= 1 && !((w.ghost ?? 0) > 0));
+  const shown = indices.map((i) => wordSeen(node, i)).filter((w) => w.opacity >= 1 && !((w.ghost ?? 0) > 0));
   return [...new Set(shown.map((w) => w.fill ?? base))];
 }
 

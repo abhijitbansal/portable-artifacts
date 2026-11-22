@@ -85,13 +85,16 @@ const GLOW = { color: '#ffd24a', alpha: 0.8, radius: 12 };
 const ID = { opacity: 1, x: 0, y: 0, scale: 1 };
 
 // One word on one line at (0, 0), centred on the origin (its left is -width / 2), drawn through drawFrame.
-function drawWord(text, wordTracks, { glow, shift = 0, font = FONT, reserve } = {}) {
+function drawWord(text, trackValues, { glow, shift = 0, font = FONT, reserve, lines } = {}) {
   const ctx = fakeContext();
   const width = widthOf(text);
+  const { glyphs, ...wordTracks } = trackValues; // a sampled node carries the glyph values beside the words' (sampled.glyphs)
   const node = {
     type: 'text', id: 't', x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, reveal: 1, blur: 0, children: [],
-    props: { font, layout: { lines: [{ x: 0, y: 0, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }], ...(reserve ? { reserve } : {}) }, ...(glow ? { glow } : {}) },
+    props: { font, layout: { lines: [{ x: 0, y: 0, width, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }], ...(reserve ? { reserve } : {}) }, ...(glow ? { glow } : {}) },
     words: [wordTracks],
+    ...(glyphs ? { glyphs: [glyphs] } : {}),
+    ...(lines ? { lines } : {}),
   };
   drawFrame(ctx, [node], { canvas: { w: 1000, h: 400 } });
   const left = -width / 2; // the word's centre is its x + width / 2 = 0
@@ -316,4 +319,34 @@ test('a scaled glyph pivots on the centre of its ink: the letter spacing the adv
   const font = { ...FONT, tracking: 0.05 };
   const { fills, left } = drawWord('ABC', word({ glyphs: [ID, { ...ID, scale: 2 }, ID] }), { font });
   assert.equal(fills.find((f) => f.text === 'B').x - left, 7);
+});
+
+// ---- a line moves as one block ----
+
+const LINE_ID = { opacity: 1, x: 0, y: 0, scale: 1 };
+
+test('a line track fades, moves and scales the whole line, and its words are drawn whole (never expanded into glyphs)', () => {
+  const faded = drawWord('ABC', word(), { lines: [{ ...LINE_ID, opacity: 0.5 }] });
+  assert.deepEqual(faded.fills.map((f) => [f.text, f.alpha]), [['ABC', 0.5]]);
+  const moved = drawWord('ABC', word(), { lines: [{ ...LINE_ID, x: 10, y: -3 }] });
+  assert.deepEqual(moved.fills.map((f) => [f.text, f.x - moved.left, f.y]), [['ABC', 10, -3]]);
+  // the line's centre is its x plus half its width (15) on its baseline; the word's centre is 0, so scaled by 2 about 15 its
+  // centre goes to -15 and its left edge (-15 from its centre) to -45
+  const scaled = drawWord('ABC', word(), { lines: [{ ...LINE_ID, scale: 2 }] });
+  assert.deepEqual(scaled.fills.map((f) => [f.text, f.scale, f.x]), [['ABC', 2, -45]]);
+});
+
+test('a line at opacity 0 draws nothing, glow included; a line at its rest values is drawn as if it had no track', () => {
+  const none = drawWord('ABC', word({ glow: 1 }), { glow: GLOW, lines: [{ ...LINE_ID, opacity: 0 }] });
+  assert.deepEqual([none.fills, none.strokes], [[], []]);
+  const rest = drawWord('ABC', word(), { lines: [LINE_ID] });
+  const bare = drawWord('ABC', word());
+  assert.deepEqual(rest.fills.map(({ text, x, y, scale, alpha }) => ({ text, x, y, scale, alpha })), bare.fills.map(({ text, x, y, scale, alpha }) => ({ text, x, y, scale, alpha })));
+});
+
+test('a line track composes with a word track and with letters still arriving', () => {
+  const both = drawWord('ABC', word({ opacity: 0.5 }), { lines: [{ ...LINE_ID, opacity: 0.5 }] });
+  assert.equal(both.fills[0].alpha, 0.25);
+  const letters = drawWord('ABC', word({ glyphs: [{ ...ID, opacity: 0.5 }, ID, ID] }), { lines: [{ ...LINE_ID, x: 4 }] });
+  assert.deepEqual(letters.fills.map((f) => [f.text, f.x - letters.left, f.alpha]), [['A', 4, 0.5], ['B', 14, 1], ['C', 24, 1]]);
 });
