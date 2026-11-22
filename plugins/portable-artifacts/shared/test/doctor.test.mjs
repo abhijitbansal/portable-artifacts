@@ -1097,6 +1097,21 @@ test("builderAgent: the newer-reviewer note shows whatever else builder_agent re
   assert.match(r.info[0].note, /this skill's copy is older/);
 });
 
+// The human-readable output (not --json): one id carries a missing entry (the stale builder) and an info note (the newer reviewer).
+test("builderAgent: the text output prints the missing line and the newer-reviewer note for one id, once each", async () => {
+  const c = rctx({ [BUILDER_USER]: OLD_TEXT, [REVIEWER_USER]: REVIEWER_NEWER });
+  const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
+  assert.equal(human.code, 0, "optional: it never fails the doctor");
+  const lines = human.out.split("\n");
+  const missingLines = lines.filter((l) => /^outdated \(optional\): builder_agent — /.test(l));
+  const noteLines = lines.filter((l) => /^Note: builder_agent — /.test(l));
+  assert.equal(missingLines.length, 1, human.out);
+  assert.equal(noteLines.length, 1, human.out);
+  assert.match(noteLines[0], /newer/);
+  assert.match(noteLines[0], /this skill's copy is older/);
+  assert.doesNotMatch(human.out, /^ok: everything/m, "something is reported, so it does not say everything is installed");
+});
+
 test("builderAgent: with a stale builder and no newer reviewer there is no newer note", async () => {
   const c = rctx({ [BUILDER_USER]: OLD_TEXT, [REVIEWER_USER]: REVIEWER_CURRENT });
   const r = await diagnose([builderAgent()], c);

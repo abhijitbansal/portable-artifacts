@@ -190,16 +190,28 @@ export const CURRENT_MARKER = 'make.mjs';
 const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-dir>
        node agents.mjs write-reviewer <${REVIEWER_HOSTS.join('|')}> <agents-dir> [--force [--replace-foreign]]`;
 
-// The reason --force must be refused for this file, or null. It fails closed: only an absent file (ENOENT) is clear to
-// write. A file the writer cannot read (EACCES, EISDIR, ELOOP...) is not known to be ours, a file with no marker is not
-// ours, and one written by a newer skill would be downgraded. --replace-foreign overrides all three.
+// The refusal for a path whose read gave ENOENT, or null when nothing is there (lstat does not follow a link).
+function danglingRefusal(file) {
+  try {
+    fs.lstatSync(file);
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    return `cannot look at ${file} to check it is ours (${e.code ?? e.message}); to replace it anyway pass --force --replace-foreign (keep a copy first)`;
+  }
+  return `${file} is a symbolic link to nothing; to replace the link anyway pass --force --replace-foreign`;
+}
+
+// The reason --force must be refused for this file, or null. It fails closed: only an absent file is clear to write. A read
+// that gives ENOENT is looked at with lstat too, because a dangling symbolic link reads as ENOENT and something is there. A
+// file the writer cannot read (EACCES, EISDIR, ELOOP...) is not known to be ours, a file with no marker is not ours, and one
+// written by a newer skill would be downgraded. --replace-foreign overrides all of these.
 function reviewerRefusal(dir, fileName) {
   const file = path.join(path.resolve(dir), fileName);
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (e) {
-    if (e.code === 'ENOENT') return null;
+    if (e.code === 'ENOENT') return danglingRefusal(file);
     return `cannot read ${file} to check it is ours (${e.code ?? e.message}); to replace it anyway pass --force --replace-foreign (keep a copy first)`;
   }
   const state = reviewerFileState(text);

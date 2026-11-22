@@ -444,6 +444,26 @@ test('cli: write-reviewer --force refuses a path it cannot read as a file (a dir
   assert.ok(fs.statSync(path.join(dir, 'motion-reviewer.md')).isDirectory(), 'the directory is untouched');
 });
 
+// A dangling link reads as ENOENT, but something is there: it was put there on purpose, so it is not clear to replace.
+test('cli: write-reviewer --force refuses a dangling symbolic link at the file, and replaces it only with --replace-foreign', { skip: process.platform === 'win32' && 'symbolic links need a privilege on Windows' }, () => {
+  const dir = path.join(tmpDir(), 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'motion-reviewer.md');
+  const target = path.join(dir, 'nowhere.md');
+  fs.symlinkSync(target, file);
+  const refused = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
+  assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+  assert.match(refused.stderr, /--force --replace-foreign/);
+  assert.match(refused.stderr, /symbolic link/);
+  assert.ok(fs.lstatSync(file).isSymbolicLink(), 'the link is untouched');
+  assert.equal(fs.existsSync(target), false, 'nothing written through the link');
+  const replaced = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force', '--replace-foreign'], { encoding: 'utf8' });
+  assert.equal(replaced.status, 0, replaced.stderr);
+  assert.ok(fs.lstatSync(file).isFile(), 'the link is replaced by a file');
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+  assert.equal(fs.existsSync(target), false, 'its target was never written');
+});
+
 test('cli: write-reviewer --force refuses a NEWER file of ours, says it is newer, and replaces it only with --replace-foreign', () => {
   const dir = path.join(tmpDir(), 'agents');
   fs.mkdirSync(dir, { recursive: true });
