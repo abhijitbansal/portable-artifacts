@@ -17,8 +17,12 @@ const QUIET = ['-hide_banner', '-loglevel', 'error'];
 const STDERR_KEEP = 4000;
 const STDERR_LINES = 5;
 
-/** The ffmpeg arguments that decode the first video stream of `file` to CHECK_WIDTH by CHECK_HEIGHT 8-bit gray frames on stdout. */
-export const checkArgs = (file) => [...QUIET, '-i', file, '-map', '0:v:0', '-vf', `scale=${CHECK_WIDTH}:${CHECK_HEIGHT}:flags=area,format=gray`, '-f', 'rawvideo', '-'];
+/**
+ * The ffmpeg arguments that decode the first video stream of `file` to CHECK_WIDTH by CHECK_HEIGHT 8-bit gray frames on
+ * stdout. `-fps_mode passthrough` (ffmpeg 5.1, as the doctor's loudness note already needs) makes the count the frames in
+ * the file: the default would repeat or drop frames to keep a steady rate, hiding a lost frame or failing a legal film.
+ */
+export const checkArgs = (file) => [...QUIET, '-i', file, '-map', '0:v:0', '-vf', `scale=${CHECK_WIDTH}:${CHECK_HEIGHT}:flags=area,format=gray`, '-fps_mode', 'passthrough', '-f', 'rawvideo', '-'];
 
 /** What is wrong with the finished file, or null: a frame count that differs from the timeline's, or a picture with no detail. */
 export function outputProblem({ decoded, stds, frames }) {
@@ -45,29 +49,38 @@ const refusal = (problem) => new Error(`render check: ${problem}; nothing was wr
  * Decodes `file` and throws `render check: <problem>; nothing was written` when its frame count is not `frames` or no frame
  * of it has any detail, or when ffmpeg cannot read it; else { decoded }. `signal` stops it (ffmpeg is killed, the promise
  * rejects with the signal's reason).
- * @param {{ ffmpeg: string, file: string, frames: number, signal?: AbortSignal }} opts
+ * `beat` is called once per decoded frame (the stage clock restarts its stall limit on it: capture-clock.mjs), and
+ * `stalled` is the clock's signal, aborted when the stage stalls: ffmpeg is killed then as well. `spawn` is for tests.
+ * @param {{ ffmpeg: string, file: string, frames: number, signal?: AbortSignal, stalled?: AbortSignal, beat?: () => void,
+ *   spawn?: typeof spawn }} opts
  * @returns {Promise<{ decoded: number }>}
  */
-export function checkOutput({ ffmpeg, file, frames, signal }) {
+export function checkOutput({ ffmpeg, file, frames, signal, stalled, beat, spawn: start = spawn }) {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(signal.reason);
-    const child = spawn(ffmpeg, checkArgs(file), { stdio: ['ignore', 'pipe', 'pipe'] });
+    const stops = [signal, stalled].filter(Boolean);
+    const already = stops.find((s) => s.aborted);
+    if (already) return reject(already.reason);
+    const child = start(ffmpeg, checkArgs(file), { stdio: ['ignore', 'pipe', 'pipe'] });
     const stds = [];
     let carry = Buffer.alloc(0);
     let stderr = '';
     let failure = null;
-    const onAbort = () => { child.kill('SIGKILL'); reject(signal.reason); };
-    signal?.addEventListener('abort', onAbort, { once: true });
+    const onAbort = (stop) => () => { child.kill('SIGKILL'); reject(stop.reason); };
+    const listeners = stops.map((stop) => [stop, onAbort(stop)]);
+    for (const [stop, listener] of listeners) stop.addEventListener('abort', listener, { once: true });
     child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-STDERR_KEEP); });
     child.stdout.on('data', (chunk) => {
       const bytes = carry.length === 0 ? chunk : Buffer.concat([carry, chunk]);
       let offset = 0;
-      for (; offset + FRAME_BYTES <= bytes.length; offset += FRAME_BYTES) stds.push(lumaStd(bytes, offset));
+      for (; offset + FRAME_BYTES <= bytes.length; offset += FRAME_BYTES) {
+        stds.push(lumaStd(bytes, offset));
+        beat?.();
+      }
       carry = Buffer.from(bytes.subarray(offset)); // a copy: the chunk's memory is reused
     });
     child.on('error', (err) => { failure = err.message; });
     child.on('close', (code) => {
-      signal?.removeEventListener('abort', onAbort);
+      for (const [stop, listener] of listeners) stop.removeEventListener('abort', listener);
       if (failure !== null || code !== 0) {
         const said = stderr.trim().split('\n').filter(Boolean).slice(-STDERR_LINES).join(' | ');
         return reject(refusal(`ffmpeg could not read the finished file (${failure ?? `exit ${code}`}): ${said}`));

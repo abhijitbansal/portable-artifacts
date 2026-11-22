@@ -38,12 +38,14 @@ const wakeUp = (queue, slot) => {
   fn?.();
 };
 
+const askPage = (page, from, to) => page.evaluate(([x, y]) => window.__heldFlags(x, y, true), [from, to]);
+
 // Captures range `range` on `page` into `queue` (held frames repeat the previous picture of the range).
-async function produce({ page, range, queue, shoot, state }) {
+async function produce({ page, range, queue, shoot, held: heldFlags, state }) {
   let previous = null;
   for (let a = range.from; a < range.to; a += HELD_CHUNK) {
     const b = Math.min(range.to, a + HELD_CHUNK) - 1;
-    const held = await page.evaluate(([x, y]) => window.__heldFlags(x, y, true), [a, b]);
+    const held = await heldFlags(page, a, b);
     for (let k = 0; k < held.length; k++) {
       if (state.failed) return;
       const fresh = previous === null || !held[k];
@@ -83,10 +85,11 @@ async function consume({ queues, ranges, write, state, onProgress, frames }) {
 /**
  * Captures every frame of `frames` with `pages` (one range each) and writes them in order through `write(buffer)`.
  * `shoot(page, i)` seeks `page` to frame i and takes the picture (render.mjs shootFrame, which times both steps);
- * `write(buffer, frame)` gets the 0-based frame it is for. -> the number of pictures taken. A failure on any page stops
- * the others and rejects.
+ * `write(buffer, frame)` gets the 0-based frame it is for. `held(page, from, to)` gives the held flags of frames
+ * from..to (default: asked of the page directly; render.mjs times it as part of the draw stage). -> the number of
+ * pictures taken. A failure on any page stops the others and rejects.
  */
-export async function captureParallel({ pages, frames, shoot, write, onProgress, signal }) {
+export async function captureParallel({ pages, frames, shoot, write, held = askPage, onProgress, signal }) {
   const ranges = workerRanges(frames, pages.length);
   const queues = ranges.map(newQueue);
   const state = { captured: 0, bytes: 0, failed: false, writing: null };
@@ -98,7 +101,7 @@ export async function captureParallel({ pages, frames, shoot, write, onProgress,
   const guarded = (promise) => promise.catch(fail);
   const checked = async (buffer, frame) => { signal?.throwIfAborted(); await write(buffer, frame); };
   await Promise.all([
-    ...ranges.map((range, k) => guarded(produce({ page: pages[k], range, queue: queues[k], shoot, state }))),
+    ...ranges.map((range, k) => guarded(produce({ page: pages[k], range, queue: queues[k], shoot, held, state }))),
     guarded(consume({ queues, ranges, write: checked, state, onProgress, frames })),
   ]);
   return state.captured;

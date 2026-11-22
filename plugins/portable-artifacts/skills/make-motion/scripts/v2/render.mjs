@@ -131,7 +131,8 @@ export function sweepPartials(dir, { olderThanMs = PARTIAL_MAX_AGE_MS, now = Dat
 }
 
 // Which of frames from..to equal their predecessor under the capture key.
-const heldChunk = (page, from, to) => page.evaluate(([a, b]) => window.__heldFlags(a, b, true), [from, to]);
+// Timed as part of the draw stage (the page works out the frames' state keys), so a page that hangs here names it.
+export const heldFlags = (page, from, to, clock) => clock.time('draw', from, () => page.evaluate(([a, b]) => window.__heldFlags(a, b, true), [from, to]));
 
 const capture = (page, exact) => page.screenshot(exact ? { type: 'png' } : { type: 'jpeg', quality: JPEG_QUALITY });
 
@@ -151,7 +152,7 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress, clock
   let captured = 0;
   for (let from = 0; from < frames; from += HELD_CHUNK) {
     const to = Math.min(frames, from + HELD_CHUNK) - 1;
-    const held = await heldChunk(page, from, to);
+    const held = await heldFlags(page, from, to, clock);
     for (let k = 0; k < held.length; k++) {
       signal?.throwIfAborted();
       if (previous === null || !held[k]) {
@@ -174,6 +175,7 @@ async function encodeWithWorkers({ session, encoder, exact, signal, onProgress, 
     const pages = [session.page, ...extra.map((s) => s.page)];
     return await captureParallel({
       pages, frames, onProgress, signal,
+      held: (page, from, to) => heldFlags(page, from, to, clock),
       shoot: (page, i) => shootFrame(page, i, { exact, clock }),
       write: (buffer, frame) => clock.time('encode', frame, () => encoder.write(buffer)),
     });
@@ -272,7 +274,9 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     // The file about to become the output is decoded and checked first: a wrong frame count or a picture with no detail is a
     // render error (the film is not at fault), and the finally below removes both partial files, so it keeps no output.
     const finished = audio === null ? partial : muxed;
-    await clock.time('check', open.timeline.frameCount - 1, () => checkOutput({ ffmpeg, file: finished, frames: open.timeline.frameCount, signal }));
+    // The check stalls when it decodes no frame for the limit, not when the whole film takes that long (`beat`), and a
+    // stall kills its ffmpeg (`stalled`).
+    await clock.time('check', open.timeline.frameCount - 1, ({ beat, signal: stalled }) => checkOutput({ ffmpeg, file: finished, frames: open.timeline.frameCount, signal, stalled, beat }));
     renameSync(finished, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;

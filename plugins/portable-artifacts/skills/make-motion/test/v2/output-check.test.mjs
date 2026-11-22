@@ -2,10 +2,12 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ffmpegOrNull } from './helpers/session.mjs';
+import { createStageClock } from '../../scripts/v2/capture-clock.mjs';
 import { BLANK_STD, CHECK_HEIGHT, CHECK_WIDTH, checkArgs, checkOutput, outputProblem } from '../../scripts/v2/output-check.mjs';
 
 let dir;
@@ -33,6 +35,7 @@ test('the check decodes the first video stream to 96 by 54 gray frames on stdout
   assert.deepEqual(args.slice(args.indexOf('-map'), args.indexOf('-map') + 2), ['-map', '0:v:0']);
   assert.equal(args[args.indexOf('-vf') + 1], 'scale=96:54:flags=area,format=gray');
   assert.deepEqual(args.slice(-3), ['-f', 'rawvideo', '-']);
+  assert.deepEqual(args.slice(args.indexOf('-fps_mode'), args.indexOf('-fps_mode') + 2), ['-fps_mode', 'passthrough'], 'the count reads frames, not timestamps');
 });
 
 test('a film whose every frame is flat is blank; one frame with detail is enough', () => {
@@ -69,6 +72,46 @@ test('a film of one frame is legal, and a file ffmpeg cannot read fails with its
   assert.deepEqual(await checkOutput({ ffmpeg, file: clip('one.mp4'), frames: 1 }), { decoded: 1 });
   await assert.rejects(checkOutput({ ffmpeg, file: clip('missing.mp4'), frames: 1 }), /^Error: render check: ffmpeg could not read the finished file.*; nothing was written$/);
   return undefined;
+});
+
+// A decoder that is not ffmpeg: a child that writes one gray frame every `everyMs` for `count` frames, then either ends
+// (`ends`) or goes silent for good. kill() stops it and ends it as a killed process does.
+const FRAME = Buffer.from(Array.from({ length: CHECK_WIDTH * CHECK_HEIGHT }, (_, i) => i % 256));
+function fakeDecoder({ count, everyMs, ends }) {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.killed = false;
+  let sent = 0;
+  const timer = setInterval(() => {
+    if (sent < count) { sent++; child.stdout.emit('data', FRAME); return; }
+    if (!ends) return; // silent: never emits again, never ends
+    clearInterval(timer);
+    child.emit('close', 0);
+  }, everyMs);
+  child.kill = () => { child.killed = true; clearInterval(timer); child.emit('close', null); };
+  return child;
+}
+const checking = ({ clock, frames, child, frame = frames - 1 }) => clock.time('check', frame, ({ beat, signal }) => checkOutput({ ffmpeg: 'fake', file: 'f.mp4', frames, beat, stalled: signal, spawn: () => child }));
+
+test('a decode slower than the stall limit in total passes while every frame arrives within it (the heartbeat)', async () => {
+  const child = fakeDecoder({ count: 10, everyMs: 15, ends: true }); // 150 ms in all, 15 ms a frame, against a 60 ms limit
+  const clock = createStageClock({ frames: 10, stallMs: 60 });
+  assert.deepEqual(await checking({ clock, frames: 10, child }), { decoded: 10 });
+  assert.equal(child.killed, false);
+});
+
+test('a decoder that stops emitting stalls the check stage and has its ffmpeg killed', async () => {
+  const child = fakeDecoder({ count: 2, everyMs: 10, ends: false });
+  const clock = createStageClock({ frames: 10, stallMs: 80 });
+  await assert.rejects(checking({ clock, frames: 10, child }), /^Error: render stalled in the check stage at frame 10 of 10: no answer in 0\.08 s/);
+  assert.equal(child.killed, true);
+});
+
+test('checkOutput gives one heartbeat per decoded frame', async () => {
+  let beats = 0;
+  await checkOutput({ ffmpeg: 'fake', file: 'f.mp4', frames: 4, beat: () => { beats++; }, spawn: () => fakeDecoder({ count: 4, everyMs: 1, ends: true }) });
+  assert.equal(beats, 4);
 });
 
 test('an abort stops the check and rejects with the signal\'s reason', async (t) => {
