@@ -1,5 +1,5 @@
 // The stage clock: the time each stage of a frame takes (draw: the page seeks and paints it; capture: the screenshot;
-// encode: the write to ffmpeg and its finish), and a stalled stage turned into an error that names it. render.mjs
+// encode: the write to ffmpeg and its finish; check: the decode of the finished file, output-check.mjs), and a stalled stage turned into an error that names it. render.mjs
 // shootFrame and renderFilm put every stage of both capture paths (one page, --workers) through `time`, so a render that
 // stops answering says where, and the report says where the time went.
 //
@@ -8,7 +8,7 @@
 // passes through unchanged: it is a finding or a machine error of its own, never a stall.
 import { performance } from 'node:perf_hooks';
 
-export const STAGES = Object.freeze(['draw', 'capture', 'encode']);
+export const STAGES = Object.freeze(['draw', 'capture', 'encode', 'check']);
 export const STAGE_STALL_MS = 120_000;
 export const TAIL_LINES = 5;
 const MS_PER_SECOND = 1000;
@@ -47,6 +47,6 @@ export function createStageClock({ frames, stallMs = STAGE_STALL_MS, tail = () =
         spent[stage] += now() - started;
       }
     },
-    totals: () => ({ drawMs: Math.round(spent.draw), captureMs: Math.round(spent.capture), encodeMs: Math.round(spent.encode) }),
+    totals: () => ({ drawMs: Math.round(spent.draw), captureMs: Math.round(spent.capture), encodeMs: Math.round(spent.encode), checkMs: Math.round(spent.check) }),
   };
 }

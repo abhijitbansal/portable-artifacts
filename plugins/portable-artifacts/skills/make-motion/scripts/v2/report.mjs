@@ -4,8 +4,8 @@
 // The report has the same keys on every path, so a reader never has to guess which exist:
 //   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, timing,
 //   findings, provenance
-// `timing` is { drawMs, captureMs, encodeMs }, the milliseconds the render spent in each stage of a frame (summed across
-// pages with --workers, so it can exceed `seconds`), null until a render ran.
+// `timing` is { drawMs, captureMs, encodeMs, checkMs }, the milliseconds the render spent in each stage of a frame and in the
+// check of the finished file (summed across pages with --workers, so it can exceed `seconds`), null until a render ran.
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
 // ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, a voice that cannot be made, an interrupt).
 // `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
@@ -34,6 +34,7 @@ const secondsText = (n) => n.toFixed(SECOND_DECIMALS);
 // A hint for a message that carries none of its own.
 const HINTS = Object.freeze([
   [/^render stalled in the /, 'the browser or ffmpeg stopped answering at that stage; run again, and with --workers 1 if it keeps happening'], // first: its page messages may match a later pattern
+  [/^render check: /, 'the browser drew or captured nothing, or the encode lost frames; run again with --workers 1, then with --exact, and report it if it stays'],
   [/^cannot read /, 'give the path of an existing film .json file; a relative path is read from the current directory'],
   [/^.* is not a regular file/, 'give the path of a film .json file, not a folder or a device'],
   [/^ffmpeg failed/, 'ffmpeg refused the frames; the lines above are its own words. Retry with --exact, or check the disk space'],
@@ -104,7 +105,7 @@ function postText({ post, cuts }) {
 }
 
 // The timing part of the frames line: where the render's time went, in ms; nothing when no render ran.
-const timingText = (timing) => (timing ? `, draw ${timing.drawMs} capture ${timing.captureMs} encode ${timing.encodeMs} ms` : '');
+const timingText = (timing) => (timing ? `, draw ${timing.drawMs} capture ${timing.captureMs} encode ${timing.encodeMs} check ${timing.checkMs} ms` : '');
 
 /** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look,
  *  `kinds` only for a film that uses a parked kind, `cuts` only for a film with shader cuts). */

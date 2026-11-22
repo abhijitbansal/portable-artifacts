@@ -37,6 +37,7 @@ const FILMS = {
   stillLast: { version: 2, shots: [still('first', 1), still('last', 8)] },
   meshLong: { version: 2, shots: [meshShot('mesh', 7), meshShot('end', 1)] },
   meshShort: { version: 2, fps: FPS, shots: [meshShot('mesh', 2)] },
+  blank: { version: 2, fps: FPS, shots: [{ id: 'blank', show: 'free', hold: 1, background: '#000000', nodes: [] }] },
   invalid: { version: 2, shots: [{ id: 'a', show: 'nope', hold: 1 }] },
   v1: { version: 1, scenes: [] },
   long: { version: 2, mode: 'pro', shots: [
@@ -345,6 +346,19 @@ test('a full run renders an H.264 yuv420p MP4 of the film, one frame per film fr
   assert.deepEqual(readdirSync(path.dirname(report.output)).filter((f) => f !== 'film.sheets' && f !== 'film.mp4'), []);
   assert.ok(report.timing.drawMs > 0 && report.timing.captureMs > 0 && report.timing.encodeMs >= 0, JSON.stringify(report.timing));
   assert.ok(report.timing.drawMs + report.timing.captureMs <= report.seconds * 1000, 'one page: the stage times cannot exceed the render');
+  assert.ok(report.timing.checkMs > 0, 'the finished file was decoded and checked');
+});
+
+test('a film whose picture has no detail in any frame fails the render with "render check", and no file is kept', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const run = make([filmPath('blank'), '--json', '--out', outPath('blank')]);
+  assert.equal(run.status, 2, run.stdout + run.stderr);
+  const report = parse(run);
+  assert.equal(report.ok, false);
+  assert.match(report.error.message, /^render check: the finished file's picture is blank: none of its 30 frames has any detail; nothing was written$/);
+  assert.match(report.error.hint, /--workers 1, then with --exact/);
+  assert.equal(report.output, null);
+  assert.deepEqual(readdirSync(path.dirname(outPath('blank'))).filter((f) => !f.endsWith('.sheets')), [], 'no output and no partial file');
 });
 
 test('a held shot is not re-captured every frame: captured is one per grain pattern, and the MP4 still has every frame', async (t) => {

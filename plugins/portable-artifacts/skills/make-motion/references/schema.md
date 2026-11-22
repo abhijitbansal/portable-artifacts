@@ -136,7 +136,7 @@ A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", 
 | `stages` | `[{ name, ok, seconds }]` for each stage that ran |
 | `frames`, `captured` | Frames in the film, and frames actually captured |
 | `seconds`, `msPerFrame`, `bytes`, `mbps` | Render time, time per frame, file size and bit rate |
-| `timing` | `{ drawMs, captureMs, encodeMs }`: where the render's time went, summed across pages with `--workers`, or `null` when nothing was rendered |
+| `timing` | `{ drawMs, captureMs, encodeMs, checkMs }`: where the render's time went, summed across pages with `--workers`, or `null` when nothing was rendered |
 | `findings` | `[{ kind, shot, path, message }]` (see below) |
 | `provenance` | `{ comment, artist }` as stamped into the MP4, or `null` |
 

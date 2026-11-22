@@ -20,7 +20,7 @@ test('the clock sums each stage and returns what the stage returned', async () =
   assert.equal(await clock.time('draw', 0, async () => { t += 4; return 'x'; }), 'x');
   await clock.time('draw', 1, async () => { t += 6; });
   await clock.time('capture', 1, async () => { t += 30; });
-  assert.deepEqual(clock.totals(), { drawMs: 10, captureMs: 30, encodeMs: 0 });
+  assert.deepEqual(clock.totals(), { drawMs: 10, captureMs: 30, encodeMs: 0, checkMs: 0 });
 });
 
 test('a stage that does not answer in time is a stall naming the stage, the frame and the last page messages', async () => {
@@ -47,7 +47,7 @@ test('the browser\'s own timeout is a stall too, with its first line as the caus
 
 test('a stall with no page message says none, and an unknown stage is refused', async () => {
   assert.match(stallError({ stage: 'encode', frame: 0, frames: 1, cause: 'no answer in 1 s', tail: [] }).message, /last page messages: none$/);
-  await assert.rejects(createStageClock({ frames: 1 }).time('paint', 0, async () => {}), /stage must be one of draw, capture, encode/);
+  await assert.rejects(createStageClock({ frames: 1 }).time('paint', 0, async () => {}), /stage must be one of draw, capture, encode, check/);
 });
 
 test('a stage that answers in time leaves no stall timer behind, and a late failure of a stalled stage is not unhandled', async () => {
@@ -72,7 +72,7 @@ test('shootFrame seeks as draw and screenshots as capture, and returns the pictu
   const page = fakePage({ seek: async (i) => { seen.push(['seek', i]); }, shot: async (opts) => { seen.push(['shot', opts.type]); return Buffer.from('p'); } });
   assert.equal((await shootFrame(page, 3, { exact: false, clock })).toString(), 'p');
   assert.deepEqual(seen, [['seek', 3], ['shot', 'jpeg']]);
-  assert.deepEqual(Object.keys(clock.totals()), ['drawMs', 'captureMs', 'encodeMs']);
+  assert.deepEqual(Object.keys(clock.totals()), ['drawMs', 'captureMs', 'encodeMs', 'checkMs']);
 });
 
 test('shootFrame: a seek that hangs stalls in draw, a browser timeout in capture, and a film error passes through', async () => {
@@ -92,11 +92,13 @@ test('shootFrame: a seek that hangs stalls in draw, a browser timeout in capture
 });
 
 test('the report says where the time went on the frames line, and a stall gets its hint even when a page message matches another', () => {
-  const report = { stages: [{ name: 'validate', ok: true }], findings: [], timed: 'estimated', sheets: [], output: 'o.mp4', frames: 30, captured: 30, capture: 'fast', post: 'webgl2', msPerFrame: 12.34, bytes: 2e6, mbps: 1.5, audio: null, timing: { drawMs: 11, captureMs: 222, encodeMs: 33 } };
-  assert.match(formatText(report, { sheetsDir: 's' }), /12\.3 ms per frame, draw 11 capture 222 encode 33 ms\); size:/);
+  const report = { stages: [{ name: 'validate', ok: true }], findings: [], timed: 'estimated', sheets: [], output: 'o.mp4', frames: 30, captured: 30, capture: 'fast', post: 'webgl2', msPerFrame: 12.34, bytes: 2e6, mbps: 1.5, audio: null, timing: { drawMs: 11, captureMs: 222, encodeMs: 33, checkMs: 4 } };
+  assert.match(formatText(report, { sheetsDir: 's' }), /12\.3 ms per frame, draw 11 capture 222 encode 33 check 4 ms\); size:/);
   assert.doesNotMatch(formatText({ ...report, timing: null }, { sheetsDir: 's' }), /draw 11/);
   const stalled = describeError(stallError({ stage: 'capture', frame: 0, frames: 9, cause: 'no answer in 120 s', tail: ['Target page, context or browser has been closed'] }));
   assert.match(stalled.hint, /stopped answering at that stage; run again, and with --workers 1/);
+  const checked = describeError(new Error('render check: the finished file holds 29 frames, the timeline has 30; nothing was written'));
+  assert.match(checked.hint, /^the browser drew or captured nothing, or the encode lost frames; run again with --workers 1, then with --exact/);
 });
 
 test('the parallel path stalls through the same function: captureParallel with shootFrame names the stage and the frame', async () => {

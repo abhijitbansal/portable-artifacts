@@ -20,6 +20,7 @@ import { registries } from '../../engine/registry.mjs';
 import '../../engine/modes/index.mjs'; // registers the modes whose loudness a voiced film is mastered to
 import { loadFilm } from './pipeline.mjs';
 import { createStageClock } from './capture-clock.mjs';
+import { checkOutput } from './output-check.mjs';
 import { openSession } from './session.mjs';
 import { withStamp } from './stamp.mjs';
 import { captureParallel, workerRanges } from './workers.mjs';
@@ -207,9 +208,11 @@ const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, mu
  *   output: the encode of a film with neither a voice nor sound, else the mux.
  * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
  *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null, cues: number, music: object | null } | null,
- *   timing: { drawMs: number, captureMs: number, encodeMs: number } }>}
+ *   timing: { drawMs: number, captureMs: number, encodeMs: number, checkMs: number } }>}
  *   timing: whole milliseconds spent in each stage (capture-clock.mjs); with --workers it is summed across pages, so it can
  *   exceed `seconds`. A stage that does not answer in 120 s, or a browser TimeoutError, rejects with an error that names it.
+ *   The finished file is decoded before it is kept (output-check.mjs): a frame count other than the timeline's, or a
+ *   picture with no detail in any frame, rejects with `render check: ...` and no output file is left.
  *   audio: the sound as measured in the finished file (lufs null, with a note, when it is too short to measure), with the
  *   cue count and the music summary of the plan; null with neither a voice nor sound (and then the video is exactly what
  *   it was: no audio step runs). A level more than 1 LU off the mode's target, or a true peak over its ceiling, fails
@@ -266,7 +269,11 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     await clock.time('encode', open.timeline.frameCount - 1, () => encoder.finish());
     encoder = null;
     const audio = encoded === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run: stampedRunner(run, muxed, stamp), video: partial, audio: encoded.file, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
-    renameSync(audio === null ? partial : muxed, out);
+    // The file about to become the output is decoded and checked first: a wrong frame count or a picture with no detail is a
+    // render error (the film is not at fault), and the finally below removes both partial files, so it keeps no output.
+    const finished = audio === null ? partial : muxed;
+    await clock.time('check', open.timeline.frameCount - 1, () => checkOutput({ ffmpeg, file: finished, frames: open.timeline.frameCount, signal }));
+    renameSync(finished, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;
     const bytes = statSync(out).size;
