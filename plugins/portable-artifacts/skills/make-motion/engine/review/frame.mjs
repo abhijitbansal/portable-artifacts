@@ -51,6 +51,7 @@
 import { unitOf } from '../units.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, unionBox as union } from '../kinds/shared.mjs';
 import { contrastFindings } from './contrast.mjs';
+import { minSizeSuggest } from './suggest.mjs';
 import { markBoxes, showsItself } from './marks.mjs';
 import { regionFindings } from './regions.mjs';
 import { droppedMessage } from './dropped.mjs';
@@ -257,7 +258,7 @@ export function textLandings(sampled, ctx) {
 }
 
 const pathOf = (ctx) => `shots[${ctx.shotIndex ?? ctx.shotId}]`;
-const finding = (ctx, kind, rule, node, message, role) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}) });
+const finding = (ctx, kind, rule, node, message, role, suggest) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}), ...(suggest ? { suggest } : {}) });
 const units = (n) => Number(n.toFixed(1));
 
 function outsideSafe([x, y, w, h], safe, slack) {
@@ -281,7 +282,7 @@ function textRules(texts, ctx) {
     const out = [];
     const id = node.id;
     if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, overflowMessage(node, size), role));
-    if (landed && smallest < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(smallest)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
+    if (landed && smallest < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(smallest)} units tall; the floor is ${MIN_TEXT_UNITS}`, role, minSizeSuggest(MIN_TEXT_UNITS, smallest)));
     if (landed && outsideSafe(ink, ctx.safe, (SAFE_TOLERANCE_UNITS + INK_OUTSET_EM * size) * unitOf(ctx.canvas))) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
     return out;
   });
@@ -781,7 +782,7 @@ export function auditFrame(sampled, ctx) {
   const { texts, unmeasured } = visibleTexts(sampled, unit, ctx);
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
   const opening = ctx.opensShot === true ? openingFindings(sampled, ctx) : [];
-  const make = (kind, rule, node, message, role) => finding(ctx, kind, rule, node, message, role);
+  const make = (kind, rule, node, message, role, suggest) => finding(ctx, kind, rule, node, message, role, suggest);
   const contrast = contrastFindings(texts, sampled, ctx, make);
   const regions = regionFindings(sampled, texts, ctx, make);
   const composition = ctx.restsShot === true ? compositionFindings(sampled, ctx) : [];

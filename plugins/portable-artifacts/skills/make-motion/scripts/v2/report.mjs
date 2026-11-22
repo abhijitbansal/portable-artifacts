@@ -61,8 +61,8 @@ export function describeError(err) {
 /** A validation error { path, message } as a finding. Validation errors are always mechanical: the film cannot be built. */
 export const validationFinding = ({ path, message }) => ({ kind: 'mechanical', shot: null, path, message });
 
-/** A review finding as the report carries it: its rule, role and node are for deduplication and the path only. */
-export const reviewFinding = ({ kind, shot, path, message, t }) => ({ kind, shot, path, message, t });
+/** A review finding as the report carries it: its rule, and the value that fixes it when it has one (`suggest`); its role and node are for deduplication and the path only. */
+export const reviewFinding = ({ kind, shot, path, message, t, rule, suggest }) => ({ kind, shot, path, message, t, rule, ...(suggest ? { suggest } : {}) });
 
 /** A finding about the page or the post pass rather than about a shot. */
 export const pageFinding = (kind, message) => ({ kind, shot: null, path: '', message });

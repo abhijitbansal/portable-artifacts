@@ -152,7 +152,7 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 | `frames`, `captured` | Frames in the film, and frames actually captured |
 | `seconds`, `msPerFrame`, `bytes`, `mbps` | Render time, time per frame, file size and bit rate |
 | `timing` | `{ drawMs, captureMs, encodeMs, checkMs }`: where the render's time went, summed across pages with `--workers`, or `null` when nothing was rendered |
-| `findings` | `[{ kind, shot, path, message }]` (see below) |
+| `findings` | `[{ kind, shot, path, message, t?, rule?, suggest? }]` (see below): `t` and `rule` are on a review finding, `suggest` only where the rule has a fix value |
 | `provenance` | `{ comment, artist }` as stamped into the MP4, or `null` |
 
 These keys appear only when they apply: `poster`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.

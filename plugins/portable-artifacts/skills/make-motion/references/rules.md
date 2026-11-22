@@ -1,6 +1,6 @@
 # The rules a review finding names
 
-Every finding the film review raises is raised by one rule, and its id comes from this list (a validation error or a render error is not a review finding and has no rule). This page lists the rules, one row each: the rule, whether it raises a `mechanical` finding (a fault with a path, which fails the run), a `creative` one (a call for you), or both, the stage that checks it, what it means, the question a creative rule asks, the value that fixes it and where its number comes from. `engine/review/rules.mjs` holds the same list, and a test keeps the code, that list and this page equal.
+Every finding the film review raises is raised by one rule, and its id comes from this list, and the report's finding keeps it as `rule` (a validation error or a render error is not a review finding and carries no `rule`). A finding of a rule with a fix value in a computable form also carries `suggest`, an object with only the keys `color`, `minSize`, `factor` or `cuts`; the rule's row names which. This page lists the rules, one row each: the rule, whether it raises a `mechanical` finding (a fault with a path, which fails the run), a `creative` one (a call for you), or both, the stage that checks it, what it means, the question a creative rule asks, the value that fixes it and where its number comes from. `engine/review/rules.mjs` holds the same list, and a test keeps the code, that list and this page equal.
 
 A rule id is never renamed or reused after 2.3.0; a new rule takes a new id.
 
@@ -10,11 +10,11 @@ A rule id is never renamed or reused after 2.3.0; a new rule takes a new id.
 |---|---|---|---|---|---|---|
 | `measure` | mechanical | frame | An element could not be measured, so the frame cannot be checked. |  | Give the named node text or a size, or take it out of the shot. | unmeasured |
 | `empty-first-frame` | mechanical | frame | A shot opens on a frame where only the field is on screen. |  | Bring the shot's hero in on its first frame. | unmeasured |
-| `contrast` | mechanical | frame | Text is under 3:1 against what is drawn directly under it. |  | A text colour that reaches 3:1 against the ground, from the look or the film's accent, or change what lies under it. | convention: WCAG 2 contrast ratio, 3:1, the floor for large text; the check treats every text as large, as video sizes make it |
+| `contrast` | mechanical | frame | Text is under 3:1 against what is drawn directly under it. |  | A text colour that reaches 3:1 against the ground, from the look or the film's accent, or change what lies under it. The finding's `suggest.color` is the look's palette colour nearest the failing one that passes (black or white when none does). | convention: WCAG 2 contrast ratio, 3:1, the floor for large text; the check treats every text as large, as video sizes make it |
 | `region-off-frame` | mechanical | frame | A mark on a region runs past the frame edge in the close-up. |  | Give the region more room in the close-up, or mark a smaller region. | unmeasured |
 | `frame-edge` | mechanical | frame | Text is sliced by the frame edge during a close-up. |  | Keep the text inside the frame, or off the close-up. | unmeasured |
 | `overflow` | creative | frame | Text does not fit even at the smallest size its kind allows. | Is a shorter word or fewer words truer to what this shot says? | Shorten the widest word, or cut words. | unmeasured |
-| `min-size` | mechanical | frame | Text is under 28 units tall. |  | Cut words until the text can be 28 units tall or more. | unmeasured |
+| `min-size` | mechanical | frame | Text is under 28 units tall. |  | Cut words until the text can be 28 units tall or more. The finding's `suggest` is `{ minSize: 28, factor }`, the factor that scales the smallest word to the floor, rounded up to 2 decimals. | unmeasured |
 | `safe-area` | mechanical | frame | Text sits outside the safe area. |  | Move the text in, or cut words. | unmeasured |
 | `overlap` | mechanical | frame | Two texts overlap by more than 4 units. |  | Move one text off the other, or cut words. | unmeasured |
 | `word-overlap` | mechanical | frame | A word overlaps its neighbour by more than 1 unit, as an emphasis pulse grows it. |  | Cut words from the line, or use a gentler emphasis. | unmeasured |

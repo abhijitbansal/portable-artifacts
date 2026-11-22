@@ -26,8 +26,11 @@
 // meets the ink while its outline does not is judged as if it did.
 import { colourChannels } from '../time/track.mjs';
 import { GLOW_EDGE } from '../devices/glow.mjs';
+import { toOklab } from '../color/oklab.mjs';
 
 export const MIN_CONTRAST = 3;
+const BLACK = '#000000', WHITE = '#ffffff';
+const HEX_COLOUR = /^#[0-9a-f]{6}$/i;
 const DEFAULT_TEXT_FILL = '#ffffff'; // engine/page/draw.mjs draws a text without a fill in white
 const CHANNEL_MAX = 255;
 const LINEAR_KNEE = 0.03928;
@@ -193,8 +196,21 @@ function wordsUnder(node, box) {
 }
 
 /**
+ * The #rrggbb colour that fixes a failing text colour: of the palette's colours whose contrast against `ground` is at
+ * least `min`, the nearest to `fill` by OKLab distance; when none passes, black or white, whichever has the higher ratio.
+ * @param {string} fill @param {string} ground @param {Record<string, string>} palette @param {number} [min]
+ */
+export function nearestPassing(fill, ground, palette, min = MIN_CONTRAST) {
+  const passing = Object.values(palette ?? {}).filter((c) => HEX_COLOUR.test(c) && contrastRatio(c, ground) >= min).map((c) => c.toLowerCase());
+  if (passing.length === 0) return contrastRatio(WHITE, ground) > contrastRatio(BLACK, ground) ? WHITE : BLACK;
+  const from = toOklab(fill);
+  const distance = (c) => Math.hypot(...toOklab(c).map((v, i) => v - from[i]));
+  return passing.reduce((best, c) => (distance(c) < distance(best) ? c : best));
+}
+
+/**
  * Contrast findings for the texts of one frame. `texts` are the frame review's visible texts ({ node, ink, role,
- * opacity }); `finding(kind, rule, node, message, role)` builds a finding in the frame review's shape.
+ * opacity }); `finding(kind, rule, node, message, role, suggest)` builds a finding in the frame review's shape.
  */
 export function contrastFindings(texts, sampled, ctx, finding) {
   const drawn = groundsOf(sampled);
@@ -213,6 +229,7 @@ export function contrastFindings(texts, sampled, ctx, finding) {
       .reduce((low, c) => (low === null || c.ratio < low.ratio ? c : low), null);
     if (worst === null || worst.ratio >= MIN_CONTRAST) return [];
     const ratio = worst.ratio.toFixed(RATIO_DECIMALS);
-    return [finding('mechanical', 'contrast', t.node.id, `text "${t.node.id}" is ${worst.fill} on ${worst.ground}, a contrast of ${ratio}:1; it needs at least ${MIN_CONTRAST}:1, so change its colour (the film's accent, or the look) or what lies under it`, t.role)];
+    const color = nearestPassing(worst.fill, worst.ground, ctx.look?.palette);
+    return [finding('mechanical', 'contrast', t.node.id, `text "${t.node.id}" is ${worst.fill} on ${worst.ground}, a contrast of ${ratio}:1; it needs at least ${MIN_CONTRAST}:1, so change its colour (the film's accent, or the look) or what lies under it; ${color} passes`, t.role, { color })];
   });
 }

@@ -89,6 +89,9 @@ export const RULES = Object.freeze([
 /** Every rule id, in registry order. */
 export const RULE_IDS = Object.freeze(RULES.map((r) => r.id));
 
+/** The keys a finding's `suggest` may hold: the value that fixes the finding (a colour, the size floor and the factor that reaches it, cut types). */
+export const SUGGEST_KEYS = Object.freeze(['color', 'minSize', 'factor', 'cuts']);
+
 /** The rule with this id. Throws `unknown rule "<id>"` with a did-you-mean, as engine/registry.mjs does for a name. */
 export function ruleOf(id) {
   const found = RULES.find((r) => r.id === id);
