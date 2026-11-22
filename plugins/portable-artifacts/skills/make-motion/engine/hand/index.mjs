@@ -241,7 +241,7 @@ export function handFindings(plan, look, texts, { canvas, unit = 1, duration, re
     }
   }
   for (const [id, { worst, at }] of covered) {
-    if (worst > COVER_SECONDS) out.push({ kind: 'mechanical', rule: 'covered', node: id, t: at, message: `the hand rests over the finished text "${id}" for ${worst.toFixed(2)} s; the most is ${COVER_SECONDS} s` });
+    if (worst > COVER_SECONDS) out.push({ kind: 'mechanical', rule: 'hand-covered', node: id, t: at, message: `the hand rests over the finished text "${id}" for ${worst.toFixed(2)} s; the most is ${COVER_SECONDS} s` });
   }
   out.push(...strokeEdgeFindings(plan, canvas, unit));
   if (edge !== null) out.push({ kind: 'mechanical', rule: 'hand-edge', node: 'hand', t: edge, message: 'the hand crosses the top or left edge of the frame; it may leave only through the bottom or right edge' });

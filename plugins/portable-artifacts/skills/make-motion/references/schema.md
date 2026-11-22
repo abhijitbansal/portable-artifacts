@@ -157,7 +157,7 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 
 These keys appear only when they apply: `poster`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
 
-A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `path` and says what to change; it makes `ok` false. A `creative` finding is a call for the author and never fails the run. A parked kind is not a finding: it renders, and the report's `kinds` lists it.
+A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `path` and says what to change; it makes `ok` false. A `creative` finding is a call for the author and never fails the run. A parked kind is not a finding: it renders, and the report's `kinds` lists it. Every rule a finding can name, with what it asks and the value that fixes it, is in `references/rules.md`.
 
 `error` is `{ message, hint }`. It is set when something about the machine stopped the run (a missing film file, no browser, no ffmpeg, a crashed page, an interrupt). A fault in the film is a finding, not an error.
 

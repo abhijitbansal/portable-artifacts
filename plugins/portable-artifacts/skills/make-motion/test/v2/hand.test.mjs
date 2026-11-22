@@ -195,11 +195,11 @@ test('the two hand findings fire on a planted pose: over a finished text for mor
   const planted = [{ id: 'under', box: [rest[0] + 20, rest[1] + 10, 120, 40], done: 0 }];
   // judged past the shot's end, where the hand has gone to rest over it
   const late = { ...opts, duration: opts.duration + 2 };
-  assert.deepEqual(handFindings(plan, look, planted, late).filter((f) => f.rule === 'covered').map((f) => [f.kind, f.node]), [['mechanical', 'under']]);
+  assert.deepEqual(handFindings(plan, look, planted, late).filter((f) => f.rule === 'hand-covered').map((f) => [f.kind, f.node]), [['mechanical', 'under']]);
   // the board's own texts, each finished when its line is written: never covered for long
   const writes = plan.filter((s) => s.kind === 'write');
   const own = inkBoxes(out.nodes).map((box, i) => ({ id: `t${i}`, box, done: writes[i].end }));
-  assert.deepEqual(handFindings(plan, look, own, opts).filter((f) => f.rule === 'covered'), []);
+  assert.deepEqual(handFindings(plan, look, own, opts).filter((f) => f.rule === 'hand-covered'), []);
   // a planted pose: a hand turned up (angle -90) resting on the top edge crosses it once it goes to rest
   const top = handLook('hand-test-top', { angle: -90, restAt: { wide: [0.5, 0.005], tall: [0.5, 0.005] } });
   const leftFindings = handFindings(plan, registries.looks.get(top), [], late);

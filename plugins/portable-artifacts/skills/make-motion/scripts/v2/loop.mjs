@@ -42,6 +42,8 @@ export async function loopFindings(session) {
     kind: 'creative',
     shot: timeline.shots.at(-1).id,
     path: 'loop',
+    rule: 'loop',
+    node: '',
     t: last / timeline.fps,
     message: `the last frame does not match the first (difference ${diff.toFixed(DECIMALS)}); end on the opening picture again so the film loops`,
   }];

@@ -96,7 +96,7 @@ test('guardrail: a link to a missing reference or script is caught', () => {
   assert.deepEqual(brokenLinks('see references/nope.md and scripts/nope.mjs and references/schema.md'), ['references/nope.md', 'scripts/nope.mjs']);
 });
 
-const WAVE_1_DOCS = ['references/broll.md', 'references/music.md', 'references/reviewing.md', 'references/tells.md',
+const WAVE_1_DOCS = ['references/broll.md', 'references/music.md', 'references/reviewing.md', 'references/rules.md', 'references/tells.md',
   'references/types/data.md', 'references/types/explainer.md', 'references/types/vertical.md'];
 
 test('the doctrine files exist, and the review protocol is not called review.md', () => {

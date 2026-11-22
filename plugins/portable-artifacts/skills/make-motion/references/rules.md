@@ -1,0 +1,48 @@
+# The rules a review finding names
+
+Every finding in the report carries the `rule` that raised it. This page lists them all, one row each: the rule, whether it raises a `mechanical` finding (a fault with a path, which fails the run), a `creative` one (a call for you), or both, the stage that checks it, what it means, the question a creative rule asks, the value that fixes it and where its number comes from. `engine/review/rules.mjs` holds the same list, and a test keeps the code, that list and this page equal.
+
+A rule id is never renamed or reused after 2.3.0; a new rule takes a new id.
+
+`Checked`: `frame` is one frame of one shot, `film` is the whole film, `hand` is a hand-drawn look's strokes and hand, `outline` is the spec alone before anything is drawn. `Ask` is blank for a rule that is only mechanical: its fix value is the answer. `Evidence`: `measured` names a table of ours the threshold comes from, `convention` names a published standard, `unmeasured` means the number is ours or another project's and nobody here has measured it.
+
+| Rule | Kind | Checked | Meaning | Ask | Fix value | Evidence |
+|---|---|---|---|---|---|---|
+| `measure` | mechanical | frame | An element could not be measured, so the frame cannot be checked. |  | Give the named node text or a size, or take it out of the shot. | unmeasured |
+| `empty-first-frame` | mechanical | frame | A shot opens on a frame where only the field is on screen. |  | Bring the shot's hero in on its first frame. | unmeasured |
+| `contrast` | mechanical | frame | Text is under 3:1 against what is drawn directly under it. |  | A text colour that reaches 3:1 against the ground, from the look or the film's accent, or change what lies under it. | convention: WCAG 2 contrast ratio, 3:1 for large text |
+| `region-off-frame` | mechanical | frame | A mark on a region runs past the frame edge in the close-up. |  | Give the region more room in the close-up, or mark a smaller region. | unmeasured |
+| `frame-edge` | mechanical | frame | Text is sliced by the frame edge during a close-up. |  | Keep the text inside the frame, or off the close-up. | unmeasured |
+| `overflow` | creative | frame | Text does not fit even at the smallest size its kind allows. | Is a shorter word or fewer words truer to what this shot says? | Shorten the widest word, or cut words. | unmeasured |
+| `min-size` | mechanical | frame | Text is under 28 units tall. |  | Cut words until the text can be 28 units tall or more. | unmeasured |
+| `safe-area` | mechanical | frame | Text sits outside the safe area. |  | Move the text in, or cut words. | unmeasured |
+| `overlap` | mechanical | frame | Two texts overlap by more than 4 units. |  | Move one text off the other, or cut words. | unmeasured |
+| `word-overlap` | mechanical | frame | A word overlaps its neighbour by more than 1 unit, as an emphasis pulse grows it. |  | Cut words from the line, or use a gentler emphasis. | unmeasured |
+| `sizes` | creative | frame | More than 3 distinct text sizes are on screen. | Which of these sizes does the viewer need to tell apart? | Drop an optional part such as a label or a delta, so 3 sizes or fewer remain. | unmeasured |
+| `hero` | creative | frame | The hero text is under 3 times the smallest text. | Does the eye land on one thing first? | Make the hero at least 3 times larger than the smallest text. | unmeasured |
+| `dropped` | creative | frame | A kind left a part out so the hero could keep 3 times the smallest text. | Is what was left out something the viewer needs, so the copy should shrink instead? | Shorten the copy so the part stays, or aim the shot's events at what remains. | unmeasured |
+| `highlight-lines` | creative | frame | One highlight runs across more than one line. | Does the highlight mark one idea, or several? | Mark fewer words, so the highlight stays on one line. | unmeasured |
+| `card-overlap` | mechanical, creative | frame | Text runs over a card, or a caption runs over a card with no clear place in its band. | Should the caption give way, or should the card move? | Move the text off the card or cut words; for a caption, shorten the shot's line or turn captions off (`captions: false`). | unmeasured |
+| `covered` | mechanical | frame | Text is drawn under a picture that covers it. |  | Draw the text after the picture, or move it off. | unmeasured |
+| `line-words` | creative | frame | A line of text holds more words than its kind allows. | Can this line be said in fewer words without losing the point? | Shorten the line. | unmeasured |
+| `hook-words` | creative | frame | The opening statement holds more words than the mode's hook allows. | Does the first line earn a stranger's next second? | Cut the opening statement to the number of words the message names. | unmeasured |
+| `caption-zone` | mechanical | frame | A caption sits outside its caption zone. |  | Cut words from the shot's line: a long word alone, or many words together. | unmeasured |
+| `caption-hero` | mechanical | frame | A caption covers the hero or a picture. |  | Make the picture smaller, shorten the shot's line, or turn captions off (`captions: false`). | unmeasured |
+| `caption-late` | mechanical | frame | A caption stays on screen more than 0.3 s after its last word ends. |  | Let the caption leave within 0.3 s of its last word: end the shot sooner or shorten the line. | unmeasured |
+| `caption-clipped` | mechanical | frame | An emphasised caption word is clipped by its zone at its peak scale. |  | Keep room in the layout for the word's peak scale. | unmeasured |
+| `caption-covers` | creative | frame | A caption covers a marked region or arriving text. | Is the thing the caption covers more important than the words? | Move the mark (its region, target or cue), shorten the text, or shorten the shot's line. | unmeasured |
+| `dead-space` | creative | frame | The longest empty band of the safe area reaches 35% of its width or height (40% in desk and ledger). | Is the empty part of this frame doing a job? | Let the hero take more of the frame, add a second element, or use a look that fills with type. | measured: .scratch/motion-steals-w2/results/calibration.md (91 shots of ten films; commits 04f1a1e, 6794ae9, 0786f60) |
+| `scale-contrast` | creative | frame | The hero leads its neighbours but reaches under half of the safe area (45% in ledger). | Should the hero be the thing the viewer sees first, and is it big enough to be? | Set the hero larger, crop in on it, or give it a second mass (a picture, a chart, a card). | measured: .scratch/motion-steals-w2/results/calibration.md (91 shots of ten films; commits 04f1a1e, 6794ae9, 0786f60) |
+| `unsettled` | mechanical | film | Text never lands within its shot: on every sampled frame it is still arriving or moving. |  | Let the text land well before the shot ends: lengthen the shot or bring it in sooner. | unmeasured |
+| `still` | creative | film | The picture holds still for longer than the mode allows. | Is the film waiting on something, or is there nothing left to show? | Add motion, or cut sooner; the mode's longest still is in the message. | unmeasured |
+| `kind` | mechanical, creative | film | A kind gave advice about its own shot. | Does this note change what the shot says, or only how it is laid out? | The one the kind's message names. | unmeasured |
+| `cut-window` | mechanical, creative | film | A cut is longer than its shot (mechanical), or takes more than half of it (creative). | Is the cut the point of this shot? | Shorten the cut or lengthen the shot. | unmeasured |
+| `match` | creative | film | A match cut carries nothing, as the two shots share no node. | Does this cut join two ideas, or only change the picture? | Give both shots a node with the same id (`hero`), or use another cut. | unmeasured |
+| `hook` | mechanical | film | The first shot of a mode that reads from frame 0 does not show all its text on frame 0. |  | Show every word of the hero on the first frame. | unmeasured |
+| `loop` | creative | film | The last frame of a looping film does not match the first. | Does the end hand the viewer back to the start? | End on the opening picture again. | unmeasured |
+| `stroke-edge` | mechanical | hand | A stroke is drawn past the frame edge. |  | Keep every stroke inside the frame. | unmeasured |
+| `hand-speed` | creative | hand | The hand has too much to draw in one sentence at its top speed. | Which element of this sentence can go? | Cut an element, or lengthen the line. | unmeasured |
+| `hand-covered` | mechanical | hand | The hand rests over finished text for more than 0.3 s. |  | Move the named text away from where the hand rests. | unmeasured |
+| `hand-edge` | mechanical | hand | The hand crosses the top or left frame edge. |  | Let the hand leave only through the bottom or right edge. | unmeasured |
+| `cut-variety` | creative | outline | More than two thirds of a film's cuts are one cut type. | Does each cut say something different about how the two shots relate? | Change some cuts to another type, so no type takes more than two thirds. | unmeasured |
+| `sameness` | creative | outline | Three or more shots in a row share one kind, one cut or one move. | Would a different kind, cut or move show some of these ideas better? | Change one shot of the run to another kind, cut or move. | unmeasured |
