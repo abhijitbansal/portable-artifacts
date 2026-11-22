@@ -190,6 +190,36 @@ test('a voiced film is judged the same way on its measured timeline (anchorSpanE
   assert.deepEqual(anchorSpanErrors(withOn('a', underline('word:six')), build(FILM, { words })), []);
 });
 
+test('a word or sentence anchor on a word the lead made heard before the shot began is an error at the anchor, and was fine unshifted', () => {
+  const led = (at) => withOn('b', { ...underline(at), narration: { lead: 0.5 } });
+  assert.deepEqual(errorsOf(withOn('b', underline('word:seven'))), []);
+  assert.deepEqual(errorsOf(led('word:nine')), [], 'a word heard inside the shot');
+  for (const at of ['word:seven', 'word:eight', 'word:0', 'word:seven+0.2']) {
+    const errors = errorsOf(led(at));
+    assert.equal(errors.length, 1, at);
+    assert.match(errors[0], /^shots\[1\]\.on\[0\]\.at: ".*" names a word that is heard before the shot has begun \(the shot runs from 0 to [\d.]+ s\); anchor a later word, or shorten the narration "lead"$/, at);
+  }
+  const sentence = errorsOf(led('sentence:0'));
+  assert.equal(sentence.length, 1);
+  assert.match(sentence[0], /^shots\[1\]\.on\[0\]\.at: "sentence:0" names a sentence that is heard before the shot has begun /);
+  assert.deepEqual(errorsOf(withOn('b', { ...underline(0.1), narration: { lead: 0.5 } })), [], 'a time in seconds is not a word');
+});
+
+test('a sentence anchor a trail leaves behind the cut says "sentence", not "word"', () => {
+  const two = { ...FILM, shots: [{ id: 'a', show: 'statement', say: 'One two three four five six. Seven.', ...underline('sentence:1'), narration: { trail: 1.5 } }, FILM.shots[1], FILM.shots[2]] };
+  const message = errorsOf(two).join('\n');
+  assert.match(message, /"sentence:1" names a sentence that is heard after the shot has ended /);
+});
+
+test('a voiced film judges a lead anchor the same way on its measured timeline (anchorSpanErrors)', () => {
+  const words = base.shots.map((s) => ({ id: s.id, seconds: s.words.at(-1).end, sentences: [{ words: s.words.map(({ text, start, end }) => ({ text, start, end })) }] }));
+  const film = withOn('b', { ...underline('word:seven'), narration: { lead: 0.5 } });
+  const messages = anchorSpanErrors(film, build(film, { words })).map((e) => `${e.path}: ${e.message}`);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /^shots\[1\]\.on\[0\]\.at: "word:seven" names a word that is heard before the shot has begun /);
+  assert.deepEqual(anchorSpanErrors(withOn('b', underline('word:seven')), build(FILM, { words })), []);
+});
+
 test('a shift of whole frames at 25 fps: 0.3 s is 8 frames, the film is as long, every word is heard when it was', () => {
   const plain = build(FILM, { fps: 25 });
   const led = build(withOn('b', { narration: { lead: 0.3 } }), { fps: 25 });

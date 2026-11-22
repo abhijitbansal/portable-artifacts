@@ -309,9 +309,38 @@ const LENGTHEN = 'anchor it inside the shot, or lengthen the shot';
 const LENGTHEN_MEASURED = 'anchor it inside the shot, or end its say with a pause such as (0.5) to lengthen it';
 
 const WORD_ANCHOR_RE = /^(word|sentence):/;
+// anchorSeconds rounds to 1e-6, so a word clamped to the shot's end reads up to this far under the shot's duration
+const ANCHOR_ROUNDING = 1e-6;
 
-// `shifted`: the timeline has a J or L cut (a shot carries narrationAt). A word the cut leaves behind is shown from the edge
-// of the shot it is heard after (its shown time is clamped to the shot), so an anchor on it names the shot's last frame.
+// Does the word or sentence anchor `ref` name a word heard before the shot's picture begins (soundStart below 0, a J cut's
+// lead)? The shot shows that word from its first frame (shown time clamped to 0), so the device would fire after the
+// word was heard. Asked of the entry with each word's `start` swapped for a marker (1 when heard before, else 0), so the
+// anchor grammar, offsets included, stays anchors.mjs's own: the marked read less the unmarked one is the word's marker.
+const leadMarked = (entry, markOf) => ({
+  ...entry,
+  words: entry.words.map((w) => ({ ...w, start: markOf(w) })),
+  sentences: entry.sentences.map((s) => ({ ...s, start: markOf(entry.words[s.first]) })),
+});
+const isHeardBefore = (ref, entry) => anchorSeconds(ref, leadMarked(entry, (w) => (w.soundStart < 0 ? 1 : 0)))
+  - anchorSeconds(ref, leadMarked(entry, () => 0)) > 0;
+
+const anchoredThing = (ref) => (String(ref).startsWith('sentence:') ? 'sentence' : 'word');
+
+// The error for a word or sentence anchor a J or L cut leaves outside its shot, or null: `shifted` says the timeline has a
+// J or L cut (a shot carries narrationAt). A word the cut leaves behind is shown from the edge of the shot it is heard
+// after (its shown time is clamped to the shot), so an anchor on it names the shot's last frame; a word the lead made
+// heard before the shot begins is shown from its first frame, after it was heard.
+function shiftedAnchorError(item, at, entry, seconds) {
+  if (!WORD_ANCHOR_RE.test(String(item.at))) return null;
+  const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
+  const name = `${quote(item.at)} names a ${anchoredThing(item.at)} that is heard`;
+  if (isHeardBefore(item.at, entry)) {
+    return { path: pathJoin(at, 'at'), message: `${name} before the shot has begun (the shot runs from ${span}); anchor a later word, or shorten the narration "lead"` };
+  }
+  if (seconds < entry.duration - ANCHOR_ROUNDING) return null;
+  return { path: pathJoin(at, 'at'), message: `${name} after the shot has ended (the shot runs from ${span}); anchor an earlier word, or shorten the narration "trail"` };
+}
+
 function checkAnchor(item, at, entry, { fps, inside = true, measured = false, shifted = false }) {
   if (entry === null || item.at === undefined) return [];
   let seconds;
@@ -322,10 +351,8 @@ function checkAnchor(item, at, entry, { fps, inside = true, measured = false, sh
     return [{ path: pathJoin(at, 'at'), message: err.message }];
   }
   if (!inside) return [];
-  if (shifted && WORD_ANCHOR_RE.test(String(item.at)) && seconds >= entry.duration) {
-    const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
-    return [{ path: pathJoin(at, 'at'), message: `${quote(item.at)} names a word that is heard after the shot has ended (the shot runs from ${span}); anchor an earlier word, or shorten the narration "trail"` }];
-  }
+  const shiftedError = shifted ? shiftedAnchorError(item, at, entry, seconds) : null;
+  if (shiftedError !== null) return [shiftedError];
   const slack = 1 / fps;
   if (seconds >= -slack && seconds <= entry.duration + slack) return [];
   const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
