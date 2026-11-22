@@ -437,3 +437,13 @@ canvas; otherwise the word arrives as one block. The check runs in the browser a
 - **B:** decide from shaping data instead (no ligature or mark sequences, no kern pairs the per-glyph advance misses),
   so the choice is the same on every system, at the cost of more words arriving as one block.
 - **C:** pin a per-look table of the words the example films use and assert it on each platform in CI.
+
+## make-motion statement kicker: timed from the old entrance length (branch feat/motion-steals, 2026-11-22)
+
+A centred statement's kicker is timed from the look's `enter` move (0.5 s) even when the look now brings the title in by
+`letters` or `lines` (cosmos letters: 0.18 s a letter). The two only differ when the first word is spoken late, which
+the estimated timeline never produces, so no shipped film or test shows it.
+
+- **A (default, shipped):** leave the kicker on `enter.dur`; the lead is cosmetic.
+- **B:** time it from the entrance actually used (`letters.dur` or `lines.dur` when present), with a test on a film
+  whose first word is spoken late, and regenerate the cosmos statement frozen entries it moves.
