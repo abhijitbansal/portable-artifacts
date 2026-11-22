@@ -399,3 +399,17 @@ and its place (a band above the cover). Judgment calls taken while building it, 
   Default: re-render it with make-motion 2 the next time the explainer examples change. The make-motion SKILL.md byte
   budget went from 20,900 to 21,150 for this review's fixes (`bin/test/skill-budget.test.mjs`); trim SKILL.md instead if
   you prefer.
+
+## make-motion second reviewer: how strong the proof is (branch feat/motion-steals, 2026-11-22)
+
+The billed proof of the `motion-reviewer` agent passed: the pilot found 4 of 4 defects for 1.74 USD, and the full run
+found 12 of 12 with no false fail for 4.83 USD, measured from the session streams (`eval/results/summary-motion-reviewer-2026-11-22.md`).
+The W5 wave review then found that each planted defect can be read from the film's JSON alone (`value: 24`,
+`highlight: "May"`, `region: blue`, the shot id `aside`), and that the score never checks which sheets the agent
+opened. So the proof shows the agent finds defects the spec and its narration state, not that it reads pictures.
+
+- **A (default, shipped):** `reviewing.md`, the summary and the INDEX row claim only what was measured, and the agent
+  stays listed as optional.
+- **B:** a second billed proof with defects that exist only in the pixels (for example a highlight drawn on the wrong
+  region with a neutral region name, or a chart mark coloured against its label), scored on `looked` too. Estimated
+  6 to 15 USD for 15 sessions at the first proof's cost; needs the owner's yes.
