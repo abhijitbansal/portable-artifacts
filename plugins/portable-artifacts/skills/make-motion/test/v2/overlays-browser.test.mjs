@@ -144,6 +144,42 @@ test('a poster seek and the loop check draw no overlay', async (t) => {
   assert.ok(close(at(...LOGO_CENTRE), GROUND_RGB, 3), 'the poster has no logo');
 });
 
+// The hash (FNV-1a over the RGBA bytes, 1920x1080) of frame 10 of the overlay-free film above, a flat #101820 fill: recorded
+// at b41e178, before the page drew overlays, from both window.__source and the visible canvas after the post pass at 0.
+const FLAT_FRAME_10_HASH = 517316037;
+const shownHash = (s, frame) => s.page.evaluate((i) => {
+  window.__seek(i);
+  const stage = document.getElementById('stage');
+  const copy = new OffscreenCanvas(stage.width, stage.height);
+  const ctx = copy.getContext('2d');
+  ctx.drawImage(stage, 0, 0);
+  const { data } = ctx.getImageData(0, 0, stage.width, stage.height);
+  let h = 0x811c9dc5;
+  for (let k = 0; k < data.length; k += 1) h = Math.imul(h ^ data[k], 0x01000193) >>> 0;
+  return h;
+}, frame);
+
+test('a film without overlays draws the frame it drew before overlays existed, before and after the post pass', async (t) => {
+  const plain = await open(t, filmWith()); if (!plain) return;
+  assert.equal(await frameHash(plain, BEFORE), FLAT_FRAME_10_HASH, 'the 2D frame');
+  assert.equal(await shownHash(plain, BEFORE), FLAT_FRAME_10_HASH, 'the visible canvas, post pass included');
+});
+
+// Bloom (a halo round pixels above 0.7 luminance) runs over the finished frame, overlays included. White ground and a
+// bloom strength of 1 through __setPost: the bar's pixels and the ones beside it must read the same inside a shader cut's
+// window as outside it.
+test('bloom sees the overlays inside a shader cut: the bar and its halo read as they do outside the window', async (t) => {
+  const white = (id, cut) => flat(id, '#ffffff', cut);
+  const s = await open(t, filmWith({ overlays: { progress: true } }, [white('a'), white('b', { type: 'slide' }), white('c', 'crossfade'), white('d', 'ripple')])); if (!s) return;
+  if (s.info.post !== 'webgl2') return t.skip('this browser has no WebGL2: bloom is not drawn');
+  await s.page.evaluate(() => window.__setPost({ bloom: 1 }));
+  const column = [BAR_ROW, H - 9, H - 14].map((y) => [100, y]); // on the bar, in its halo, clear of it
+  const outside = (await shown(s, 85, { points: column })).points;
+  const inside = (await shown(s, MID_RIPPLE, { points: column })).points;
+  assert.deepEqual(s.errors, []);
+  inside.forEach((px, k) => assert.ok(close(px, outside[k], 2), `${JSON.stringify(column[k])}: ${JSON.stringify(px)} in the window, ${JSON.stringify(outside[k])} outside`));
+});
+
 test('a film without overlays makes no overlay canvas and its frames are the frames drawn with them off', async (t) => {
   const plain = await open(t, filmWith()); if (!plain) return;
   for (const frame of [BEFORE, MID_SLIDE, MID_CROSSFADE, MID_RIPPLE]) await plain.page.evaluate((i) => window.__seek(i), frame);

@@ -28,7 +28,7 @@ const PCG_MULTIPLY = 747796405;
 const PCG_ADD = 2891336365;
 const PCG_WORD = 277803737;
 const OVERLAY_UNIT = 3; // the texture unit of the film's overlays; the shader cuts' pictures are 1 and 2
-const EFFECTS_NEEDING_WEBGL =Object.freeze(['halftone', 'bloom']);
+const EFFECTS_NEEDING_WEBGL = Object.freeze(['halftone', 'bloom']);
 
 /** Which grain pattern shows at time t: it changes GRAIN_FPS times a second. For t = frame / fps this equals
  *  floor(frame * 12 / fps) at every frame of every fps a film can have (test/v2/post-browser.test.mjs checks it). */
@@ -76,7 +76,18 @@ float noise(uvec2 p) {
   return float(h) / 4294967295.0;
 }
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
-vec3 fetch(ivec2 p) { return texelFetch(uFrame, clamp(p, ivec2(0), uSize - 1), 0).rgb; }
+// The finished picture at p: the frame with the film's overlays over it (premultiplied alpha) when the frame has them
+// here (a shader cut's frame: every other frame has them in its source). The bloom taps read it too, so the bar and the
+// logo glow and cover the picture under them as they do outside a cut.
+vec3 fetch(ivec2 p) {
+  ivec2 q = clamp(p, ivec2(0), uSize - 1);
+  vec3 c = texelFetch(uFrame, q, 0).rgb;
+  if (uHasOverlay == 1) {
+    vec4 o = texelFetch(uOverlay, q, 0);
+    c = o.rgb + c * (1.0 - o.a);
+  }
+  return c;
+}
 
 vec3 bloomOf(ivec2 p) {
   float radius = 10.0 * uUnit;
@@ -100,11 +111,6 @@ float halftoneDot(vec2 at, float lum) {
 void main() {
   ivec2 p = ivec2(int(gl_FragCoord.x), uSize.y - 1 - int(gl_FragCoord.y));
   vec3 c = fetch(p);
-  // the film's overlays over the picture (premultiplied alpha), before the effects so the grain is one pattern over all
-  if (uHasOverlay == 1) {
-    vec4 o = texelFetch(uOverlay, p, 0);
-    c = o.rgb + c * (1.0 - o.a);
-  }
   if (uBloom > 0.0) c += uBloom * bloomOf(p);
   if (uHalftone > 0.0) c *= 1.0 - uHalftone * halftoneDot(vec2(p), luma(c));
   if (uGrain > 0.0) c += (noise(uvec2(p)) - 0.5) * ${GRAIN_GAIN.toFixed(1)} * uGrain;

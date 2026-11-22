@@ -5,7 +5,10 @@
 // the picture before the post pass) and the visible canvas shows it through the post pass (post.mjs): WebGL2 when the
 // browser has it, else a 2D copy with the same grain. __ready reports which as post: 'webgl2' | '2d' and, for '2d',
 // postNotice: { reason, failed, dropped } (failed: a shader that would not build; dropped: effects the look asked for).
-// __seek draws frames 0 .. frameCount - 1.
+// __seek draws frames 0 .. frameCount - 1: __seek(i, { captions, overlays, progress }) leaves out the film's captions or
+// its overlays (a logo and a progress bar over every cut: engine/page/overlay-layer.mjs) and, for tests, draws a cut at
+// `progress`. __snapshotOverlays(i) reports the overlays with their boxes (they are never in __snapshot) and
+// window.__overlayCanvases (a number) counts the pictures the overlays made for a shader cut: 0 without one.
 import { registries } from '../registry.mjs';
 import '../fields/index.mjs';
 import { buildFilm, resolveLook, shotTime } from '../graph/film.mjs';
@@ -279,7 +282,7 @@ async function init() {
   const keys = frameKeys({ frameState, fps, grainNow: () => grain, look, overlays });
   // the overlays alone at frame i, with their boxes, for the review (`--inspect`) and the tests; none leave __snapshot
   const overlaySnapshot = (i) => {
-    frameState(i);
+    frameState(i); // checks i is a frame of the film (it throws otherwise), as snapshotShot does; the overlays are sampled at i / fps
     return snapshotOf(built.overlayAt(i / fps));
   };
   const snapshotOf = (sampled) => annotate(sampled, { lineInk: lineInkOf(document.createElement('canvas').getContext('2d')) });

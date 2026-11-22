@@ -1,7 +1,7 @@
 // make.mjs --inspect <film time>: one moment of the film as a PNG and a JSON dump. The PNG is the film's own frame, post
 // pass and captions included; the JSON lists every node on it (engine/review/inspect-nodes.mjs: id, box, opacity, and for a
-// text its height in units, its ink and whether it left the safe area), the safe rectangle and, inside a cut's window, the
-// cut. Inside a layer or shader cut's window the PNG is the cut's composition at `p`: the outgoing shot (still moving) and
+// text its height in units, its ink and whether it left the safe area), the film's overlays in the same shape, the safe
+// rectangle and, inside a cut's window, the cut. Inside a layer or shader cut's window the PNG is the cut's composition at `p`: the outgoing shot (still moving) and
 // the incoming one, each as faded, moved or covered as the cut's recipe has it at that `p`, so one of them may be partly or
 // wholly gone (a crossfade shows both only for p between 0.3 and 0.5). `nodes` lists the incoming shot alone (the page's
 // __snapshot, engine/page/stage.mjs), so `cut` names the outgoing shot and the second it stands at. No review, no sound,
@@ -48,7 +48,9 @@ function writeWhole(files) {
 
 /**
  * Draws `frame` on the session's page, and writes `<dir>/<frame>.png` and `<dir>/<frame>.json`. The JSON: { frame, seconds,
- * shot, timed, canvas: { w, h }, unit, safe: { left, top, right, bottom }, cut: { name, family, p, from } | null, nodes }.
+ * shot, timed, canvas: { w, h }, unit, safe: { left, top, right, bottom }, cut: { name, family, p, from } | null, nodes,
+ * overlays }. `overlays` lists the film's logo and progress bar (engine/overlays) in the node shape, [] for a film with
+ * none: they are the film's, over every cut, so they are never in `nodes`.
  * `shot` is the shot the frame belongs to (the incoming one inside a window). `nodes` are as the page's __snapshot gives
  * them: inside a layer or shader cut's window the incoming shot's alone, whatever the PNG shows of the outgoing one at that
  * `p`; a node cut moves both shots' nodes in one tree, which `nodes` lists as drawn. -> { png, json, frame, seconds, shot }.
@@ -58,9 +60,10 @@ export async function writeInspect({ session, frame, dir }) {
   await page.evaluate((i) => window.__seek(i), frame);
   const picture = await page.screenshot({ type: 'png' });
   const sampled = await page.evaluate((i) => window.__snapshot(i), frame);
+  const overlays = await page.evaluate((i) => window.__snapshotOverlays(i), frame);
   const ctx = frameContext(film, timeline, new Map(), { frame, whole: false }, info.backgrounds);
   const seconds = round(frame / timeline.fps, SECONDS_DECIMALS);
-  const dump = { frame, seconds, shot: ctx.shotId, timed: timeline.timed, canvas: ctx.canvas, unit: unitOf(ctx.canvas), safe: ctx.safe, cut: cutAt(film, timeline, frame), nodes: inspectNodes(sampled, ctx) };
+  const dump = { frame, seconds, shot: ctx.shotId, timed: timeline.timed, canvas: ctx.canvas, unit: unitOf(ctx.canvas), safe: ctx.safe, cut: cutAt(film, timeline, frame), nodes: inspectNodes(sampled, ctx), overlays: inspectNodes(overlays, ctx) };
   const png = path.join(dir, `${frame}.png`), json = path.join(dir, `${frame}.json`);
   writeWhole([[png, picture], [json, `${JSON.stringify(dump, null, 2)}\n`]]);
   return { png, json, frame, seconds, shot: ctx.shotId };

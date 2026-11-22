@@ -422,6 +422,7 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
     look,
     frameAt,
     overlayAt,
+    hasOverlays: overlays.length > 0,
     sampleAt: (t) => {
       const frame = frameAt(t);
       return frame.smear?.whole ?? frame.sampled;

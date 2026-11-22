@@ -287,6 +287,7 @@ test('overlayAt gives the logo and the bar at every film second, and nothing for
   const built = buildWith(ON);
   assert.deepEqual(built.overlayAt(1).map((n) => n.id), ['overlay.logo', 'overlay.progress.track', 'overlay.progress.bar']);
   assert.deepEqual(buildWith(undefined).overlayAt(1), []);
+  assert.deepEqual([built.hasOverlays, buildWith(undefined).hasOverlays], [true, false]);
 });
 
 test('overlayAt is sampled at film time with no camera: the bar reveals with the film, the logo does not move', () => {
