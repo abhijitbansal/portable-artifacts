@@ -6,6 +6,33 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-11-21
+
+A docs and site release. The skills, their spec formats and their output are unchanged.
+
+### Site
+
+- **A make-motion 2 reel at the top of the site.** A new band above the cover plays a 24-second silent loop and, on
+  one click, the full 96-second reel with voice and music. It is nine make-motion films (an intro, one film per look
+  and a close) joined into one, and it names each new look on screen. The chapter specs, the join script and the
+  evidence for each "new" label are in `docs/showcase/portable-artifacts/gallery/showreel/reel/`. The register lists it
+  first among the films. Nobody has listened to it yet.
+- **The make-motion 1.x film archive is gone from the site folder.** The page stopped linking it in 2.1.2, and its
+  version 1 specs no longer build. Old links to the archive anchor still land on the register.
+
+### Docs
+
+- Stale paths and names fixed: USAGE no longer names `adapters/install.sh`, the shared README no longer names
+  `scripts/sweep_counts.py`, `onDemandHint` or `ffmpeg-static`, and the change-request table uses version 2 film
+  fields.
+- make-motion says there are two pinned downloads (the voice model and, for `cutout.mjs`, MODNet), that `marker`
+  serves `pro` only, and that `--no-render` is the twin of `--sheets-only`. The README's ffmpeg input rule now says
+  file and pipe protocols, as the code allows.
+- The plugin README and USAGE describe the current site. The eval README, SECURITY, CONTRIBUTING and AGENTS.md match
+  the code and CI. The `generatedBy` character set lists `[ ]` in every schema.
+- A test fixture from an eval pilot had a home path, a session id and local plugin names. They are replaced with
+  placeholders, and the plans under `docs/superpowers/` use `<repo>` instead of a home folder.
+
 ## [2.2.0] - 2026-11-21
 
 Fixes from a deep review of the committed code: 2 high and 25 medium findings, each confirmed by a separate verifier.

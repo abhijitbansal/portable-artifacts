@@ -22,7 +22,7 @@
 - Reduced motion: unchanged (no dot, instant camera, `autoplay` ignored). Full screen has no motion of its own.
 - Every control has an accessible name: the full-screen button reads `Full screen` / `Exit full screen` and carries `aria-pressed`.
 - Goldens: make-diagram's `test/golden/*` do not change this phase (nothing in the SVG or layout changes). make-explainer's `test/golden/recap.body.html` changes once, in Part C's commit, because the overlay markup inside the `<figure>` changes; it is regenerated with `UPDATE_GOLDEN=1 node --test test/golden.test.mjs` after reading the diff, and the commit message says so. Never regenerated to hide an unrelated failure.
-- Verification commands (exact, bare, no pipes): `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test`; one file: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/<file>.test.mjs`; `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test`; `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`; `cd /Users/abhijitbansal/projects/claude-skills && python3 -m pytest -q` (Part D touches SKILL.md frontmatter and docs); eval tests: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"`. The eval run itself (Task 6) is `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node eval/run-eval.mjs --skill diagram --host claude --model haiku --timeout 900` and is **started by the orchestrator only** (it bills ten Claude Haiku sessions through the `claude` CLI); the executor prepares everything and stops.
+- Verification commands (exact, bare, no pipes): `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test`; one file: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/<file>.test.mjs`; `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test`; `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"`; `cd <repo> && python3 -m pytest -q` (Part D touches SKILL.md frontmatter and docs); eval tests: `cd <repo>/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"`. The eval run itself (Task 6) is `cd <repo>/plugins/portable-artifacts && node eval/run-eval.mjs --skill diagram --host claude --model haiku --timeout 900` and is **started by the orchestrator only** (it bills ten Claude Haiku sessions through the `claude` CLI); the executor prepares everything and stops.
 - Guard proofs: each new browser assertion is shown failing against a deliberately broken page (phase 1's Step-10 style) before it is trusted; every doctoring edit is reverted and the suite rerun.
 - Look at the result (agent-autonomy rule): the implementer of Task 7 opens `thumb.jpg` and the rebuilt `index.html` (in a browser, Play story tab, one beat in) and views them before declaring the task done.
 - The eval, the gallery rebuild and the docs make no claim that is not measured: the summary names the results folder and the exact command; the gallery footnote says who wrote the stories.
@@ -318,7 +318,7 @@ Also in the existing test "a pointer on the canvas pauses…" change `await page
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/transport-unit.test.mjs test/story-browser.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/transport-unit.test.mjs test/story-browser.test.mjs`
 Expected: `story-unit` fails with `story.reframe is not a function`; `transport-unit` fails on `scrollIntoViewCalls === 0` (the chip's `scrollIntoView` was called) and on `doc.activeElement` (still Next); in `story-browser`, "a resize while the dot travels" fails at `the dot never went away` (count 0: the restarted beat is mid-glide), "written once per beat" fails at its first assertion, `entering Play writes #step-1 once` (the entry glide alone fires dozens of frames, each a write), "End with focus on Next" fails at `focus is on Play` (the active element is `<body>`).
 
 - [ ] **Step 3: `template/story.js`**
@@ -428,7 +428,7 @@ In `paint()` replace the four `prev`/`next` lines with:
 
 - [ ] **Step 6: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/transport-unit.test.mjs test/story-browser.test.mjs` — expected: all pass. Then `npm test` — green (the `#step-N deep link` test in `browser.test.mjs` still sees `#step-3` after ArrowRight and `''` after Escape). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay still passes only `caption`; the transport paints what it finds).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/story-unit.test.mjs test/transport-unit.test.mjs test/story-browser.test.mjs` — expected: all pass. Then `npm test` — green (the `#step-N deep link` test in `browser.test.mjs` still sees `#step-3` after ArrowRight and `''` after Escape). Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green (its overlay still passes only `caption`; the transport paints what it finds).
 
 - [ ] **Step 7: Guard proofs** (each new browser assertion shown catching a broken page; revert each edit before moving on)
 
@@ -519,7 +519,7 @@ In the existing test "a beat needs exactly one target" change the two `required 
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/emoji.test.mjs test/stories.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/emoji.test.mjs test/stories.test.mjs`
 Expected: `structure` fails on the 50-part chain (`true`), `escapes` fails (the source holds literal characters); `two-headed edge` fails on the first assertion (`reverse: true`); `focus names nodes` fails (`[]`, the edge id is accepted); `unknown properties` passes only if the schema wording already matches — if it fails, read the message and adjust the expectation to the schema's own words (the test pins them either way); `required with` fails on the message.
 
 - [ ] **Step 3: `scripts/lib/emoji.mjs`** (replace the whole file)
@@ -615,7 +615,7 @@ Update the `checkStories` doc comment: `ctx.focusable` the ids focus may name (g
 
 - [ ] **Step 5: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/emoji.test.mjs test/stories.test.mjs test/spec.test.mjs` — expected: all pass (the story example's `focus: ["core"]` names a group, still valid). Then `npm test` — green.
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/emoji.test.mjs test/stories.test.mjs test/spec.test.mjs` — expected: all pass (the story example's `focus: ["core"]` names a group, still valid). Then `npm test` — green.
 
 - [ ] **Step 6: Commit**
 
@@ -787,7 +787,7 @@ test('Escape closes the panel before it leaves the fallback, and leaves the fall
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/runtime.test.mjs test/fullscreen-browser.test.mjs test/browser.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/runtime.test.mjs test/fullscreen-browser.test.mjs test/browser.test.mjs`
 Expected: `runtime` fails on the list; every `fullscreen-browser` test fails at its first `[data-pa-full]` lookup (`null`, the button does not exist) or on `aria-pressed`; in `browser.test.mjs` the three edited tests fail because `0` does nothing yet (zoom stays 1.25; the solo test's viewBox assertions still pass, so only the pan test fails).
 
 - [ ] **Step 3: `template/fullscreen.js`**
@@ -906,7 +906,7 @@ html.pa-fill .titles, html.pa-fill [data-act], html.pa-fill .zoom-label, html.pa
 
 - [ ] **Step 6: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/runtime.test.mjs test/fullscreen-browser.test.mjs test/browser.test.mjs` — expected: all pass. Then `npm test` — green; `wc -l template/*.js template/viewer.html` — every file under 400. Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green (the overlay has no `[data-pa-full]` yet; `root` defaults to the document element and nothing presses `F` inside the dialog).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/runtime.test.mjs test/fullscreen-browser.test.mjs test/browser.test.mjs` — expected: all pass. Then `npm test` — green; `wc -l template/*.js template/viewer.html` — every file under 400. Then `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green (the overlay has no `[data-pa-full]` yet; `root` defaults to the document element and nothing presses `F` inside the dialog).
 
 If the iframe test reports a console problem that only the sandbox produces (an `about:srcdoc` storage or history message the page's own try/catch does not cover), do not filter the assertion: read the message, fix the page so it stays silent there, and say so in the task report.
 
@@ -1099,7 +1099,7 @@ test('full screen in the overlay: a refused request puts pa-fill on the dialog; 
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && node --test test/diagram.test.mjs test/diagram-browser.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-explainer && node --test test/diagram.test.mjs test/diagram-browser.test.mjs`
 Expected: the two render tests fail on the missing hooks (`data-pa-mode="play"`) and the datalist; "Present opens the overlay…" fails at `[data-pa-line]` (no such element: `textContent()` times out — use the failure as the RED signal); the slides test fails at `End then Home` (count stays `4 / 4`: focus fell to the body); the three new tests fail at their first dialog lookups.
 
 - [ ] **Step 3: `scripts/lib/render/diagram.mjs`**
@@ -1366,7 +1366,7 @@ Why the `cancel` handler is not a hole in the Escape order: Chromium raises a mo
 
 - [ ] **Step 6: Run the tests; regenerate the recap golden once**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && node --test test/diagram.test.mjs test/diagram-browser.test.mjs` — expected: all pass. Then `npm test` — expected: every test green except `golden: body markup of the recap example is unchanged` (the recap example embeds a diagram; its figure's overlay markup moved). Read the diff: only the `<dialog>` block inside `<figure class="dg">` changes. Then run once: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && UPDATE_GOLDEN=1 node --test test/golden.test.mjs`, then `npm test` — green. Then `node scripts/check.mjs` on the built recap example (`node scripts/build.mjs references/examples/recap.explainer.json --out /private/tmp/claude-501/-Users-abhijitbansal-projects-claude-skills/bed33bab-d0b4-4db1-8160-1bc98623e9ab/scratchpad/recap.html` then `node scripts/check.mjs /private/tmp/claude-501/-Users-abhijitbansal-projects-claude-skills/bed33bab-d0b4-4db1-8160-1bc98623e9ab/scratchpad/recap.html`) — expected: `check: ok` (one Esc after opening still closes the overlay). `wc -l template/diagram.js template/diagram.css` — under 400.
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-explainer && node --test test/diagram.test.mjs test/diagram-browser.test.mjs` — expected: all pass. Then `npm test` — expected: every test green except `golden: body markup of the recap example is unchanged` (the recap example embeds a diagram; its figure's overlay markup moved). Read the diff: only the `<dialog>` block inside `<figure class="dg">` changes. Then run once: `cd <repo>/plugins/portable-artifacts/skills/make-explainer && UPDATE_GOLDEN=1 node --test test/golden.test.mjs`, then `npm test` — green. Then `node scripts/check.mjs` on the built recap example (`node scripts/build.mjs references/examples/recap.explainer.json --out <scratchpad>/recap.html` then `node scripts/check.mjs <scratchpad>/recap.html`) — expected: `check: ok` (one Esc after opening still closes the overlay). `wc -l template/diagram.js template/diagram.css` — under 400.
 
 - [ ] **Step 7: Guard proofs**
 
@@ -1450,7 +1450,7 @@ test('README says F is full screen and 0 fits; kinds.md describes every colour f
 
 - [ ] **Step 2: Run the test to see it fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/docs.test.mjs`
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/docs.test.mjs`
 Expected: all four fail (`autoplay`, `stories`, `emoji`, `detail`, `caption`, `edge` missing from schema.md; no `## Stories`; the README row reads `` `F`, double-click ``; no family rows).
 
 - [ ] **Step 3: `SKILL.md`** (replace the whole file)
@@ -1679,11 +1679,11 @@ Four pages describe make-diagram in prose with "a step-by-step presentation mode
 - `docs/skills-catalog.md:170` — `zoom and pan, hover tracing, a step-by-step presentation mode and PNG/SVG export.` becomes `zoom and pan, hover tracing, a story player with chapters and beats, an Explore panel, full screen and PNG/SVG export.`
 - `docs/features/portable-artifacts.html:73` — `with zoom, hover tracing and a step-by-step presentation mode.` becomes `with zoom, hover tracing, a story player that follows a request hop by hop, an Explore panel and full screen.`
 
-Then `grep -rl "step-by-step presentation mode" /Users/abhijitbansal/projects/claude-skills/plugins /Users/abhijitbansal/projects/claude-skills/docs/catalog.html /Users/abhijitbansal/projects/claude-skills/docs/skills-catalog.md /Users/abhijitbansal/projects/claude-skills/docs/features` — expected: no output (the older plan and spec under `docs/superpowers/` keep their history and are not edited).
+Then `grep -rl "step-by-step presentation mode" <repo>/plugins <repo>/docs/catalog.html <repo>/docs/skills-catalog.md <repo>/docs/features` — expected: no output (the older plan and spec under `docs/superpowers/` keep their history and are not edited).
 
 - [ ] **Step 6: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && node --test test/docs.test.mjs` — expected: pass. Then `npm test` — green. Then `cd /Users/abhijitbansal/projects/claude-skills && python3 -m pytest -q` — green (the frontmatter is single-line `key: value`; the registry parser reads the description).
+Run: `cd <repo>/plugins/portable-artifacts/skills/make-diagram && node --test test/docs.test.mjs` — expected: pass. Then `npm test` — green. Then `cd <repo> && python3 -m pytest -q` — green (the frontmatter is single-line `key: value`; the registry parser reads the description).
 
 - [ ] **Step 7: Commit**
 
@@ -1731,7 +1731,7 @@ test('diagram prompts: two per type, a story prompt, an emoji prompt, and one ed
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"`
+Run: `cd <repo>/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"`
 Expected: FAIL at `prompts.length` (8).
 
 - [ ] **Step 3: The prompts**
@@ -1745,15 +1745,15 @@ Append to the array in `eval/prompts/diagram.json` (after `edit-existing`):
 
 - [ ] **Step 4: Run the tests to see them pass**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"` — expected: green.
+Run: `cd <repo>/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"` — expected: green.
 
 - [ ] **Step 5: The run (orchestrator only)**
 
 The executor stops here and reports "prompts ready; the run is the orchestrator's". The orchestrator, after confirming the spend with the user (ten `claude -p` Haiku sessions, up to 900 s each), runs exactly:
 
-`cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node eval/run-eval.mjs --skill diagram --host claude --model haiku --timeout 900`
+`cd <repo>/plugins/portable-artifacts && node eval/run-eval.mjs --skill diagram --host claude --model haiku --timeout 900`
 
-The harness prints `▶ <id>` per prompt and writes `eval/results/<stamp>/claude-diagram/{results.json,summary.md,<id>/…}`. Then copy the folder for the record (it is gitignored; only the summary below is committed): `cp -R /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/eval/results/<stamp> /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/eval/results/diagram-stories-haiku-2026-10-14`.
+The harness prints `▶ <id>` per prompt and writes `eval/results/<stamp>/claude-diagram/{results.json,summary.md,<id>/…}`. Then copy the folder for the record (it is gitignored; only the summary below is committed): `cp -R <repo>/plugins/portable-artifacts/eval/results/<stamp> <repo>/plugins/portable-artifacts/eval/results/diagram-stories-haiku-2026-10-14`.
 
 - [ ] **Step 6: The summary**
 
@@ -1784,7 +1784,7 @@ Measured with `node eval/run-eval.mjs --skill diagram --host claude --model haik
 
 - [ ] **Step 7: The pin**
 
-If the gate failed, remove the two lines `model: haiku` and `effort: low` from `SKILL.md`'s frontmatter (nothing else), run `cd /Users/abhijitbansal/projects/claude-skills && python3 -m pytest -q` (frontmatter still parses) and say so in the summary. If it passed, SKILL.md is untouched.
+If the gate failed, remove the two lines `model: haiku` and `effort: low` from `SKILL.md`'s frontmatter (nothing else), run `cd <repo> && python3 -m pytest -q` (frontmatter still parses) and say so in the summary. If it passed, SKILL.md is untouched.
 
 - [ ] **Step 8: Commit**
 
@@ -1806,7 +1806,7 @@ Message: `test(make-diagram): eval over the story and emoji prompts` (body: the 
 
 - [ ] **Step 1: The failing check**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills && node plugins/portable-artifacts/skills/make-diagram/scripts/validate.mjs docs/features/showcase/portable-artifacts/gallery/pipeline-diagram/diagram.json` — expected today: `valid` (the sample still uses `steps`). The RED signal for this task is `grep -c 'Write and check' docs/features/showcase/portable-artifacts/gallery/pipeline-diagram/index.html` printing `0` (and exiting 1): the built page carries no chapter of that name.
+Run: `cd <repo> && node plugins/portable-artifacts/skills/make-diagram/scripts/validate.mjs docs/features/showcase/portable-artifacts/gallery/pipeline-diagram/diagram.json` — expected today: `valid` (the sample still uses `steps`). The RED signal for this task is `grep -c 'Write and check' docs/features/showcase/portable-artifacts/gallery/pipeline-diagram/index.html` printing `0` (and exiting 1): the built page carries no chapter of that name.
 
 - [ ] **Step 2: `diagram.json`** (replace the whole file)
 
@@ -1875,7 +1875,7 @@ Run: `cd /Users/abhijitbansal/projects/claude-skills && node plugins/portable-ar
 
 - [ ] **Step 3: Validate, build, check**
 
-Run, from `/Users/abhijitbansal/projects/claude-skills`:
+Run, from `<repo>`:
 
 `node plugins/portable-artifacts/skills/make-diagram/scripts/validate.mjs docs/features/showcase/portable-artifacts/gallery/pipeline-diagram/diagram.json` — expected: `valid`. If a label no longer fits its card (the emoji tile took room), shorten the label the message names, not the limit.
 
@@ -1892,9 +1892,9 @@ Write `.scratch/thumb-pipeline.mjs` (the folder is gitignored; create it if abse
 ```js
 // A 1280x720 JPEG of the pipeline sample one beat into its story, in dark mode (the glow look).
 import { pathToFileURL } from 'node:url';
-import { launchBrowser } from '/Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram/scripts/lib/browser.mjs';
+import { launchBrowser } from '<repo>/plugins/portable-artifacts/skills/make-diagram/scripts/lib/browser.mjs';
 
-const DIR = '/Users/abhijitbansal/projects/claude-skills/docs/features/showcase/portable-artifacts/gallery/pipeline-diagram';
+const DIR = '<repo>/docs/features/showcase/portable-artifacts/gallery/pipeline-diagram';
 const browser = await launchBrowser();
 const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, colorScheme: 'dark', deviceScaleFactor: 1 });
 const page = await context.newPage();
@@ -1907,7 +1907,7 @@ await page.screenshot({ path: `${DIR}/thumb.jpg`, type: 'jpeg', quality: 82 });
 await browser.close();
 ```
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills && node .scratch/thumb-pipeline.mjs`. Open `thumb.jpg` (Read it) and look: the dark canvas, the transport bar with `Beat 2 / 9`, the lit `agent → spec` edge and dimmed rest. If the panel or legend covers the lit edge, press `Escape` and retake at beat 1; say which beat the picture shows in the task report.
+Run: `cd <repo> && node .scratch/thumb-pipeline.mjs`. Open `thumb.jpg` (Read it) and look: the dark canvas, the transport bar with `Beat 2 / 9`, the lit `agent → spec` edge and dimmed rest. If the panel or legend covers the lit edge, press `Escape` and retake at beat 1; say which beat the picture shows in the task report.
 
 - [ ] **Step 5: The gallery page**
 
@@ -1921,7 +1921,7 @@ Line 829 (the footnote) gains a sentence at its end, inside the `<p>`: ` The dia
 
 - [ ] **Step 6: Run the repo tests**
 
-Run: `cd /Users/abhijitbansal/projects/claude-skills && python3 -m pytest -q` — expected: green (no test counts gallery files; this confirms nothing else broke). Then `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
+Run: `cd <repo> && python3 -m pytest -q` — expected: green (no test counts gallery files; this confirms nothing else broke). Then `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
 
 - [ ] **Step 7: Commit**
 
@@ -1933,11 +1933,11 @@ Message: `docs(portable-artifacts): pipeline diagram sample plays a story` (body
 
 After Task 7, with everything on disk:
 
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/skills/make-explainer && npm test` — green, with the recap golden regenerated once in Task 4.
-- `cd /Users/abhijitbansal/projects/claude-skills && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green (nothing in `shared/` changed); `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — in sync.
-- `cd /Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"` — green.
-- `cd /Users/abhijitbansal/projects/claude-skills && python3 -m pytest -q` — green.
+- `cd <repo>/plugins/portable-artifacts/skills/make-diagram && npm test` — green.
+- `cd <repo>/plugins/portable-artifacts/skills/make-explainer && npm test` — green, with the recap golden regenerated once in Task 4.
+- `cd <repo> && node --test "plugins/portable-artifacts/shared/test/*.test.mjs"` — green (nothing in `shared/` changed); `cd <repo>/plugins/portable-artifacts && node bin/sync-shared.mjs --check` — in sync.
+- `cd <repo>/plugins/portable-artifacts && node --test "eval/test/*.test.mjs"` — green.
+- `cd <repo> && python3 -m pytest -q` — green.
 - `wc -l plugins/portable-artifacts/skills/make-diagram/template/*.js plugins/portable-artifacts/skills/make-diagram/template/viewer.html plugins/portable-artifacts/skills/make-explainer/template/diagram.js plugins/portable-artifacts/skills/make-explainer/template/diagram.css` — every file under 400; the built story example and the gallery sample under 400 KB.
 - Spec coverage this phase delivers: §2 Full screen (the button or `F` calls `requestFullscreen` on the viewer root; refusal or absence switches to the fixed window-filling layer; Esc leaves) and the keyboard line's `F`; §2 Inside make-explainer (the overlay mounts the full viewer: Play, Explore, panel, full screen; Back / Next replaced by the viewer's transport); §1's last paragraph (SKILL.md teaches `stories`, `emoji`, `detail` and no longer `steps`; schema.md documents both, `steps` marked older); §4 Tests (make-explainer: a page embedding a story diagram builds, `check.mjs` passes, the overlay plays a beat; the eval over 8 + 2 prompts with the pin rule and the summary file); §5 phase 4 (the gallery sample rebuilt with stories and emoji, thumbnail refreshed). The four deferred phase-4 findings and the Low items are handled per the table above.
 - Left for the branch's end (the orchestrator, per the global manual-test rule): the manual-test checklist. Items this phase adds to it: real full screen in a real browser window (headless cannot show it; check Chrome, Safari and Firefox, and that Esc returns the page), the fallback inside the deployed site's sandboxed iframe, emoji rendering per OS in the tile and the panel, the gallery card and thumbnail on the deployed page.

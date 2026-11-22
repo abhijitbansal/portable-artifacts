@@ -24,16 +24,19 @@ sweeps, mods, machine setup, bats) was dropped.
   `node` (shared copies in sync, shared and installer tests), `node-skills` (one runner per skill, make-motion split into 4 shards and make-scene and make-explainer into 2, with Chromium and
   ffmpeg), `commit-trailers` and `plugin-version-guard`. `webgl-spike-macos` runs by hand only.
   `audit-on-demand-deps.yml` audits the lockfiles of the packages make-motion installs on demand, weekly and on
-  changes. `pages.yml` deploys `docs/` on every push to `main` that touches `docs/` (Pages is enabled, source GitHub
-  Actions). Every action is pinned to a commit SHA with the version in a comment; Dependabot bumps them monthly.
-- **Site.** `docs/` is the Pages root, hand-written static files with no build step. `docs/index.html` is the cover
-  sheet plus one sheet per skill (a spec excerpt beside the artifact it built, with leader lines);
+  changes. `pages.yml` deploys `docs/` on every push to `main` that touches `docs/`,
+  `scripts/build_dashboard_gallery.py`, `eval/fixtures/data/**` or `LICENSE`, on a published release and by hand (Pages
+  is enabled, source GitHub Actions). It stages `docs/` into `_site` and builds the dashboard gallery ZIPs into it.
+  Every action is pinned to a commit SHA with the version in a comment; Dependabot bumps them monthly.
+- **Site.** `docs/` is the Pages root, hand-written static files with no build step in the repo (the Pages job adds the gallery ZIPs when it stages
+  `_site`). `docs/index.html` is a reel band, the cover sheet and one sheet per skill (a spec excerpt beside the artifact it built, with leader lines);
   `docs/gallery.html` is the register of every output with its spec. `docs/assets/pa.css` and `pa.js` are the only
   stylesheet and script; `docs/media/` holds the muted plate loops (under 2 MB each), posters and thumbnails;
   `docs/showcase/portable-artifacts/gallery/` holds the outputs and their specs. The design system is recorded in
   `.agents/context/DESIGN.md`, product truth in `.agents/context/PRODUCT.md`. Old one-page anchors are redirected by
   the `LEGACY` table in `pa.js`. `docs/superpowers/` keeps design specs and plans; they quote old commands on purpose,
-  so leave their text as written.
+  so leave their text as written. The one exception: machine paths are written as `<repo>` and `<scratchpad>`, never
+  a real home folder (the owner scrubbed them on 2026-11-21, since the folder is public).
 - **Copy-button contract.** On `docs/index.html`, a command block (`.code.cmds`) holds one
   `<div class="cl"><code class="ct">cmd</code><button class="copy" data-copy="cmd">copy</button></div>` per command: one
   button per command, never one button for several. A trailing `# comment` may stay in the visible `<code class="ct">`

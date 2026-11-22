@@ -10,11 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-15-portable-artifacts-2-design.md` section 13 (binding), section 15 step 8 (this plan), section 16 (constraints), section 17 ("the per-skill refresh lists" are left to the builder), section 18 (the regression risk). Routing: `~/.claude/skills/design-router/SKILL.md`.
 
-Abbreviations: `P` = `plugins/portable-artifacts`, `D` = `P/skills/make-dashboard`, `G` = `P/skills/make-diagram`, `E` = `P/skills/make-explainer`, `S` = `P/skills/make-scene`, `W` = the worktree root `/Users/abhijitbansal/projects/claude-skills/.claude/worktrees/New-Motion`. Inventory read at commit `c8c1d659`.
+Abbreviations: `P` = `plugins/portable-artifacts`, `D` = `P/skills/make-dashboard`, `G` = `P/skills/make-diagram`, `E` = `P/skills/make-explainer`, `S` = `P/skills/make-scene`, `W` = the worktree root `<repo>/.claude/worktrees/New-Motion`. Inventory read at commit `c8c1d659`.
 
 ## What was looked at, and what was not
 
-- The four skills have no `node_modules` in this worktree, so their build scripts do not run here. Five examples were built with the main checkout's copy of the skills (`/Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts`, branch `docs/skill-improvement-plan`) into `W/.scratch/refresh-look/`: `dashboard-sales/index.html`, `diagram-story.html`, `explainer-concept.html`, `explainer-slides.html`, `scene-city.html`. All five built.
+- The four skills have no `node_modules` in this worktree, so their build scripts do not run here. Five examples were built with the main checkout's copy of the skills (`<repo>/plugins/portable-artifacts`, branch `docs/skill-improvement-plan`) into `W/.scratch/refresh-look/`: `dashboard-sales/index.html`, `diagram-story.html`, `explainer-concept.html`, `explainer-slides.html`, `scene-city.html`. All five built.
 - No screenshot was taken and no page was viewed in a browser: other agents' headless browsers were live, and the planner was told not to start one. The "provisional list" in each task below comes from the template and stylesheet source in this worktree, not from pixels. It is a starting point; step 1 of each task replaces it with a list written after viewing.
 - The other branch differs from this one in the presentation files only slightly (`git diff HEAD docs/skill-improvement-plan` on `D/template/page.html`, `G/template/viewer.html`, `E/template/base.css`, `E/template/deck-flavors.css`: a `font-synthesis` line, right-aligned number cells, weight variables in the diagram viewer, diff and checklist rules, a poster deck fix). It does not touch `shared/type.mjs`, `shared/theme.mjs`, `shared/art.mjs`, `shared/contrast.mjs` or `shared/themes/`. So the provisional lists carry over to this branch.
 
@@ -55,7 +55,7 @@ Each has a default this plan is written to. Change the default before dispatchin
 
 `shot.mjs` is the tool the user's rules name: `node <path>/shot.mjs <file.html | folder> --widths 390,1280 --out <dir>`. It serves the page from a loopback server, shoots each width in light and dark in one browser, refuses while another headless browser is live (exit 2), and reports horizontal overflow at 390 px as a warning.
 
-- It is **not in this worktree**. It lives at `/Users/abhijitbansal/projects/claude-skills/plugins/portable-artifacts/shared/shot.mjs` (commits `2164616c`, `748ecd8d`, branch `docs/skill-improvement-plan`). Under decision 1's default it arrives as `W/plugins/portable-artifacts/shared/shot.mjs`; otherwise run it from the main checkout path. It loads Playwright from a skill folder next to it, so the main-checkout copy works without an install here.
+- It is **not in this worktree**. It lives at `<repo>/plugins/portable-artifacts/shared/shot.mjs` (commits `2164616c`, `748ecd8d`, branch `docs/skill-improvement-plan`). Under decision 1's default it arrives as `W/plugins/portable-artifacts/shared/shot.mjs`; otherwise run it from the main checkout path. It loads Playwright from a skill folder next to it, so the main-checkout copy works without an install here.
 - Output goes to `W/.scratch/refresh-look/<before|after-rN>/<skill>/`. File names are `<page>-<width>-<scheme>.png`.
 - It writes PNGs; it verifies nothing. Every shot is opened and viewed with the Read tool.
 

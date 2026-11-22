@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "cosmos",
+  "format": "16:9",
+  "seed": 14,
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "drift",
+    "bpm": 90
+  },
+  "sound": "on",
+  "generatedBy": {
+    "model": "claude-opus-5-5",
+    "agent": "Claude Code"
+  },
+  "shots": [
+    {
+      "id": "cosmos",
+      "show": "statement",
+      "kicker": "New look: cosmos",
+      "say": "Cosmos. A science explainer in deep *violet*."
+    },
+    {
+      "id": "giants",
+      "show": "chart",
+      "cut": "ripple",
+      "type": "bar",
+      "title": "Jupiter is the widest planet",
+      "unit": "km",
+      "say": "Earth is thirteen thousand kilometres wide. *Jupiter* is eleven times wider.",
+      "data": [
+        {
+          "label": "Earth",
+          "value": 12756
+        },
+        {
+          "label": "Uranus",
+          "value": 51118
+        },
+        {
+          "label": "Saturn",
+          "value": 120536
+        },
+        {
+          "label": "Jupiter",
+          "value": 142984
+        }
+      ],
+      "highlight": "Jupiter",
+      "source": "NASA Planetary Fact Sheet"
+    },
+    {
+      "id": "launch",
+      "show": "map",
+      "cut": {
+        "type": "iris",
+        "direction": "in"
+      },
+      "region": "world",
+      "title": "Where rockets launch",
+      "source": "Bundled world atlas, drawn offline",
+      "say": "Maps draw offline. Rockets leave from Florida, Kazakhstan, and Guiana.",
+      "places": [
+        {
+          "name": "Florida",
+          "at": [
+            -80.6,
+            28.4
+          ]
+        },
+        {
+          "name": "Kazakhstan",
+          "at": [
+            63.3,
+            45.9
+          ]
+        },
+        {
+          "name": "Guiana",
+          "at": [
+            -52.8,
+            5.2
+          ]
+        }
+      ]
+    }
+  ]
+}

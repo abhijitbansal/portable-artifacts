@@ -24,7 +24,7 @@ plugins/portable-artifacts/       the plugin
 docs/                             the GitHub Pages site: index.html, gallery.html, assets/, media/, showcase/
 docs/superpowers/                 design specs and plans (not published)
 tests/pytest/                     checks on the site pages and the CI workflow
-scripts/                          audit-on-demand-deps.sh, check_trailers.sh
+scripts/                          audit-on-demand-deps.sh, build_dashboard_gallery.py, check_trailers.sh
 .agents/context/                  PRODUCT.md and DESIGN.md: product truth and the site's design system
 ```
 
@@ -41,8 +41,8 @@ node --test "plugins/portable-artifacts/shared/test/*.test.mjs"
 python3 -m pytest tests/pytest
 ```
 
-For a skill, run `npm ci` and then `npm test` in its folder. The installer tests run from
-`plugins/portable-artifacts/bin` with `node --test "test/*.test.mjs"` and need `npm ci` in `skills/make-motion`.
+For a skill, run `npm ci --ignore-scripts` and then `npm test` in its folder. The installer tests run from
+`plugins/portable-artifacts/bin` with `node --test "test/*.test.mjs"` and need `npm ci --ignore-scripts` in `skills/make-motion`.
 
 Any change under `plugins/` bumps the `version` in `plugins/portable-artifacts/.claude-plugin/plugin.json` once per PR
 and adds a heading to `plugins/portable-artifacts/CHANGELOG.md`. CI checks this.

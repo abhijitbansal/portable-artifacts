@@ -1,0 +1,62 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "marker",
+  "format": "16:9",
+  "seed": 17,
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "tape"
+  },
+  "sound": "on",
+  "generatedBy": {
+    "model": "claude-opus-5-5",
+    "agent": "Claude Code"
+  },
+  "shots": [
+    {
+      "id": "marker",
+      "show": "statement",
+      "kicker": "Redrawn look: marker",
+      "say": "Marker. A hand draws *every* stroke."
+    },
+    {
+      "id": "loop",
+      "show": "diagram",
+      "cut": "erase",
+      "layout": "cycle",
+      "title": "How a film gets made",
+      "say": "Make the film. Look at the sheets. Fix the script, and make it again.",
+      "nodes": [
+        {
+          "id": "make",
+          "label": "Make"
+        },
+        {
+          "id": "look",
+          "label": "Look"
+        },
+        {
+          "id": "fix",
+          "label": "Fix"
+        }
+      ],
+      "edges": [
+        {
+          "from": "make",
+          "to": "look"
+        },
+        {
+          "from": "look",
+          "to": "fix"
+        },
+        {
+          "from": "fix",
+          "to": "make"
+        }
+      ]
+    }
+  ]
+}
