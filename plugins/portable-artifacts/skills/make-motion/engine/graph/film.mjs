@@ -201,14 +201,19 @@ function windowOf(cut, cutDur, local, look, outgoingDuration) {
  * is the cut that opens shot `shot` (the resolved cut: name, family, direction), `p` how far it has come (0 on its first
  * frame), `from` the outgoing shot's index, `live` whether that shot keeps moving through the window (isLiveOutgoing), and
  * `outgoingT` the second of it the window reads (its own seconds). The same window buildFilm's frameAt opens, for a node cut
- * and a smear as well as a layer or shader cut; a hard cut and the film's first shot have none.
+ * and a smear as well as a layer or shader cut; a hard cut and the film's first shot have none. A frame outside the film
+ * throws, as frameAt does for a time outside it.
  */
 export function cutWindowAt(film, timeline, frame) {
   const t = frame / timeline.fps;
+  if (!Number.isFinite(t) || t < 0 || t > timeline.duration + 1 / TIME_DECIMALS) throw new Error(`time must be in 0..${timeline.duration}, got ${t}`);
   const index = timeline.shots.findLastIndex((s) => s.start <= t + 1 / TIME_DECIMALS);
   if (index <= 0) return null;
   const shot = timeline.shots[index];
-  const cut = resolveShotCut(film, index, { look: lookOfShot(film, index) }); // the shot's own look, as expandOne resolves it
+  // film is the given film, not buildFilm's withLookEmphasis(film): that rewrites only a shot's `on` and `say`, never its
+  // look, seed, show or cut, so the cut resolved here is the one buildFilm resolves (the look handed to resolveShotCut is
+  // the shot's own, as expandOne passes it)
+  const cut = resolveShotCut(film, index, { look: lookOfShot(film, index) });
   const found = windowOf(cut, cut ? Math.min(cut.dur, shot.duration) : 0, shotTime(t, shot.start), resolveLook(film), timeline.shots[index - 1].duration);
   return found && { ...found, shot: index, from: index - 1 };
 }

@@ -129,16 +129,16 @@ test('cutWindowAt is the engine\'s window: the cut, how far, and the outgoing sh
 
 // cutAt and the page's frameAt read the window from one engine function; this holds them together on every frame of a film
 // with a crossfade (layer), a slide (node), a flood (layer, a look-grounded colour) and a cross-zoom (shader).
-test('cutAt agrees with frameAt on every frame of a film with a crossfade, a node cut, a flood and a shader cut', () => {
-  const film = filmOf([shot('a'), shot('b', 'crossfade'), shot('c', 'slide'), shot('d', 'flood'), shot('e', 'cross-zoom')]);
+// every frame of `film` (built with `look`): cutAt names the window the page's frameAt opens; returns the cut names seen
+function checkParity(film, look) {
   const timeline = buildTimeline(film, { fps: FPS });
-  const built = filmFor(film.shots);
+  const built = filmFor(film.shots, look);
   const seen = new Set();
   for (let frame = 0; frame < timeline.frameCount; frame += 1) {
     const state = built.frameAt(frame / FPS);
     const found = cutAt(film, timeline, frame);
     if (state.cut === undefined) {
-      if (found !== null) { assert.equal(found.family, 'node', `frame ${frame}: only a node cut has a window with no cut in the frame`); seen.add('node'); }
+      if (found !== null) { assert.equal(found.family, 'node', `frame ${frame}: only a node cut has a window with no cut in the frame`); seen.add('node'); seen.add(found.name); }
       continue;
     }
     assert.notEqual(found, null, `frame ${frame}`);
@@ -150,10 +150,36 @@ test('cutAt agrees with frameAt on every frame of a film with a crossfade, a nod
     assert.ok(Math.abs(found.from.seconds - (state.from.t - outgoing.start)) < 1e-3, `frame ${frame}: outgoing second`);
     assert.equal(found.from.live, state.from.live === true);
     seen.add(found.family);
+    seen.add(found.name);
   }
-  assert.deepEqual([...seen].sort(), ['layer', 'node', 'shader']);
+  return { timeline, seen };
+}
+
+test('cutAt agrees with frameAt on every frame of a film with a crossfade, a node cut, a flood and a shader cut', () => {
+  const film = filmOf([shot('a'), shot('b', 'crossfade'), shot('c', 'slide'), shot('d', 'flood'), shot('e', 'cross-zoom')]);
+  const { timeline, seen } = checkParity(film, 'desk');
+  for (const found of ['layer', 'node', 'shader', 'crossfade', 'slide', 'flood', 'cross-zoom']) assert.ok(seen.has(found), `${found} was reached`);
   const slide = [...Array(timeline.frameCount).keys()].filter((frame) => cutAt(film, timeline, frame)?.name === 'slide');
   assert.ok(slide.length > 0 && slide.every((frame, k) => k === 0 || frame === slide[k - 1] + 1), 'the node cut has one run of frames');
+});
+
+// the poster look picks its own cut (cutPick: a cover every third shot, in turn up and left, a plain cut where its plates
+// would hide it): the cut is resolved on the shot's grounded look, and the window must still be the page's
+test('cutAt agrees with frameAt on a poster film whose cuts the look picks', () => {
+  const shots = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => shot(id));
+  const { timeline, seen } = checkParity(filmOf(shots, 'poster'), 'poster');
+  assert.ok(seen.has('cover'), `the look's cover was reached: ${[...seen]}`);
+  const shotsOf = (frame) => cutAt(filmOf(shots, 'poster'), timeline, frame)?.from.shot;
+  const opening = new Set([...Array(timeline.frameCount).keys()].map(shotsOf).filter(Boolean));
+  assert.deepEqual([...opening].sort(), ['c', 'f'], 'only every third shot opens on a cut, so only the shots before them are outgoing');
+});
+
+test('cutWindowAt refuses a frame outside the film, as frameAt refuses a time outside it', () => {
+  const film = filmWith('crossfade');
+  const timeline = buildTimeline(film, { fps: FPS });
+  for (const frame of [-1, timeline.frameCount + 5, Number.NaN]) assert.throws(() => cutWindowAt(film, timeline, frame), /time must be in 0\.\.2, got/, String(frame));
+  assert.equal(cutWindowAt(film, timeline, timeline.frameCount - 1), null, 'the last frame is inside the film');
+  assert.equal(cutWindowAt(film, timeline, 0), null);
 });
 
 // ---- the flag ---------------------------------------------------------------------------------------------------------
