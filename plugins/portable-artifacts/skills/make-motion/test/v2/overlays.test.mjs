@@ -201,6 +201,27 @@ test('on a short every look keeps a bottom logo and a bottom bar above the platf
   }
 });
 
+test('in pro on a 9:16 canvas there is no platform: overlays keep to the composition rectangle, band foot and margins included', () => {
+  const insets = safeInsets([TALL.w, TALL.h], VIRAL_SAFE_ZONE);
+  const pro = registries.modes.get('pro');
+  const unit = unitOf(TALL);
+  for (const name of ['poster', 'pop', 'cosmos', 'desk']) {
+    const film = { version: 2, mode: 'pro', look: name, overlays: { logo: { src: 'assets/logo.png', corner: 'top-left' } }, shots: [SHOT] };
+    const look = resolveLook(film);
+    const rect = compositionRect({ canvas: TALL, look, viralInsets: insets, mode: pro });
+    const gap = look.overlays.logo.margin * unit;
+    const at = (corner) => overlayNodes({ film: { ...film, overlays: { logo: { src: 'assets/logo.png', corner } } }, look, canvas: TALL, timeline: buildTimeline(film, { fps: FPS }), assets: new Map([['assets/logo.png', LOGO]]) })[0].props;
+    const topLeft = at('top-left');
+    assert.equal(topLeft.x, rect.left + gap, `${name}: x`);
+    assert.equal(topLeft.y, rect.top + gap, `${name}: y`);
+    const far = at('bottom-right');
+    assert.equal(far.y + far.h, rect.top + rect.h - gap, `${name}: the band foot (${rect.top + rect.h}) is kept`);
+    assert.equal(far.x + far.w, rect.left + rect.w - gap, `${name}: right`);
+  }
+  const poster = resolveLook({ version: 2, mode: 'pro', look: 'poster', shots: [SHOT] });
+  assert.equal(compositionRect({ canvas: TALL, look: poster, viralInsets: insets, mode: pro }).left, poster.grid.margin * unit, 'poster composes at its margins in pro');
+});
+
 test('a picture with no size is an error naming the logo, not an infinite or NaN width', () => {
   for (const bad of [{ width: 200, height: 0 }, { width: 0, height: 100 }, { width: Number.NaN, height: 100 }]) {
     assert.throws(() => overlayNodes(argsFor({ overlays: { logo: { src: 'assets/logo.png' } } }, WIDE, { assets: new Map([['assets/logo.png', bad]]) })), /overlays\.logo\.src.*assets\/logo\.png.*no size/);

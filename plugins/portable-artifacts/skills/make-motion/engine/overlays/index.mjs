@@ -99,12 +99,13 @@ for (const { name, ...entry } of OVERLAYS) {
   if (!registries.overlays.has(name)) registries.overlays.add(name, Object.freeze(entry));
 }
 
-// Where overlays may stand: the rectangle the look composes in, and on a short composed inside the platform safe zone
-// (`rect.safe`) also inside the platform's own insets. A banded look's band can reach below the safe zone's bottom (pop to
-// 1440 px, cosmos to 1613 px, against 1245 px on 1080x1920): its text keeps to the band, but a corner mark or a bar at
-// the foot there would sit under the platform's caption and buttons.
-function overlayRect(rect, insets, canvas) {
-  if (!rect.safe) return rect;
+// Where overlays may stand: the rectangle the look composes in, and in a platform mode (mode.platformSafeZone: viral) on a
+// composed 9:16 frame (`rect.safe`) also inside the platform's own insets. A banded look's band can reach below the safe
+// zone's bottom (pop to 1440 px, cosmos to 1613 px, against 1245 px on 1080x1920): its text keeps to the band, but a corner
+// mark or a bar at the foot there would sit under the platform's caption and buttons. `rect.safe` alone is not enough: it
+// is also true for a banded look in a mode with no platform (poster in pro, composed at its margins), which stays as it is.
+function overlayRect(rect, insets, canvas, mode) {
+  if (!rect.safe || mode.platformSafeZone !== true) return rect;
   const left = Math.max(rect.left, insets.left);
   const top = Math.max(rect.top, insets.top);
   const right = Math.min(rect.left + rect.w, canvas.w - insets.right);
@@ -114,8 +115,8 @@ function overlayRect(rect, insets, canvas) {
 
 /**
  * The nodes of every overlay the film asks for (`film.overlays`), in the registry's order, none for a film that asks for
- * none. They stand inside the rectangle the look composes in (compositionRect, and on a short also inside the platform
- * safe zone, given `viralInsets`, which default to VIRAL_SAFE_ZONE on the canvas: overlayRect), and the bar reveals over
+ * none. They stand inside the rectangle the look composes in (compositionRect, and in a platform mode also inside the
+ * platform safe zone, given `viralInsets`, which default to VIRAL_SAFE_ZONE on the canvas: overlayRect), and the bar reveals over
  * `timeline.duration`: they are sampled at film time, never handed to a cut.
  * `assets` maps a src to its picture ({ width, height }); a logo with no loaded picture throws, naming `overlays.logo.src`.
  * @returns {import('../graph/node.mjs').Node[]}
@@ -126,7 +127,7 @@ export function overlayNodes({ film, look, canvas, timeline, assets = new Map(),
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
   // a short's platform safe zone, as the review reads it (review.mjs): used only where the look composes inside it
   const insets = viralInsets ?? safeInsets([canvas.w, canvas.h], VIRAL_SAFE_ZONE);
-  const safe = overlayRect(compositionRect({ canvas, look, viralInsets: insets, mode }), insets, canvas);
+  const safe = overlayRect(compositionRect({ canvas, look, viralInsets: insets, mode }), insets, canvas, mode);
   const asset = (src) => {
     const picture = assets.get(src);
     if (!picture) throw new Error(`overlays.logo.src: no loaded picture for "${src}"`);
