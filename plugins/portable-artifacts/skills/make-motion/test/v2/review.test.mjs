@@ -850,7 +850,39 @@ test('restingByShot keeps the room of a shot that captions its own words even wh
   const snapshots = [{ frame: last, tree: built.sampleShot(1, last / FPS - entry.start) }];
   assert.deepEqual([captionsHoldRoom(film)('a'), captionsHoldRoom(film)('d')], [false, true]);
   assert.equal(restingByShot(timeline, snapshots).get('d').captionZone, undefined, 'by default a hidden caption is no room');
-  assert.equal(restingByShot(timeline, snapshots, captionsHoldRoom(film)).get('d').captionZone?.length, 4, 'a diagram shot keeps its captions room');
+  // the room is the one its caption nodes reserve (hidden or not): their zones' union, from the tree itself
+  const zones = [];
+  const walk = (n) => { if (n.props?.caption && String(n.id).startsWith('d.captions')) zones.push(n.props.caption.zone); (n.children ?? []).forEach(walk); };
+  snapshots[0].tree.forEach(walk);
+  assert.ok(zones.length > 0, 'the diagram shot has caption nodes');
+  const [left, top] = [Math.min(...zones.map(([x]) => x)), Math.min(...zones.map(([, y]) => y))];
+  const [right, bottom] = [Math.max(...zones.map(([x, , w]) => x + w)), Math.max(...zones.map(([, y, , h]) => y + h))];
+  assert.deepEqual(restingByShot(timeline, snapshots, captionsHoldRoom(film)).get('d').captionZone, [left, top, right - left, bottom - top], 'a diagram shot keeps its captions room');
+});
+
+// A shot with no say of its own (a hold) has no words to caption: the captions its tree carries are a neighbour's, over
+// the cut, and they are hidden by its last frame. Only a shot with words of its own keeps the room.
+test('a chart or diagram held with no say keeps no caption room, as in the same film without the neighbour\'s trail', () => {
+  const zoneOf = (kind, trail) => {
+    const example = Object.fromEntries(Object.entries(registries.kinds.get(kind).example).filter(([key]) => key !== 'say'));
+    const shots = [
+      { id: 'a', show: 'statement', say: 'One two three four five six.', ...(trail ? { narration: { trail } } : {}) },
+      { ...example, id: 'b', hold: 3 },
+      { id: 'c', show: 'statement', say: 'Thirteen fourteen fifteen sixteen.' },
+    ];
+    const film = filmOf(shots, 'desk', '16:9', { captions: true });
+    const timeline = buildTimeline(film, { fps: FPS });
+    const canvas = canvasOf('16:9');
+    const built = buildFilm({ film, timeline, measure, assets: IMAGES, canvas, viralInsets: viralOf(canvas) });
+    const entry = timeline.shots[1];
+    const last = Math.round(entry.end * FPS) - 1;
+    const snapshots = [{ frame: last, tree: built.sampleShot(1, last / FPS - entry.start) }];
+    return [captionsHoldRoom(film)('b'), restingByShot(timeline, snapshots, captionsHoldRoom(film)).get('b').captionZone];
+  };
+  for (const kind of ['chart', 'diagram']) {
+    assert.deepEqual(zoneOf(kind, 0), [false, undefined], `${kind}: control, no trail`);
+    assert.deepEqual(zoneOf(kind, 1), [false, undefined], `${kind}: a trail on the shot before`);
+  }
 });
 
 test('restingByShot counts a caption by its inherited opacity: hidden by a group above it is not a zone, shown is', () => {

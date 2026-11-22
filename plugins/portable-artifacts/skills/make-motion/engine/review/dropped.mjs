@@ -31,7 +31,7 @@ export function droppedMessage(node, minRatio, aimed) {
   const moved = node.props.dropped.flatMap((part) => {
     const target = TARGET_OF[part] ?? part;
     const paths = aimed.items.filter((item) => item.target === target).map((item) => item.path);
-    return paths.length === 0 ? [] : [`${paths.join(' and ')}, aimed at "${target}", land on "${aimed.fallback}" instead`];
+    return paths.length === 0 ? [] : [`${paths.join(' and ')}, aimed at "${target}", ${paths.length === 1 ? 'lands' : 'land'} on "${aimed.fallback}" instead`];
   });
   return moved.length === 0 ? said : `${said}; ${moved.join('; ')}`;
 }

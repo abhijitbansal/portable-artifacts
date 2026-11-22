@@ -334,7 +334,8 @@ function expandEnd(shot, ctx) {
     : wordmark ? expandWordmark(shot, ctx, data, times, titleOf(shot))
       : isEditorial(look) ? expandDesk(shot, ctx, data, times) : expandPop(shot, ctx, data, times);
   // a left-out ask or mark has the title's box (end-mark.mjs), so a highlight on it goes behind the line as one on the title does
-  const behind = Object.fromEntries(Object.entries(parts.boxes).filter(([k, box]) => k === 'title' || k.startsWith('word:') || box === parts.boxes.title).map(([k]) => [k, parts.hero]));
+  const { title: titleBox } = parts.boxes;
+  const behind = Object.fromEntries(Object.entries(parts.boxes).filter(([k, box]) => k === 'title' || k.startsWith('word:') || (titleBox !== undefined && box === titleBox)).map(([k]) => [k, parts.hero]));
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'title', behind });
   // the mark is pinned to the frame (fixed) as a desk card, a ledger tag or a product end's tag: the camera does not move it,
   // so a cut that opens from it (cut.at: "mark") reads it as drawn (graph/film.mjs drawnCentre). Elsewhere (a wordmark's

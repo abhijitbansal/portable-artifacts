@@ -64,8 +64,10 @@ test('a cut or an on event aimed at a part the card left out is named in the dro
   const end = { id: 'e', show: 'end', say: 'Every number, with its source.', ask: 'Start today', mark: 'make-motion', on: [{ at: 'word:1', do: 'highlight', target: 'mark' }] };
   const [found] = droppedFindings([end, { ...NEXT, cut: { type: 'iris', at: 'ask' } }], 'cosmos', '16:9');
   assert.match(found.message, /left out its ask and mark/);
-  assert.match(found.message, /shots\[1\]\.cut\.at, aimed at "ask", land on "title"/);
-  assert.match(found.message, /shots\[0\]\.on\[0\]\.target, aimed at "mark", land on "title"/);
+  assert.match(found.message, /shots\[1\]\.cut\.at, aimed at "ask", lands on "title"/);
+  assert.match(found.message, /shots\[0\]\.on\[0\]\.target, aimed at "mark", lands on "title"/);
+  const [both] = droppedFindings([end, { ...NEXT, cut: { type: 'iris', at: 'mark' } }], 'cosmos', '16:9');
+  assert.match(both.message, /shots\[1\]\.cut\.at and shots\[0\]\.on\[0\]\.target, aimed at "mark", land on "title"/, 'two paths: "land"');
   const [plain] = droppedFindings([{ ...end, on: undefined }, NEXT], 'cosmos', '16:9');
   assert.doesNotMatch(plain.message, /aimed at/, 'nothing aimed at it, nothing said');
 });
@@ -74,7 +76,7 @@ test('a quote byline the card left out is named by its target, "by", not by "att
   const quote = { id: 'q', show: 'quote', say: 'Every chart should show its work.', by: 'The data desk' };
   const [found] = droppedFindings([quote, { ...NEXT, cut: { type: 'iris', at: 'by' } }], 'cosmos', '1:1');
   assert.match(found.message, /left out its attribution/);
-  assert.match(found.message, /shots\[1\]\.cut\.at, aimed at "by", land on "text"/);
+  assert.match(found.message, /shots\[1\]\.cut\.at, aimed at "by", lands on "text"/);
 });
 
 test('no dropped finding without props.dropped, or with an empty list', () => {

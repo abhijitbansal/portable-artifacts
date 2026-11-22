@@ -211,15 +211,17 @@ function captionZoneIn(trees, shotId, hidden = false) {
 }
 
 /**
- * shotId -> does the shot caption its own words (a kind that does not show them: a diagram, a chart), so its captions
- * are on screen as it speaks and their room stays reserved? A kind that shows its words (statement, number) captions only
- * a neighbour's, over the cut (captions/index.mjs wordsToCaption).
+ * shotId -> does the shot caption its own words (a kind that does not show them: a diagram, a chart, and a say of its
+ * own to speak), so its captions are on screen as it speaks and their room stays reserved? A kind that shows its words
+ * (statement, number) captions only a neighbour's, over the cut (captions/index.mjs wordsToCaption), and so does a shot
+ * with no say (a hold): the captions its tree carries are a neighbour's.
  */
 export function captionsHoldRoom(film) {
   const byId = new Map((film.shots ?? []).map((shot) => [shot.id, shot]));
   return (shotId) => {
     const shot = byId.get(shotId);
-    return shot !== undefined && registries.kinds.has(shot.show) && !showsWordsOf(registries.kinds.get(shot.show), shot);
+    const speaks = typeof shot?.say === 'string' && shot.say.trim() !== '';
+    return speaks && registries.kinds.has(shot.show) && !showsWordsOf(registries.kinds.get(shot.show), shot);
   };
 }
 
