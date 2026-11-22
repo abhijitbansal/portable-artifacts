@@ -6,12 +6,14 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { CUE_LAYERS, CUE_VARIANTS, VARIANT_CENTS, cueWav } from '../../scripts/v2/sound/cue-synth.mjs';
-import { KNOWN_CUES, cueSamples, renderCues } from '../../scripts/v2/sound/synth.mjs';
+import { CUE_LAYERS, CUE_VARIANTS, VARIANT_CENTS, cueWav, layerCue, variantRatio } from '../../scripts/v2/sound/cue-synth.mjs';
+import { KNOWN_CUES, cueSamples, renderCues, riserTo } from '../../scripts/v2/sound/synth.mjs';
+import { mulberry32 } from '../../engine/seeded.mjs';
 
 const RATE = 48000;
 const HEADER = 44;
 const BASE_PLAIN_SHA = 'c307781a0561c3881242a5dcdd3aae187424cf173f671aa0b4765424fd6d6198'; // pop at 1 s, click at 2 s, seed 1, 3 s: the bytes before variants existed
+const BASE_ALL_ONCE_SHA = '604a5ddbd779f1c7f668cb78e1b23475071c80db0bc324124caee6f4251e18c9'; // every known cue once, seed 12345: measured on b32d5f0, before variants existed
 const dir = mkdtempSync(path.join(tmpdir(), 'sound-variants-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -84,6 +86,45 @@ test('each cue name counts on its own', async () => {
   assert.deepEqual(window(out, 2, 0.04), window(solo, 2, 0.04));
   // the second pop is a different take from the first
   assert.notDeepEqual(window(out, 1, 0.16), window(out, 3, 0.16));
+});
+
+// Zero crossings of `xs`: for band-limited noise it follows the band's centre, so a detune shows in it.
+const crossings = (xs) => xs.reduce((n, x, i) => (i > 0 && (x < 0) !== (xs[i - 1] < 0) ? n + 1 : n), 0);
+const MIN_RATIO = 1.02; // +30 against -30 cents is 1.035; averaging over seeds keeps the noise well under that
+
+test('variantRatio: the detune of a take, 1 exactly for take 0, and a bad take is a prefixed RangeError', () => {
+  assert.equal(variantRatio(0), 1);
+  assert.ok(Math.abs(variantRatio(1) - 2 ** (30 / 1200)) < 1e-12);
+  assert.ok(Math.abs(variantRatio(2) - 2 ** (-30 / 1200)) < 1e-12);
+  assert.throws(() => variantRatio(3, 'somewhere'), /^RangeError: somewhere: variant must be/);
+  assert.throws(() => cueWav({ cue: 'pop', variant: 3 }), /^RangeError: cueWav: variant must be/);
+  assert.throws(() => cueSamples('pop', { seed: 1, variant: -1 }), /^RangeError: cueSamples: variant must be/);
+  assert.throws(() => riserTo(1, { seed: 1, variant: 1.5 }), /^RangeError: riserTo: variant must be/);
+});
+
+test('the noise cues of version 1 are detuned: the same noises through a band moved +30 against -30 cents cross zero 2 % or more oftener', () => {
+  for (const cue of ['click', 'whoosh', 'swoosh', 'riser']) {
+    const body = { ...CUE_LAYERS[cue], transient: undefined, tail: undefined }; // the filtered noise alone: a click's burst is broadband
+    const mean = (variant) => Array.from({ length: 24 }, (_, seed) => crossings(layerCue(body, 440, mulberry32(seed), variantRatio(variant)).left)).reduce((a, b) => a + b, 0) / 24;
+    const ratio = mean(1) / mean(2);
+    assert.ok(ratio >= MIN_RATIO, `${cue}: ${ratio}`);
+  }
+});
+
+test('the new noise voices and the riser are detuned: over 24 seeds take 1 crosses zero 2 % or more oftener than take 2', () => {
+  for (const cue of ['paper', 'marker', 'erase', 'riser']) {
+    const mean = (variant) => Array.from({ length: 24 }, (_, seed) => crossings(cueSamples(cue, { seed, variant }))).reduce((a, b) => a + b, 0) / 24;
+    const ratio = mean(1) / mean(2);
+    assert.ok(ratio >= MIN_RATIO, `${cue}: ${ratio}`);
+  }
+});
+
+test('a film that plays every cue once keeps its bytes, the new voices and the riser included', async () => {
+  const out = path.join(dir, 'all-once.wav');
+  const cues = KNOWN_CUES.map((cue, i) => ({ t: 0.5 + i * 1.5, cue, gainDb: -(i % 4) * 3, pan: ((i % 5) - 2) / 2 }));
+  await renderCues(cues, { seconds: 0.5 + KNOWN_CUES.length * 1.5 + 2, seed: 12345, out });
+  assert.equal(KNOWN_CUES.length, 13);
+  assert.equal(createHash('sha256').update(readFileSync(out)).digest('hex'), BASE_ALL_ONCE_SHA);
 });
 
 test('a film that plays each cue once keeps its bytes', async () => {

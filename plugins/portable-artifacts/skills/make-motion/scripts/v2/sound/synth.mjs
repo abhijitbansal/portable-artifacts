@@ -2,7 +2,7 @@
 // voice the cues they already have; sub, paper, marker and the riser are new, pure sample generators seeded from the film
 // seed through engine/seeded.mjs. renderCues lays a cue list (cues.mjs planCues) into one stereo track of the film's
 // length. Nothing here reads a clock or Math.random: the same cues and seed give the same bytes.
-import { CUE_LAYERS, CUE_VARIANTS, SAMPLE_RATE, VARIANT_CENTS, cueWav, pinkNoise } from './cue-synth.mjs';
+import { CUE_LAYERS, CUE_VARIANTS, SAMPLE_RATE, cueWav, pinkNoise, variantRatio } from './cue-synth.mjs';
 import { mulberry32 } from '../../../engine/seeded.mjs';
 import { writeWav } from './wav.mjs';
 
@@ -19,7 +19,6 @@ const ONSET_SECONDS = 0.0005; // every voice rises from 0 over its first 0.5 ms,
 const EDGE_FADE_SECONDS = 0.004; // a voice cut by the film's start or end fades in or out over this, never a step
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
-const CENTS_PER_OCTAVE = 1200;
 
 // A sine gliding (exponentially) from `from` to `to` Hz over the whole sound, with a short attack and a decay per second.
 const SUB = Object.freeze({ seconds: 0.35, from: 90, to: 40, attack: 0.004, decay: 6 });
@@ -87,21 +86,13 @@ function cueSeed(seed, cue) {
 // The noise seed of take `variant` of a cue: the cue's own seed plus the take number (take 0 is cueSeed itself).
 const takeSeed = (seed, cue, variant) => (cueSeed(seed, cue) + variant) >>> 0;
 
-function checkVariant(variant, who) {
-  if (!Number.isInteger(variant) || variant < 0 || variant >= CUE_VARIANTS) {
-    throw new RangeError(`${who}: variant must be an integer from 0 to ${CUE_VARIANTS - 1}, got ${String(variant)}`);
-  }
-}
-
 // ---- the new voices ----
 
-// The pitch ratio of take `variant`: its detune in cents (take 0 is 1, exactly).
-const detune = (variant) => 2 ** (VARIANT_CENTS[variant] / CENTS_PER_OCTAVE);
-
-function sub(_noise, variant = 0) {
+// Each voice takes the take's pitch ratio (variantRatio: exactly 1 for take 0, so take 0 is the voice as it was) and
+// scales its pitch, or the band of its noise, by it.
+function sub(_noise, ratio = 1) {
   let phase = 0;
   const length = frames(SUB.seconds);
-  const ratio = detune(variant);
   return levelled(Float64Array.from({ length }, (_, i) => {
     const t = i * DT;
     phase += TWO_PI * sweep(SUB.from * ratio, SUB.to * ratio, i / length) * DT;
@@ -109,15 +100,15 @@ function sub(_noise, variant = 0) {
   }));
 }
 
-function paper(noise) {
+function paper(noise, ratio = 1) {
   const length = frames(PAPER.seconds);
-  const filtered = bandPass(() => noise() * 2 - 1, length, () => PAPER.hz, PAPER.q);
+  const filtered = bandPass(() => noise() * 2 - 1, length, () => PAPER.hz * ratio, PAPER.q);
   return levelled(filtered.map((x, i) => x * Math.min(1, (i * DT) / PAPER.attack) * Math.exp(-(i * DT) / PAPER.tau)));
 }
 
-function marker(noise) {
+function marker(noise, ratio = 1) {
   const length = frames(MARKER.seconds);
-  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(MARKER.from, MARKER.to, u), MARKER.q);
+  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(MARKER.from * ratio, MARKER.to * ratio, u), MARKER.q);
   return levelled(filtered.map((x, i) => {
     const t = i * DT;
     return x * Math.min(1, t / MARKER.attack, (MARKER.seconds - t) / MARKER.release);
@@ -145,13 +136,12 @@ export function riserTo(seconds, { seed, variant = 0 } = {}) {
     throw new RangeError(`riserTo: seconds must be a positive number, got ${String(seconds)}`);
   }
   checkSeed(seed, 'riserTo');
-  checkVariant(variant, 'riserTo');
+  const ratio = variantRatio(variant, 'riserTo');
   const length = Math.max(2, frames(seconds));
   const release = frames(RISER_RELEASE_SECONDS);
-  const ratio = detune(variant);
   const toneHi = RISER.toneHi * ratio;
   const pink = pinkNoise(mulberry32(takeSeed(seed, RISER_CUE, variant)));
-  const noisy = bandPass(pink, length, (u) => sweep(RISER.lo, RISER.hi, u ** RISER.curve), RISER.q);
+  const noisy = bandPass(pink, length, (u) => sweep(RISER.lo * ratio, RISER.hi * ratio, u ** RISER.curve), RISER.q);
   const noiseTop = peakOf(noisy) || 1;
   const tone = chirpToPeak(length, RISER.toneLo * ratio, toneHi, RISER.curve);
   return Float32Array.from({ length: length + release }, (_, i) => {
@@ -170,9 +160,9 @@ export function riserTo(seconds, { seed, variant = 0 } = {}) {
 // The index of a riser's peak in its samples (riserTo): just before its release.
 const riserPeakIndex = (xs) => xs.length - 1 - frames(RISER_RELEASE_SECONDS);
 
-function eraser(noise) {
+function eraser(noise, ratio = 1) {
   const length = frames(ERASER.seconds);
-  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(ERASER.from, ERASER.to, u), ERASER.q);
+  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(ERASER.from * ratio, ERASER.to * ratio, u), ERASER.q);
   return levelled(filtered.map((x, i) => {
     const t = i * DT;
     return x * Math.min(1, t / ERASER.attack, (ERASER.seconds - t) / ERASER.release);
@@ -200,7 +190,7 @@ function withOnset(xs) {
 
 function rawSamples(cue, seed, variant) {
   if (cue === RISER_CUE) return riserTo(RISER.seconds, { seed, variant });
-  if (Object.hasOwn(NEW_VOICES, cue)) return NEW_VOICES[cue](mulberry32(takeSeed(seed, cue, variant)), variant);
+  if (Object.hasOwn(NEW_VOICES, cue)) return NEW_VOICES[cue](mulberry32(takeSeed(seed, cue, variant)), variantRatio(variant));
   return versionOneMono(cue, variant);
 }
 
@@ -215,7 +205,7 @@ function rawSamples(cue, seed, variant) {
 export function cueSamples(cue, { seed, variant = 0 } = {}) {
   if (!KNOWN_CUES.includes(cue)) throw new RangeError(`unknown cue ${JSON.stringify(cue)}; known cues: ${KNOWN_CUES.join(', ')}`);
   checkSeed(seed, 'cueSamples');
-  checkVariant(variant, 'cueSamples');
+  variantRatio(variant, 'cueSamples');
   return withOnset(rawSamples(cue, seed, variant));
 }
 

@@ -15,6 +15,16 @@ const NOISE_SEED = 0x5eed;
 export const CUE_VARIANTS = 3;
 export const VARIANT_CENTS = Object.freeze([0, 30, -30]);
 const CENTS_PER_OCTAVE = 1200;
+/**
+ * The pitch ratio of take `variant` (2 ** (cents / 1200); exactly 1 for take 0). Every voice scales its pitch, or its
+ * band for a noise voice, by it. A take outside 0 to CUE_VARIANTS - 1 is a RangeError naming `who`.
+ */
+export function variantRatio(variant, who = 'variantRatio') {
+  if (!Number.isInteger(variant) || variant < 0 || variant >= CUE_VARIANTS) {
+    throw new RangeError(`${who}: variant must be an integer from 0 to ${CUE_VARIANTS - 1}, got ${String(variant)}`);
+  }
+  return 2 ** (VARIANT_CENTS[variant] / CENTS_PER_OCTAVE);
+}
 const A4_HZ = 440;
 const A4_MIDI = 69;
 const SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -189,13 +199,16 @@ export function widen(mono, { crossoverHz, delaySeconds }) {
 }
 const WIDTH = { crossoverHz: 120, delaySeconds: 0.0007 };
 
-/** One cue's layers summed: transient + body, then the reverb tail, then stereo width. */
-export function layerCue(def, f0, noise) {
+/**
+ * One cue's layers summed: transient + body, then the reverb tail, then stereo width. `ratio` (a take's variantRatio,
+ * default 1) is passed to each layer as its third argument: a noise layer scales its band by it, as a tonal one scales f0.
+ */
+export function layerCue(def, f0, noise, ratio = 1) {
   const length = frames(def.seconds);
   const mono = new Float64Array(length);
   for (const layer of [def.transient, def.body]) {
     if (!layer) continue;
-    layer(f0, noise).forEach((x, i) => { if (i < length) mono[i] += x; });
+    layer(f0, noise, ratio).forEach((x, i) => { if (i < length) mono[i] += x; });
   }
   const wet = def.tail ? reverbTail(mono, def.tail) : mono;
   return def.stereo ? widen(wet, WIDTH) : { left: wet, right: wet };
@@ -225,13 +238,13 @@ export const CUE_LAYERS = Object.freeze({
   click: {
     seconds: 0.04,
     transient: (f0, noise) => scaled(noiseClick(0.002, 0.0004, noise), 0.8),
-    body: (f0, noise) => sweptBandPass(() => noise() * 2 - 1, frames(0.04), () => 3200, 3).map((x, i) => x * Math.exp(-i * DT / 0.005)),
+    body: (f0, noise, ratio = 1) => sweptBandPass(() => noise() * 2 - 1, frames(0.04), () => 3200 * ratio, 3).map((x, i) => x * Math.exp(-i * DT / 0.005)),
   },
   // Air going past: pink noise through a band-pass that opens from 200 Hz to 10 kHz and back, under the same swell,
   // so it is brightest where it is loudest (0.4 s in).
   whoosh: {
     seconds: 0.8,
-    body: (f0, noise) => noiseSweep(0.8, noise, { lo: 200, hi: 10000, q: 1.4, shape: swell, envelope: swell }),
+    body: (f0, noise, ratio = 1) => noiseSweep(0.8, noise, { lo: 200 * ratio, hi: 10000 * ratio, q: 1.4, shape: swell, envelope: swell }),
     stereo: true,
   },
   // A soft bell: three harmonics that fade at different rates, in a little room.
@@ -256,14 +269,14 @@ export const CUE_LAYERS = Object.freeze({
   // Tension building: pink noise through a band-pass climbing 200 Hz -> 6 kHz, swelling from 0.05 to full level.
   riser: {
     seconds: 1.6,
-    body: (f0, noise) => noiseSweep(1.6, noise, { lo: 200, hi: 6000, q: 2, shape: (u) => u ** 1.5, envelope: (u) => 0.05 * 20 ** u }),
+    body: (f0, noise, ratio = 1) => noiseSweep(1.6, noise, { lo: 200 * ratio, hi: 6000 * ratio, q: 2, shape: (u) => u ** 1.5, envelope: (u) => 0.05 * 20 ** u }),
     stereo: true,
   },
   // A short whoosh for a transition: a 5 ms click, then pink noise opening 400 Hz -> 8 kHz and back.
   swoosh: {
     seconds: 0.3,
     transient: (f0, noise) => scaled(noiseClick(0.005, 0.0015, noise), 0.25),
-    body: (f0, noise) => noiseSweep(0.3, noise, { lo: 400, hi: 8000, q: 1.4, shape: swell, envelope: swell }),
+    body: (f0, noise, ratio = 1) => noiseSweep(0.3, noise, { lo: 400 * ratio, hi: 8000 * ratio, q: 1.4, shape: swell, envelope: swell }),
     stereo: true,
   },
   // A sub hit: an FM click, then a sine falling an octave (2 × f0 -> f0) in 80 ms; dry.
@@ -361,9 +374,8 @@ export function channelsWav({ left, right, pan = 0 }) {
  * it changes too.
  */
 export function cueWav({ cue, note, pan = 0, chars = 1, spacing = TYPING_SECONDS_PER_KEY, variant = 0 }) {
-  if (!Number.isInteger(variant) || variant < 0 || variant >= CUE_VARIANTS) throw new RangeError(`variant must be an integer from 0 to ${CUE_VARIANTS - 1}, got ${String(variant)}`);
+  const ratio = variantRatio(variant, 'cueWav');
   const def = layersOf(cue, chars, spacing);
-  const f0 = noteHz(note ?? DEFAULT_NOTE[cue] ?? 'A4') * 2 ** (VARIANT_CENTS[variant] / CENTS_PER_OCTAVE);
-  const { left, right } = layerCue(def, f0, mulberry32(NOISE_SEED + variant));
+  const { left, right } = layerCue(def, noteHz(note ?? DEFAULT_NOTE[cue] ?? 'A4') * ratio, mulberry32(NOISE_SEED + variant), ratio);
   return channelsWav({ left, right, pan });
 }
