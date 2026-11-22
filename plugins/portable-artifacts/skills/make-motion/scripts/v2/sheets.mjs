@@ -19,8 +19,11 @@ const STAMP_SHARE = 34; // the stamp is a tile's width / this many px tall, but 
 const STAMP_MIN = 11;
 const STAMP_PAD = 0.4; // of the stamp size
 
-// Runs in the page (Playwright sends its source), so it names only page globals and its own argument.
-async function composeInPage({ width, height, placements, colours, format }) {
+// Runs in the page (Playwright sends its source), so it names only page globals and its own argument. Exported for the
+// compare sheet (compare.mjs), which stamps its tiles the same way. A placement with a `note` is not a frame of the film: it is
+// a flat cell (colours.flat) with the stamp and the note wrapped under it (compare.mjs: a look that cannot draw the shot), which
+// needs no film page: the stamp face falls back to a monospace one.
+export async function composeInPage({ width, height, placements, colours, format }) {
   const sheet = document.createElement('canvas');
   sheet.width = width;
   sheet.height = height;
@@ -28,12 +31,16 @@ async function composeInPage({ width, height, placements, colours, format }) {
   ctx.fillStyle = colours.sheet;
   ctx.fillRect(0, 0, width, height);
   ctx.imageSmoothingQuality = 'high';
-  const stage = document.getElementById('stage');
   for (const p of placements) {
-    await window.__seek(p.frame); // a film with clips loads the frame's clip pictures first (engine/page/clip-frames.mjs)
-    ctx.drawImage(stage, p.x, p.y, p.w, p.h);
+    if (p.note === undefined) {
+      await window.__seek(p.frame); // a film with clips loads the frame's clip pictures first (engine/page/clip-frames.mjs)
+      ctx.drawImage(document.getElementById('stage'), p.x, p.y, p.w, p.h);
+    } else {
+      ctx.fillStyle = colours.flat;
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+    }
     const size = Math.max(colours.stampMin, Math.round(p.w / colours.stampShare));
-    const font = `${size}px "${window.__stampFamily}"`;
+    const font = `${size}px "${window.__stampFamily ?? 'monospace'}"`;
     await document.fonts.load(font);
     ctx.font = font;
     ctx.textBaseline = 'top';
@@ -42,13 +49,36 @@ async function composeInPage({ width, height, placements, colours, format }) {
     ctx.fillRect(p.x, p.y, ctx.measureText(p.label).width + 2 * pad, size + 2 * pad);
     ctx.fillStyle = colours.stampInk;
     ctx.fillText(p.label, p.x + pad, p.y + pad);
+    if (p.note === undefined) continue;
+    const fits = (text) => ctx.measureText(text).width <= p.w - 2 * pad;
+    const lines = [];
+    let line = '';
+    for (const word of p.note.split(' ')) {
+      if (line === '' ? fits(word) : fits(`${line} ${word}`)) {
+        line = line === '' ? word : `${line} ${word}`;
+        continue;
+      }
+      if (line !== '') lines.push(line);
+      line = word;
+      while (!fits(line) && line.length > 1) { // a word wider than the cell is broken
+        let k = line.length - 1;
+        while (k > 1 && !fits(line.slice(0, k))) k -= 1;
+        lines.push(line.slice(0, k));
+        line = line.slice(k);
+      }
+    }
+    lines.push(line);
+    lines.forEach((text, i) => {
+      const y = p.y + size + colours.noteTop * pad + i * Math.round(size * colours.noteLine);
+      if (y + size <= p.y + p.h) ctx.fillText(text, p.x + pad, y);
+    });
   }
   return sheet.toDataURL(format.mime, format.quality).split(',')[1];
 }
 
-const PNG = Object.freeze({ mime: 'image/png' });
+export const PNG = Object.freeze({ mime: 'image/png' });
 
-const COLOURS = Object.freeze({ sheet: SHEET_BACKGROUND, stampBackground: STAMP_BACKGROUND, stampInk: STAMP_INK, stampShare: STAMP_SHARE, stampMin: STAMP_MIN, pad: STAMP_PAD });
+export const COLOURS = Object.freeze({ sheet: SHEET_BACKGROUND, stampBackground: STAMP_BACKGROUND, stampInk: STAMP_INK, stampShare: STAMP_SHARE, stampMin: STAMP_MIN, pad: STAMP_PAD });
 
 async function writeOne(session, sheet, dir, canvas, signal) {
   signal?.throwIfAborted();
@@ -59,7 +89,7 @@ async function writeOne(session, sheet, dir, canvas, signal) {
 }
 
 // The file appears whole or not at all: written under a temp name beside it, then renamed.
-function writeAtomically(file, bytes) {
+export function writeAtomically(file, bytes) {
   const temp = path.join(path.dirname(file), `.${path.basename(file)}.tmp-${process.pid}`);
   try {
     writeFileSync(temp, bytes);

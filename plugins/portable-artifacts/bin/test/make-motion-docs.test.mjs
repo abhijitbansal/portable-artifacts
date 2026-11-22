@@ -379,7 +379,7 @@ test('schema.md lists the report keys the code builds, and the keys that appear 
   const sometimes = ticks(text.match(/These keys appear only when they apply: ([^\n]*)/)[1]);
   const blank = { validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
   assert.deepEqual(sorted(always), sorted(Object.keys(reportOf(blank))));
-  const full = reportOf({ ...blank, poster: {}, inspect: {}, slice: {}, board: [], workers: 2, subtitles: {}, cuts: { ran: ['x'], replaced: [] }, look: {}, kinds: [{}], error: { message: 'x', hint: '' } });
+  const full = reportOf({ ...blank, poster: {}, inspect: {}, slice: {}, board: [], compare: {}, workers: 2, subtitles: {}, cuts: { ran: ['x'], replaced: [] }, look: {}, kinds: [{}], error: { message: 'x', hint: '' } });
   assert.deepEqual(sorted(sometimes), sorted(Object.keys(full).filter((k) => !always.includes(k))));
   assert.deepEqual(Object.keys(errorReport({ message: 'x', hint: '' })).filter((k) => !always.includes(k)), ['error']);
 });
@@ -449,7 +449,7 @@ test('migrating.md names the old model folder, the frame cache and the voice pac
 
 // Every flag the five scripts and the doctor define, read from their own source.
 function knownFlags() {
-  const files = ['scripts/make.mjs', 'scripts/v2/cli.mjs', 'scripts/doctor.mjs', 'scripts/cutout.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/locate.mjs',
+  const files = ['scripts/make.mjs', 'scripts/v2/cli.mjs', 'scripts/doctor.mjs', 'scripts/cutout.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/locate.mjs', 'scripts/measure.mjs',
     'scripts/lib/cutout-cli.mjs', 'scripts/lib/beats.mjs', 'scripts/lib/help.mjs', 'scripts/v2/storyboard.mjs', 'shared/doctor.mjs'];
   const text = files.filter((f) => fs.existsSync(path.join(MOTION, f))).map((f) => read(f)).join('\n');
   return new Set([...text.matchAll(/--[a-z][a-z-]*/g)].map((m) => m[0]));

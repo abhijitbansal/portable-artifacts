@@ -128,7 +128,7 @@ function sourcesUnder(folder) {
 
 test('a literal -i appears in an ffmpeg argument list only at the sites reviewed for a whitelist', () => {
   const found = {};
-  for (const rel of [...sourcesUnder('scripts/v2'), ...sourcesUnder('scripts/lib'), 'scripts/make.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/cutout.mjs']) {
+  for (const rel of [...sourcesUnder('scripts/v2'), ...sourcesUnder('scripts/lib'), 'scripts/make.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/cutout.mjs', 'scripts/measure.mjs']) { // measure.mjs spawns ffmpeg and ffprobe: its inputs come from clipInput, and a literal '-i' there fails this pin (scripts/lib/measure.mjs is pure and is scanned with scripts/lib)
     const count = readFileSync(path.join(SKILL_DIR, rel), 'utf8').split('\n').filter((line) => /'-i'/.test(line) && !/^\s*\/\//.test(line)).length;
     if (count > 0) found[rel] = count;
   }

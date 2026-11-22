@@ -151,7 +151,7 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 
 ## The report
 
-`make.mjs --json` prints one object on stdout. Every path gives the same keys. In the report of a single-film run, every file path (`output`, `sheets`, `board`, `poster.file`, `inspect.png` and `.json`, `subtitles.file`) is absolute, resolved against the folder `make.mjs` ran in, so a reviewer that can only Read opens a sheet from any folder; the text form prints the paths as you gave them, and the rows of a `--batch --json` report keep the paths as given.
+`make.mjs --json` prints one object on stdout. Every path gives the same keys. In the report of a single-film run, every file path (`output`, `sheets`, `board`, `poster.file`, `inspect.png` and `.json`, `subtitles.file`, `compare.file`) is absolute, resolved against the folder `make.mjs` ran in, so a reviewer that can only Read opens a sheet from any folder; the text form prints the paths as you gave them, and the rows of a `--batch --json` report keep the paths as given.
 
 | Key | Meaning |
 |---|---|
@@ -169,13 +169,15 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 | `findings` | `[{ kind, shot, path, message, t?, rule?, suggest? }]` (see below): `t` and `rule` are on a review finding, `suggest` only where the rule has a fix value |
 | `provenance` | `{ comment, artist }` as stamped into the MP4, or `null` |
 
-These keys appear only when they apply: `poster`, `inspect`, `slice`, `board`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
+These keys appear only when they apply: `poster`, `inspect`, `slice`, `board`, `compare`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
 
 `subtitles` is `{ file, format, timed, level }`, on a `--subtitles` run only. `level` is `sentence`, or `word` with `--subtitle-words` (needs `--subtitles`): one cue per word, at the film second it is heard (a word that leads or trails its cut keeps its heard time), sorted across the film, each cue held inside the film; words heard at the same moment, within a millisecond of each other (a merged run such as "$5 million"), are one cue, and each cue ends where the next starts, so no two cues overlap. An estimated VTT says so in a `NOTE`; an estimated SRT is refused.
 
 `slice` is `{ from, to, frames, shots, silent, skipped }`, on a `--shot` or `--range` run only: the frames it covers, the shots it touches, whether the film's sound is left out, and the review rules it does not run (`references/tools.md`, "One shot or a range").
 
 `board` is the paths of the board strips, in order (`<name>.sheets/board/board-1.jpg` on): six shots to a strip, one tile per shot, on a `--sheets-only --estimated` run only. That run makes no voice, so `timed` is `"estimated"` and `voice` is `null`.
+
+`compare` is `{ file, shot, frame, frameLook, looks }`, on a `--compare-looks` run only: the sheet, the anchor shot, its late frame and the look that frame is in (the film's own look when it is on the sheet, else the first look drawn whole; both `null` when every look drew the anchor alone), and one `{ look, status, note, frame }` per look on the sheet in listed order (`status` is `drawn`, `parked` or `refused`; `note` says why for a parked look, a refused one, or a look that drew the anchor alone; `frame` is `null` for a refused look and for one that drew the anchor alone). The run writes no sheets and no video, so `output` is `null` and `sheets` is `[]` (`references/tools.md`, "Comparing looks").
 
 A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `path` and says what to change; it makes `ok` false. A `creative` finding is a call for the author and never fails the run. A parked kind is not a finding: it renders, and the report's `kinds` lists it. Every rule a finding can name, with what it asks and the value that fixes it, is in `references/rules.md`.
 

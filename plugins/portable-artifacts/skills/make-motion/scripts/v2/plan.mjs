@@ -56,11 +56,17 @@ function shotMoments(film, timeline, index) {
   }).sort((a, b) => a.frame - b.frame);
 }
 
+/** The late frame of shot `index` (85% of its length): the phone tile's frame, the board tile's and the compare sheet's. */
+export function lateFrameOf(timeline, index) {
+  const shot = timeline.shots[index];
+  return frameIn(timeline, shot, shot.start + shot.duration * LATE);
+}
+
 function shotSheet(film, timeline, index) {
   const shot = timeline.shots[index];
   const moments = shotMoments(film, timeline, index);
   const tiles = moments.map(({ role, frame }) => tile(timeline, role, frame, shot.id));
-  const late = frameIn(timeline, shot, shot.start + shot.duration * LATE);
+  const late = lateFrameOf(timeline, index);
   return { name: `${shot.id}.png`, kind: 'shot', shot: shot.id, tiles: [...tiles, tile(timeline, 'phone', late, shot.id, { width: PHONE_TILE_WIDTH })] };
 }
 
@@ -156,8 +162,8 @@ export const BOARD_STRIP_WIDTH = 1920;
  * @returns {{ name: string, tiles: { frame: number, t: number, label: string }[] }[]}
  */
 export function planBoard(film, timeline) {
-  const tiles = timeline.shots.map((shot) => {
-    const { frame, t, label } = tile(timeline, 'phone', frameIn(timeline, shot, shot.start + shot.duration * LATE), shot.id);
+  const tiles = timeline.shots.map((shot, index) => {
+    const { frame, t, label } = tile(timeline, 'phone', lateFrameOf(timeline, index), shot.id);
     return { frame, t, label };
   });
   return Array.from({ length: Math.ceil(tiles.length / BOARD_PER_STRIP) }, (_, k) => ({

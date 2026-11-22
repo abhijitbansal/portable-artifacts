@@ -32,6 +32,7 @@ import { posterFindings, posterPath, writePoster } from './poster.mjs';
 import { filmFrame, filmSeconds } from './film-time.mjs';
 import { inspectDir, writeInspect } from './inspect.mjs';
 import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf, slicePath } from './slice.mjs';
+import { comparePath, memoiseMusicInput, writeComparison } from './compare.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { logoThrowFinding, pictureLoadFinding } from './picture-finding.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
@@ -424,15 +425,21 @@ export async function makeSound(loaded, timeline, state, io, work, clips = [], {
 
 // ---- the poster ----------------------------------------------------------------------------------------------------------
 
+// `timeline` with its cuts moved onto the beats of the film's music (music.snap): the music plan alone, no cue plan and no WAV.
+// A SpecError when the music is the film's to fix (no steady beat, an anchor the move leaves outside its shot).
+// `steps`: the sound stage's modules when the caller has them already (--compare-looks shares one set across the looks).
+async function snappedTimeline({ film, specDir }, timeline, signal, steps) {
+  return (await fileMusicPlan(steps ?? await soundSteps(), film, timeline, specDir, signal)).timeline;
+}
+
 // The timeline a still (--poster, --inspect) reads film time on: the one the render draws, so with music.snap the cuts are
 // moved onto the beats first (as makeSound does; fileMusicPlan), and a frame of the still is the frame of the video. Only the
 // snap is made: no cue plan, no WAV. A music file with no beats file is read for its beats by ffmpeg. -> the timeline, or
 // null when the film is at fault (its errors become findings: exit 1).
 async function drawnTimeline(loaded, timeline, clips, state, io) {
-  const { film, specDir } = loaded;
-  if (film.music?.snap !== true || !wantsSound(film, clips)) return timeline;
+  if (loaded.film.music?.snap !== true || !wantsSound(loaded.film, clips)) return timeline;
   try {
-    return await stage(state, io.log, 'sound', async () => (await fileMusicPlan(await soundSteps(), film, timeline, specDir, io.signal)).timeline);
+    return await stage(state, io.log, 'sound', () => snappedTimeline(loaded, timeline, io.signal));
   } catch (err) {
     const findings = io.signal?.aborted ? null : soundFindings(err);
     if (findings === null) throw err;
@@ -469,6 +476,39 @@ async function makeInspect(options, loaded, state, io) {
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
     await session.close();
+  }
+}
+
+// ---- the comparison ------------------------------------------------------------------------------------------------------
+
+// What --compare-looks draws for one look's film (compare.mjs `prepare`): its own estimated timeline (look data can lengthen a shot),
+// with the cuts moved onto the beats for a music.snap film, as --poster draws it, and its clips decoded. A film's fault is a SpecError.
+// The music's beats are detected once for the run, not once per look (memoiseMusicInput).
+const comparePrepare = (options, io) => {
+  let steps = null;
+  return async (loaded) => {
+    const { film, specDir } = loaded;
+    const [w, h] = canvasSize(film);
+    const clips = clipUses(film).length === 0 ? [] : await prepareClips({ film, specDir, timeline: loaded.timeline, cacheDir: clipCacheDir(options), canvas: { w, h }, signal: io.signal });
+    const snapped = film.music?.snap === true && wantsSound(film, clips);
+    if (snapped) steps ??= memoiseMusicInput(await soundSteps());
+    return { ...loaded, clips, timeline: snapped ? await snappedTimeline(loaded, loaded.timeline, io.signal, steps) : loaded.timeline };
+  };
+};
+
+// --compare-looks: one PNG of the anchor shot in every look that can draw it (compare.mjs), beside the MP4 path, on estimated timing,
+// no review, no sound, no video. A film no look can draw is a finding at the shot (exit 1) and writes no file.
+async function makeCompare(options, state, io) {
+  const file = comparePath(outputPaths(options).out);
+  try {
+    const { findings, ...compare } = await stage(state, io.log, 'compare', () => writeComparison({
+      specPath: options.specPath, values: options.values ?? {}, shot: options.compareLooks, file, browser: io.browser, signal: io.signal, prepare: comparePrepare(options, io),
+    }));
+    state.compare = compare;
+    state.findings = [...state.findings, ...findings];
+  } catch (err) {
+    if (!(err instanceof SpecError) || io.signal?.aborted) throw err;
+    state.findings = err.errors.map(validationFinding);
   }
 }
 
@@ -557,6 +597,13 @@ async function execute(options, state, io) {
   // a film with no voice and no music.snap is drawn on exactly that timeline: a time past its end is refused now, before a clip is decoded
   if (typeof reference === 'string' && film.voice === undefined && film.music?.snap !== true) filmFrame(reference, film, loaded.timeline, typeof options.inspect === 'string' ? '--inspect' : '--poster');
   checkSlice(options, film, loaded.timeline); // --shot and --range likewise: a shot the film lacks, a reference that names nothing
+  if (typeof options.compareLooks === 'string') {
+    // --compare-looks: the anchor must be a shot of the film, judged now; no voice is made, so every look is drawn on estimated timing
+    checkSlice({ shot: options.compareLooks }, film, loaded.timeline);
+    io.log('make: --compare-looks: no voice was made; every cell uses estimated timing');
+    if (await timelineFor(film, null, state, io.log)) await makeCompare(options, state, io);
+    return;
+  }
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so. So does --estimated
   // (with --sheets-only): its sheets and board are drawn on the estimate, whose times the render later measures.
   const voiced = film.voice !== undefined && options.outline !== true && options.estimated !== true;
