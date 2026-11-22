@@ -581,16 +581,16 @@ function narrationFieldErrors(shots, recording) {
 /**
  * The film's estimated timeline when some shot has a narration shift: { timeline }, or { errors } when the shift leaves a
  * shot under 1 s or under its cut (a PlacementError's). null for a film with no shift, one whose narration field is refused
- * (narrationFieldErrors: that error is the only one), and for one not well-formed enough to
- * be timed: any other failure of the timeline is another check's own error (a bad say, hold, mode or cut is reported where it
- * is), and a film with none of them builds, as loadFilm does next. The film is then drawn on this timeline, so its anchors are
+ * (`field`, its narrationFieldErrors: that error is the only one), and for one not well-formed enough to be timed: any
+ * other failure of the timeline is another check's own error (a bad say, hold, mode or cut is reported where it is), and a
+ * film with none of them builds, as loadFilm does next. The film is then drawn on this timeline, so its anchors are
  * judged on it (checkShot).
  */
-function shiftedEstimate(spec, ctx) {
+function shiftedEstimate(spec, ctx, field) {
   if (ctx.mode === null || ctx.fps === null || !saysReady(spec)) return null;
   if (!spec.shots.some((shot) => shiftOf(shot, 'lead') > 0 || shiftOf(shot, 'trail') > 0)) return null;
   // a refused field is the only error: its film is not drawn, so its anchors are not judged on the timeline it would make
-  if (narrationFieldErrors(spec.shots.slice(0, SHOTS_MAX), isRecordingVoice(spec.voice)).length > 0) return null;
+  if (field.length > 0) return null;
   // only the valid seconds reach the timeline: a refused value is reported by the schema, not twice
   const shots = spec.shots.map((shot) => (isPlainObject(shot.narration)
     ? { ...shot, narration: { lead: shiftOf(shot, 'lead'), trail: shiftOf(shot, 'trail') } }
@@ -605,13 +605,14 @@ function shiftedEstimate(spec, ctx) {
 /**
  * The errors of the `narration` fields of `spec`'s shots, each { path, message }: a lead on the first shot, a trail on
  * the last, narration on a shot with no say or in a film narrated by a recording, a lead and a trail on the same cut;
- * and, when none of those fired, a shift that leaves a shot too short on the estimated timeline.
+ * and, when none of those fired, a shift that leaves a shot too short on the estimated timeline. `ctx.narrationField` and
+ * `ctx.shifted` are what validateFilm worked out once; without them they are worked out here.
  */
 export function narrationErrors(spec, ctx) {
   if (!Array.isArray(spec.shots)) return [];
-  const field = narrationFieldErrors(spec.shots.slice(0, SHOTS_MAX), isRecordingVoice(spec.voice));
+  const field = ctx.narrationField ?? narrationFieldErrors(spec.shots.slice(0, SHOTS_MAX), isRecordingVoice(spec.voice));
   if (field.length > 0) return field;
-  const shifted = ctx.shifted === undefined ? shiftedEstimate(spec, ctx) : ctx.shifted;
+  const shifted = ctx.shifted === undefined ? shiftedEstimate(spec, ctx, field) : ctx.shifted;
   return shifted?.errors ?? [];
 }
 
@@ -674,7 +675,8 @@ function collectErrors(spec, specDir, regs) {
   if (!isPlainObject(spec)) return [{ path: '', message: NOT_OBJECT_MESSAGE }];
   if (Array.isArray(spec.scenes) || spec.version === 1) return [{ path: '', message: V1_MESSAGE }];
   const { ctx: base, errors: settings } = resolveContext(spec, specDir, regs);
-  const ctx = { ...base, shifted: shiftedEstimate(spec, base) };
+  const narrationField = Array.isArray(spec.shots) ? narrationFieldErrors(spec.shots.slice(0, SHOTS_MAX), isRecordingVoice(spec.voice)) : [];
+  const ctx = { ...base, narrationField, shifted: shiftedEstimate(spec, base, narrationField) };
   return [
     ...checkVersion(spec),
     ...schemaErrors(checkRootSchema, spec, ''),

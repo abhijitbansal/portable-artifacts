@@ -18,6 +18,8 @@ import { registries } from '../../engine/registry.mjs';
 import { shotTime, lookOfShot } from '../../engine/graph/film.mjs';
 import { auditFrame, textStatesIn, textLandings, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
 import { regionMarkIds } from '../../engine/review/regions.mjs';
+import { aimedAtOf } from '../../engine/review/dropped.mjs';
+import { showsWordsOf } from '../../engine/captions/index.mjs';
 import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
@@ -171,34 +173,54 @@ function modalWordScales(trees, lastTree) {
  * shot id -> what its sampled frames say about its texts (see engine/review/frame.mjs): the scale each text
  * (restScales) and each of its words (restWords) holds on most of its frames is the scale it rests at; and, for a shot
  * whose resting (last) frame carries caption nodes, `captionZone`, the union of the zones those nodes reserved (their
- * props.caption.zone: the composition rules measure the frame less that room). A caption drawn only earlier in the shot
- * (a neighbour's words heard over the cut) is not on the resting frame, so its room is not taken out.
+ * props.caption.zone: the composition rules measure the frame less that room). A caption is on the resting frame only
+ * while it shows (its opacity, multiplied down the tree, above 0): one drawn earlier in the shot for a neighbour's words
+ * heard over the cut has faded by then, so its room is not taken out. A shot for which `holdsRoom(shotId)` is true
+ * captions its own words throughout (captionsHoldRoom), so the room its captions reserve counts even after the last has faded.
  * @param {{ fps: number, shots: { id: string, start: number, end: number }[] }} timeline
  * @param {{ frame: number, tree: object[] }[]} snapshots
+ * @param {(shotId: string) => boolean} [holdsRoom]
  */
-export function restingByShot(timeline, snapshots) {
+export function restingByShot(timeline, snapshots, holdsRoom = () => false) {
   const byFrame = new Map(snapshots.map((snap) => [snap.frame, snap.tree]));
   return new Map(timeline.shots.map((shot) => {
     const first = Math.round(shot.start * timeline.fps), last = Math.round(shot.end * timeline.fps) - 1;
     const tree = byFrame.get(last);
     const trees = snapshots.filter((snap) => snap.frame >= first && snap.frame <= last).map((snap) => snap.tree);
-    const captionZone = tree ? captionZoneIn([tree], shot.id) : null;
+    const captionZone = tree ? captionZoneIn([tree], shot.id, holdsRoom(shot.id)) : null;
     return [shot.id, tree ? { restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree), ...(captionZone ? { captionZone } : {}) } : {}];
   }));
 }
 
 // The union ([x, y, w, h]) of the zones the caption nodes of shot `shotId` carry (props.caption.zone) in `trees`, or null.
-function captionZoneIn(trees, shotId) {
+// A caption that has been said stays in the graph, hidden by the opacity of its group: unless `hidden` counts it, only a
+// node whose opacity, multiplied down from the root, is above 0 reserves room.
+function captionZoneIn(trees, shotId, hidden = false) {
   const zones = [];
-  const walk = (n) => {
+  const walk = (n, inherited) => {
+    const shown = inherited * (n.opacity ?? 1);
+    if (shown <= 0 && !hidden) return;
     if (n.props?.caption && Array.isArray(n.props.caption.zone) && String(n.id).startsWith(`${shotId}.captions`)) zones.push(n.props.caption.zone);
-    (n.children ?? []).forEach(walk);
+    (n.children ?? []).forEach((child) => walk(child, shown));
   };
-  trees.forEach((tree) => (Array.isArray(tree) ? tree : []).forEach(walk));
+  trees.forEach((tree) => (Array.isArray(tree) ? tree : []).forEach((n) => walk(n, 1)));
   if (zones.length === 0) return null;
   const left = Math.min(...zones.map(([x]) => x)), top = Math.min(...zones.map(([, y]) => y));
   const right = Math.max(...zones.map(([x, , w]) => x + w)), bottom = Math.max(...zones.map(([, y, , h]) => y + h));
   return [left, top, right - left, bottom - top];
+}
+
+/**
+ * shotId -> does the shot caption its own words (a kind that does not show them: a diagram, a chart), so its captions
+ * are on screen as it speaks and their room stays reserved? A kind that shows its words (statement, number) captions only
+ * a neighbour's, over the cut (captions/index.mjs wordsToCaption).
+ */
+export function captionsHoldRoom(film) {
+  const byId = new Map((film.shots ?? []).map((shot) => [shot.id, shot]));
+  return (shotId) => {
+    const shot = byId.get(shotId);
+    return shot !== undefined && registries.kinds.has(shot.show) && !showsWordsOf(registries.kinds.get(shot.show), shot);
+  };
 }
 
 /**
@@ -248,6 +270,7 @@ export function frameContext(film, timeline, restingOf, { frame, whole }, backgr
     peers: isPeerShot(film.shots[shot.index]),
     background: backgrounds[shot.index],
     regionMarks: regionMarksOf(film)[shot.index] ?? [],
+    aimed: aimedAtOf(film, shot.index),
   };
 }
 
@@ -431,7 +454,7 @@ export function capComposition(findings, cap = COMPOSITION_CAP) {
 export async function reviewFilm({ session, signal }) {
   const { film, timeline } = session;
   const snapshots = await snapshotsOf(session, auditPlan(film, timeline), signal);
-  const restingOf = restingByShot(timeline, snapshots);
+  const restingOf = restingByShot(timeline, snapshots, captionsHoldRoom(film));
   const backgrounds = session.info?.backgrounds ?? [];
   const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
   const deduped = capComposition(dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots));

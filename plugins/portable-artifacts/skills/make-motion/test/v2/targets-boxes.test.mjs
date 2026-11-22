@@ -93,6 +93,16 @@ test('an end card that left its ask or mark out still builds an on event aimed a
   }
 });
 
+test('a highlight aimed at a left-out ask or mark is drawn behind the closing line, as one aimed at the title is', () => {
+  const orderOf = (target) => expandIn(filmOf([{ ...END, on: [{ at: 'word:1', do: 'highlight', target }] }], 'cosmos', '16:9')).nodes.map((n) => n.id);
+  const control = orderOf('title');
+  assert.ok(control.indexOf('e.on0') < control.indexOf('e.title'), 'the control draws it behind the title');
+  for (const target of ['ask', 'mark']) {
+    const order = orderOf(target);
+    assert.ok(order.indexOf('e.on0') < order.indexOf('e.title'), `${target}: behind the title`);
+  }
+});
+
 test('a quote card that left its byline out still has one to open a cut from: the text', () => {
   for (const look of ['cosmos', 'ledger', 'keynote', 'marker']) {
     const cut = (at) => [QUOTE, { ...NEXT, cut: { type: 'iris', at } }];

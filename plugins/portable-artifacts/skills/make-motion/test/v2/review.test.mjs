@@ -8,7 +8,7 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { stillStretches } from '../../engine/review/pacing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
-import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot, frameContext, reviewFilm, COMPOSITION_CAP } from '../../scripts/v2/review.mjs';
+import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot, captionsHoldRoom, frameContext, reviewFilm, COMPOSITION_CAP } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
@@ -814,16 +814,53 @@ test('restingByShot reads a shot\'s caption zone from the caption nodes its rest
   assert.equal('captionZone' in resting.get('b'), false);
 });
 
-test('restingByShot measures the caption zone on the resting frame only: a caption a neighbour\'s words draw early in the shot is not on it', () => {
+// A caption stays in the graph, hidden by the opacity of its group, once its words have been said: only a caption that
+// shows on the resting frame reserves room there. Engine-built trees: nothing here is hand-made.
+const restingZoneOf = (trail) => {
+  const shots = [
+    { id: 'a', show: 'statement', say: 'One two three four five six.', ...(trail ? { narration: { trail } } : {}) },
+    { id: 'b', show: 'statement', say: 'Seven eight nine ten eleven twelve.' },
+    { id: 'c', show: 'statement', say: 'Thirteen fourteen fifteen sixteen.' },
+  ];
+  const film = filmOf(shots, 'desk', '16:9', { captions: true });
+  const timeline = buildTimeline(film, { fps: FPS });
+  const canvas = canvasOf('16:9');
+  const built = buildFilm({ film, timeline, measure, assets: IMAGES, canvas, viralInsets: viralOf(canvas) });
+  const entry = timeline.shots[1];
+  const last = Math.round(entry.end * FPS) - 1;
+  const tree = built.sampleShot(1, last / FPS - entry.start);
+  return restingByShot(timeline, [{ frame: last, tree }]).get('b').captionZone;
+};
+
+test('restingByShot: a caption a neighbour\'s trail draws early in a shot is hidden on its resting frame, so it takes no zone (the same film without the trail gives none)', () => {
+  assert.equal(restingZoneOf(0), undefined, 'control: no trail, no caption zone');
+  assert.equal(restingZoneOf(1), undefined, 'a trail on the shot before: its early caption is at opacity 0 on the resting frame');
+});
+
+// A shot whose captions are its own words (a diagram, a chart, a clipping: not a kind that shows its words) is captioned
+// throughout, and the captions of its last words fade before its last frame: the strip they reserve still counts there.
+test('restingByShot keeps the room of a shot that captions its own words even when the last caption has faded; captionsHoldRoom says which', () => {
+  const shots = [{ id: 'a', show: 'statement', say: 'One two three four five six.' }, { ...registries.kinds.get('diagram').example, id: 'd', say: 'Seven eight nine ten eleven twelve.' }];
+  const film = filmOf(shots, 'desk', '16:9', { captions: true });
+  const timeline = buildTimeline(film, { fps: FPS });
+  const canvas = canvasOf('16:9');
+  const built = buildFilm({ film, timeline, measure, assets: IMAGES, canvas, viralInsets: viralOf(canvas) });
+  const entry = timeline.shots[1];
+  const last = Math.round(entry.end * FPS) - 1;
+  const snapshots = [{ frame: last, tree: built.sampleShot(1, last / FPS - entry.start) }];
+  assert.deepEqual([captionsHoldRoom(film)('a'), captionsHoldRoom(film)('d')], [false, true]);
+  assert.equal(restingByShot(timeline, snapshots).get('d').captionZone, undefined, 'by default a hidden caption is no room');
+  assert.equal(restingByShot(timeline, snapshots, captionsHoldRoom(film)).get('d').captionZone?.length, 4, 'a diagram shot keeps its captions room');
+});
+
+test('restingByShot counts a caption by its inherited opacity: hidden by a group above it is not a zone, shown is', () => {
   const timeline = { fps: 30, frameCount: 60, duration: 2, shots: [{ id: 'a', index: 0, start: 0, end: 1, duration: 1 }, { id: 'b', index: 1, start: 1, end: 2, duration: 1 }] };
   const caption = (id, zone) => ({ ...bar(id, [200, 900, 100, 40]), props: { fill: '#111111', d: 'M0 0H1V1H0Z', caption: { zone, end: 1, hero: null, emphasis: [], marks: [] } } });
-  const snapshots = [
-    { frame: 35, tree: [bar('body', [96, 96, 1000, 400]), caption('b.captions.0', [200, 800, 1100, 170])] },
-    { frame: 59, tree: [bar('body', [96, 96, 1000, 400])] },
-  ];
-  assert.equal('captionZone' in restingByShot(timeline, snapshots).get('b'), false, 'no caption on the resting frame, so no zone');
-  const resting = restingByShot(timeline, [...snapshots.slice(0, 1), { frame: 59, tree: [bar('body', [96, 96, 1000, 400]), caption('b.captions.1', [300, 840, 900, 130])] }]);
-  assert.deepEqual(resting.get('b').captionZone, [300, 840, 900, 130], 'the zone the resting frame carries, not the union with the early one');
+  const group = (id, opacity, children) => ({ type: 'group', id, opacity, children, props: {} });
+  const zoneOf = (opacity) => restingByShot(timeline, [{ frame: 59, tree: [group('b.captions', opacity, [caption('b.captions.0.text', [300, 840, 900, 130])])] }]).get('b').captionZone;
+  assert.equal(zoneOf(0), undefined);
+  assert.deepEqual(zoneOf(1), [300, 840, 900, 130]);
+  assert.deepEqual(zoneOf(0.4), [300, 840, 900, 130]);
 });
 
 test('frameContext hands the shot\'s caption zone on to the frame review', () => {

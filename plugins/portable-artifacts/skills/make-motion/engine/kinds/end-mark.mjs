@@ -113,7 +113,7 @@ export function expandWordmark(shot, ctx, data, times, title) {
   // a text left out (props.dropped) keeps the title's box: the kind lists `ask` and `mark` as targets without knowing the
   // measure, so a cut or an on event aimed at one must still find a box (the review says what was left out)
   if (shot.ask !== undefined) boxes.ask = boxes.ask ?? boxes.title;
-  boxes.mark = boxes.mark ?? boxes.title;
+  boxes.mark = boxes.mark ?? boxes.title; // this layout runs only for a shot with a mark (end.mjs)
   const sun = sunNodes(`${shot.id}.sun`, look, { ...sunAnchor(look, ctx), strength: wm.sun.strength, at: markAt });
   return { nodes: [...sun, ...nodes], boxes, hero };
 }

@@ -53,6 +53,7 @@ import { CAP_HEIGHT, WORD_DESCENT, unionBox as union } from '../kinds/shared.mjs
 import { contrastFindings } from './contrast.mjs';
 import { markBoxes, showsItself } from './marks.mjs';
 import { regionFindings } from './regions.mjs';
+import { droppedMessage } from './dropped.mjs';
 import { registries } from '../registry.mjs';
 import { GROUND_ID } from '../looks/grounds.mjs';
 import { DEFAULT_FILL, isFillShare } from '../looks/fill.mjs';
@@ -370,7 +371,7 @@ function hierarchyRules(all, ctx) {
   }
   // a kind that left out a secondary line to keep its secondary text at the look's floor says so (kinds/secondary.mjs)
   for (const { node } of all.filter((t) => Array.isArray(t.node.props?.dropped) && t.node.props.dropped.length > 0)) {
-    out.push(finding(ctx, CREATIVE, 'dropped', node.id, `"${node.id}" left out its ${node.props.dropped.join(' and ')}: the frame cannot hold its hero at ${MIN_HERO_RATIO} times the look's minimum secondary size; shorten the copy to keep it`));
+    out.push(finding(ctx, CREATIVE, 'dropped', node.id, droppedMessage(node, MIN_HERO_RATIO, ctx.aimed)));
   }
   return out;
 }
@@ -771,6 +772,7 @@ export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
  *   only then are the composition findings (compositionFindings) added. peers: the shot's kind lays out equals (kind.peers),
  *   so scale-contrast is not judged. captionZone: [x, y, w, h], the zone the shot's caption layout reserves (the caption
  *   nodes' props.caption.zone; scripts/v2/review.mjs restingByShot), which the composition measure leaves out of the safe rectangle.
+ *   aimed: the spec paths aimed at the shot's targets (dropped.mjs aimedAtOf), for the "dropped" finding.
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {
