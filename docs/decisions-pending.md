@@ -457,3 +457,13 @@ entrance distance away from the ink; at rest the two agree, and landing already 
 - **A (default, shipped):** keep word-level boxes; only frames at rest are judged for placement.
 - **B:** offset each box by its line's and the mean of its letters' x and y while arriving, so `--inspect` mid-entrance
   shows where the ink is.
+
+## Gallery: the rebuilt whats-new film is 70.8 MB (branch feat/motion-steals, 2026-11-22)
+
+The rebuilt `docs/showcase/portable-artifacts/gallery/showreel/whats-new/video.mp4` is 70,769,743 bytes (5.0 Mbps over
+113 s), against 24,592,273 on main; the other rebuilt films grew 0 to 16%. Every frame was captured fresh (3391 of 3391),
+so no still frames compress away. GitHub warns above 50 MB and refuses above 100 MB. It is not on the register page.
+
+- **A (default, shipped):** keep it as built.
+- **B:** re-encode the gallery copy at a higher CRF (a smaller file, slightly softer picture), recorded in the PR.
+- **C:** drop the whats-new video from the gallery, keeping its spec, since no page links it.
