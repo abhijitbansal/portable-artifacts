@@ -49,34 +49,20 @@
     },
     {
       "type": "steps",
-      "title": "One-line numbers take three tasks",
-      "label": "Numbers tasks",
+      "title": "Eleven tasks ship the three workstreams",
+      "label": "Tasks",
       "items": [
-        { "title": "Bind each number to its unit", "text": "A build step wraps the token in a no-wrap span; a unit test feeds it sample text." },
-        { "title": "Size KPI values to their tile", "text": "CSS keeps a value on one line; check.mjs fails on a spilled tile." },
-        { "title": "Fail the build on a split", "text": "check.mjs measures each token in a browser at three widths." }
-      ]
-    },
-    {
-      "type": "steps",
-      "title": "The cheap model needs four tasks",
-      "label": "Model tasks",
-      "items": [
-        { "title": "Write the agent files", "text": "One pinned file each for Copilot and Codex; a test reads back the model key." },
-        { "title": "Teach the installer", "text": "It writes the file to a user or project folder and never overwrites without --force." },
-        { "title": "Add a doctor check", "text": "doctor.mjs reports a missing file and fixes it on request." },
-        { "title": "Add the hand-off line", "text": "SKILL.md names the agent; a test requires the same text in all five skills." }
-      ]
-    },
-    {
-      "type": "steps",
-      "title": "Plan mode needs four tasks",
-      "label": "Plan tasks",
-      "items": [
-        { "title": "Add the answer sections", "text": "Decision, approval, question, review and verdict; validate rejects a bad id." },
-        { "title": "Save answers in the page", "text": "Browser tests answer every item and reload the page." },
-        { "title": "Check the file", "text": "answers.mjs refuses a stale hash or an unknown id; its tests cover each case." },
-        { "title": "Ship this example", "text": "It must validate with no warnings and build in both themes." }
+        { "title": "Numbers: bind each number to its unit", "text": "A build step wraps the token in a no-wrap span; a unit test feeds it sample text." },
+        { "title": "Numbers: size KPI values to their tile", "text": "CSS keeps a value on one line; check.mjs fails on a spilled tile." },
+        { "title": "Numbers: fail the build on a split", "text": "check.mjs measures each token in a browser at three widths." },
+        { "title": "Model: write the agent files", "text": "One pinned file each for Copilot and Codex; a test reads back the model key." },
+        { "title": "Model: teach the installer", "text": "It writes the file to a user or project folder and never overwrites without --force." },
+        { "title": "Model: add a doctor check", "text": "doctor.mjs reports a missing file and fixes it on request." },
+        { "title": "Model: add the hand-off line", "text": "SKILL.md names the agent; a test requires the same text in all five skills." },
+        { "title": "Plan: add the answer sections", "text": "Decision, approval, question, review and verdict; validate rejects a bad id." },
+        { "title": "Plan: save answers in the page", "text": "Browser tests answer every item and reload the page." },
+        { "title": "Plan: check the file", "text": "answers.mjs refuses a stale hash or an unknown id; its tests cover each case." },
+        { "title": "Plan: ship this example", "text": "It must validate with no warnings and build in both themes." }
       ]
     },
     {

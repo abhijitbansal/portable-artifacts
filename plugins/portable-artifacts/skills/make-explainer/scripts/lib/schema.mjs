@@ -18,6 +18,8 @@ export const CHANGES = ['added', 'modified', 'deleted', 'renamed'];
 export const STEP_STATUSES = ['done', 'doing', 'todo'];
 export const CHECK_TAGS = ['regression', 'device', 'manual', 'visual'];
 export const ALIGNS = ['left', 'center', 'right'];
+// The sections a plan reviewer answers; they come in runs by design (semantic.mjs reserves their ids, lint.mjs lets their runs pass).
+export const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question']);
 
 export const LIMITS = Object.freeze({
   title: 90,

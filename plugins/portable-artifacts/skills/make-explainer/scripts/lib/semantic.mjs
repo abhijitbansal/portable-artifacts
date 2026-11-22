@@ -3,7 +3,7 @@
 // Runs only after the schema passes, so shapes can be trusted.
 import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { listThemes } from '../../shared/theme.mjs';
-import { ID_PATTERN, KEY_PATTERN, LIMITS, META_KEYS, NON_SPACE } from './schema.mjs';
+import { ID_PATTERN, KEY_PATTERN, LIMITS, META_KEYS, NON_SPACE, PLAN_ITEM_TYPES } from './schema.mjs';
 import { codeLines } from './slides.mjs';
 import { suggestedPlanKey, DRAFT_PLAN_KEY } from './plan-hash.mjs';
 
@@ -78,8 +78,7 @@ function checkKey(errors, key, at) {
 // radio group name.
 const RESERVED_IDS = [/^content$/, /^outline-title$/, /^slide-\d+(?:-title)?$/, /^ch\d+-/, /^plan-verdict$/];
 // An answerable item's radios are named "plan-<id>", so its id must not be "verdict" (the verdict's group). Only these
-// three types: a tldr may keep the id "verdict" (the examples use it).
-const PLAN_ITEM_TYPES = new Set(['decision', 'approval', 'question']);
+// three types: a tldr may keep the id "verdict" (the examples use it). The set lives in schema.mjs (lint.mjs shares it).
 const RESERVED_ITEM_IDS = new Set(['verdict']);
 
 export function checkIds(spec, errors) {

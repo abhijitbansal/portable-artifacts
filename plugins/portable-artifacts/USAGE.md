@@ -385,7 +385,7 @@ in order, as a numbered list under the item) and `expect` (a "You should see" li
 **Plan mode.** Ask for a plan, proposal or design to be reviewed and answered.
 `scaffold.mjs plan --title "…" --out plan.json` writes a starter that
 explains before it asks: a summary, three numbers, a card per workstream, goals,
-one workstream's tasks as steps (copy it once per workstream), a table of choices
+every workstream's tasks in one steps section, a table of choices
 already made, a diagram, phases and risks, then a decision, an approval, a
 question, "review these first" and last the reviewer's overall verdict control.
 Validate warns when a decision, approval or question comes before any steps, cards,

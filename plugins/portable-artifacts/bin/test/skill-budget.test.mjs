@@ -110,6 +110,14 @@ for (const skill of SKILL_NAMES.filter((s) => s !== 'make-motion')) {
   });
 }
 
+test('make-explainer/SKILL.md: a defect is reported with the screenshot it was seen in', () => {
+  const md = read('make-explainer');
+  const step = md.split('\n').find((l) => /check\.mjs[^\n]*--shots/.test(l));
+  assert.ok(step, 'SKILL.md has a step that runs check.mjs with --shots; if it was reworded, update this test');
+  assert.match(step, /name the PNG it shows in/);
+  assert.match(md, /the screenshots viewed/);
+});
+
 test('guardrail proof: each compound-form rule fires on its own sample', () => {
   const samples = ['node validate.mjs x.json; echo done', 'S=/p/skill && node run.mjs', 'node $S/validate.mjs', 'cat <<EOF', 'SKILL=/p/skill'];
   assert.equal(samples.length, COMPOUND_FORMS.length);

@@ -70,10 +70,12 @@ test('planHash ignores a section\'s simple text: the toggle never affects answer
   assert.notEqual(planHash(plan({ sections: sections.map((s, i) => (i === 3 ? { ...s, text: 'Who owns the launch?' } : s)) })), hash, 'the normal text still counts');
 });
 
-test('a page with no simple text hashes exactly as before: the plan example\'s hash is pinned', () => {
-  // 2b4ae5297680 is the hash of references/examples/plan.explainer.json taken before simple was left out of the hash.
+test('the plan example\'s hash is pinned: it changes only when the example\'s plan content does', () => {
+  // History: 2b4ae5297680 was the hash taken before simple was left out of the hash (it then held unchanged). The section-sameness lint made
+  // the example merge its three workstream task lists into one steps section (three steps sections in a row warned), which moved the hash on
+  // purpose. Re-pin it, saying why in the commit, whenever the example's sections change.
   const example = JSON.parse(readFileSync(new URL('../references/examples/plan.explainer.json', import.meta.url), 'utf8'));
-  assert.equal(planHash(example), '2b4ae5297680');
+  assert.equal(planHash(example), '42c1cf31aad5');
 });
 
 test('planHash changes with an option label, a section title or the plan title', () => {

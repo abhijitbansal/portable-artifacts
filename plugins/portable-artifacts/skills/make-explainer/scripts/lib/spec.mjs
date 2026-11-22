@@ -9,7 +9,7 @@ import { UsageError, JsonSyntaxError, exitSpecUsage } from './usage-exit.mjs';
 import { ROOT_SCHEMA, SECTION_SCHEMAS, TYPE_SCHEMA, NON_SPACE } from './schema.mjs';
 import { checkTop, checkIds, checkSections, warnSections } from './semantic.mjs';
 import { collectStrings } from './walk.mjs';
-import { lintText, lintPlaceholders, rawMarkdownWarnings, labelTitleWarnings } from './lint.mjs';
+import { lintText, lintPlaceholders, rawMarkdownWarnings, labelTitleWarnings, sectionSamenessWarnings } from './lint.mjs';
 import { warnBudget, capWarnings } from './budget.mjs';
 import { slideBudget, slideSimpleWarnings } from './slides.mjs';
 import { checksFor } from './checks.mjs';
@@ -99,6 +99,7 @@ export function lintWarnings(spec) {
     if (!isTableCell(spec, at)) out.push(...rawMarkdownWarnings(text, at));
     if (/^sections\[\d+\]\.title$/.test(at)) out.push(...labelTitleWarnings(text, at));
   }
+  out.push(...sectionSamenessWarnings(spec.sections));
   return out;
 }
 

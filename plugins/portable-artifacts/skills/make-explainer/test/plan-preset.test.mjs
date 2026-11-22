@@ -180,9 +180,8 @@ test('the plan example validates with no errors and no warnings, context first, 
   const firstAnswerable = types.findIndex((t) => ['decision', 'approval', 'question'].includes(t));
   const before = types.slice(0, firstAnswerable);
   for (const t of ['cards', 'table', 'steps']) assert.ok(before.includes(t), `a ${t} section comes before the first decision (index ${firstAnswerable})`);
-  // The scaffold has one workstream `steps`; the example copies it once per workstream, so a run of steps counts as one.
-  const collapse = (list) => list.filter((t, i) => !(t === 'steps' && list[i - 1] === 'steps'));
-  assert.deepEqual(collapse(before), ORDER.slice(0, ORDER.indexOf('decision')), 'the example follows the scaffold order up to the first decision');
+  // The scaffold has one workstream `steps` section, and the example has the same: one list of tasks, not one section per workstream.
+  assert.deepEqual(before, ORDER.slice(0, ORDER.indexOf('decision')), 'the example follows the scaffold order up to the first decision');
   assert.ok(before.filter((t) => t === 'steps').length >= 2, 'a workstream steps section, and the phases after the diagram');
 });
 
