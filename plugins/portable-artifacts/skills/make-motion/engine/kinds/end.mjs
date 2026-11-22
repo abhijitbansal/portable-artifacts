@@ -335,10 +335,15 @@ function expandEnd(shot, ctx) {
       : isEditorial(look) ? expandDesk(shot, ctx, data, times) : expandPop(shot, ctx, data, times);
   const behind = Object.fromEntries(Object.keys(parts.boxes).filter((k) => k === 'title' || k.startsWith('word:')).map((k) => [k, parts.hero]));
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'title', behind });
+  // the mark is pinned to the frame (fixed) as a desk card, a ledger tag or a product end's tag: the camera does not move it,
+  // so a cut that opens from it (cut.at: "mark") reads it as drawn (graph/film.mjs drawnCentre). Elsewhere (a wordmark's
+  // text, a pop kicker or picture) it is an ordinary camera node and needs no entry.
+  const pinned = parts.nodes.find((n) => n.id === `${shot.id}.mark` && n.props.fixed === true);
   return {
     nodes: placeDevices([fieldNode(shot, ctx), ...parts.nodes], devices),
     camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
     boxes: parts.boxes,
+    targetNodes: pinned ? { mark: pinned.id } : {},
     hero: parts.hero,
     background: look.palette.paper,
   };

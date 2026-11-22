@@ -213,6 +213,9 @@ function findNode(nodes, id) {
 // Where the centre of target `at`'s box (laid out at rest) is drawn as shot `prev` ends. A target is a camera node of depth 0
 // unless the kind names the node it belongs to (targetNodes): that node's own depth then sets how far the camera moves it,
 // and a pinned (fixed) node skips the camera and is moved only by its own tracks, from its rest pose to its pose at the end.
+// `targetNodes` names the node a box was laid out for, which is a top-level node of the shot (clipping's caption card, the end
+// card's mark): the box is its parent's frame, so a node inside a fixed group would need the group's pose as well, and no
+// kind maps one. A kind that does must name the group, not the child.
 function drawnCentre(prev, at, canvas) {
   const centre = centreOf(prev.boxes[at]);
   const id = prev.targetNodes[at];

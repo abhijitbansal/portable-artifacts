@@ -114,7 +114,8 @@ function drawnFilm(look, at, format = '16:9') {
 
 test('a camera target after a push: the origin is the target as the camera draws it at the end of the shot', () => {
   const { built, origin, end, rest } = drawnFilm('desk', 'image');
-  const hero = built.sampleShot(0, end).find((n) => n.bbox !== undefined);
+  const hero = built.sampleShot(0, end).find((n) => n.id === rest.hero);
+  assert.ok(hero.bbox !== undefined, 'the hero node carries its drawn box');
   close(origin, centre(hero.bbox), 'the image box as drawn, which the page also reports');
   assert.ok(apart(origin, centre(rest.boxes.image)) > 5, 'the push moved the picture, so a box at rest is the wrong point');
 });
