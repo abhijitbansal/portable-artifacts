@@ -15,7 +15,7 @@ import { buildFilm, resolveLook, shotTime } from '../graph/film.mjs';
 import { stateKey } from '../graph/sample.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../formats.mjs';
 import { drawFrame, resetContext } from './draw.mjs';
-import { setGlyphPath } from './glyph-draw.mjs';
+import { glyphStats, setGlyphPath } from './glyph-draw.mjs';
 import { annotate } from './bounds.mjs';
 import { applyFont, createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
@@ -184,9 +184,11 @@ function installApi({ fps, draw, post, source, measure, frameState, keys, setGra
     post.setStrengths(next);
     if (next.grain !== undefined) setGrain(next.grain);
   };
-  // for tests: true draws every word glyph by glyph with identity values. Left in the production page on purpose: a film is
-  // JSON and reaches no page global, and the switch only changes how a word is drawn, to pixels the whole word equals
+  // for tests: __setGlyphPath(true, values?) draws every word glyph by glyph with `values` (the identity unless given) for
+  // each glyph, and __glyphStats() counts the words that took the glyph path and those the check rejected. Left in the
+  // production page on purpose: a film is JSON and reaches no page global, and a switch only changes how a word is drawn
   window.__setGlyphPath = setGlyphPath;
+  window.__glyphStats = glyphStats;
   window.__stampFamily = STAMP_FAMILY;
   window.__measure = measure; // the layout measure, for tests
   // a smeared frame is audited at its own progress, without the smear (engine/graph/film.mjs smear.whole)

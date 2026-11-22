@@ -22,8 +22,11 @@ function stretchOf(font) {
 export function applyFont(ctx, font, { tracked }) {
   ctx.font = fontString(font);
   ctx.fontStretch = stretchOf(font);
-  ctx.letterSpacing = tracked ? `${(font.tracking ?? 0) * font.size}px` : '0px';
+  ctx.letterSpacing = tracked ? trackingPx(font) : '0px';
 }
+
+// The letter spacing a tracked draw sets for `font`, as the CSS length applyFont gives the context.
+export const trackingPx = (font) => `${(font.tracking ?? 0) * font.size}px`;
 
 // The `measure(text, font) -> { width, ascent, descent, inkAscent, inkDescent, inkLeft, inkRight }` layoutText and
 // `free` take, backed by a canvas context. ascent and descent are the font's box; the ink fields are where the glyphs

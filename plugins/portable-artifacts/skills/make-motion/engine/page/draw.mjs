@@ -1,7 +1,7 @@
 // Canvas 2D drawing of a sampled (and camera-applied) scene graph. drawFrame(ctx, sampled, env) paints the nodes in
 // order, each child after its parent inside the parent's transform. Nothing here reads a clock or a random source:
 // the same sampled tree draws the same pixels.
-import { applyFont, createMeasure, WORD_IDENTITY } from './text-style.mjs';
+import { applyFont, createMeasure, trackingPx, WORD_IDENTITY } from './text-style.mjs';
 import { drawnFont, reservedFont, reservedInset } from '../text/layout.mjs';
 import { measurePath, path2D } from './geometry.mjs';
 import { roughShape } from './rough.mjs';
@@ -82,11 +82,20 @@ function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   const left = -word.width / HALF + wordInset(ctx, word, tracks, type.font, type.reserve, word === line.words[0] || word === line.words.at(-1));
   const share = unit01(tracks.glow ?? 0);
   // glyphs still arriving: each glyph's halo is stroked with the glyph (its opacity, offset and scale), under the letters;
-  // a word drawn whole, or with every glyph at rest, has its halo stroked whole
-  const run = glyphRunOf(ctx, word, tracks);
+  // a word drawn whole, or with every glyph at rest, has its halo stroked whole. A word the glyph path cannot draw
+  // faithfully is drawn whole with the mean of its glyph values, so it arrives with its letters (glyph-draw.mjs rollupOf).
+  const run = glyphRunOf(ctx, word, tracks, left, () => trackingPx(drawnFont(type.font, tracks)));
+  if (run?.rolled) {
+    const { opacity: rolledOpacity, x, y, scale } = run.rolled;
+    if (unit01(rolledOpacity) <= 0) return ctx.restore();
+    ctx.globalAlpha *= unit01(rolledOpacity);
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+  }
+  const glyphWise = Boolean(run?.placement);
   const glowing = Boolean(glow) && share > 0;
-  if (glowing && (!run || run.settled)) drawGlow(ctx, word.text, left, glow, share);
-  if (!run) ctx.fillText(word.text, left, 0);
+  if (glowing && (!glyphWise || run.settled)) drawGlow(ctx, word.text, left, glow, share);
+  if (!glyphWise) ctx.fillText(word.text, left, 0);
   else drawGlyphs(ctx, run.placement, run.glyphs, left, glowing && !run.settled ? (char, x) => drawGlow(ctx, char, x, glow, share) : null);
   ctx.restore();
 }

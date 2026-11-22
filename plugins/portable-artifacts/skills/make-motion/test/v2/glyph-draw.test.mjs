@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { drawFrame } from '../../engine/page/draw.mjs';
-import { graphemesOf, setGlyphPath } from '../../engine/page/glyph-draw.mjs';
+import { graphemesOf, placementOf, setGlyphPath } from '../../engine/page/glyph-draw.mjs';
 
 const ADVANCE = 10;
 const KERN = { AV: 2 };
@@ -41,6 +41,7 @@ function fakeContext() {
     restore() { state = stack.pop(); },
     setTransform() { state = { ...state, m: [1, 0, 0, 1, 0, 0] }; },
     transform() {},
+    getTransform() { return { a: state.m[0], e: state.m[4] }; },
     translate(x, y) { const [e, f] = at(x, y); state = { ...state, m: [state.m[0], 0, 0, state.m[3], e, f] }; },
     scale(sx, sy) { state = { ...state, m: [state.m[0] * sx, 0, 0, state.m[3] * sy, state.m[4], state.m[5]] }; },
     measureText(text) {
@@ -54,11 +55,16 @@ function fakeContext() {
 }
 
 // The scratch canvas of the faithfulness check: its picture is the shapes its fillText calls made, in a typed array.
+const scratches = []; // each scratch context made, so a test can read the whole-word draw of its check
 class FakeOffscreenCanvas {
   constructor(width, height) { this.width = width; this.height = height; }
   getContext() {
     const ctx = fakeContext();
     const clear = ctx.log;
+    scratches.push(ctx);
+    ctx.drawn = []; // every fillText of the check, kept after clearRect: the whole-word draw comes first
+    const fill = ctx.fillText;
+    ctx.fillText = (text, x, y) => { ctx.drawn.push({ text, x }); fill(text, x, y); };
     ctx.getImageData = () => ({ data: new Uint8ClampedArray(Buffer.from(JSON.stringify(clear.filter((c) => c.op === 'fillText').flatMap((c) => shapesOf(c.text, c.x))))) });
     ctx.clearRect = () => { clear.length = 0; };
     return ctx;
@@ -71,12 +77,12 @@ const GLOW = { color: '#ffd24a', alpha: 0.8, radius: 12 };
 const ID = { opacity: 1, x: 0, y: 0, scale: 1 };
 
 // One word on one line at (0, 0), centred on the origin (its left is -width / 2), drawn through drawFrame.
-function drawWord(text, wordTracks, { glow } = {}) {
+function drawWord(text, wordTracks, { glow, shift = 0 } = {}) {
   const ctx = fakeContext();
   const width = widthOf(text);
   const node = {
     type: 'text', id: 't', x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, reveal: 1, blur: 0, children: [],
-    props: { font: FONT, layout: { lines: [{ x: 0, y: 0, words: [{ text, x: -width / 2, width, index: 0 }] }] }, ...(glow ? { glow } : {}) },
+    props: { font: FONT, layout: { lines: [{ x: 0, y: 0, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }] }, ...(glow ? { glow } : {}) },
     words: [wordTracks],
   };
   drawFrame(ctx, [node], { canvas: { w: 1000, h: 400 } });
@@ -186,4 +192,70 @@ test('a glowing word with no glyph values strokes its halo whole, as before', ()
   const { strokes, fills } = drawWord('ABC', word({ glow: 1 }), { glow: GLOW });
   assert.ok(strokes.length > 0 && strokes.every((s) => s.text === 'ABC'));
   assert.deepEqual(fills.map((f) => f.text), ['ABC']);
+});
+
+// ---- a word drawn whole still arrives with its letters ----
+
+test('a rejected word whose glyphs are all at opacity 0 draws nothing, halo included', () => {
+  const none = { ...ID, opacity: 0 };
+  const plain = drawWord('fi', word({ glyphs: [none, none] }));
+  assert.deepEqual(plain.fills, []);
+  const glowing = drawWord('fi', word({ glow: 1, glyphs: [none, none] }), { glow: GLOW });
+  assert.deepEqual([glowing.fills, glowing.strokes], [[], []]);
+  const rtl = drawWord('שלום', word({ glyphs: graphemesOf('שלום').map(() => none) }));
+  assert.deepEqual(rtl.fills, []);
+});
+
+test('a rejected word is drawn whole with the mean of its glyph values: opacity, offset and scale', () => {
+  const { fills, left } = drawWord('fi', word({ glyphs: [{ opacity: 0, x: 0, y: 0, scale: 1 }, { opacity: 1, x: 10, y: -4, scale: 1.5 }] }));
+  assert.equal(fills.length, 1);
+  const [fill] = fills;
+  assert.equal(fill.text, 'fi');
+  assert.equal(fill.alpha, 0.5);
+  assert.equal(fill.y, -2);
+  assert.equal(fill.scale, 1.25);
+  // centred on the word's centre (the origin), moved by the mean offset 5: its left edge is -width / 2 * 1.25 + 5
+  assert.equal(fill.x, left * 1.25 + 5);
+});
+
+test('a rejected word with every glyph at the identity is drawn whole, untouched', () => {
+  const { fills, left } = drawWord('fi', word({ glyphs: [ID, ID] }));
+  assert.deepEqual(fills.map((f) => [f.text, f.x, f.alpha, f.scale]), [['fi', left, 1, 1]]);
+});
+
+test('the test seam can set the glyph values every word is drawn with: a rejected word follows them too', () => {
+  setGlyphPath(true, { opacity: 0 });
+  try {
+    assert.deepEqual(drawWord('ABC', word()).fills, []);
+    assert.deepEqual(drawWord('fi', word()).fills, []);
+  } finally {
+    setGlyphPath(false);
+  }
+});
+
+test('the faithfulness check runs at the word\'s own sub-pixel x, in quarter pixels, and decides again for another quarter', () => {
+  const glyphs = [{ ...ID, opacity: 0.5 }, ID, ID];
+  const before = scratches.length;
+  drawWord('PQR', word({ glyphs }), { shift: 0.3 });
+  assert.equal(scratches.length, before + 1);
+  assert.equal(scratches.at(-1).drawn[0].x % 1, 0.25, 'the whole-word draw sits a quarter pixel off the pixel grid');
+  drawWord('PQR', word({ glyphs }), { shift: 0.3 });
+  assert.equal(scratches.length, before + 1, 'the same quarter is not checked again');
+  drawWord('PQR', word({ glyphs }), { shift: 0.55 });
+  assert.equal(scratches.length, before + 2, 'another quarter is');
+  assert.equal(scratches.at(-1).drawn[0].x % 1, 0.5);
+});
+
+test('the check is cached on the canvas settings that change shaping, not on the font alone', () => {
+  const ctx = fakeContext();
+  ctx.font = 'bold 40px "Fake"';
+  const before = scratches.length;
+  placementOf(ctx, 'STU', 0);
+  placementOf(ctx, 'STU', 0);
+  assert.equal(scratches.length, before + 1);
+  for (const [setting, value] of [['fontKerning', 'none'], ['fontVariantCaps', 'small-caps'], ['textRendering', 'optimizeSpeed'], ['wordSpacing', '3px'], ['letterSpacing', '2px']]) {
+    ctx[setting] = value;
+    placementOf(ctx, 'STU', 0);
+    assert.equal(scratches.length, before + 2 + ['fontKerning', 'fontVariantCaps', 'textRendering', 'wordSpacing', 'letterSpacing'].indexOf(setting), setting);
+  }
 });
