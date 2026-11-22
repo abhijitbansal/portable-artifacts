@@ -18,9 +18,9 @@ A resumed session reads this table first, then `git log --oneline origin/main..H
 
 | Wave | State | Commits |
 |---|---|---|
-| W0 measurements | not started | |
-| W1 doctrine and colour | not started | |
-| W2 composition and cut craft | not started | |
+| W0 measurements | done | 1914642, f75d40a, 6b14b80 |
+| W1 doctrine and colour | done (gate passed) | 135d064..dbafdea |
+| W2 composition and cut craft | in progress | 6bb53aa, 78607d0 |
 | W3 inspection tools | not started | |
 | W4 shorts, sound, overlays | not started | |
 | W5 evidence loop II | not started | |
