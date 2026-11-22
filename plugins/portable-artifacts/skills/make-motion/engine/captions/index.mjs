@@ -90,7 +90,10 @@ export const showsWordsOf = (kind, shot) => (typeof kind.showsWords === 'functio
 // its own words only the ones heard over it from another shot (those carry `from`), which it does not show.
 const wordsToCaption = (kind, shot, words) => (showsWordsOf(kind, shot) ? words.filter((w) => w.from !== undefined) : words);
 
-const captioned = (kind, ctx, shot, words = ctx.captionWords ?? ctx.timing.words) => wordsToCaption(kind, shot, words).length > 0;
+// The words heard over a shot (shotContext's captionWords), the shot's own for a ctx that has none.
+const wordsOfCtx = (ctx) => ctx.captionWords ?? ctx.timing.words;
+
+const captioned = (kind, ctx, shot, words = wordsOfCtx(ctx)) => wordsToCaption(kind, shot, words).length > 0;
 
 /**
  * The ctx a shot's kind composes in. A captioned shot whose look composes inside the platform safe zone (compositionRect
@@ -113,10 +116,10 @@ export function kindContext(film, kind, ctx) {
  * @param {object} shot @param {object} ctx the shot's ctx (shotContext)
  * @param {{ kind: object, hero: string | null, filmStart: number, nodes: object[], camera?: Function, words?: object[] }} p
  *   nodes: the kind's nodes; camera: the shot's camera, (t) => { x, y, zoom, rotate } (graph/film.mjs), for where its marks
- *   stand; words: the words heard while the shot is on screen (captionWordsOf), the shot's own when not given. A kind that
+ *   stand; words: the words heard while the shot is on screen (captionWordsOf), ctx.captionWords when not given. A kind that
  *   shows its own words captions only those heard over it from another shot (they carry `from`).
  */
-export function shotCaptions(shot, ctx, { kind, hero, filmStart, nodes, camera, words = ctx.timing.words }) {
+export function shotCaptions(shot, ctx, { kind, hero, filmStart, nodes, camera, words = wordsOfCtx(ctx) }) {
   if (!captioned(kind, ctx, shot, words)) return [];
   const style = registries.captions.get(ctx.look.captions);
   const ids = markIds(shot);

@@ -211,6 +211,23 @@ test('a sentence anchor a trail leaves behind the cut says "sentence", not "word
   assert.match(message, /"sentence:1" names a sentence that is heard after the shot has ended /);
 });
 
+test('a trail anchor is judged by the word, not by anchor plus offset', () => {
+  // the word a trail left behind is refused whatever offset brings the anchor back under the shot's end
+  for (const at of ['word:six', 'word:six-0.3', 'word:five+0.2']) {
+    const errors = errorsOf(withOn('a', { ...underline(at), narration: { trail: 1 } }));
+    if (at === 'word:five+0.2') assert.deepEqual(errors, [], 'a word heard inside the shot, offset into the tail, is fine');
+    else assert.match(errors.join('\n'), /names a word that is heard after the shot has ended /, at);
+  }
+  // an offset anchor that lands on the end of a shot with no trail is not a trail error, in a film that has a shift elsewhere
+  const c = build(withOn('b', { narration: { lead: 0.5 } })).shots[2];
+  const last = c.words.at(-1);
+  const offset = Math.ceil((c.duration - last.start) * 1000) / 1000;
+  const at = `word:sixteen+${offset}`;
+  assert.deepEqual(errorsOf(withOn('b', { narration: { lead: 0.5 } })), []);
+  const film = { ...withOn('b', { narration: { lead: 0.5 } }), shots: withOn('b', { narration: { lead: 0.5 } }).shots.map((s) => (s.id === 'c' ? { ...s, ...underline(at) } : s)) };
+  assert.deepEqual(errorsOf(film), [], `${at} lands on c's end (${c.duration} s) and c has no trail`);
+});
+
 test('a voiced film judges a lead anchor the same way on its measured timeline (anchorSpanErrors)', () => {
   const words = base.shots.map((s) => ({ id: s.id, seconds: s.words.at(-1).end, sentences: [{ words: s.words.map(({ text, start, end }) => ({ text, start, end })) }] }));
   const film = withOn('b', { ...underline('word:seven'), narration: { lead: 0.5 } });

@@ -6,13 +6,13 @@ import assert from 'node:assert/strict';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { buildFilm } from '../../engine/graph/film.mjs';
-import { captionWordsOf } from '../../engine/captions/groups.mjs';
+import { captionGroups, captionWordsOf, groupTimes } from '../../engine/captions/groups.mjs';
 import { heardWordSpans } from '../../scripts/v2/sound/duck.mjs';
 import { soundEvents } from '../../scripts/v2/sound/events.mjs';
 import { subtitleCues } from '../../scripts/v2/subtitles.mjs';
 import { voiceTrackArgs } from '../../scripts/v2/voice/master.mjs';
 import { cutWindowFindings } from '../../scripts/v2/review.mjs';
-import { measure, canvasOf } from './helpers/kinds.mjs';
+import { measure, canvasOf, all } from './helpers/kinds.mjs';
 
 const FPS = 30;
 const FILM = { version: 2, mode: 'pro', shots: [
@@ -71,12 +71,43 @@ test('with a trail longer than the mode\'s tail, a\'s last word belongs to b', (
   assert.ok(six.start >= 0 && six.start < trailed.shots[1].duration, 'heard over b: inside b\'s own seconds');
 });
 
+test('after a trail every word is at the second it is heard in the shot\'s own seconds, so the groups come in order (a kind that does not show its words)', () => {
+  const trailed = build(withOn('a', { narration: { trail: 1 } }));
+  const words = captionWordsOf(trailed, 1);
+  const heard = (w) => (w.from === undefined ? w.soundStart : w.start);
+  words.forEach((w, k) => assert.ok(k === 0 || w.start >= words[k - 1].start - 1e-9, `${w.text} starts after ${words[k - 1]?.text}`));
+  const own = words.filter((w) => w.from === undefined);
+  own.forEach((w) => assert.ok(Math.abs(w.start - heard(w)) < 1e-9 && Math.abs(w.end - w.soundEnd) < 1e-9, `${w.text}: an own word is at its heard times`));
+  assert.ok(Math.abs(own[0].start - trailed.shots[1].narrationAt) < 1e-9, 'the shot\'s first word is heard narrationAt into the picture, not at 0');
+  const groups = captionGroups(words, { maxWords: 3, maxChars: 30 });
+  const times = groupTimes(groups, { duration: trailed.shots[1].duration, fps: FPS });
+  times.forEach((t, k) => assert.ok(k === 0 || t.at >= times[k - 1].at, `group ${k} is not before the group before it`));
+  assert.equal(groups[0].words[0].text, 'six.');
+  assert.ok(times[0].until >= Math.min(times[0].end + 0.2, times[1].at) - 1e-9, 'the carried word is held to its end, not for one frame');
+  assert.ok(times[0].until - times[0].at > 0.2, 'six. is on screen about as long as it is heard');
+  assert.ok(Math.abs(times[1].at - trailed.shots[1].narrationAt) < 1e-9, 'the shot\'s own first group opens when its first word is heard');
+});
+
+test('a word heard two shots away is captioned: every word of the film by exactly one shot', () => {
+  const far = { ...FILM, shots: [FILM.shots[0], { id: 'b', show: 'statement', say: 'Yes.', narration: { lead: 1.4 } }, { ...FILM.shots[2], narration: { lead: 1.5 } }] };
+  const timeline = build(far);
+  const heardAtFilm = (s, w) => s.start + w.soundStart;
+  assert.ok(heardAtFilm(timeline.shots[2], timeline.shots[2].words[0]) < timeline.shots[1].start, 'the fixture: c\'s first word is heard over a, two shots back');
+  const onA = captionWordsOf(timeline, 0);
+  assert.ok(onA.some((w) => w.text === 'Thirteen' && w.from === 2), 'a captions "Thirteen"');
+  const total = timeline.shots.reduce((n, _, i) => n + captionWordsOf(timeline, i).length, 0);
+  assert.equal(total, timeline.shots.reduce((n, s) => n + s.words.length, 0));
+});
+
 test('a captioned film draws b\'s early words on a, also when a shows its own words (decision 4)', () => {
   const film = { ...star(withOn('b', { narration: { lead: 0.5 } })), captions: true, look: 'desk', format: '16:9', fps: FPS, seed: 1 };
   const timeline = build(film);
   const built = buildFilm({ film, timeline, measure, canvas: canvasOf('16:9') });
-  const late = JSON.stringify(built.sampleShot(0, timeline.shots[0].duration - 0.1));
-  assert.ok(late.includes('a.captions') && /"text":"seven"/i.test(late), 'a statement shot captions the neighbour\'s words (the desk style sets them in capitals)');
+  const sampled = built.sampleShot(0, timeline.shots[0].duration - 0.1);
+  const card = sampled.find((n) => n.id === 'a.captions');
+  assert.ok(card !== undefined, 'a statement shot has a caption node for the neighbour\'s words');
+  const captioned = all([card]).filter((n) => n.type === 'text').flatMap((n) => n.props.layout.lines.flatMap((l) => l.words.map((w) => w.text)));
+  assert.ok(captioned.includes('SEVEN'), 'the neighbour\'s word is set inside a.captions (the desk look sets caption text in capitals)');
   assert.ok(!JSON.stringify(built.sampleShot(1, 0.2)).includes('b.captions'), 'b shows its own words and none was heard over another shot: no captions');
   const before = buildFilm({ film: { ...star(FILM), captions: true, look: 'desk', format: '16:9', fps: FPS, seed: 1 }, timeline: plain, measure, canvas: canvasOf('16:9') });
   assert.ok(!JSON.stringify(before.sampleShot(0, 0.5)).includes('a.captions'), 'a statement with no shift has no captions, as today');
