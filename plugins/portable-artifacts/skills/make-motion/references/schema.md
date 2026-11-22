@@ -85,7 +85,7 @@ An anchor says when in a shot something happens. It is a number of seconds from 
 
 `beat:<n>` is refused. Cut to music with `music.beats` and `music.snap`. An anchor that lands more than one frame outside its shot is an error.
 
-An event in `on` is `{ "at": <anchor>, "do": <device>, "target": <target> }`. `at` and `do` are required. `do` is one of `--list devices`. `target` is a region of the shot (`region:query`) or one of the parts the kind names. A device the look does not draw is an error that lists the devices it does.
+An event in `on` is `{ "at": <anchor>, "do": <device>, "target": <target> }`. `at` and `do` are required. `do` is one of `--list devices`. `target` is a region of the shot (`region:query`) or one of the parts the kind names. A device the look does not draw is an error that lists the devices it does. To find the box of a region on a picture, see Locating a region in `references/tools.md`.
 
 ## Sound
 

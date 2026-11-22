@@ -1,6 +1,6 @@
 # Tools for looking at one moment
 
-Small commands that draw or measure one part of a film without a whole-film render. This page grows as they arrive: film time first (the one way every command names a moment), then the commands that read it: `--inspect`, `--shot` and `--range` today.
+Small commands that draw or measure one part of a film without a whole-film render. This page grows as they arrive: film time first (the one way every command names a moment), then the commands that read it: `--inspect`, `--shot` and `--range` today, and the locate helper for a box on a picture.
 
 ## Film time
 
@@ -76,3 +76,21 @@ What is written and what is judged:
 - **A silent MP4.** Unless `--sheets-only`, a slice run also writes its frames as a video, `<out stem>.<label>.mp4` beside where the film's own MP4 would go (`out/film.rows.mp4`, `out/film.range-30-75.mp4`), and `output` names it; the film's own `<out stem>.mp4` is never written or replaced. The frames are the full render's frames, byte for byte at `--exact` (the page seeks each by its number in the film, and the first frame of the slice is always captured, though the page would call it a repeat of the one before). The slice has no sound: the voice and the sound are mastered for the whole film, so `audio` is `null`, and when the film has a voice or sound the run says `make: the slice is silent: the sound is mastered for the whole film` and `slice.silent` is `true`. It needs ffmpeg, as a film does, and is checked and tagged like one; `--workers` does not go with it. With `--sheets-only` there is no video and `output` is `null`.
 
 `--shot` and `--range` do not go with each other or with `--poster`, `--poster-out`, `--inspect`, `--outline`, `--phonemes`, `--batch`, `--subtitles`, `--workers` or `--preview`; `--sheets-only`, `--out` and `--exact` are accepted. A shot the film lacks is exit 2 with the list of shots in `error.hint`; a `--range` with no `..`, or one that runs backwards (its first frame after its last), is exit 2 naming the form; a time past the end or one that names nothing is refused as above. A film with no voice (and no `music.snap`) is timed exactly before anything runs, so the whole slice is checked at once. A voiced film is timed only once the voice is made, so before it the shot and the references are checked, and a range is refused when it runs backwards however the film is timed (two plain times, or two shots named outright, such as `rows..hook`); a range inside one shot, one that uses a word or an offset, and a time past the end are judged after the voice, on the measured timeline.
+
+## Locating a region
+
+`scripts/locate.mjs` turns a target you can see in a picture into the `[x, y, w, h]` box a clipping shot's `regions` entry takes (fractions of the picture). You look at PNGs it draws and name numbers; it uses no network and no model. Three plain calls:
+
+```
+node <skill-dir>/scripts/locate.mjs shot.png --out locate
+node <skill-dir>/scripts/locate.mjs shot.png --cols 5-6 --rows 2-3 --out locate
+node <skill-dir>/scripts/locate.mjs shot.png --cols 5-6 --rows 2-3 --cells 15-30 --json
+```
+
+1. **Strips.** The first call writes `locate/strips-cols.png` and `locate/strips-rows.png`: the picture in nine numbered strips each way. Open both and name the strips the target touches, as `--cols` and `--rows` (`5-6`, or `5` for one).
+2. **Cells.** The second call writes `locate/grid.png`: that block of strips, enlarged if it is small, in 36 numbered cells (1 to 36, row by row). Name the first and the last cell the target touches as `--cells`: the cells between them form a rectangle.
+3. **The box.** The third call prints `[x, y, w, h]` (with `--json`: `{ "region": [...] }`), each to three decimals, ready to paste into `regions`. With `--out` it also writes `locate/box.png`, the picture with the box drawn and the rest dimmed: open it to check.
+
+Name every strip and cell the target touches. The box is that rectangle grown by a quarter cell, so it holds the target and each edge lies within 1.25 cells of it (a cell of the second grid, plus the pad). A cell label is the first thing in its cell, at the top left. The pictures are at most 1600 px a side.
+
+A PNG the reader takes (8-bit RGB or RGBA) is read directly. Any other format, or a PNG of another kind, is decoded by ffmpeg, one frame; with no ffmpeg that is exit 2 saying so, and a PNG avoids it. A URL, a folder, an `--out` that is the picture, a strip outside 1 to 9 and a cell outside 1 to 36 are each exit 2 naming the accepted values.
