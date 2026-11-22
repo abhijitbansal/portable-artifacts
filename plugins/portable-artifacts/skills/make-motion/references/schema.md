@@ -122,7 +122,7 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 
 ## The `--list` names
 
-`node scripts/make.mjs --list <name>` prints one of these. Add `--json` for JSON. `--all` adds the experimental looks and the parked kinds.
+`node scripts/make.mjs --list <name>` prints one of these. Add `--json` for JSON. `--all` adds the parked kinds (and any experimental look; there is none today).
 
 | Name | Prints |
 |---|---|

@@ -12,7 +12,7 @@ There is no migrator. You write the film again as a script of shots. This page s
 
 1. **A script of shots replaces scenes and elements.** A version 1 film placed elements in scenes and keyed their properties by hand. A version 2 film is a list of shots. Each shot has an `id`, a `show` (its kind) and usually a `say` (what is spoken). The kind lays out the frame. `node scripts/make.mjs --list kinds` prints every kind with its fields and one example.
 2. **Durations come from the narration.** A scene had a `duration`. A shot lasts as long as its `say` takes at the mode's pace, plus a short tail. A shot with no `say` takes `hold` (1 to 30 seconds). A shot takes `say` or `hold`, never both. `--outline` prints the timed script with no browser.
-3. **A look replaces a theme.** A look is the whole style of the film: type, colour, motion and the marks a hand draws. Set `"look"` in the film. `node scripts/make.mjs --list looks` prints the looks. Each look serves the modes it names, and a look parks or excludes some kinds (see the table at the end of `SKILL.md`).
+3. **A look replaces a theme.** A look is the whole style of the film: type, colour, motion and the marks a hand draws. Set `"look"` in the film. `node scripts/make.mjs --list looks` prints the looks. Each look serves the modes it names, and a look parks or excludes some kinds (see the table under Looking things up in `SKILL.md`).
 
 ## Version 1 features
 

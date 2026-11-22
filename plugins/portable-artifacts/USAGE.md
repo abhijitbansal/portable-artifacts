@@ -35,10 +35,6 @@ installer runs `npm ci --ignore-scripts` for you. Pass `--link` to symlink to th
 `portableArtifacts.requires` list in its `package.json`). make-motion is
 optional for the explainer and is only installed if you name it.
 
-The repo-wide `adapters/install.sh codex|copilot` symlinks *every* skill in
-this repo, these five included. Only `install.mjs` also runs `npm ci --ignore-scripts`, supports
-project scope and writes the Gemini commands.
-
 For **make-motion**, also run the one-time `npx playwright install chromium`
 inside the skill folder (about 150 MB), and make sure `ffmpeg` is on your
 `PATH`. Agents ask before downloading Chromium.
@@ -505,7 +501,7 @@ preset in `references/examples/`.
 
 ## 5. Videos with make-motion
 
-make-motion 2 reads version 2 films only: a script of shots in one JSON file, `film.json`. A version 1 spec (one with `scenes`) is refused with a pointer to `skills/make-motion/references/migrating.md`, which says what each version 1 feature became and what is not in 2.0. The films in the gallery and on the site were made with make-motion 2; clips made with make-motion 1.x stay on the gallery page as a labelled archive.
+make-motion 2 reads version 2 films only: a script of shots in one JSON file, `film.json`. A version 1 spec (one with `scenes`) is refused with a pointer to `skills/make-motion/references/migrating.md`, which says what each version 1 feature became and what is not in 2.0. The films in the gallery and on the site were made with make-motion 2.
 
 **Ask:**
 
@@ -643,7 +639,7 @@ node <skill-dir>/scripts/make.mjs film.json --model "Claude Opus 5.5" --effort h
 
 On make-motion the flags override the film's `generatedBy`, and `--no-provenance` leaves the authoring tags out of the MP4.
 
-Each field is 1 to 60 characters from `A-Za-z0-9 ._:/()+-`; anything else fails
+Each field is 1 to 60 characters from `A-Za-z0-9 ._:/()+[]-`; anything else fails
 validation (exit 1) and never reaches the page. A field the agent does not know is
 left out, and the page reads "not reported": nothing is guessed. The stamp shows as
 a footer line (make-diagram: a line under the title), for example
@@ -695,8 +691,8 @@ same:
 |---|---|
 | "Make the region chart a line chart" | `charts[0].kind` |
 | "Add a KPI for total units" | one new entry in `kpis` (+ one query) |
-| "Slow scene 2 down" | `scenes[1].duration` (+ that scene's keyframe times) |
-| "Change the counter to 25" | `elements[n].to` |
+| "Slow shot 2 down" | `shots[1].say` (or `hold`) |
+| "Change the number to 25" | `shots[n].value` |
 | "Add a cache between the API and the DB" | one node and two edges in `diagram.json` |
 | "Rename Orders DB to Ledger" | `nodes[n].label` |
 | "Add a risk about the migration" | one new entry in a `risks` section's `items` |
@@ -725,7 +721,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | Query stopped after 30 s | Make it cheaper, or pass `--timeout 120` to `build` |
 | `nodes[0].kind: kind "databse" is not valid for architecture diagrams; did you mean "database"?` (and similar `path: message` lines from make-diagram) | The path is the field to fix and the message names the fix. The agent edits that field and reruns `validate` |
 | `text is … px wide; the box fits … px — shorten the label` or `node "b" overlaps node "a"` | make-diagram's geometry lint: shorten the label or note, or split the diagram |
-| `generatedBy.model: must match pattern "^[A-Za-z0-9 ._:/()+-]+$"` (or a 61-character value) | The `--model`, `--effort` or `--agent` flag, or the spec's `generatedBy`, has a character outside the allowed set or is longer than 60. Shorten it or drop the odd character |
+| `generatedBy.model: must match pattern "^[A-Za-z0-9 ._:/()+\[\]-]+$"` (or a 61-character value) | The `--model`, `--effort` or `--agent` flag, or the spec's `generatedBy`, has a character outside the allowed set or is longer than 60. Shorten it or drop the odd character |
 | `sections[3].title: warning: title is 12 words; keep it to 8` (or label, paragraph, card, list item) | A soft cap. It does not block the build. Shorten the text or convert it (a long `text` into `cards` or `steps`) |
 | `sections[3].text: still has a TODO placeholder` | A scaffold sentence was left in. Replace every `TODO: …` with real prose, or delete the section |
 | `banned phrase "leverage"; replace it with "use"` (or `heading ends with "!"`) | Reword as the message says. The full list is `make-explainer/references/style.md` |
@@ -757,7 +753,7 @@ node plugins/portable-artifacts/eval/run-eval.mjs --skill explainer --host claud
 node plugins/portable-artifacts/eval/run-eval.mjs --skill dashboard --host claude --set kinds
 ```
 
-It records: spec written, valid, validate retries, build or contact sheet ok,
+It records: spec written, valid, validate retries, build or review sheets ok,
 the browser check where the skill has one, whether the spec used the feature the prompt asked for,
 and which fields changed on edit prompts. `--set <name>` picks a further prompt set, and
 `--host claude-frontmatter` runs Claude Code without a `--model` flag (the account's default model; no `SKILL.md`

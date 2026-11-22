@@ -140,7 +140,7 @@ The agent writes the SQL, so it is treated as untrusted:
 - Queries run on a connection locked to the exact declared files
   (`allowed_paths`, external access off, configuration locked). Each one is
   wrapped in a row limit and stopped after a timeout.
-- An attached DuckDB file that defines views or macros is refused: they would
+- An attached DuckDB file that defines views or macros, or has generated columns, is refused: they would
   run outside the allowlist. Export plain tables instead.
 - Sources must resolve to regular files inside the spec's folder.
   `--allow-outside` is a flag only the person running the command can add.

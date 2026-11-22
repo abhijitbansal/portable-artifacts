@@ -125,7 +125,9 @@ of which model ran. (The harness rebuilds each page from the spec without
 2. Runs the host with the prompt *"Read `skills/<skill>/SKILL.md` and
    follow its workflow … Task: … Save the spec as `./<spec>.json`."*.
    `EVAL_LOG` is set, so every `validate.mjs` call the host makes adds a
-   line (`{ ts, ok, errors }`) to a log, which is how retries are counted. The log is copied into the case
+   line (`{ ts, ok, errors }`) to a log, which is how retries are counted. Only the four page skills write it
+   (their `validate.mjs`, and `make.mjs` as a `command: "make"` line); make-motion has no `validate.mjs` and writes
+   nothing, so a motion case has no retry count. The log is copied into the case
    folder as `.eval-log.jsonl`. The per-call error messages are not in it yet: the validators write only the count,
    so a retry loop can be seen (how many calls, which one was the first valid) but not read.
 3. Scores the result. The harness reruns `validate` and the output step
@@ -214,7 +216,7 @@ version 1 fixtures `clip.mp4`, `captions.srt`, `captions.vtt`, `badge.lottie.jso
 `node --test "test/**/*.test.mjs"` uses a fake skill and fake host, so it
 needs no LLM. `test/lib.test.mjs` covers scoring, the prompt files (every block, section type and chart kind has a
 prompt that expects it) and the run-eval flags; `test/session.test.mjs` and `test/director-host.test.mjs` cover the stream
-parser, the `claude-director` host, `--budget` and the new columns on synthetic streams (a fake `claude` prints one); `test/validate-fuzz.test.mjs` runs the five `validate.mjs` scripts on specs
+parser, the `claude-director` host, `--budget` and the new columns on synthetic streams (a fake `claude` prints one); `test/validate-fuzz.test.mjs` runs the four `validate.mjs` scripts on specs
 whose keys and lookup values are `constructor`, `__proto__` and `toString`, and shows it catches a scratch validator
 that accepts them; `test/docs-facts.test.mjs` ties the plugin README and USAGE to the code. They need each skill's
 `node_modules` installed, and none opens a browser or calls a model.

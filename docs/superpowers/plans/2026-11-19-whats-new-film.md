@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-19-whats-new-film-design.md`
 
-Paths: `W` = `/Users/abhijitbansal/projects/claude-skills/.claude/worktrees/New-Motion`. `M` = `W/plugins/portable-artifacts/skills/make-motion`. `X` = `M/references/examples/v2`. `GAL` = `W/docs/features/showcase/portable-artifacts/gallery`. `PAGE` = `W/docs/features/portable-artifacts.html`. `S` = `W/.scratch/pa2-release`. Write every path out in full in a command.
+Paths: `W` = `<repo>/.claude/worktrees/New-Motion`. `M` = `W/plugins/portable-artifacts/skills/make-motion`. `X` = `M/references/examples/v2`. `GAL` = `W/docs/features/showcase/portable-artifacts/gallery`. `PAGE` = `W/docs/features/portable-artifacts.html`. `S` = `W/.scratch/pa2-release`. Write every path out in full in a command.
 
 ## Global Constraints
 

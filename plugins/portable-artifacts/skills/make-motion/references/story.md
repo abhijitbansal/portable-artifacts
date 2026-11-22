@@ -12,9 +12,9 @@ Every number and every claim in a `say` comes from the brief or from the user's 
 
 ## Three storylines
 
-For a film over 15 seconds, when a person is there to answer, offer three storylines before you write shots, and make them three different films, not three phrasings of one. Each gives four things: the first two seconds written out (the opening shot's kind and its exact `say`), the worked example, the arc in one line per shot, and the closing ask. Two storylines that share both their opening kind and their worked example are one storyline: replace one. Fill the teaching check (below) first, then write the three to `storylines.md` beside the film. They are the last item of the intake message, so the one reply that settles the options also picks the storyline: no second question. If the prompt settled every option and the intake round is skipped, the three are the one question you ask.
+For a film over 20 seconds, draft three storylines before you write shots, and make them three different films, not three phrasings of one. Each gives four things: the first two seconds written out (the opening shot's kind and its exact `say`), the worked example, the arc in one line per shot, and the closing ask. Two storylines that share both their opening kind and their worked example are one storyline: replace one. Fill the teaching check (below) first, then write the three to `storylines.md` beside the film.
 
-When nobody can answer (`claude -p`, `codex exec`, an eval), or the intake already ran without them, pick the first and say so in the report. The example films show the shape of the fields; they are not a pace, a look or a shot order to copy.
+Do not ask the user to pick: the intake round in `SKILL.md` is the only question round, and the storyboard step is where a person answers a plan. Take the storyline that best fits the ask and say which one in the report. The example films show the shape of the fields; they are not a pace, a look or a shot order to copy.
 
 ## Write for the picture
 

@@ -126,7 +126,8 @@ test('story.md is built around the one thing, three storylines as three films an
   const md = read('references/story.md');
   assert.deepEqual(headings(md), ['The one thing', 'Claims', 'Three storylines', 'Write for the picture', 'Narration', 'Sound across a cut', 'The teaching check', 'Tells every look shares', 'What the review tells you']);
   const three = section(md, 'Three storylines');
-  for (const phrase of ['three different films', 'first two seconds', 'storylines.md', '`claude -p`', 'pick the first']) assert.ok(three.includes(phrase), phrase);
+  for (const phrase of ['over 20 seconds', 'three different films', 'first two seconds', 'storylines.md', 'Do not ask the user to pick', 'say which one in the report']) assert.ok(three.includes(phrase), phrase);
+  assert.ok(!three.includes('no second question'), 'the storylines are not folded into the intake question');
   assert.equal(section(md, 'The teaching check').split('\n').filter((l) => /^\d\. /.test(l)).length, 5);
   for (const mode of ['pro', 'viral']) assert.ok(md.includes(`${registries.modes.get(mode).wpm} words a minute`), `${mode} pace`);
   assert.deepEqual([registries.modes.get('pro').wpm, registries.modes.get('viral').wpm], [150, 175]);
@@ -149,18 +150,23 @@ test('the docs name the composition findings, the look fill that tunes them, and
   assert.ok(section(read('references/story.md'), 'What the review tells you').includes('`dead-space`'));
 });
 
-// The storyline pick must obey the intake's one round: SKILL.md folds the three storylines into the intake message, and
-// routes the teaching check and the storylines from step 1, so no agent asks a second time or skips the step.
-test('SKILL.md folds the storyline pick into the one intake round and routes the teaching check from step 1', () => {
+// The storyline pick is the agent's, never a question: the intake is the one question round (and the storyboard step is
+// where a person answers a plan), so SKILL.md has the agent draft three storylines for a film over 20 s, pick one and say
+// which, and routes the teaching check and the storylines from step 1. Main's rule (2.2.1) wins over folding them into the intake.
+test('SKILL.md has the agent pick the storyline itself, never asks the user, and routes the teaching check from step 1', () => {
   const skill = read('SKILL.md');
   const intake = section(skill, 'Intake (one round)');
   assert.match(intake, /three storylines/);
   assert.match(intake, /references\/story\.md/);
-  assert.ok(intake.indexOf('three storylines') < intake.indexOf('do not ask again'), 'the pick comes before "do not ask again"');
-  assert.match(intake, /\(with a person there, a film over 15 s still asks its storylines\)/, 'the skip-the-round exception names the person too');
+  assert.match(intake, /A film over 20 s drafts three storylines itself/);
+  assert.match(intake, /picks one and says which in the report/);
+  assert.match(intake, /not a question for the user/);
+  assert.ok(!intake.includes('the reply picks one'), 'the reply does not pick the storyline');
+  assert.ok(!/over 15 s/.test(intake), 'the threshold is 20 s, as the storyboard step');
   const step1 = skill.split('\n').find((l) => l.startsWith('1. Pick the film'));
   assert.ok(step1.includes('teaching check') && step1.includes('storylines') && step1.includes('references/story.md'), 'step 1 routes to both');
-  assert.ok(section(read('references/story.md'), 'Three storylines').includes('no second question'));
+  assert.ok(step1.includes('pick one yourself'), 'step 1 has the agent pick');
+  assert.ok(section(read('references/story.md'), 'Three storylines').includes('Do not ask the user to pick'));
 });
 
 test('each type file has its four sections, and offers only devices the kinds, cuts and devices can draw', () => {

@@ -24,7 +24,7 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 | `title` | required string |
 | `description` | optional subtitle |
 | `theme` | optional: `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster`, `mono`, `brief`. `build.mjs --theme <name>` and `serve.mjs --watch --theme <name>` override it. An unknown name fails with did-you-mean. The page also has an icon toggle that cycles Auto, Light, Dark |
-| `generatedBy` | optional object `{ model?, effort?, agent? }`: who made the dashboard, shown in the page footer beside the refresh time and in the generator meta; each field is 1-60 characters of letters, digits, space and `. _ : / ( ) + -`; `build.mjs --model`, `--effort` and `--agent` override it; a missing field shows as "not reported" |
+| `generatedBy` | optional object `{ model?, effort?, agent? }`: who made the dashboard, shown in the page footer beside the refresh time and in the generator meta; each field is 1-60 characters of letters, digits, space and `. _ : / ( ) + [ ] -`; `build.mjs --model`, `--effort` and `--agent` override it; a missing field shows as "not reported" |
 | `maxRows` | integer 1–100000, default 5000; applied to every query. Longer results are cut and the card says "truncated at N rows; raise `maxRows` in the spec or aggregate in SQL" |
 | `sources.<name>` | `name` matches `^[a-z][a-z0-9_]*$` and is not `main`, `temp` or `system` (DuckDB catalogs). `type`: `csv`, `parquet`, `json`, `duckdb`, `sqlite` (take `path`) or `postgres`, `mysql` (take `env`, never `path`). `path` is relative to the **spec file**, not the cwd, and must resolve (symlinks followed) to a regular file inside the spec's folder. Only `--allow-outside` on validate/build lifts the folder rule; it is deliberately not a spec field |
 | `queries.<name>` | one SQL `SELECT` (CTEs and UNIONs fine). Each source name is a table/view in the query. No other statement types |
@@ -144,7 +144,7 @@ connection-string secrets, but that is defence in depth only: the guard is the c
 
 Queries are model-written, so they are untrusted; the SQL allowlist is the control, the rest is depth. Layers, in order: the SQL allowlist above; in-memory DuckDB with reads limited
 to exactly the declared files (`allowed_paths`), external access off and the configuration locked; sources confined to the
-spec folder (`--allow-outside` is a CLI flag, never a spec field); attached DuckDB files without views or macros; a row limit
+spec folder (`--allow-outside` is a CLI flag, never a spec field); attached DuckDB files without views, macros or generated columns; a row limit
 and a timeout. For postgres and mysql the read-only database role is the guard that matters. Titles and SQL are HTML-escaped and
 embedded data has `<` escaped. The page carries `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:`;
 charts use Vega's bundled expression interpreter (`ast: true`), so no `unsafe-eval` is needed. The built page contains the query

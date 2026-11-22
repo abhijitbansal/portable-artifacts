@@ -99,7 +99,7 @@ Two renders of the same film and media give the same frames. The MP4's `comment`
 - **The servers bind `127.0.0.1` and answer only their own `Host`.** The render server and the preview page both. Tests: `security-guards.test.mjs`, `stage-browser.test.mjs`, `viewer-server.test.mjs`.
 - **The server serves only files on its allow-list.** A path outside it, a link out of the folder and a picture swapped for a link after start are refused. Tests: `stage-browser.test.mjs`, "refuses everything outside its allow-list" and "an asset swapped for a link out".
 - **No field of a film names a remote URL or a file outside the film's folder.** Tests: `spec.test.mjs` and the table in `security-guards.test.mjs` over `music.src`, `audio[0].src`, `voice.src`, `voice.words` and the `src` of `media` and `screen`, for five URL schemes.
-- **ffmpeg opens files only.** Every input carries the file protocol whitelist, and a source scan fails on a new `-i` that was not reviewed. Tests: `security-guards.test.mjs` and `ffmpeg.test.mjs`.
+- **ffmpeg opens files only.** Every input carries a protocol whitelist of `file` and `pipe`, so no URLs, and a source scan fails on a new `-i` that was not reviewed. Tests: `security-guards.test.mjs` and `ffmpeg.test.mjs`.
 - **A download is pinned.** The voice model comes from one commit, with the size and SHA-256 of each file, and a file that does not match is kept nowhere. Tests: `voice-model.test.mjs` and `pinned-file.test.mjs`.
 - **A video is written to a partial file** beside the output and renamed when ffmpeg finishes. A partial file left by a killed run is deleted on a later run once it is an hour old. A stop (SIGINT or SIGTERM) ends the run with exit 130 and a report of what was done.
 
@@ -122,6 +122,6 @@ The dependencies are pinned by the lockfile:
 | onnxruntime-node 1.21.0 (`optional/voice`), 1.31.1 (`optional/cutout`) | MIT | Running the voice and the cut-out model |
 | phonemizer 1.2.1 (`optional/voice`) | Apache-2.0 | Turning text into phonemes |
 
-The models: the Kokoro voice model (Apache-2.0, pinned to one commit of `onnx-community/Kokoro-82M-v1.0-ONNX-timestamped`) and, for the cut-out tool, MODNet (Apache-2.0). Nothing downloads at render time.
+The models: the Kokoro voice model (Apache-2.0, pinned to one commit of `onnx-community/Kokoro-82M-v1.0-ONNX-timestamped`) and, for the cut-out tool, MODNet (Apache-2.0). Nothing downloads at render time except the voice model, once, on the first voiced render.
 
 Fonts are bundled as files, all under the SIL Open Font License 1.1: Fraunces, Archivo, Nunito, Geist and Caveat in `engine/fonts` (their sources and SHA-256 are in `engine/fonts/SOURCES.md`), and the shared set in `shared/fonts` (`shared/fonts/SOURCES.md`). Ten of the shader cuts are ported from [gl-transitions](https://github.com/gl-transitions/gl-transitions); the licences and file hashes are in `THIRD_PARTY_NOTICES.md`.

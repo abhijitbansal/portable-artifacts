@@ -20,7 +20,7 @@ areas:
 
 - **The installer** (`plugins/portable-artifacts/bin/install.mjs`) and each
   skill's **doctor** (`scripts/doctor.mjs`) — they write into `~/.claude`,
-  `~/.agents`, `~/.copilot` and `~/.gemini`, and install dependencies.
+  `~/.agents`, `~/.copilot`, `~/.gemini` and `~/.codex`, and install dependencies.
 - **On-demand installs** — `npm ci --ignore-scripts` from committed lockfiles,
   and the pinned model downloads (checked against a SHA-256) in make-motion.
 - **Skill scripts** — anything a `SKILL.md` tells an agent to run, including
@@ -33,6 +33,8 @@ The security model of the skills is described in
 
 ## Notes for users
 
-- The one network use a skill can start without a download prompt is make-explainer's
-  `--image-api <https-endpoint>` flag, and only when you pass it.
+- Among the page builds, the one network use a skill can start without a download prompt is
+  make-explainer's `--image-api <https-endpoint>` flag, and only when you pass it. Separately,
+  make-dashboard's `setup.mjs` goes online (it installs DuckDB extensions), and its Postgres and
+  MySQL sources connect over the network.
 - Dashboards run model-written SQL: use a read-only database role for Postgres and MySQL.

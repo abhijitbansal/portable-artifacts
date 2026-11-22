@@ -109,12 +109,15 @@ Each has a default the work proceeds on; all are one-value changes in mode data 
 - **Unpinned `npx skills`, `npx playwright install chromium` and `npm install -g cartoon-wrap` in docs.** Default:
   allowed in docs only by the dependency rule tests; pin if the owner wants docs commands reproducible.
 - **Workflow actions pinned to tags, not commit SHAs.** Default: left; SHA pinning is a repo-wide choice.
+  **Resolved (checked 2026-11-21):** every action in `.github/workflows/` is pinned to a commit SHA (AGENTS.md, CI).
 - **session-compass: old stored goals are not re-stripped of control characters on display**, and the hover reveal is
   not built (`/compass more` expands instead). Default: left.
+  **Not this repo (2026-11-21):** session-compass is not part of portable-artifacts; the entry came across from claude-skills.
 - **make-motion 2 cut-outs with alpha (people) are not supported yet.** Default: later plan, with the optional
   cut-out package.
 - **cache-clock keep-warm ceiling is per session and resets if the ledger file is deleted.** Default: documented;
   a machine-wide ceiling would need a shared ledger.
+  **Not this repo (2026-11-21):** cache-clock is not part of portable-artifacts.
 
 ## Shot kinds, first wave: look review 3 leftovers (2026-11-16)
 
@@ -154,6 +157,7 @@ Still open, default is to leave as is:
 ## The cosmos look is parked (2026-11-16)
 
 Three independent reviewers said "not yet" for both gate films; the last after both allowed revision rounds. The look is on the branch as experimental (not listed, not documented). Record: docs/superpowers/plans/2026-11-15-pa2-gate-report.md.
+**Resolved (checked 2026-11-21):** cosmos was finished and ships; `--list looks` lists it with the other six.
 
 - Default: leave it parked; the other four looks (ledger, keynote, poster, marker) are not started.
 - If the owner wants it finished, the shortest path from review 3: put the sun at the orbit centre (or draw a Sun to Earth line instead of an orbit), give the to-scale compare a reveal and one alignment axis, draw the sun one way everywhere, keep gold off orbit strokes, drop the quote card. The reviewers agree the films already hold together and that gold-only-for-light is the idea to keep.
@@ -233,6 +237,7 @@ The security-lens review of the make-motion 2 cut-over (`.superpowers/sdd/2026-1
 - **F15, stale example and doc claims.** (a) `make-explainer/references/examples/slides.explainer.json` shows `clip.mp4`, a version 1 render, captioned as made by make-motion; (b) the `viewer-run.mjs` comment on where clips are decoded is wrong (they go to `clipCacheDir`); (c) `eval/README.md` says every `validate.mjs` call adds an EVAL_LOG line, which make-motion 2 does not write; (d) `eval/README.md` still says "the five `validate.mjs` scripts". Default: fix all four in the release polish pass; re-render the clip from `clip.motion.json` with the gallery.
 - **F17, the Playwright context does not block service workers** (`session.mjs`). The CSP still stops off-origin fetches and no page registers a worker. Default: add `serviceWorkers: 'block'` to `newContext` the next time `session.mjs` is touched.
 - **Also left, from the F12 sweep.** The runtime hints in `make-dashboard` (`pipeline.mjs`), `make-explainer` and `make-scene` (`siblings.mjs`, `checks.mjs`) and the stale-copy warning still print `npm ci --omit=dev --prefix …` or a bare `npm ci`, and the plans under `docs/superpowers/plans/` still name `references/examples/v2/hand-spike.json`. Default: change the hints with their tests when a skill next ships; leave the plans as history.
+  **Resolved in 2.2.0:** the hints now say `npm ci --ignore-scripts` (CHANGELOG 2.2.0, Diagnostics).
 
 ## make-explainer deck art: confirm-review leftovers (2026-11-18)
 
@@ -299,6 +304,7 @@ look-cosmos.json and look-poster.json passed look review 2 with SHIP AFTER FIXES
 ## Site hero: a 26 MB showreel (2026-11-18)
 
 Release Task 4 made the site hero (`site/index.html`) and the page's films section play the pro showreel, a 26 MB 1080p MP4 with autoplay, loop, `preload="metadata"` and controls; the old hero was a 12 s clip. The file has its index (`moov`) before the data, so it streams rather than loading whole, but a looping autoplay still downloads it all over time. Default: keep it, since the film is voiced and the caption invites unmuting. Option: a short, silent, lighter hero cut (for example the first 12 s at a higher CRF) with the full film one click away.
+**Resolved (checked 2026-11-21):** the cover now plays a 0.56 MB muted loop (`docs/media/hero-loop.mp4`) with the full film one click away, and the reel band above it a 0.68 MB loop.
 
 ## make-dashboard mono on hinted Linux browsers (2026-11-19)
 
@@ -329,12 +335,15 @@ Found by the whole-repo review (`.scratch/review/repo-review.md`, local only). E
   `prompt-to-dashboard*`, `press/`, `poster/`, `voice/`). The new site no longer links them and their v1 specs no
   longer build. Options: delete; move to a release asset or an `archive` branch; keep. **Default: keep** (another
   session has a `feat/gallery-source-downloads` worktree that may touch these).
+  **Resolved 2026-11-21: delete** (owner's choice, branch `feat/showcase-reel`). Git history keeps them.
 - **`eval/test/helpers/real-stream-pilot-2026-11-18.jsonl`** is a real session capture with the owner's home path, a
   session id and harness plugin names. Options: scrub (fake home path and id, drop unread keys, rerun eval tests); keep.
-  **Default: keep.** Recommended: scrub.
+  **Default: keep.** Recommended: scrub. **Resolved 2026-11-21: scrubbed** (home path, session id, temp folder id and plugin names replaced in the
+  stream and its test; history keeps the old file).
 - **`docs/superpowers/` (8 plans carry `/Users/` paths) and this file** are public on GitHub. Options: move to
-  `.github/plans/`; scrub paths; keep. **Default: keep** (AGENTS.md says leave plan text as written).
-- **Release.** No tags or releases exist. Options: cut `v2.1.1` with the CHANGELOG entry and the 1080p films attached;
+  `.github/plans/`; scrub paths; keep. **Default: keep** (AGENTS.md says leave plan text as written). **Resolved
+  2026-11-21: scrub paths** (owner's choice; `<repo>` and `<scratchpad>` placeholders, noted in AGENTS.md).
+- **Release.** No tags or releases exist. Options: cut a release for the current version (2.2.1 after `feat/showcase-reel`) with the CHANGELOG entry and the 1080p films attached;
   wait. **Default: wait** (publishing is the owner's call).
 - **Branch protection `strict`** (require branches to be up to date). **Default: off**, to avoid rebase churn with 13
   required checks.
@@ -366,3 +375,27 @@ From `.scratch/review/deep-review-2026-11-20.md` (local only). Each is shipped o
   matches the page title counts as an older twin; a concurrent install of the same skill can lose its stage folder to
   the leftover sweep; a failed restore rename does not name the backup path; "folder exists" stands in for "model
   complete" in the model cache. **Default: defer.**
+
+## make-motion 2 reel (branch feat/showcase-reel, 2026-11-21)
+
+The owner chose the reel's scope (everything new in make-motion 2, tagged on screen), its audio (voice, beds and cues)
+and its place (a band above the cover). Judgment calls taken while building it, each shipped on its default:
+
+- **One look per film, so nine films joined with ffmpeg.** `showcase/.../showreel/reel/join.mjs` dips through black
+  for 0.6 s between films and crossfades the sound. Option: a make-motion film that mixes looks per shot (an engine
+  feature, not built).
+- **A music bed per chapter**, restarting at each seam under the crossfade. Option: render the films silent of music
+  and lay one bed under the joined reel. Nobody has listened to it.
+- **Marker is labelled "redrawn", not new**, because 1.2.0 had a hand-drawn style it replaces.
+- **12 of 16 kinds are on screen** (`quote`, `free`, `timeline` and `media` are not); the narration states the count.
+- **The old hero stays.** The cover's Plate 00 still plays the pro showreel; the reel band sits above it. Option: drop
+  Plate 00's video and keep only the reel.
+- **Merged local branches** (`chore/standalone-plugin`, `ci/faster-tests`, `chore/repo-hardening-site-redesign`,
+  `fix/deep-review`, `fix/port-claude-skills-pr51-52`, `feat/gallery-source-downloads`) were not deleted: the
+  bash-guard hook blocks `git branch -D` for agents. Their tips equal the merged PR heads; the one remote left
+  (`chore/standalone-plugin`) is deleted.
+- **Docs review, one finding left** (`.scratch/review/docs-review-2026-11-21.md`, local only, #9): make-explainer's
+  `references/examples/slides.explainer.json` still shows `clip.mp4`, a make-motion 1 render (cut-over F15(a)).
+  Default: re-render it with make-motion 2 the next time the explainer examples change. The make-motion SKILL.md byte
+  budget went from 20,900 to 21,150 for this review's fixes (`bin/test/skill-budget.test.mjs`); trim SKILL.md instead if
+  you prefer.

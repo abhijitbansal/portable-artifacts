@@ -50,7 +50,7 @@ Inputs the spec implies and no feature test would naturally hit. Each line has i
 
 - [ ] **Step 1: Install dependencies**
 
-Run: `npm --prefix /Users/abhijitbansal/projects/claude-skills/.claude/worktrees/Add-Couple-features/plugins/portable-artifacts/skills/make-motion ci`
+Run: `npm --prefix <repo>/.claude/worktrees/Add-Couple-features/plugins/portable-artifacts/skills/make-motion ci`
 Expected: exit 0.
 
 - [ ] **Step 2: Run the existing suite**

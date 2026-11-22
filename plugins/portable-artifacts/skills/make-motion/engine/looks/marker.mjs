@@ -130,7 +130,7 @@ export const marker = {
   // support it). Kinds that read data start from desk's (the same editorial composition, margins and steps).
   // PARKED in marker alone (experimental: true on the kind: they validate and render here, and are not listed), each measured on its
   // registered example by scripts/v2/review.mjs (the hand's findings are in the review, scripts/v2/review-hand.mjs); the
-  // shortest path to finish each is named below (docs/decisions-pending.md has no entries for them yet). m2: the hand's
+  // shortest path to finish each is named below. m2: the hand's
   // per-element speed model made quote and diagram review clean. m3 shipped list, compare, media, map and clipping
   // by changing what is drawn, where and when (never a threshold): list writes its figure before its item (bulletFirst);
   // compare's arrow is drawn between the cards

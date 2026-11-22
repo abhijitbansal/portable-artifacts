@@ -1,0 +1,62 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "ledger",
+  "format": "16:9",
+  "seed": 13,
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "pulse",
+    "bpm": 96
+  },
+  "sound": "on",
+  "generatedBy": {
+    "model": "claude-opus-5-5",
+    "agent": "Claude Code"
+  },
+  "shots": [
+    {
+      "id": "ledger",
+      "show": "statement",
+      "kicker": "New look: ledger",
+      "say": "Ledger. The newsroom *data* look."
+    },
+    {
+      "id": "tests",
+      "show": "chart",
+      "cut": {
+        "type": "wipe",
+        "direction": "right"
+      },
+      "type": "bar",
+      "title": "Tests per suite in 2.2",
+      "say": "Every bar labels itself. make-motion runs the most tests.",
+      "data": [
+        {
+          "label": "make-motion",
+          "value": 4570
+        },
+        {
+          "label": "make-explainer",
+          "value": 1318
+        },
+        {
+          "label": "make-diagram",
+          "value": 1050
+        },
+        {
+          "label": "make-scene",
+          "value": 716
+        },
+        {
+          "label": "shared",
+          "value": 376
+        }
+      ],
+      "highlight": "make-motion",
+      "source": "Local runs for the 2.2.0 release"
+    }
+  ]
+}
