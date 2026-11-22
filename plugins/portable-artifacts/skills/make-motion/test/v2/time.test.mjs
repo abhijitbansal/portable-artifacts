@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ease } from '../../engine/time/ease.mjs';
 import { track, sample } from '../../engine/time/track.mjs';
+import { registries } from '../../engine/registry.mjs';
+import { validateLook } from '../../engine/looks/index.mjs';
 
 const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} is not within ${eps} of ${b}`);
 
@@ -97,6 +99,76 @@ test('a malformed or non-positive spring throws and says the form', () => {
   assert.throws(() => ease('spring(a,b)'), /spring\(<stiffness>,<damping>\)/);
   assert.throws(() => ease('spring(0,12)'), /stiffness and damping must be > 0/);
   assert.throws(() => ease('spring(170,0)'), /stiffness and damping must be > 0/);
+});
+
+// ---- ease: cubic-bezier and steps ----
+
+const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) <= eps, `${a} vs ${b}`);
+test('cubic-bezier(0,0,1,1) is linear', () => { for (const p of [0.1, 0.3, 0.77]) near(ease('cubic-bezier(0,0,1,1)')(p), p); });
+test('cubic-bezier matches the CSS ease and ease-in-out at the midpoint', () => {
+  near(ease('cubic-bezier(0.25,0.1,0.25,1)')(0.5), 0.8024, 1e-3);
+  near(ease('cubic-bezier(0.42,0,0.58,1)')(0.5), 0.5);
+});
+test('a cubic-bezier may overshoot and still ends on 1', () => {
+  const f = ease('cubic-bezier(0.34, 1.56, 0.64, 1)');
+  assert.ok(Math.max(...Array.from({ length: 101 }, (_, i) => f(i / 100))) > 1);
+  assert.equal(f(0), 0); assert.equal(f(1), 1);
+});
+test('a cubic-bezier is clamped outside [0, 1]', () => {
+  const f = ease('cubic-bezier(0,1,1,0)');
+  assert.equal(f(-1), 0); assert.equal(f(2), 1);
+  for (let i = 0; i <= 100; i++) assert.ok(Number.isFinite(f(i / 100)));
+  near(f(0.5), 0.5);
+});
+test('a cubic-bezier whose slope is flat at the start still solves to a reference value', () => {
+  // x1 = 0: dx/dt is ~6p at t = p, under the 1e-6 flat-slope limit for p = 1.5e-7, and x(p) - p is over the 1e-7 precision,
+  // so the Newton step is refused and the bisection runs. Near t = 0, y = 1.5t^2 and x = 3t^2, so y is p / 2.
+  const f = ease('cubic-bezier(0,0,1,0.5)');
+  const p = 1.5e-7;
+  near(f(p), p / 2, 6e-8);
+  assert.ok(f(p) > 0);
+  // and the curve is sane through its whole run
+  let last = 0;
+  for (let i = 1; i <= 200; i++) { const v = f(i / 200); assert.ok(v >= last - 1e-9, `monotonic at ${i}`); last = v; }
+});
+test('steps(4) holds each quarter and lands on 1', () => {
+  const f = ease('steps(4)');
+  assert.deepEqual([0, 0.24, 0.25, 0.5, 0.99, 1].map(f), [0, 0, 0.25, 0.5, 0.75, 1]);
+  assert.deepEqual([-1, 2].map(f), [0, 1]);
+});
+test('steps(4,end) is steps(4); steps(4,start) jumps at the start of each quarter and still starts at 0', () => {
+  assert.equal(ease('steps(4,end)')(0.3), 0.25);
+  const f = ease('steps(4, start)');
+  assert.deepEqual([0, 0.01, 0.25, 0.26, 1].map(f), [0, 0.25, 0.25, 0.5, 1]);
+});
+test('a bad cubic-bezier or steps says the form', () => {
+  assert.throws(() => ease('cubic-bezier(1.2,0,0,1)'), /expected cubic-bezier\(<x1>,<y1>,<x2>,<y2>\) with x1 and x2 from 0 to 1/);
+  assert.throws(() => ease('cubic-bezier(0,0,1)'), /expected cubic-bezier/);
+  assert.throws(() => ease('cubic-bezier(0,0,1,a)'), /expected cubic-bezier/);
+  assert.throws(() => ease(`cubic-bezier(0,${'9'.repeat(400)},1,1)`), /y1 and y2 must be finite numbers/);
+  assert.throws(() => ease('steps(0)'), /expected steps\(<n>\) or steps\(<n>,start\|end\) with n from 1 to 120/);
+  assert.throws(() => ease('steps(121)'), /with n from 1 to 120/);
+  assert.throws(() => ease('steps(2.5)'), /with n from 1 to 120/);
+  assert.throws(() => ease('steps(4,middle)'), /expected steps/);
+});
+test('a look may name either form as its punch ease and anywhere else it names an ease', () => {
+  const look = (cutMotion) => () => validateLook({ ...registries.looks.get('desk'), name: 'test-ease', cutMotion });
+  assert.doesNotThrow(look({ punchEase: 'cubic-bezier(0.2,0,0,1)' }));
+  assert.doesNotThrow(look({ punchEase: 'steps(5,start)' }));
+  assert.throws(look({ punchEase: 'cubic-bezier(2,0,0,1)' }), /cutMotion\.punchEase/);
+  assert.throws(look({ punchEase: 'steps(0)' }), /cutMotion\.punchEase/);
+  const desk = registries.looks.get('desk');
+  for (const key of ['rise', 'enter']) { // a registered move, and a legacy key the kinds still read
+    const move = (ease) => () => validateLook({ ...desk, name: 'test-ease-move', moves: { ...desk.moves, [key]: { ...desk.moves[key], ease } } });
+    assert.doesNotThrow(move('steps(6)'), key);
+    assert.doesNotThrow(move('cubic-bezier(0.2,0,0,1)'), key);
+    assert.throws(move('bogus'), new RegExp(`look "test-ease-move": moves\\.${key}\\.ease: .*unknown ease "bogus"`), key);
+    assert.throws(move('steps(0)'), new RegExp(`look "test-ease-move": moves\\.${key}\\.ease: .*expected steps`), key);
+    assert.throws(move('cubic-bezier(2,0,0,1)'), new RegExp(`look "test-ease-move": moves\\.${key}\\.ease: .*expected cubic-bezier`), key);
+  }
+  const cover = (ease) => () => validateLook({ ...desk, name: 'test-ease-cover', cutStyle: { cover: { ease } } });
+  assert.doesNotThrow(cover('steps(8,start)'));
+  assert.doesNotThrow(cover('cubic-bezier(0.2,0,0,1)'));
 });
 
 // ---- track ----

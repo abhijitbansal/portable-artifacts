@@ -205,11 +205,16 @@ function kindsErrors(name, kinds) {
 const isMoveOrNull = (move) => move === null
   || (isPlainObject(move) && typeof move.ease === 'string' && move.ease !== '' && Number.isFinite(move.dur) && move.dur >= 0);
 
-// The errors of a look's moves: an entry, a Move or null, for each registered move in `names`.
+// The errors of a look's moves: an entry, a Move or null, for each registered move in `names`; and the ease of every
+// entry that has one (a registered move or a legacy key such as enter) must parse.
 function movesErrors(name, moves, names) {
   if (!isPlainObject(moves)) return [`look "${name}": moves must be an object of move names to { ease, dur }, got ${String(moves)}`];
-  return names.filter((key) => !isMoveOrNull(moves[key]))
+  const shape = names.filter((key) => !isMoveOrNull(moves[key]))
     .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
+  const eases = Object.entries(moves).filter(([, move]) => isPlainObject(move) && typeof move.ease === 'string')
+    .map(([key, move]) => [key, easeProblem(move.ease)]).filter(([, problem]) => problem !== null)
+    .map(([key, problem]) => `look "${name}": moves.${key}.ease: ${problem}`);
+  return [...shape, ...eases];
 }
 
 const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes', 'ease']);
@@ -276,7 +281,7 @@ function coverEdgeErrors(name, look) {
 const isFraction = (v) => typeof v === 'number' && v >= 0 && v <= 1;
 const CUT_MOTION = Object.freeze({
   punchZoom: [(v) => typeof v === 'number' && v > 1 && v <= 2, 'must be a number above 1 and at most 2'],
-  punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back)'],
+  punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back; spring(<stiffness>,<damping>); cubic-bezier(<x1>,<y1>,<x2>,<y2>); steps(<n>) or steps(<n>,start|end))'],
   smearShutter: [(v) => typeof v === 'number' && v > 0 && v <= 1, 'must be a number above 0 and at most 1'],
   irisAt: [(v) => Array.isArray(v) && v.length === 2 && v.every(isFraction), 'must be two numbers from 0 to 1 (x and y as fractions of the canvas)'],
 });
