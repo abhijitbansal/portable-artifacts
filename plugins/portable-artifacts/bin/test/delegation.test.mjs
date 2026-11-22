@@ -119,10 +119,36 @@ test('reviewing.md has a Second reviewer section after its four headings, with t
   assert.match(body, /review\.md/);
 });
 
+// The brief names "the path of the report saved as a JSON file", and make.mjs --json only prints the report: nothing else
+// saves it, so the section says to (the proof's harness pre-saved the file, so only this sentence covers the hand-off).
+test('the Second reviewer section tells the director to save the --json report beside the film and pass that path', () => {
+  const body = secondReviewer(fs.readFileSync(REVIEWING, 'utf8'));
+  assert.ok(body, 'the section exists');
+  assert.match(body, /save the `make\.mjs --json` report beside the film as `<film>\.report\.json` with Write, and pass that path/i);
+  assert.match(body, /It only reads; it changes nothing/);
+  assert.doesNotMatch(body, /It reads and changes nothing/);
+});
+
+// The summary the section cites, read from the section itself, so a later proof cannot update the text and leave the file (or the other way).
+const PLUGIN_ROOT = path.join(SKILLS, '..');
+const CITED_SUMMARY = /`(eval\/results\/summary-motion-reviewer-[0-9-]+\.md)`/;
+
 test('the recorded proof the section cites exists, passed, and names the agent it proved', () => {
-  const summary = fs.readFileSync(path.join(SKILLS, '../eval/results/summary-motion-reviewer-2026-11-22.md'), 'utf8');
+  const cited = CITED_SUMMARY.exec(secondReviewer(fs.readFileSync(REVIEWING, 'utf8')) ?? '');
+  assert.ok(cited, 'the section cites a summary file by its eval/results path');
+  const summary = fs.readFileSync(path.join(PLUGIN_ROOT, cited[1]), 'utf8');
   assert.match(summary, /\*\*PASSED\*\*/);
   assert.match(summary, /Agent that ran, read from the stream: motion-reviewer/);
+  assert.match(summary, /model: opus/, 'the summary says the agent file pins opus');
+  assert.doesNotMatch(summary, /account default/, 'the agent runs on its pinned model, not the account default');
+  assert.match(summary, /6173284/, 'the summary names the commit of the agent file it proved');
+  const index = fs.readFileSync(path.join(PLUGIN_ROOT, 'eval/results/INDEX.md'), 'utf8');
+  assert.ok(index.split('\n').some((l) => l.includes(path.basename(cited[1])) && l.includes('6173284')), 'the INDEX row names the same commit');
+});
+
+test('guardrail proof: the cited-summary pattern reads a path from a section and finds none in prose without one', () => {
+  assert.equal(CITED_SUMMARY.exec('see (`eval/results/summary-motion-reviewer-2026-11-22.md`).')[1], 'eval/results/summary-motion-reviewer-2026-11-22.md');
+  assert.equal(CITED_SUMMARY.exec('see the proof'), null);
 });
 
 test('guardrail proof: the section finder reads a section and returns null for a file without one', () => {
