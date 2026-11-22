@@ -137,6 +137,19 @@ test('<shot>@end is that shot\'s own last frame, never the next shot\'s first', 
   assert.equal(filmFrame('b@end-0.5', THREE, threeTimeline), Math.round((c.start - 0.5) * FPS), 'an offset from end is still measured from the end');
 });
 
+test('<shot>@end-0 and @end+0 read as <shot>@end, a zero offset being no offset; a real offset is still from the end', () => {
+  const [, , c] = threeTimeline.shots;
+  const lastOfB = Math.round(c.start * FPS) - 1;
+  for (const ref of ['b@end-0', 'b@end+0', 'b@end-0.0', 'b@end-.0']) assert.equal(filmFrame(ref, THREE, threeTimeline), lastOfB, ref);
+  assert.equal(filmSeconds('b@end-0', THREE, threeTimeline), filmSeconds('b@end', THREE, threeTimeline));
+  assert.equal(filmFrame('b@end-0.01', THREE, threeTimeline), Math.round((c.start - 0.01) * FPS), 'a real offset stays measured from the end');
+});
+
+test('a time before the start never prints minus zero: -0.01 reads 0.0 s', () => {
+  assert.throws(() => filmFrame('start-0.01', film, timeline), (err) => err instanceof FilmTimeError && /\(0\.0 s; the film is \d+\.\d s\)/.test(err.message) && !/\(-0\.0 s/.test(err.message), 'start-0.01');
+  assert.throws(() => filmFrame('start-9', film, timeline), /\(-9\.0 s; the film is/, 'a real negative keeps its sign');
+});
+
 test('a shot id that looks like an anchor is the shot: end-1 and start-2 as well as end', () => {
   const odd = { version: 2, mode: 'pro', fps: FPS, shots: [{ id: 'end-1', show: 'statement', text: 'One.', hold: 2 }, { id: 'start-2', show: 'statement', text: 'Two.', hold: 2 }, { id: 'tail', show: 'statement', text: 'Three.', hold: 2 }] };
   const oddTimeline = buildTimeline(odd, { fps: FPS });

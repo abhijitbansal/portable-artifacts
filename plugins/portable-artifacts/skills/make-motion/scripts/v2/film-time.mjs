@@ -15,7 +15,7 @@ import { posterFrame } from './poster.mjs';
 const FILM_SHOT_ID = 'film';
 const NUMBER_RE = /^\d+(\.\d+)?$/;
 const SHOT_SEPARATOR = '@';
-const END_ANCHOR = 'end';
+const END_ZERO_RE = /^end(?:[+-](?:0+(?:\.0+)?|\.0+))?$/; // "end", or "end" with an offset of zero
 const LENGTH_DECIMALS = 1;
 const END_EPSILON = 1e-6; // anchors are rounded to a microsecond, so a time at the end may sit that far past it
 
@@ -66,11 +66,12 @@ function inShot(ref, timeline) {
   return shot === undefined ? null : { shot, anchor: ref.slice(at + SHOT_SEPARATOR.length) };
 }
 
-// The shot-local second of `<shot-id>@<anchor>`. "@end" alone is the shot's own last frame (one frame before its end,
-// which is the next shot's first frame); "@end-0.5" and the like are measured from the end itself.
+// The shot-local second of `<shot-id>@<anchor>`. "@end" is the shot's own last frame (one frame before its end, which is
+// the next shot's first frame), and so are "@end-0" and "@end+0": a zero offset is no offset. "@end-0.5" and the like are
+// measured from the end itself.
 function inShotSeconds({ shot, anchor }, timeline, ref, ids) {
   const seconds = anchorIn(anchor, shot, ref, ids);
-  return anchor === END_ANCHOR ? seconds - 1 / timeline.fps : seconds;
+  return END_ZERO_RE.test(anchor) ? seconds - 1 / timeline.fps : seconds;
 }
 
 /**
@@ -105,7 +106,9 @@ export function filmSeconds(ref, film, timeline) {
 export function filmFrame(ref, film, timeline, flag = '--poster') {
   const seconds = filmSeconds(ref, film, timeline);
   const length = timeline.duration.toFixed(LENGTH_DECIMALS);
-  if (seconds < 0) throw new FilmTimeError(`film time ${JSON.stringify(echoValue(ref))} is before the start of the film (${seconds.toFixed(LENGTH_DECIMALS)} s; the film is ${length} s)`, shotIdsOf(film, timeline));
+  // a tiny negative rounds to "-0.0": print it as 0.0, never minus zero
+  const before = seconds.toFixed(LENGTH_DECIMALS).replace(/^-(0\.0+)$/, '$1');
+  if (seconds < 0) throw new FilmTimeError(`film time ${JSON.stringify(echoValue(ref))} is before the start of the film (${before} s; the film is ${length} s)`, shotIdsOf(film, timeline));
   if (seconds > timeline.duration + END_EPSILON) return posterFrame(seconds, timeline, ref, flag); // past the last frame: it throws, naming the length
   return Math.min(Math.round(seconds * timeline.fps), timeline.frameCount - 1) + 0; // + 0: a frame that rounds to -0 is frame 0
 }
