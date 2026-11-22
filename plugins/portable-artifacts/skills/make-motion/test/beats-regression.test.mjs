@@ -288,6 +288,6 @@ test('--bpm forces the grid at that tempo and reports the fit as the confidence'
 // --- the docs describe what the detector does ---------------------------------------------------------------------
 
 test('SKILL.md names the tempo flags', () => {
-  const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
-  for (const flag of ['--bpm', '--min-bpm', '--max-bpm']) assert.ok(skill.includes(flag), `${flag} is documented`);
+  const docs = ['SKILL.md', 'references/music.md'].map((rel) => readFileSync(path.join(root, rel), 'utf8')).join('\n');
+  for (const flag of ['--bpm', '--min-bpm', '--max-bpm']) assert.ok(docs.includes(flag), `${flag} is documented`);
 });

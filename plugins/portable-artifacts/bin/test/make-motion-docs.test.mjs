@@ -21,7 +21,18 @@ import { errorReport, reportOf } from '../../skills/make-motion/scripts/v2/repor
 
 const MOTION = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../skills/make-motion');
 const read = (...parts) => fs.readFileSync(path.join(MOTION, ...parts), 'utf8');
-const DOCS = ['SKILL.md', 'README.md', 'references/schema.md', 'references/story.md', 'references/migrating.md'];
+
+// Every .md file under references/ (examples/ left out), as a path relative to the skill folder, sorted. Walked, so a new
+// reference file is covered by every link, flag and --list rule below without a list to keep in step.
+export function referenceDocs() {
+  const walk = (rel) => fs.readdirSync(path.join(MOTION, rel), { withFileTypes: true }).flatMap((entry) => {
+    const child = `${rel}/${entry.name}`;
+    if (entry.isDirectory()) return entry.name === 'examples' ? [] : walk(child);
+    return entry.name.endsWith('.md') ? [child] : [];
+  });
+  return walk('references').sort();
+}
+const DOCS = ['SKILL.md', 'README.md', ...referenceDocs()];
 const SECTION_OF = { skill: 'SKILL.md', schema: 'references/schema.md', migrating: 'references/migrating.md' };
 const COUNT_WORDS = { 7: 'seven', 16: 'sixteen' };
 
@@ -82,6 +93,28 @@ test('the finished films SKILL.md names are in references/examples/v2', () => {
 
 test('guardrail: a link to a missing reference or script is caught', () => {
   assert.deepEqual(brokenLinks('see references/nope.md and scripts/nope.mjs and references/schema.md'), ['references/nope.md', 'scripts/nope.mjs']);
+});
+
+const WAVE_1_DOCS = ['references/broll.md', 'references/music.md', 'references/reviewing.md', 'references/tells.md',
+  'references/types/data.md', 'references/types/explainer.md', 'references/types/vertical.md'];
+
+test('the doctrine files exist, and the review protocol is not called review.md', () => {
+  for (const rel of WAVE_1_DOCS) assert.ok(fs.existsSync(path.join(MOTION, rel)), rel);
+  assert.ok(!fs.existsSync(path.join(MOTION, 'references/review.md')), 'review.md is the director\'s output beside the film');
+  for (const rel of ['references/migrating.md', 'references/schema.md', 'references/story.md', ...WAVE_1_DOCS]) assert.ok(referenceDocs().includes(rel), rel); // later waves add files
+  assert.ok(referenceDocs().every((rel) => !rel.startsWith('references/examples/')));
+});
+
+test('SKILL.md is a router: it names every reference file, and the beat notes live in references/music.md', () => {
+  const md = read('SKILL.md');
+  for (const rel of referenceDocs()) assert.ok(md.includes(rel), `SKILL.md names ${rel}`);
+  assert.ok(!md.includes('reggae one-drop'), 'the misread list moved out');
+  assert.ok(read('references/music.md').includes('reggae one-drop'));
+});
+
+test('guardrail: a reference file SKILL.md does not name is caught', () => {
+  const md = read('SKILL.md').replaceAll('references/tells.md', 'x');
+  assert.deepEqual(referenceDocs().filter((rel) => !md.includes(rel)), ['references/tells.md']);
 });
 
 // ---- --list names -------------------------------------------------------------------------------------------------------
