@@ -52,13 +52,16 @@ export async function ffmpegOrNull() {
   }
 }
 
-/** { codec, pix_fmt, frames, duration, width, height } of the first video stream of `file`, by ffprobe (null: no ffprobe). */
+/** { codec, pix_fmt, frames, duration, width, height, colour: { space, primaries, transfer, range } } of the first video
+ *  stream of `file`, by ffprobe (null: no ffprobe). A colour field ffprobe leaves out is 'unknown'. */
 export function probeVideo(file) {
-  const args = ['-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,pix_fmt,nb_read_frames,width,height:format=duration', '-of', 'json', file];
+  const entries = 'stream=codec_name,pix_fmt,nb_read_frames,width,height,color_space,color_primaries,color_transfer,color_range:format=duration';
+  const args = ['-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries', entries, '-of', 'json', file];
   const run = spawnSync('ffprobe', args, { encoding: 'utf8' });
   if (run.status !== 0) return null;
   const { streams: [stream], format } = JSON.parse(run.stdout);
-  return { codec: stream.codec_name, pix_fmt: stream.pix_fmt, frames: Number(stream.nb_read_frames), duration: Number(format.duration), width: stream.width, height: stream.height };
+  const colour = { space: stream.color_space ?? 'unknown', primaries: stream.color_primaries ?? 'unknown', transfer: stream.color_transfer ?? 'unknown', range: stream.color_range ?? 'unknown' };
+  return { codec: stream.codec_name, pix_fmt: stream.pix_fmt, frames: Number(stream.nb_read_frames), duration: Number(format.duration), width: stream.width, height: stream.height, colour };
 }
 
 /** The process ids of running headless browsers (pgrep), as a Set of numbers. */

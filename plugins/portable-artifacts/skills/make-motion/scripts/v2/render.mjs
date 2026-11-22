@@ -38,8 +38,19 @@ const PARTIAL_RE = /^\..+\.partial-\d+\.mp4$/;
 const QUIET = ['-hide_banner', '-loglevel', 'error'];
 const DEFAULT_MODE = 'pro'; // as the timeline's (engine/script/timing.mjs)
 
-// A JPEG decodes to full-range YUV; the video is limited-range yuv420p like every other, so scale between the two.
-const JPEG_RANGE_FILTER = ['-vf', 'scale=in_range=pc:out_range=tv'];
+// Every film is BT.709 limited range, the colour a player assumes for HD, and says so: the last filter writes the tags
+// (matrix, primaries, transfer and range) onto the stream, and they survive the stream copy of the mux. Without them a
+// player guesses, and ffmpeg's own default for an untagged file is BT.601.
+export const BT709_TAGS = 'setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv';
+
+// One scale filter converts the matrix and the range together. A JPEG decodes to full-range BT.601 YUV (its JFIF
+// default), so the fast path names that input and converts it; a PNG decodes to RGB and needs only the output named.
+// The fast path's conversion is YUV to YUV, which swscale rounds coarsely by default (a mid grey comes out as 125, 127,
+// 127 when read back); accurate_rnd and full_chroma_int make it round to the nearest level (the same grey reads 128).
+const COLOUR_FILTER = {
+  fast: `scale=in_color_matrix=bt601:in_range=pc:out_color_matrix=bt709:out_range=tv:flags=accurate_rnd+full_chroma_int,format=yuv420p,${BT709_TAGS}`,
+  exact: `scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,${BT709_TAGS}`,
+};
 
 // The encoder settings, chosen by measurement (see the report of task 12, round 4): libx264 at crf 23 with `-tune film`
 // keeps the look's grain (about 85% of its high-pass energy on flat paper) at a size that a 20 s 1080p desk film fits in
@@ -47,12 +58,12 @@ const JPEG_RANGE_FILTER = ['-vf', 'scale=in_range=pc:out_range=tv'];
 export const ENCODER = Object.freeze({ preset: 'medium', crf: 23, tune: 'film' });
 
 /**
- * The ffmpeg arguments for frames on a pipe: PNG frames (exact) or JPEG frames (fast: scaled from full to limited
- * range, since a JPEG decodes to full-range YUV) into H.264 yuv420p. Built here rather than from the version 1 helper,
- * which cannot express a crf or a tune.
+ * The ffmpeg arguments for frames on a pipe: PNG frames (exact) or JPEG frames (fast) into H.264 yuv420p, converted to
+ * BT.709 limited range by one scale filter and tagged by the last filter (COLOUR_FILTER). Built here rather than from the
+ * version 1 helper, which cannot express a crf or a tune.
  */
 export function encoderArgs({ fps, out, exact, stamp = [] }) {
-  const input = ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', exact ? 'png' : 'mjpeg', '-i', '-', ...(exact ? [] : JPEG_RANGE_FILTER)];
+  const input = ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', exact ? 'png' : 'mjpeg', '-i', '-', '-vf', exact ? COLOUR_FILTER.exact : COLOUR_FILTER.fast];
   const video = ['-c:v', 'libx264', '-preset', ENCODER.preset, '-crf', String(ENCODER.crf), '-tune', ENCODER.tune, '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
   return [...input, ...video, ...stamp, out];
 }

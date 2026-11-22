@@ -12,7 +12,7 @@ import { HERE, browserAvailable, ffmpegOrNull, headlessPids, headlessPidsUnder, 
 import { registries } from '../../engine/registry.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
-import { encoderArgs, ENCODER, sweepPartials } from '../../scripts/v2/render.mjs';
+import { encoderArgs, ENCODER, BT709_TAGS, sweepPartials } from '../../scripts/v2/render.mjs';
 import { formatText } from '../../scripts/v2/report.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
@@ -372,7 +372,7 @@ test('fast and exact renders of the same film are both H.264 yuv420p of the expe
   }
 });
 
-test('the encoder arguments: PNG or JPEG frames from a pipe into H.264 yuv420p at crf 23 with the film tune; JPEG is scaled to limited range', () => {
+test('the encoder arguments: PNG or JPEG frames from a pipe into H.264 yuv420p at crf 23 with the film tune, converted to BT.709 limited range by one scale filter and tagged by a final setparams', () => {
   const exact = encoderArgs({ fps: FPS, out: 'x.mp4', exact: true });
   const fast = encoderArgs({ fps: FPS, out: 'x.mp4', exact: false });
   const after = (args, flag) => args[args.indexOf(flag) + 1];
@@ -385,7 +385,11 @@ test('the encoder arguments: PNG or JPEG frames from a pipe into H.264 yuv420p a
     assert.equal(args.at(-1), 'x.mp4');
     assert.ok(args.includes('libx264') && args.includes('+faststart'));
   }
-  assert.ok(!exact.includes('-vf') && fast.includes('scale=in_range=pc:out_range=tv'));
+  const vf = (args) => args[args.indexOf('-vf') + 1];
+  assert.equal(BT709_TAGS, 'setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv');
+  assert.equal(vf(fast), `scale=in_color_matrix=bt601:in_range=pc:out_color_matrix=bt709:out_range=tv:flags=accurate_rnd+full_chroma_int,format=yuv420p,${BT709_TAGS}`);
+  assert.equal(vf(exact), `scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,${BT709_TAGS}`);
+  for (const args of [exact, fast]) assert.equal(args.filter((a) => a === '-vf').length, 1);
   assert.deepEqual(ENCODER, { preset: 'medium', crf: 23, tune: 'film' });
 });
 
