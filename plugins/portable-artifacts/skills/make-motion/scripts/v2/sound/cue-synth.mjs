@@ -11,6 +11,10 @@ const PEAK = 0.5; // every cue is scaled to this peak (-6 dBFS), so a cue's `vol
 const TAIL_SECONDS = 0.005; // linear fade to silence at the end, so a cue never ends on a click
 const GAIN_STEPS = 1e9;
 const NOISE_SEED = 0x5eed;
+/** A cue that sounds again rotates through this many takes; take `k` is detuned by VARIANT_CENTS[k] and has its own noise. */
+export const CUE_VARIANTS = 3;
+export const VARIANT_CENTS = Object.freeze([0, 30, -30]);
+const CENTS_PER_OCTAVE = 1200;
 const A4_HZ = 440;
 const A4_MIDI = 69;
 const SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -352,10 +356,14 @@ export function channelsWav({ left, right, pan = 0 }) {
  * One synthesised cue as a WAV Buffer. `note` tunes pop, chime, impact, drop and ding; `pan` (-1 left .. 1 right) is
  * equal-power with the centre at unity. `chars` and `spacing` (seconds between keys) shape `typing` only. Each channel
  * peaks at 0.5 before pan, whatever the cue (a widened cue's channels are levelled one by one). A name that is not a
- * cue is an Error that lists the cues.
+ * cue is an Error that lists the cues. `variant` (0 to CUE_VARIANTS - 1) is the take: 0 is the cue as it always was;
+ * take k seeds the noise with NOISE_SEED + k and raises the pitch by VARIANT_CENTS[k] cents, so a cue with no noise in
+ * it changes too.
  */
-export function cueWav({ cue, note, pan = 0, chars = 1, spacing = TYPING_SECONDS_PER_KEY }) {
+export function cueWav({ cue, note, pan = 0, chars = 1, spacing = TYPING_SECONDS_PER_KEY, variant = 0 }) {
+  if (!Number.isInteger(variant) || variant < 0 || variant >= CUE_VARIANTS) throw new RangeError(`variant must be an integer from 0 to ${CUE_VARIANTS - 1}, got ${String(variant)}`);
   const def = layersOf(cue, chars, spacing);
-  const { left, right } = layerCue(def, noteHz(note ?? DEFAULT_NOTE[cue] ?? 'A4'), mulberry32(NOISE_SEED));
+  const f0 = noteHz(note ?? DEFAULT_NOTE[cue] ?? 'A4') * 2 ** (VARIANT_CENTS[variant] / CENTS_PER_OCTAVE);
+  const { left, right } = layerCue(def, f0, mulberry32(NOISE_SEED + variant));
   return channelsWav({ left, right, pan });
 }
