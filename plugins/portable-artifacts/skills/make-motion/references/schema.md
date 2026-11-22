@@ -39,7 +39,7 @@ An unknown root field is an error. Only `shots` and `version` are required.
 | `captions` | boolean | Draws the narration as captions, on shots whose kind does not show its own words. Off by default |
 | `loop` | boolean | `true`: the review checks that the last frame matches the first |
 | `vars` | object | Typed names for `{{name}}` in the film (see Variables) |
-| `generatedBy` | `{ "model", "effort", "agent" }` | Which model wrote the film. Each value is 1 to 60 letters, digits, spaces and `. _ : / ( ) + [ ] -`. Written into the MP4's metadata |
+| `generatedBy` | `{ "model", "effort", "agent" }` | Which model wrote the film. Each value is 1 to 60 letters, digits, spaces and `. _ : / ( ) + [ ] -`. Written into the MP4's metadata. `--model`, `--effort` and `--agent` on `make.mjs` override the three keys |
 | `provenance` | boolean | `false` leaves the authoring tags out of the MP4, as `--no-provenance` does |
 
 ## Fields every shot takes
