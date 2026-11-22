@@ -28,7 +28,8 @@ import { sessionFindings } from './review.mjs';
 import { stampTags, tagArgs } from './stamp.mjs';
 import { readBeatsFile } from './sound/beats-file.mjs';
 import { snapFilm } from './sound/snap.mjs';
-import { posterFrame, posterPath, writePoster } from './poster.mjs';
+import { posterPath, writePoster } from './poster.mjs';
+import { checkFilmTime, filmFrame } from './film-time.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
@@ -395,7 +396,7 @@ async function makeSound(loaded, timeline, state, io, work, clips = []) {
 // --poster: one still of the film's frame (poster.mjs) on its timeline (measured for a voiced film), no review, no
 // sound, no ffmpeg. A time past the end is the machine-trouble exit (2) with the film's length.
 async function makePoster(options, loaded, state, io) {
-  const frame = posterFrame(options.poster, loaded.timeline);
+  const frame = filmFrame(options.poster, loaded.film, loaded.timeline);
   const file = posterPath(options.posterOut ?? null, outputPaths(options).out);
   const session = await openSession(loaded, { browser: io.browser });
   try {
@@ -484,6 +485,8 @@ async function execute(options, state, io) {
   for (const entry of state.kinds) io.log(experimentalKindLine(entry));
   // an emphasis device the look does not draw takes the look's own emphasis: one info line per event, never a finding
   for (const entry of withLookEmphasis(film).moved) io.log(fallbackNotice(resolveLook(film).name, entry));
+  // --poster: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.
+  if (typeof options.poster === 'string') checkFilmTime(options.poster, film);
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
   const voiced = film.voice !== undefined && options.outline !== true;
   const made = !voiced ? null
@@ -502,7 +505,7 @@ async function execute(options, state, io) {
   // A film's video clips are probed, and their frames taken from (or decoded into) the cache beside the video (clips.mjs).
   const clips = clipUses(film).length === 0 ? [] : await clipStage(loaded, timeline, state, io, clipCacheDir(options));
   if (clips === null) return;
-  if (typeof options.poster === 'number') {
+  if (typeof options.poster === 'string') {
     await makePoster(options, { film, timeline, specDir, prepared: loaded.prepared, clips }, state, io);
     return;
   }

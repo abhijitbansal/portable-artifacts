@@ -8,10 +8,13 @@ export const POSTER_JPEG_QUALITY = 92;
 export const DEFAULT_POSTER = 'poster.jpg';
 const SECONDS_DECIMALS = 1;
 
-/** The frame a poster at `seconds` shows: round(seconds * fps); past the last frame is an error naming the film's length. */
-export function posterFrame(seconds, timeline) {
+/**
+ * The frame a poster at `seconds` shows: round(seconds * fps); past the last frame is an error naming the film's length.
+ * `label` is what the error calls the time (default: the seconds; film-time.mjs passes the reference as the user wrote it).
+ */
+export function posterFrame(seconds, timeline, label = seconds) {
   const frame = Math.round(seconds * timeline.fps);
-  if (frame > timeline.frameCount - 1) throw new Error(`--poster ${seconds}: past the end (the film is ${timeline.duration.toFixed(SECONDS_DECIMALS)} s)`);
+  if (frame > timeline.frameCount - 1) throw new Error(`--poster ${label}: past the end (the film is ${timeline.duration.toFixed(SECONDS_DECIMALS)} s)`);
   return frame;
 }
 

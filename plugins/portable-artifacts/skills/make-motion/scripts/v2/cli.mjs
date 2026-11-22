@@ -98,16 +98,17 @@ function checkConflicts(values) {
   }
 }
 
-// --poster <seconds>: a plain non-negative number; --poster-out needs it and names a .jpg, .jpeg or .png file.
+// --poster <film time>: the text as written (seconds, a shot, shot@anchor or an anchor: film-time.mjs reads it once the
+// film's timeline exists); --poster-out needs it and names a .jpg, .jpeg or .png file.
 function posterFlags(values) {
-  if (values['poster-out'] !== undefined && values.poster === undefined) throw new UsageError('--poster-out needs --poster <seconds>');
+  if (values['poster-out'] !== undefined && values.poster === undefined) throw new UsageError('--poster-out needs --poster <film time>');
   if (values.poster === undefined) return { poster: null, posterOut: null };
-  if (!/^\d+(\.\d+)?$/.test(values.poster)) throw new UsageError(`--poster takes a time in seconds from the film's start, such as 2.5; got ${JSON.stringify(values.poster)}`);
+  if (values.poster === '') throw new UsageError('--poster takes a film time: seconds such as 2.5, a shot id, <shot-id>@<anchor> or an anchor such as end-1');
   const out = values['poster-out'];
   if (out !== undefined && !POSTER_EXTENSIONS.includes(out.slice(out.lastIndexOf('.')).toLowerCase())) {
     throw new UsageError(`--poster-out must name a ${POSTER_EXTENSIONS.join(', ')} file, got ${JSON.stringify(out)}`);
   }
-  return { poster: Number(values.poster), posterOut: out ?? null };
+  return { poster: values.poster, posterOut: out ?? null };
 }
 
 // --workers <1-8 | auto> (default 1): the pages that capture the frames, in the run's one browser (workers.mjs).
@@ -135,7 +136,7 @@ function modeFlags(values) {
  * @param {string[]} argv the arguments after the script name
  * @returns {{ specPath: string | null, out: string | null, json: boolean, noRender: boolean, outline: boolean, list: string | null, exact: boolean, all: boolean,
  *   provenance: { model?: string, effort?: string, agent?: string, noProvenance: boolean }, phonemes: boolean,
- *   poster: number | null, posterOut: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null }}
+ *   poster: string | null, posterOut: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null }}
  * @throws {UsageError} for a removed version 1 flag (with `hint`: what to do instead), an unknown or misspelled flag, a
  *   bad --list value, a missing or extra film path, an --out that is not .mp4, or a stamp flag that is refused
  */

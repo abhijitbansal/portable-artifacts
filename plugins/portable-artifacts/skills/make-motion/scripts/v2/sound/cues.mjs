@@ -6,6 +6,7 @@ import { validateLook } from '../../../engine/looks/index.mjs';
 import '../../../engine/modes/index.mjs';
 import { anchorSeconds, AnchorError } from '../../../engine/script/anchors.mjs';
 import { DEFAULT_MODE } from '../spec.mjs';
+import { wholeFilmShot } from '../film-time.mjs';
 import { soundEvents } from './events.mjs';
 import { KNOWN_CUES } from './synth.mjs';
 
@@ -17,7 +18,6 @@ const CUE_PAN = 0;
 // emphasis, then a cut); between equal ranks the earlier one stays. An explicit list's cues all rank the same.
 const TIE_RANK = Object.freeze({ cut: 0, emphasis: 1, device: 2, land: 3 });
 const EXPLICIT_RANK = 0;
-const FILM_SHOT_ID = 'film';
 // "word:<text>" (any word form but the index one, "word:<n>" with an optional offset): across the whole film it must name
 // one shot's word, or the cue says to use the index form.
 const WORD_TEXT_RE = /^word:(?!\d+(?:[+-](?:\d+(?:\.\d+)?|\.\d+))?$)([\s\S]+)$/;
@@ -70,20 +70,6 @@ function cueFor(ev, sounds) {
   return sounds[ev.kind] ?? null;
 }
 
-// The whole film as one shot, for a film-level anchor: word and sentence indexes count across the film, in film seconds.
-// Each word as it is heard (soundStart, soundEnd), in film seconds; a sentence from its first word's heard start to its
-// last word's heard end. A cue is a sound, so it follows the voice, not the picture's start for a shot's first word.
-function filmShot(timeline) {
-  const heard = (s) => s.words.map((w) => ({ ...w, start: s.start + (w.soundStart ?? w.start), end: s.start + (w.soundEnd ?? w.end) }));
-  const sentences = (s, words) => s.sentences.map((x) => ({ ...x, start: words[x.first]?.start ?? s.start + x.start, end: words[x.last]?.end ?? s.start + x.end }));
-  return {
-    id: FILM_SHOT_ID,
-    duration: timeline.duration,
-    words: timeline.shots.flatMap(heard),
-    sentences: timeline.shots.flatMap((s) => sentences(s, heard(s))),
-  };
-}
-
 const letters = (text) => text.replace(NON_WORD_RE, '').toLowerCase();
 const listed = (items, last) => (items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} ${last} ${items.at(-1)}`);
 
@@ -124,7 +110,7 @@ const secondsText = (s) => String(Number(s.toFixed(SECONDS_DECIMALS)));
 // The film's own `cues` list as { t, cue, rank }. An anchor more than a frame outside the film is an error naming the
 // cue, never moved to the edge; the film end itself is inside (placed holds it on the last frame).
 function explicitCues(film, timeline) {
-  const wholeFilm = filmShot(timeline);
+  const wholeFilm = wholeFilmShot(timeline);
   const frame = 1 / timeline.fps;
   return film.cues.map((item, i) => {
     checkCue(item?.cue, `cues[${i}].cue`);

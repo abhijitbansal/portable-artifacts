@@ -104,6 +104,20 @@ test('a value that happens to spell a removed flag after --out is not mistaken f
   assert.throws(() => parseMakeArgs([FILM, '--out', '--fps']), (err) => err instanceof UsageError && err.hint === undefined);
 });
 
+// ---- --poster takes film time as written (film-time.mjs reads it once the timeline exists) ----
+
+test('--poster keeps its text as written: a number, a shot, shot@anchor or an anchor', () => {
+  for (const time of ['2.5', 'rows', 'rows@end-0.5', 'word:3', 'end-1']) {
+    assert.equal(parseMakeArgs([FILM, '--poster', time]).poster, time);
+  }
+  assert.equal(parseMakeArgs([FILM]).poster, null);
+});
+
+test('--poster with no text is a usage error that lists the forms; --poster-out names --poster <film time>', () => {
+  assert.throws(() => parseMakeArgs([FILM, '--poster', '']), (err) => err instanceof UsageError && /a shot id, <shot-id>@<anchor> or an anchor/.test(err.message));
+  assert.throws(() => parseMakeArgs([FILM, '--poster-out', 'p.png']), (err) => err instanceof UsageError && /--poster <film time>/.test(err.message));
+});
+
 // ---- Step 1 (c): the voices the validator accepts can be listed ----
 
 test('--list voices prints the voices the validator accepts', () => {

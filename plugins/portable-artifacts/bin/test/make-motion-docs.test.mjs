@@ -98,11 +98,12 @@ test('guardrail: a link to a missing reference or script is caught', () => {
 
 const WAVE_1_DOCS = ['references/broll.md', 'references/calibration.md', 'references/music.md', 'references/reviewing.md', 'references/rules.md', 'references/tells.md',
   'references/types/data.md', 'references/types/explainer.md', 'references/types/vertical.md'];
+const WAVE_3_DOCS = ['references/tools.md']; // film time, then the commands that read it
 
 test('the doctrine files exist, and the review protocol is not called review.md', () => {
-  for (const rel of WAVE_1_DOCS) assert.ok(fs.existsSync(path.join(MOTION, rel)), rel);
+  for (const rel of [...WAVE_1_DOCS, ...WAVE_3_DOCS]) assert.ok(fs.existsSync(path.join(MOTION, rel)), rel);
   assert.ok(!fs.existsSync(path.join(MOTION, 'references/review.md')), 'review.md is the director\'s output beside the film');
-  for (const rel of ['references/migrating.md', 'references/schema.md', 'references/story.md', ...WAVE_1_DOCS]) assert.ok(referenceDocs().includes(rel), rel); // later waves add files
+  for (const rel of ['references/migrating.md', 'references/schema.md', 'references/story.md', ...WAVE_1_DOCS, ...WAVE_3_DOCS]) assert.ok(referenceDocs().includes(rel), rel); // later waves add files
   assert.ok(referenceDocs().every((rel) => !rel.startsWith('references/examples/')));
 });
 

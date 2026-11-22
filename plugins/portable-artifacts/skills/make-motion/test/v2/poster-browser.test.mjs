@@ -71,6 +71,16 @@ test('the default poster is poster.jpg beside where the MP4 would go', async (t)
   return undefined;
 });
 
+test('a poster at film time: a shot id is its first frame, shot@end-<s> is inside that shot', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const film = writeFilm('film-time', FILM);
+  const shot = JSON.parse(make([film, '--poster', 'b', '--poster-out', path.join(dir, 'b.png'), '--json'], NO_FFMPEG).stdout);
+  assert.deepEqual(shot.poster, { file: path.join(dir, 'b.png'), frame: 30, seconds: 1 });
+  const inside = JSON.parse(make([film, '--poster', 'b@end-0.5', '--poster-out', path.join(dir, 'b-end.png'), '--json'], NO_FFMPEG).stdout);
+  assert.deepEqual(inside.poster, { file: path.join(dir, 'b-end.png'), frame: 45, seconds: 1.5 });
+  return undefined;
+});
+
 test('a time past the end is exit 2 with the film\'s length', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
   const run = make([writeFilm('past', FILM), '--poster', '40'], NO_FFMPEG);
@@ -85,7 +95,10 @@ test('refused pairs and a wrong --poster-out extension are usage errors', () => 
   }
   assert.equal(make(['f.json', '--poster-out', 'p.jpg']).status, 2);
   assert.match(make(['f.json', '--poster', '1', '--poster-out', 'p.gif']).stderr, /\.jpg, \.jpeg, \.png/);
-  assert.match(make(['f.json', '--poster', 'soon']).stderr, /--poster takes a time in seconds/);
+  // film time is read once the film's timeline exists (film-time.mjs): a word that names nothing is refused there, with the list
+  const soon = make([writeFilm('soon', FILM), '--poster', 'soon']);
+  assert.equal(soon.status, 2);
+  assert.match(soon.stderr, /the shots are: a, b/);
 });
 
 test('a captioned film\'s poster has no caption ink; the rest of the frame is the film\'s', async (t) => {

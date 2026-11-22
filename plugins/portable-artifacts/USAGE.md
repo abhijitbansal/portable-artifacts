@@ -535,7 +535,7 @@ make-motion 2 reads version 2 films only: a script of shots in one JSON file, `f
 
 **More from the same command.**
 
-- `make.mjs film.json --poster 4.5` writes one still instead of the MP4 (`--poster-out <file>.jpg` names it).
+- `make.mjs film.json --poster 4.5` writes one still instead of the MP4 (`--poster-out <file>.jpg` names it). The time can also be a shot id, `rows@end-0.5` (a place in a shot) or an anchor across the film such as `end-1` (`skills/make-motion/references/tools.md`).
 - `--workers 4` (or `auto`) captures frames in parallel. `--exact` captures every frame as a PNG. `--sheets-only` writes the review sheets and encodes nothing.
 - **One video per row.** Declare `vars` in the film, `{ "name": { "type": "string", "default": "Ada" } }`, write `{{name}}` where a value goes, put the values in a JSON array of objects, and run `make.mjs film.json --batch rows.json --out "renders/{name}.mp4"`. The `--out` needs `{index}` or a `{var}`.
 - **Footage and pictures.** A `media` shot places a picture or a clip from the project folder (`src`, and for a clip `in`, `out` and `muted`). A `clipping` shot shows a screenshot with highlighted regions. A `cutout` device places a picture with transparency; `cutout.mjs photo.png` makes one locally after a one-time install the agent asks about.
