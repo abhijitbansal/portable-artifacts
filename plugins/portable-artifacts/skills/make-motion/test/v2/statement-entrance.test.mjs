@@ -53,6 +53,38 @@ test('letterTracks gives one track map per glyph, letter k landing at at + k * s
   maps.forEach((map, k) => near(landsAt(map.opacity), 2 + k * look.moves.letters.stagger, `letter ${k}`));
 });
 
+test('letterTracks: a 45-letter word still lands its last letter within the spread cap after its spoken time', () => {
+  const look = registries.looks.get(LETTER_LOOK);
+  assert.ok(Number.isFinite(shared.LETTER_SPREAD_CAP) && shared.LETTER_SPREAD_CAP > 0, 'the cap is a named, exported number of seconds');
+  const maps = shared.letterTracks(look, UNIT, 2, 45);
+  assert.equal(maps.length, 45);
+  near(landsAt(maps[0].opacity), 2, 'the first letter stays on the spoken time');
+  assert.ok(landsAt(maps[44].opacity) <= 2 + shared.LETTER_SPREAD_CAP + 1e-9, `last letter lands ${landsAt(maps[44].opacity) - 2} s after at`);
+  const steps = maps.map((m) => landsAt(m.opacity)).map((t, k, all) => (k ? t - all[k - 1] : 0)).slice(1);
+  assert.ok(steps.every((s) => Math.abs(s - steps[0]) < 1e-9), 'the letters stay evenly spaced');
+});
+
+test('letterTracks: a short word keeps the look\'s own stagger, up to the longest word that fits the cap', () => {
+  const look = registries.looks.get(LETTER_LOOK), { stagger } = look.moves.letters;
+  const fits = Math.floor(shared.LETTER_SPREAD_CAP / stagger) + 1; // letters whose spread (count - 1) * stagger is within the cap
+  assert.ok(fits >= 18, `the cap leaves "portable-artifacts" (18 letters) alone, it fits ${fits}`);
+  const maps = shared.letterTracks(look, UNIT, 1, fits);
+  maps.forEach((map, k) => near(landsAt(map.opacity), 1 + k * stagger, `letter ${k} of ${fits}`));
+});
+
+test('letters: a statement ending in a 47-character URL is at rest before its shot\'s 85% frame', () => {
+  const url = 'docs.example.com/portable-artifacts/make-motion';
+  assert.equal(url.length, 47);
+  for (const say of [`Read ${url}`, `Our platform supports this and everything on ${url}`]) {
+    const film = filmOf([{ id: 's', show: 'statement', say }], LETTER_LOOK);
+    const out = expandIn(film);
+    const late = 0.85 * out.timing.duration;
+    const seen = sampledAt(out.nodes, late).find((n) => n.id === 's.text').seen;
+    const last = seen.length - 1;
+    assert.ok(seen.every((word) => word.rest), `${say}: every word at rest at ${late.toFixed(3)} s, the last one ${JSON.stringify(seen[last])}`);
+  }
+});
+
 test('lineEntrance lands at the time given', () => {
   assert.ok(Math.abs(landsAt(shared.lineEntrance(registries.looks.get(LINES_LOOK), UNIT, 1.25).opacity) - 1.25) < 1e-9);
 });
