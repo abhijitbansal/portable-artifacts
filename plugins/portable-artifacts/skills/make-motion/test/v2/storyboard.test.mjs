@@ -5,7 +5,8 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE } from './helpers/session.mjs';
@@ -92,6 +93,59 @@ test('the film and timeline passed in are not changed', () => {
   assert.equal(JSON.stringify({ film, timeline }), before);
 });
 
+// ---- the board's pictures ----
+
+const PLAIN_LOOKS = [{ name: 'desk', summary: 'warm paper' }, { name: 'ink', summary: 'black and white' }];
+// The sha256 of JSON.stringify of the LONG film's plan with PLAIN_LOOKS and no stills, taken before the board's pictures existed.
+const PLAN_BEFORE_STILLS = '49fd8406fa6b19087174ad340558a81a45c4485c32cce1f91033150535ccdf7b';
+const MAX_SECTIONS = 40; // make-explainer's limit per page
+const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024; // make-explainer's limit per image
+const JPEG = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
+
+// A film of `count` shots, each 5 s on its (estimated) timeline, as storyboardPlan takes them.
+function synthetic(count) {
+  const shots = Array.from({ length: count }, (_, i) => ({ id: `s${i + 1}`, show: 'statement', say: 'x y z' }));
+  return { film: { look: 'desk', shots }, timeline: { duration: count * 5, shots: shots.map((_, i) => ({ start: i * 5, end: (i + 1) * 5 })) } };
+}
+
+test('with stills the plan gains one image section per strip, after the shots, each saying the timing is estimated', () => {
+  const { film, timeline } = synthetic(8); // six shots to a strip: two strips
+  const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS, stills: ['demo.stills/board-1.jpg', 'demo.stills/board-2.jpg'] });
+  const images = plan.sections.filter((s) => s.type === 'image');
+  assert.equal(images.length, 2);
+  assert.equal(plan.sections.indexOf(images[0]), plan.sections.findIndex((s) => s.type === 'timeline') + 1);
+  assert.equal(plan.sections.indexOf(images[1]), plan.sections.indexOf(images[0]) + 1);
+  assert.deepEqual(images.map((i) => i.src), ['demo.stills/board-1.jpg', 'demo.stills/board-2.jpg']);
+  assert.deepEqual(images.map((i) => i.title), ['Shots s1 to s6 as drawn', 'Shots s7 to s8 as drawn']);
+  assert.deepEqual(images.map((i) => i.alt), ['Shots s1, s2, s3, s4, s5, s6 of the draft film', 'Shots s7, s8 of the draft film']);
+  for (const image of images) {
+    assert.equal(image.label, 'Pictures');
+    assert.equal(image.caption, 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.');
+  }
+  assert.equal(plan.sections.at(-1).type, 'verdict');
+});
+
+test('a strip with no shot behind it (a board left from a longer film) is not put on the page', () => {
+  const { film, timeline } = synthetic(4);
+  const plan = storyboardPlan(film, timeline, { name: 'stale', looks: PLAIN_LOOKS, stills: ['x.stills/board-1.jpg', 'x.stills/board-2.jpg'] });
+  assert.deepEqual(plan.sections.filter((s) => s.type === 'image').map((i) => i.src), ['x.stills/board-1.jpg']);
+});
+
+test('without stills the plan is unchanged', () => {
+  const { film, timeline } = loadFilm(writeFilm('long-nostills', LONG));
+  const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS });
+  assert.equal(createHash('sha256').update(JSON.stringify(plan)).digest('hex'), PLAN_BEFORE_STILLS);
+  assert.deepEqual(storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS, stills: [] }), plan);
+});
+
+test('a 60-shot film stays within the page\'s 40 sections', () => {
+  const { film, timeline } = synthetic(60);
+  const stills = Array.from({ length: 10 }, (_, i) => `big.stills/board-${i + 1}.jpg`);
+  const { sections } = storyboardPlan(film, timeline, { name: 'big', looks: PLAIN_LOOKS, stills });
+  assert.ok(sections.length <= MAX_SECTIONS, `${sections.length} sections`);
+  assert.equal(sections.filter((s) => s.type === 'image').length, 10);
+});
+
 // ---- the command ----
 
 test('a 30 s film writes a plan make-explainer\'s own validator accepts, and prints the build line', (t) => {
@@ -156,4 +210,75 @@ test('--out missing, an unknown flag, or --out naming the film itself is exit 2'
   const self = run(film, '--out', film);
   assert.equal(self.status, 2);
   assert.deepEqual(JSON.parse(readFileSync(film, 'utf8')), LONG, 'the film is untouched');
+});
+
+// ---- --stills ----
+
+const boardFolder = (name, files = { 'board-1.jpg': JPEG }) => {
+  const folder = path.join(dir, name);
+  mkdirSync(folder, { recursive: true });
+  for (const [file, bytes] of Object.entries(files)) writeFileSync(path.join(folder, file), bytes);
+  return folder;
+};
+const capture = () => {
+  const lines = [];
+  return { lines, io: { out: (s) => lines.push(s), err: (s) => lines.push(s) } };
+};
+
+test('--stills copies the strips beside the plan, and make-explainer\'s validator accepts the page', (t) => {
+  if (EXPLAINER_SKIP) return t.skip(EXPLAINER_SKIP);
+  const board = boardFolder('board-ok');
+  const planFile = path.join(dir, 'with-stills', 'plan.json');
+  const { lines, io } = capture();
+  const code = main([writeFilm('long-stills-cmd', LONG), '--out', planFile, '--stills', board], io);
+  assert.equal(code, 0, lines.join(''));
+  const copy = path.join(path.dirname(planFile), 'plan.stills', 'board-1.jpg');
+  assert.ok(existsSync(copy), 'the strip is beside the plan');
+  assert.deepEqual(readFileSync(copy), JPEG);
+  assert.equal(JSON.parse(readFileSync(planFile, 'utf8')).sections.find((s) => s.type === 'image').src, 'plan.stills/board-1.jpg');
+  assert.equal(lines.join('').split('\n')[0], planFile);
+  assert.ok(lines.includes('storyboard: the pictures and the times are on estimated timing (no voice was made)\n'), lines.join(''));
+  const check = spawnSync(process.execPath, [VALIDATE, planFile, '--json'], { encoding: 'utf8' });
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+  assert.deepEqual((JSON.parse(check.stdout).warnings ?? []).filter((w) => w.path !== 'generatedBy'), [], 'no warning either');
+  return undefined;
+});
+
+test('without --stills nothing is copied and the estimated line is not printed', () => {
+  const planFile = path.join(dir, 'no-stills-cmd', 'plan.json');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-nostills-cmd', LONG), '--out', planFile], io), 0);
+  assert.equal(existsSync(path.join(dir, 'no-stills-cmd', 'plan.stills')), false);
+  assert.equal(lines.some((l) => l.includes('estimated timing')), false);
+});
+
+test('a folder with no strips, a strip that is a link and a strip over 1.5 MB each exit 2 naming the file', () => {
+  const film = writeFilm('long-stills-bad', LONG);
+  const planFile = path.join(dir, 'bad-stills', 'plan.json');
+  const run2 = (board) => {
+    const { lines, io } = capture();
+    const code = main([film, '--out', planFile, '--stills', board], io);
+    return { code, text: lines.join('') };
+  };
+
+  const none = run2(boardFolder('board-none', { 'notes.txt': Buffer.from('x') }));
+  assert.equal(none.code, 2);
+  assert.match(none.text, /board-none/);
+  assert.match(none.text, /board-<n>\.jpg/);
+
+  const missing = run2(path.join(dir, 'no-such-board'));
+  assert.equal(missing.code, 2);
+  assert.match(missing.text, /no-such-board/);
+
+  const linkFolder = boardFolder('board-link', {});
+  writeFileSync(path.join(dir, 'real.jpg'), JPEG);
+  symlinkSync(path.join(dir, 'real.jpg'), path.join(linkFolder, 'board-1.jpg'));
+  const link = run2(linkFolder);
+  assert.equal(link.code, 2);
+  assert.match(link.text, /board-1\.jpg is a symbolic link/);
+
+  const big = run2(boardFolder('board-big', { 'board-1.jpg': Buffer.alloc(MAX_IMAGE_BYTES + 1, 0xff) }));
+  assert.equal(big.code, 2);
+  assert.match(big.text, /board-1\.jpg is \d\.\d\d MB; make-explainer takes at most 1\.5 MB/);
+  assert.equal(existsSync(planFile), false, 'no plan is written when a strip is refused');
 });

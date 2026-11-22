@@ -16,6 +16,8 @@ For a film over 20 seconds, draft three storylines before you write shots, and m
 
 Do not ask the user to pick: the intake round in `SKILL.md` is the only question round, and the storyboard step is where a person answers a plan. Take the storyline that best fits the ask and say which one in the report. The example films show the shape of the fields; they are not a pace, a look or a shot order to copy.
 
+**A board with pictures.** The storyboard page can show the shots drawn, before any voice is made. With the film written, run `node <skill-dir>/scripts/make.mjs film.json --sheets-only --estimated --out <name>.mp4`: no voice, no render, and the strips land in `<name>.sheets/board/` (`board-1.jpg` on, six shots to a strip). Then `node <skill-dir>/scripts/storyboard.mjs film.json --out plan.json --stills <name>.sheets/board` copies them beside the plan and the page shows each under the shots. The page says the timing is estimated: with a voice, each shot lasts as long as its narration takes. A picture the user dislikes is changed in the film and drawn again before any voice is made.
+
 ## Write for the picture
 
 Every line of narration names what is on screen while it is said. If a line has nothing to show, cut it or rewrite it until it does.

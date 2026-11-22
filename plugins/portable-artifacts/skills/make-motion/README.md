@@ -86,7 +86,7 @@ Each look serves the modes it names, and some kinds are not drawn in some looks.
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`, the voice package), with the fix for your system. `--fix <id>` installs what needs no `sudo`. Runs before the first install | `--json`, `--for <film.json\|voiceover\|cutout>`, `--fix <id[,id]>` |
 | `cutout.mjs <photo.png\|clip.mp4>` | Cuts the person out of a photo (an RGBA PNG) or a clip (a VP9 alpha WebM) with MODNet, on this machine. A `cutout` device takes the picture. It needs `doctor --for cutout --fix cutout` | `--out <dir>`, `--fps <n>` |
 | `beats.mjs <audio>` | Finds the beat grid of a music file and writes `<stem>.beats.json`, for `music.beats`. Exit 1 with `no steady beat found` when the track has none | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>`, `--min-bpm <n>`, `--max-bpm <n>` |
-| `storyboard.mjs <film.json>` | For a film over 20 s: writes a make-explainer `plan` page the user answers before the film is built. Prints `storyboard: skipped (<reason>)` and writes nothing when it is not needed | `--out <plan.json>`, `--non-interactive` |
+| `storyboard.mjs <film.json>` | For a film over 20 s: writes a make-explainer `plan` page the user answers before the film is built. Prints `storyboard: skipped (<reason>)` and writes nothing when it is not needed | `--out <plan.json>`, `--non-interactive`, `--stills <board dir>` (the strips of `--sheets-only --estimated`, shown under the shots) |
 
 `--list` takes `kinds`, `looks`, `modes`, `devices`, `moves`, `cuts`, `fields` or `voices`.
 
