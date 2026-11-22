@@ -69,6 +69,18 @@ test('a second run replaces the strips it made, drops a strip the film no longer
   return undefined;
 });
 
+test('a later run without --estimated removes the old strips, so no storyboard is built on stale pictures', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  assert.equal(existsSync(path.join(boardDir(), 'board-1.jpg')), true, 'the earlier --estimated run left a strip');
+  writeFileSync(path.join(boardDir(), 'notes.txt'), 'mine');
+  const synthesise = async (film, options) => ({ dir: path.join(options.outDir, '.voice', 'fake'), sidecar: fakeSidecar(film), cached: false });
+  const { report, exitCode } = await runMake({ specPath, noRender: true, out }, { synthesise });
+  assert.equal(exitCode, 0, JSON.stringify(report.findings));
+  assert.equal('board' in report, false);
+  assert.deepEqual(readdirSync(boardDir()), ['notes.txt']);
+  return undefined;
+});
+
 // A recording of your own is read and probed (ffprobe) by the voice stage. The file here is four bytes, "a name, not a
 // recording": without --estimated the probe refuses it (a voice-stage finding); with it nothing reads the recording at all.
 const OWN_WORDS = { segments: [{ words: [[' Every', 0.3], [' row', 0.6], [' has', 0.9], [' a', 1.1], [' source.', 1.3], [' Four', 2.6], [' hundred', 2.9], [' rows.', 3.3]]

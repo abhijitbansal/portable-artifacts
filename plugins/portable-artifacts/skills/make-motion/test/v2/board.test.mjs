@@ -9,7 +9,7 @@ import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { BOARD_PER_STRIP, BOARD_COLUMNS, BOARD_JPEG_QUALITY, BOARD_STRIP_WIDTH, planBoard, planSheets } from '../../scripts/v2/plan.mjs';
 import { layoutSheet, MAX_SHEET_WIDTH } from '../../scripts/v2/layout.mjs';
 import { formatText, reportOf } from '../../scripts/v2/report.mjs';
-import { writeBoard } from '../../scripts/v2/sheets.mjs';
+import { clearStaleBoard, writeBoard } from '../../scripts/v2/sheets.mjs';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -39,10 +39,19 @@ test('--estimated is refused beside a flag it cannot serve: a slice, an outline,
   assert.throws(() => parseMakeArgs([...base, '--preview']), /does not go with --sheets-only/);
 });
 
-test('--estimated goes with --sheets-only, --json, --out and --subtitles', () => {
-  const options = parseMakeArgs(['f.json', '--sheets-only', '--estimated', '--json', '--out', 'x/y.mp4', '--subtitles', 'srt']);
+test('--estimated goes with --sheets-only, --json and --out', () => {
+  const options = parseMakeArgs(['f.json', '--sheets-only', '--estimated', '--json', '--out', 'x/y.mp4']);
   assert.equal(options.estimated, true);
   assert.equal(options.noRender, true);
+});
+
+// Captions timed from an estimate would be written where a real render's captions go, and read as the film's own.
+test('--estimated is refused beside --subtitles, in either order, as a usage error', () => {
+  const base = ['f.json', '--sheets-only', '--estimated'];
+  for (const argv of [[...base, '--subtitles', 'vtt'], ['--subtitles', 'vtt', ...base], [...base, '--subtitles', 'srt']]) {
+    assert.throws(() => parseMakeArgs(argv), (err) => err instanceof UsageError && /--estimated does not go with --subtitles/.test(err.message), argv.join(' '));
+  }
+  assert.equal(parseMakeArgs(['f.json', '--subtitles', 'vtt']).subtitles, 'vtt');
 });
 
 test('the board constants', () => {
@@ -147,4 +156,42 @@ test('a board that is a symbolic link is not followed: nothing in its target is 
     assert.ok(lines.some((l) => /board is a symbolic link/.test(l)), lines.join('\n'));
     assert.equal(existsSync(path.join(target, 'board-2.jpg')), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- a run that writes sheets and no board: the last run's strips must not outlive their film ----
+test('clearStaleBoard removes the old board-N.jpg strips and leaves everything else', () => {
+  const dir = scratch();
+  try {
+    mkdirSync(path.join(dir, 'board'));
+    mkdirSync(path.join(dir, 'board', 'board-3.jpg'));
+    writeFileSync(path.join(dir, 'board', 'board-1.jpg'), 'old');
+    writeFileSync(path.join(dir, 'board', 'board-2.jpg'), 'old');
+    writeFileSync(path.join(dir, 'board', 'notes.txt'), 'mine');
+    writeFileSync(path.join(dir, 'board-1.jpg'), 'not in the board folder');
+    clearStaleBoard(dir);
+    assert.deepEqual(readdirSync(path.join(dir, 'board')).sort(), ['board-3.jpg', 'notes.txt']);
+    assert.ok(lstatSync(path.join(dir, 'board', 'board-3.jpg')).isDirectory());
+    assert.equal(existsSync(path.join(dir, 'board-1.jpg')), true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('clearStaleBoard with no board, a board that is a file, or a board that is a symbolic link touches nothing', () => {
+  const none = scratch();
+  const file = scratch();
+  const link = scratch();
+  try {
+    clearStaleBoard(none);
+    assert.equal(existsSync(path.join(none, 'board')), false);
+    writeFileSync(path.join(file, 'board'), 'mine');
+    clearStaleBoard(file);
+    assert.equal(readFileSync(path.join(file, 'board'), 'utf8'), 'mine');
+    const target = path.join(link, 'elsewhere');
+    mkdirSync(target);
+    writeFileSync(path.join(target, 'board-1.jpg'), 'theirs');
+    symlinkSync(target, path.join(link, 'board'));
+    clearStaleBoard(link);
+    assert.deepEqual(readdirSync(target), ['board-1.jpg']);
+  } finally {
+    for (const d of [none, file, link]) rmSync(d, { recursive: true, force: true });
+  }
 });
