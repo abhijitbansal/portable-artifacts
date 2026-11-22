@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStageClock, stallError } from '../../scripts/v2/capture-clock.mjs';
 import { describeError, formatText } from '../../scripts/v2/report.mjs';
-import { heldFlags, shootFrame } from '../../scripts/v2/render.mjs';
+import { encodeWithWorkers, heldFlags, pageMessages, shootFrame } from '../../scripts/v2/render.mjs';
 import { captureParallel } from '../../scripts/v2/workers.mjs';
 import { fakeTimers } from './helpers/fake-timers.mjs';
 
@@ -124,8 +124,43 @@ test('the report says where the time went on the frames line, and a stall gets i
   assert.doesNotMatch(formatText({ ...report, timing: null }, { sheetsDir: 's' }), /draw 11/);
   const stalled = describeError(stallError({ stage: 'capture', frame: 0, frames: 9, cause: 'no answer in 120 s', tail: ['Target page, context or browser has been closed'] }));
   assert.match(stalled.hint, /stopped answering at that stage; run again, and with --workers 1/);
-  const checked = describeError(new Error('render check: the finished file holds 29 frames, the timeline has 30; nothing was written'));
+  const checked = describeError(new Error('render check: ffmpeg could not read the finished file (exit 1): x; nothing was written'));
   assert.match(checked.hint, /^the browser drew or captured nothing, or the encode lost frames; run again with --workers 1, then with --exact/);
+});
+
+test('a blank film\'s hint names the film, not the browser; a frame-count mismatch keeps the encode hint', () => {
+  const blank = describeError(new Error('render check: the finished file\'s picture is blank: none of its 30 frames has any detail; nothing was written'));
+  assert.match(blank.hint, /^the finished film is blank: check that the shots draw something/);
+  assert.doesNotMatch(blank.hint, /browser drew or captured nothing/);
+  const count = describeError(new Error('render check: the finished file holds 29 frames, the timeline has 30; nothing was written'));
+  assert.match(count.hint, /frame count/);
+  assert.match(count.hint, /--workers 1, then with --exact/);
+  const unreadable = describeError(new Error('render check: ffmpeg could not read the finished file (exit 1): x; nothing was written'));
+  assert.match(unreadable.hint, /--workers 1, then with --exact/);
+});
+
+test('a page\'s messages are kept per page: one page unlabelled, several labelled with an even share each', () => {
+  assert.deepEqual(pageMessages([{ errors: ['a', 'b'] }]), ['a', 'b']);
+  assert.deepEqual(pageMessages([{}]), []);
+  const four = [{ errors: ['p1a', 'p1b'] }, { errors: [] }, { errors: ['p3a', 'p3b'] }, {}];
+  assert.deepEqual(pageMessages(four), ['page 1: p1b', 'page 3: p3b'], 'TAIL_LINES split over the pages, at least one line each');
+  assert.deepEqual(pageMessages([{ errors: ['a', 'b', 'c'] }, { errors: ['d', 'e', 'f'] }]), ['page 1: b', 'page 1: c', 'page 2: e', 'page 2: f']);
+});
+
+test('--workers: a stall on a later page reports that page\'s messages, not the first page\'s', async () => {
+  const release = keepAlive();
+  try {
+    const frames = 4;
+    const first = { page: fakePage(), errors: ['first page is quiet'], timeline: { frameCount: frames }, close: async () => {} };
+    const second = { page: fakePage({ seek: (i) => (i === 3 ? new Promise(() => {}) : Promise.resolve()) }), errors: ['page.on error: lost the GPU'], timeline: { frameCount: frames }, close: async () => {} };
+    const sessions = [first];
+    const clock = createStageClock({ frames, stallMs: 20, tail: () => pageMessages(sessions) });
+    await assert.rejects(encodeWithWorkers({ session: first, sessions, encoder: { write: async () => {} }, exact: false, workers: 2, openPage: async () => second, clock }),
+      /^Error: render stalled in the draw stage at frame 4 of 4: no answer in 0\.02 s; last page messages: page 1: first page is quiet \| page 2: page\.on error: lost the GPU$/);
+    assert.deepEqual(sessions, [first], 'the second page is left out of the list again once it is closed');
+  } finally {
+    release();
+  }
 });
 
 test('the held-frame flags are part of the draw stage on both paths: a hang there names the stage and the frame', async () => {

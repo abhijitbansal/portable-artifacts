@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ffmpegOrNull } from './helpers/session.mjs';
 import { createStageClock } from '../../scripts/v2/capture-clock.mjs';
-import { BLANK_STD, CHECK_HEIGHT, CHECK_WIDTH, checkArgs, checkOutput, outputProblem, versionOf } from '../../scripts/v2/output-check.mjs';
+import { BLANK_STD, CHECK_HEIGHT, CHECK_WIDTH, VERSION_PROBE_TIMEOUT_MS, checkArgs, checkOutput, ffmpegVersion, outputProblem, versionOf } from '../../scripts/v2/output-check.mjs';
+import { ownMp4Input } from '../../scripts/v2/voice/master.mjs';
 import { fakeTimers } from './helpers/fake-timers.mjs';
 
 let dir;
@@ -37,6 +38,24 @@ test('the check decodes the first video stream to 96 by 54 gray frames on stdout
   assert.equal(args[args.indexOf('-vf') + 1], 'scale=96:54:flags=area,format=gray');
   assert.deepEqual(args.slice(-3), ['-f', 'rawvideo', '-']);
   assert.deepEqual(args.slice(args.indexOf('-fps_mode'), args.indexOf('-fps_mode') + 2), ['-fps_mode', 'passthrough'], 'the count reads frames, not timestamps');
+});
+
+test('the check opens the finished MP4 through the whitelisting builder for our own MP4s: file protocol, MP4 demuxers only', () => {
+  const args = checkArgs('/x/film.mp4');
+  const own = ownMp4Input('/x/film.mp4');
+  assert.deepEqual(args.slice(args.indexOf('-protocol_whitelist')), [...own, ...args.slice(args.indexOf('-i') + 2)], 'the builder\'s arguments come straight before the options');
+  assert.deepEqual(args.slice(args.indexOf('-protocol_whitelist'), args.indexOf('-protocol_whitelist') + 2), ['-protocol_whitelist', 'file']);
+  assert.deepEqual(args.slice(args.indexOf('-format_whitelist'), args.indexOf('-format_whitelist') + 2), ['-format_whitelist', 'mov,mp4,m4a']);
+  assert.ok(args.indexOf('-protocol_whitelist') < args.indexOf('-i') && args.indexOf('-format_whitelist') < args.indexOf('-i'), 'both whitelists come before the file');
+});
+
+test('the version probe is given a time limit, and one that runs out counts as no version', () => {
+  const calls = [];
+  const timedOut = (cmd, args, opts) => { calls.push([cmd, args, opts]); return { status: null, error: new Error('spawnSync ETIMEDOUT'), stdout: null }; };
+  assert.equal(ffmpegVersion('/probe/timeout', timedOut), null);
+  assert.deepEqual(calls, [['/probe/timeout', ['-version'], { encoding: 'utf8', timeout: 5000 }]]);
+  assert.equal(VERSION_PROBE_TIMEOUT_MS, 5000);
+  assert.deepEqual(ffmpegVersion('/probe/ok', () => ({ status: 0, stdout: 'ffmpeg version 4.4.2 x\n' })), { major: 4, minor: 4 });
 });
 
 test('a film whose every frame is flat is blank; one frame with detail is enough', () => {

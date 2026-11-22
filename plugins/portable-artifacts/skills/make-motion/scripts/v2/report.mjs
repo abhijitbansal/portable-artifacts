@@ -34,6 +34,8 @@ const secondsText = (n) => n.toFixed(SECOND_DECIMALS);
 // A hint for a message that carries none of its own.
 const HINTS = Object.freeze([
   [/^render stalled in the /, 'the browser or ffmpeg stopped answering at that stage; run again, and with --workers 1 if it keeps happening'], // first: its page messages may match a later pattern
+  [/^render check: the finished file's picture is blank/, 'the finished film is blank: check that the shots draw something (a film of one `free` shot with only a background draws nothing); if they do, run again with --workers 1, then with --exact, and report it if it stays'], // before the general check hint
+  [/^render check: the finished file holds /, 'the frame count of the finished file is not the timeline\'s: the encode lost or added frames; run again with --workers 1, then with --exact, and report it if it stays'],
   [/^render check: /, 'the browser drew or captured nothing, or the encode lost frames; run again with --workers 1, then with --exact, and report it if it stays'],
   [/^cannot read /, 'give the path of an existing film .json file; a relative path is read from the current directory'],
   [/^.* is not a regular file/, 'give the path of a film .json file, not a folder or a device'],

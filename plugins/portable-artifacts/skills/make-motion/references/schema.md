@@ -146,6 +146,12 @@ A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `pa
 
 `error` is `{ message, hint }`. It is set when something about the machine stopped the run (a missing film file, no browser, no ffmpeg, a crashed page, an interrupt). A fault in the film is a finding, not an error.
 
+Three render errors come from the checks the render makes on itself, and each leaves no MP4:
+
+- `render stalled in the <stage> stage at frame N of M: ...; last page messages: ...`: a stage (draw, capture, encode or check) gave no answer for 120 s, or the browser timed out. With `--workers` the messages are those of every page, as `page N: message`. Run again, and with `--workers 1` if it keeps happening.
+- `render check: the finished file holds N frames, the timeline has M`: the finished file does not hold the frames the timeline has. The encode lost or added frames. Run again with `--workers 1`, then with `--exact`.
+- `render check: the finished file's picture is blank: none of its N frames has any detail`: the finished film is blank. Check that the shots draw something: a film of one `free` shot with only a `background` validates and draws nothing. It is an error and not a finding, because the film is valid and the file is useless.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -167,3 +173,4 @@ A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `pa
 | Sound cues | 64 |
 | Extra audio files | 20 |
 | `--workers` | 1 to 8, or `auto` |
+| A render stage with no answer | 120 s, then the render stops with `render stalled` (the check restarts it on every frame it decodes) |

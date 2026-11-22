@@ -6,6 +6,8 @@
 // Not checked, on purpose: a picture that does not move (a film of one held still is legal) and a flat stretch inside a
 // film (a flood, a field, the poster look's grounds). Only a wrong frame count, or a film with no detail in any frame, fails.
 import { spawn, spawnSync } from 'node:child_process';
+// The finished film is our own MP4: it is opened by the builder that allows the file protocol and the MP4 demuxers only.
+import { ownMp4Input } from './voice/master.mjs';
 
 export const CHECK_WIDTH = 96;
 export const CHECK_HEIGHT = 54;
@@ -29,10 +31,13 @@ export function versionOf(text) {
   return found === null ? null : { major: Number(found[1]), minor: Number(found[2]) };
 }
 
-/** The version of the ffmpeg at `ffmpeg`, read once per path; null when it does not say (or cannot be run). */
-export function ffmpegVersion(ffmpeg) {
+// A probe that does not answer in this long counts as no version, which gets the modern flag.
+export const VERSION_PROBE_TIMEOUT_MS = 5000;
+
+/** The version of the ffmpeg at `ffmpeg`, read once per path; null when it does not say, cannot be run or does not answer in time. `probe` is for tests. */
+export function ffmpegVersion(ffmpeg, probe = spawnSync) {
   if (!versions.has(ffmpeg)) {
-    const run = spawnSync(ffmpeg, ['-version'], { encoding: 'utf8' });
+    const run = probe(ffmpeg, ['-version'], { encoding: 'utf8', timeout: VERSION_PROBE_TIMEOUT_MS });
     versions.set(ffmpeg, run.status === 0 ? versionOf(run.stdout.split('\n')[0] ?? '') : null);
   }
   return versions.get(ffmpeg);
@@ -50,7 +55,7 @@ const knowsFpsMode = (version) => version === null || version === undefined
  * @param {{ version?: { major: number, minor: number } | null }} [opts] the ffmpeg's version (versionOf)
  */
 export const checkArgs = (file, { version = null } = {}) => [
-  ...QUIET, '-i', file, '-map', '0:v:0', '-vf', `scale=${CHECK_WIDTH}:${CHECK_HEIGHT}:flags=area,format=gray`,
+  ...QUIET, ...ownMp4Input(file), '-map', '0:v:0', '-vf', `scale=${CHECK_WIDTH}:${CHECK_HEIGHT}:flags=area,format=gray`,
   ...(knowsFpsMode(version) ? ['-fps_mode', 'passthrough'] : ['-vsync', 'passthrough']), '-f', 'rawvideo', '-',
 ];
 

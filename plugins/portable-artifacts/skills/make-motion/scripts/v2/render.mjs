@@ -19,7 +19,7 @@ export { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/modes/index.mjs'; // registers the modes whose loudness a voiced film is mastered to
 import { loadFilm } from './pipeline.mjs';
-import { createStageClock } from './capture-clock.mjs';
+import { TAIL_LINES, createStageClock } from './capture-clock.mjs';
 import { checkOutput } from './output-check.mjs';
 import { openSession } from './session.mjs';
 import { withStamp } from './stamp.mjs';
@@ -166,12 +166,29 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress, clock
   return captured;
 }
 
-// --workers: the first page plus one opened through openPage per further range (workers.mjs), closed after.
-async function encodeWithWorkers({ session, encoder, exact, signal, onProgress, workers, openPage, clock }) {
+/**
+ * The page and console messages of every page of the run, for a stall's "last page messages". Each page has its own
+ * session and its own `errors`, and the stage clock does not know which page stalled, so all of them are read: one page
+ * unlabelled, several as `page N: message`, each giving its newest TAIL_LINES / pages messages (at least one) so the pages
+ * share the lines the stall error keeps.
+ * @param {{ errors?: string[] }[]} sessions the first page's session, then the extra pages' (encodeWithWorkers)
+ */
+export function pageMessages(sessions) {
+  if (sessions.length === 1) return sessions[0].errors ?? [];
+  const share = Math.max(1, Math.floor(TAIL_LINES / sessions.length));
+  return sessions.flatMap((s, k) => (s.errors ?? []).slice(-share).map((message) => `page ${k + 1}: ${message}`));
+}
+
+// --workers: the first page plus one opened through openPage per further range (workers.mjs), closed after. Each extra
+// session is in `sessions` (the clock's message source) while it is open.
+export async function encodeWithWorkers({ session, sessions = [session], encoder, exact, signal, onProgress, workers, openPage, clock }) {
   const frames = session.timeline.frameCount;
   const extra = [];
   try {
-    for (let k = 1; k < workerRanges(frames, workers).length; k++) extra.push(await openPage());
+    for (let k = 1; k < workerRanges(frames, workers).length; k++) {
+      extra.push(await openPage());
+      sessions.push(extra[extra.length - 1]);
+    }
     const pages = [session.page, ...extra.map((s) => s.page)];
     return await captureParallel({
       pages, frames, onProgress, signal,
@@ -180,6 +197,7 @@ async function encodeWithWorkers({ session, encoder, exact, signal, onProgress, 
       write: (buffer, frame) => clock.time('encode', frame, () => encoder.write(buffer)),
     });
   } finally {
+    for (const s of extra) sessions.splice(sessions.indexOf(s), 1);
     await Promise.all(extra.map((s) => s.close()));
   }
 }
@@ -266,8 +284,9 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     const judgement = { noVoice: !narrated, heldFrom: encoded?.heldFrom ?? null };
     if (encoded !== null) steps.judgeLevel(encoded.level, loudness, subject, judgement);
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact, stamp: steps === null ? stamp : [] })], signal);
-    const clock = createStageClock({ frames: open.timeline.frameCount, tail: () => open.errors ?? [] });
-    const captured = workers > 1 && openPage ? await encodeWithWorkers({ session: open, encoder, exact, signal, onProgress, workers, openPage, clock }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress, clock });
+    const sessions = [open]; // the pages the stall error reads its messages from; encodeWithWorkers adds the extra ones
+    const clock = createStageClock({ frames: open.timeline.frameCount, tail: () => pageMessages(sessions) });
+    const captured = workers > 1 && openPage ? await encodeWithWorkers({ session: open, sessions, encoder, exact, signal, onProgress, workers, openPage, clock }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress, clock });
     await clock.time('encode', open.timeline.frameCount - 1, () => encoder.finish());
     encoder = null;
     const audio = encoded === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run: stampedRunner(run, muxed, stamp), video: partial, audio: encoded.file, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
