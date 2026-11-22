@@ -169,7 +169,9 @@ function modalWordScales(trees, lastTree) {
 
 /**
  * shot id -> what its sampled frames say about its texts (see engine/review/frame.mjs): the scale each text
- * (restScales) and each of its words (restWords) holds on most of its frames is the scale it rests at.
+ * (restScales) and each of its words (restWords) holds on most of its frames is the scale it rests at; and, for a shot
+ * whose frames carry caption nodes, `captionZone`, the union of the zones the caption layout reserved (the nodes'
+ * props.caption.zone: the composition rules measure the frame less that room).
  * @param {{ fps: number, shots: { id: string, start: number, end: number }[] }} timeline
  * @param {{ frame: number, tree: object[] }[]} snapshots
  */
@@ -179,8 +181,23 @@ export function restingByShot(timeline, snapshots) {
     const first = Math.round(shot.start * timeline.fps), last = Math.round(shot.end * timeline.fps) - 1;
     const tree = byFrame.get(last);
     const trees = snapshots.filter((snap) => snap.frame >= first && snap.frame <= last).map((snap) => snap.tree);
-    return [shot.id, tree ? { restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree) } : {}];
+    const captionZone = captionZoneIn(trees, shot.id);
+    return [shot.id, tree ? { restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree), ...(captionZone ? { captionZone } : {}) } : {}];
   }));
+}
+
+// The union ([x, y, w, h]) of the zones the caption nodes of shot `shotId` carry (props.caption.zone) in `trees`, or null.
+function captionZoneIn(trees, shotId) {
+  const zones = [];
+  const walk = (n) => {
+    if (n.props?.caption && Array.isArray(n.props.caption.zone) && String(n.id).startsWith(`${shotId}.captions`)) zones.push(n.props.caption.zone);
+    (n.children ?? []).forEach(walk);
+  };
+  trees.forEach((tree) => (Array.isArray(tree) ? tree : []).forEach(walk));
+  if (zones.length === 0) return null;
+  const left = Math.min(...zones.map(([x]) => x)), top = Math.min(...zones.map(([, y]) => y));
+  const right = Math.max(...zones.map(([x, , w]) => x + w)), bottom = Math.max(...zones.map(([, y, , h]) => y + h));
+  return [left, top, right - left, bottom - top];
 }
 
 /**
@@ -218,7 +235,7 @@ const isPeerShot = (spec) => typeof spec?.show === 'string' && registries.kinds.
 
 // The ctx auditFrame takes for one snapshot: the shot it belongs to, the look and canvas, what the shot's frames say,
 // and the colour painted under the shot (`backgrounds`, per shot, from the page: session.info.backgrounds).
-function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds = []) {
+export function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds = []) {
   const shot = shotAtFrame(timeline, frame);
   const [width, height] = canvasSize(film);
   const look = lookOfShot(film, shot.index), canvas = { w: width, h: height };
@@ -398,7 +415,7 @@ export function capComposition(findings, cap = COMPOSITION_CAP) {
   const worst = [...composition].sort((a, b) => b.measure - a.measure).slice(0, cap);
   const kept = new Set(worst);
   const last = worst.at(-1), dropped = composition.length - cap;
-  const note = ` (${dropped} more ${dropped === 1 ? 'shot has' : 'shots have'} a composition finding; fix the worst first)`;
+  const note = ` (${dropped} more composition ${dropped === 1 ? 'finding is' : 'findings are'} left out; fix the worst first)`;
   return findings.flatMap((f) => {
     if (!COMPOSITION_RULE_IDS.has(f.rule)) return [f];
     if (!kept.has(f)) return [];

@@ -55,6 +55,7 @@ import { markBoxes, showsItself } from './marks.mjs';
 import { regionFindings } from './regions.mjs';
 import { registries } from '../registry.mjs';
 import { GROUND_ID } from '../looks/grounds.mjs';
+import { DEFAULT_FILL, isFillShare } from '../looks/fill.mjs';
 import '../modes/index.mjs';
 
 export const MIN_TEXT_UNITS = 28;
@@ -604,24 +605,34 @@ export function openingFindings(sampled, ctx) {
 // rectangle that no element's box enters. The hero is the largest element when it leads the second by HERO_LEAD or more.
 // Both rules are judged once per shot, on its resting frame (ctx.restsShot), and a frame with a ground (an element covering
 // GROUND_SHARE of the canvas) is judged by neither. scale-contrast is also skipped on a shot of peers (ctx.peers: the kind
-// lays out equals, kind.peers), where a slug or a divider is the "second" element and the ratio means nothing.
+// lays out equals, kind.peers), where a slug or a divider is the "second" element and the ratio means nothing. A captioned
+// shot is measured inside the safe rectangle less the zone its caption layout reserves (ctx.captionZone), so the reserved
+// strip is not counted as empty and a hero that clears it is not counted as small.
 
 export const COMPOSITION_RULES = Object.freeze(['dead-space', 'scale-contrast']);
-// The share of the safe rectangle's side left empty, and the share a hero reaches of it, at which a rule fires; a look may
-// give its own as `fill` (looks/index.mjs). Calibrated on ten shipped films (91 shots) with the fixed overlays left out:
-// at a band of 0.40 no film has more than a third of its shots flagged; the cap keeps what reaches the report to three.
-export const DEFAULT_FILL = Object.freeze({ band: 0.4, hero: 0.55 });
+// The thresholds and what a look's `fill` may hold are looks/fill.mjs's: one definition for the validator and the review.
+export { DEFAULT_FILL };
 export const HERO_LEAD = 1.5;
 const PERCENT = 100;
 const WHERE = Object.freeze({ left: 'the left', right: 'the right', top: 'the top', bottom: 'the bottom', middle: 'a band through the middle' });
 const SIDE = Object.freeze({ x: 'width', y: 'height' });
-
-const isShare = (v) => Number.isFinite(v) && v > 0 && v <= 1;
+const EPSILON_PERCENT = 1e-9; // so 29% (0.29 * 100 = 28.999...) is not floored to 28
+const percentOf = (share) => Math.floor(share * PERCENT + EPSILON_PERCENT); // rounded down: 54.6% never reads as 55% against a 55% bar
 
 /** The fill thresholds of a look: DEFAULT_FILL with the look's optional `fill` laid over it; a key that is not a field, or
  *  not a number above 0 and at most 1, is ignored (looks/index.mjs validateLook refuses both when the look registers), so
  *  it cannot switch a rule off. */
-export const fillOf = (look) => ({ ...DEFAULT_FILL, ...Object.fromEntries(Object.entries(look?.fill ?? {}).filter(([key, v]) => Object.hasOwn(DEFAULT_FILL, key) && isShare(v))) });
+export const fillOf = (look) => ({ ...DEFAULT_FILL, ...Object.fromEntries(Object.entries(look?.fill ?? {}).filter(([key, v]) => Object.hasOwn(DEFAULT_FILL, key) && isFillShare(v))) });
+
+// The safe rectangle less the room the caption layout reserves: a zone in the lower half takes the safe rectangle's bottom
+// up to its top, one in the upper half takes the top down to its bottom. A zone that is not a box, or that would leave no
+// room, changes nothing.
+function safeLessCaptions(safe, zone) {
+  if (!isBox(zone)) return safe;
+  const [, y, , h] = zone, middle = (safe.top + safe.bottom) / 2;
+  const less = y + h / 2 >= middle ? { ...safe, bottom: Math.min(safe.bottom, y) } : { ...safe, top: Math.max(safe.top, y + h) };
+  return less.bottom > less.top ? less : safe;
+}
 
 // A box cut to the canvas, or null when none of it is on the canvas.
 function clipToCanvas([x, y, w, h], canvas) {
@@ -700,12 +711,13 @@ function bandOf(all, safe) {
  * The composition of one frame: { ground, elements: [{ id, box, area }], band: { share, axis, where }, hero: { id,
  * extent } | null, next: { id, area } | null }. `ground`: an element covers GROUND_SHARE of the canvas. `hero`: the largest
  * element when it stands alone or is HERO_LEAD times the next; `extent` is the larger of its width over the safe width and
- * its height over the safe height. @param {object[]} sampled @param {object} ctx as for auditFrame
+ * its height over the safe height; both are measured in the safe rectangle less ctx.captionZone, the room the caption layout
+ * reserves. @param {object[]} sampled @param {object} ctx as for auditFrame
  */
 export function compositionOf(sampled, ctx) {
   const elements = elementsOf(sampled, ctx);
   const [top, second] = [...elements].sort((a, b) => b.area - a.area);
-  const { safe } = ctx;
+  const safe = safeLessCaptions(ctx.safe, ctx.captionZone);
   const leads = top !== undefined && (second === undefined || top.area >= HERO_LEAD * second.area);
   return {
     ground: elements.some((e) => canvasShare(e.box, ctx.canvas) >= GROUND_SHARE),
@@ -726,13 +738,13 @@ export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
   if (c.ground) return [];
   const out = [];
   if (c.band.share >= fill.band) {
-    const percent = Math.round(c.band.share * PERCENT), side = SIDE[c.band.axis];
+    const percent = percentOf(c.band.share), side = SIDE[c.band.axis];
     const said = c.elements.length === 0 ? `the frame shows nothing: ${percent}% of its ${side} is empty` : `the frame leaves ${percent}% of its ${side} empty (${WHERE[c.band.where]})`;
     out.push({ ...finding(ctx, CREATIVE, 'dead-space', '', `${said}; let the hero take more of the frame, add a second element, or use a look that fills with type`), measure: c.band.share - fill.band });
   }
   if (c.hero && ctx.peers !== true && c.hero.extent < fill.hero) {
     const rest = c.next ? `, and the next largest thing, "${c.next.id}", is smaller still` : ' and stands alone';
-    out.push({ ...finding(ctx, CREATIVE, 'scale-contrast', '', `the hero, "${c.hero.id}", reaches ${Math.round(c.hero.extent * PERCENT)}% of the frame${rest}; set it larger, crop in on it, or give it a second mass (a picture, a chart, a card)`), measure: fill.hero - c.hero.extent });
+    out.push({ ...finding(ctx, CREATIVE, 'scale-contrast', '', `the hero, "${c.hero.id}", reaches ${percentOf(c.hero.extent)}% of the frame${rest}; set it larger, crop in on it, or give it a second mass (a picture, a chart, a card)`), measure: fill.hero - c.hero.extent });
   }
   return out;
 }
@@ -754,7 +766,8 @@ export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
  *   mark among them that runs past the frame is a finding (region-off-frame), as is a text the frame edge slices during
  *   a close-up (frame-edge). restsShot: the frame is the shot's resting frame (not mid-entrance, not inside a cut's window):
  *   only then are the composition findings (compositionFindings) added. peers: the shot's kind lays out equals (kind.peers),
- *   so scale-contrast is not judged.
+ *   so scale-contrast is not judged. captionZone: [x, y, w, h], the zone the shot's caption layout reserves (the caption
+ *   nodes' props.caption.zone; scripts/v2/review.mjs restingByShot), which the composition measure leaves out of the safe rectangle.
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {

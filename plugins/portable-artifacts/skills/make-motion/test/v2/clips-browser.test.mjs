@@ -18,7 +18,7 @@ import { runMake } from '../../scripts/v2/run.mjs';
 const CLIP = path.resolve(HERE, '../../../references/examples/v2/media-clip.mp4'); // HERE is test/v2/helpers
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
 const FILM = { version: 2, fps: 30, look: 'desk', seed: 3, shots: [
-  { id: 'open', show: 'free', hold: 1, background: '#f3eee3', nodes: [{ type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' } }] },
+  { id: 'open', show: 'free', hold: 1, background: '#f3eee3', nodes: [{ type: 'path', id: 'bar', props: { d: 'M300 140H1620V940H300Z', fill: '#15130f' } }] }, // a block that fills the frame, so the clip tests do not depend on the composition thresholds
   { id: 'reel', show: 'media', cut: 'cut', src: 'clip.mp4', in: 1, hold: 1.5 },
 ] };
 
@@ -85,13 +85,12 @@ test('the clip route serves decoded frames by canonical index only', async (t) =
   }
 });
 
-test('the review sheets take clip frames, and the run reports no finding about the clip', async (t) => {
+test('the review sheets take clip frames, and the run reports no finding', async (t) => {
   if (!ready) return t.skip('no browser or ffmpeg');
   const out = path.join(dir, 'sheets', 'film.mp4');
   const { report, exitCode } = await runMake(options({ out, noRender: true }));
   assert.equal(exitCode, 0, JSON.stringify(report.findings ?? report.error));
-  // the only finding is the first shot's: its fixture is one 80-unit bar on an empty page (W2 Task 3, dead-space, 46% bare)
-  assert.deepEqual(report.findings.map((f) => [f.kind, f.shot, f.path, /^the frame leaves 46% of its height empty/.test(f.message)]), [['creative', 'open', 'shots[0]', true]]);
+  assert.deepEqual(report.findings, []);
   assert.ok(report.stages.some((s) => s.name === 'clips' && s.ok));
   assert.ok(readdirSync(path.join(dir, 'sheets', 'film.sheets')).some((f) => f.endsWith('.png')));
 });

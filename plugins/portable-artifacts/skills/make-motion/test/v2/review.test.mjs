@@ -8,7 +8,7 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { stillStretches } from '../../engine/review/pacing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
-import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot } from '../../scripts/v2/review.mjs';
+import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot, frameContext, reviewFilm, COMPOSITION_CAP } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
@@ -787,4 +787,60 @@ test('a word that lands late is judged at the scale it lands at, not the scale i
   // a text never fully shown on a sampled frame falls back to its last frame
   const never = restingByShot(timeline, [0, 29].map((frame) => ({ frame, tree: [textNode({ id: 't', scale: 0.9, opacity: 0.5 })] }))).get('hero');
   assert.ok(Math.abs(never.restScales.get('t') - 0.9) < 1e-9, 'the last frame\'s scale');
+});
+
+// ---- composition wiring (W2 Task 3): the context's restsShot and peers, the caption zone, the cap ----
+
+const bar = (id, bbox) => ({ type: 'path', id, depth: 0, props: { fill: '#111111', d: 'M0 0H1V1H0Z' }, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, draw: 1, visible: true, children: [], bbox });
+
+test('frameContext marks the last whole frame of a shot as resting, and a shot of a peer kind as peers', () => {
+  const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 2, show: 'list', items: ['one', 'two'] }]);
+  const timeline = buildTimeline(f, { fps: 30 });
+  const at = (frame, whole = true) => frameContext(f, timeline, new Map(), { frame, whole });
+  assert.deepEqual([at(59).restsShot, at(58).restsShot, at(59, false).restsShot, at(119).restsShot], [true, false, false, true]);
+  assert.deepEqual([at(59).peers, at(119).peers], [false, true]);
+});
+
+test('restingByShot reads a shot\'s caption zone from the caption nodes its frames carry: the union of their zones, none when it has no caption', () => {
+  const timeline = { fps: 30, frameCount: 60, duration: 2, shots: [{ id: 'a', index: 0, start: 0, end: 1, duration: 1 }, { id: 'b', index: 1, start: 1, end: 2, duration: 1 }] };
+  const caption = (id, zone) => ({ ...bar(id, [200, 900, 100, 40]), props: { fill: '#111111', d: 'M0 0H1V1H0Z', caption: { zone, end: 1, hero: null, emphasis: [], marks: [] } } });
+  const snapshots = [
+    { frame: 10, tree: [bar('body', [96, 96, 1000, 400]), caption('a.captions.0', [300, 820, 900, 150])] },
+    { frame: 29, tree: [bar('body', [96, 96, 1000, 400]), caption('a.captions.1', [200, 800, 1100, 170])] },
+    { frame: 59, tree: [bar('body2', [96, 96, 1000, 400])] },
+  ];
+  const resting = restingByShot(timeline, snapshots);
+  assert.deepEqual(resting.get('a').captionZone, [200, 800, 1100, 170]);
+  assert.equal('captionZone' in resting.get('b'), false);
+});
+
+test('frameContext hands the shot\'s caption zone on to the frame review', () => {
+  const f = film([{ id: 'a', hold: 2, show: 'free' }]);
+  const timeline = buildTimeline(f, { fps: 30 });
+  const resting = new Map([['a', { captionZone: [200, 800, 1100, 170] }]]);
+  assert.deepEqual(frameContext(f, timeline, resting, { frame: 59, whole: true }).captionZone, [200, 800, 1100, 170]);
+});
+
+// A session whose page answers the two evaluate calls reviewFilm makes without a browser: a chunk of snapshot requests
+// ([shot, frame] pairs) gets the same tree for each, a held-frame range gets "not held" for each frame.
+const stubSession = (f, tree) => {
+  const timeline = buildTimeline(f, { fps: 30 });
+  const page = { evaluate: async (_fn, arg) => (Array.isArray(arg[0]) ? arg.map(() => tree) : Array.from({ length: arg[1] - arg[0] + 1 }, () => false)) };
+  return { film: f, timeline, page, info: {}, errors: [] };
+};
+
+test('reviewFilm caps the composition findings of a film at three and says how many it dropped', async () => {
+  const f = film(['a', 'b', 'c', 'd'].map((id) => ({ id, hold: 2, show: 'free' })));
+  const small = [bar('card', [864, 486, 192, 108])]; // a small card alone: dead-space and scale-contrast on every shot
+  const found = await reviewFilm({ session: stubSession(f, small) });
+  const composition = found.filter((x) => x.rule === 'dead-space' || x.rule === 'scale-contrast');
+  assert.equal(composition.length, COMPOSITION_CAP, `${composition.length} composition findings of 8`);
+  assert.equal(composition.filter((x) => /more composition findings? (is|are) left out/.test(x.message)).length, 1);
+  assert.match(composition.find((x) => /more composition/.test(x.message)).message, /\(5 more composition findings are left out; fix the worst first\)/);
+});
+
+test('reviewFilm judges composition on a resting frame only: a film whose frames all hold a full block has none', async () => {
+  const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 2, show: 'free' }]);
+  const found = await reviewFilm({ session: stubSession(f, [bar('block', [96, 96, 1728, 800])]) });
+  assert.deepEqual(found.filter((x) => x.rule === 'dead-space' || x.rule === 'scale-contrast'), []);
 });

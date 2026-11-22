@@ -22,9 +22,11 @@ const SHIPPED = registries.kinds.names().filter((kind) => supportsKind(look, kin
 const exampleOf = (kind) => listEntries('kinds').find((e) => e.name === kind)?.example ?? registries.kinds.get(kind).example;
 // The composition findings (W2 Task 3) marker gives on a kind's example, by "<kind> <format>", as "<kind> <rule> <path>":
 // - media 16:9: a picture card reaching 46% of the frame with its caption under it, the cut-out card layout the calibration
-//   found small (marker `print` 0.42, the whats-new cards 0.45); scale-contrast is right. Not viewed here, measured.
+//   found small (marker `print` 0.42, the whats-new cards 0.45); scale-contrast is right (viewed, see the report);
+// - end 9:16: the end card with 35% of the height bare at the foot (viewed, see the report).
 const KNOWN = Object.freeze({
   'media 16:9': ['creative scale-contrast shots[0]'],
+  'end 9:16': ['creative dead-space shots[0]'],
 });
 
 // A striped PNG, built by hand so a browser can decode it: a stand-in screenshot.

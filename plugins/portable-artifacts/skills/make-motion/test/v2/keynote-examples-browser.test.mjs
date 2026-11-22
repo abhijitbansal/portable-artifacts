@@ -25,14 +25,12 @@ const exampleOf = (kind) => listEntries('kinds').find((e) => e.name === kind)?.e
 // quote and diagram frames were viewed (.scratch/motion-steals-w2/t3/png), free is read from its spec, and the examples are
 // shared with the other looks, so their copy stays:
 // - free: one 80-unit bar on an empty page (the kind's minimal example): dead-space is right;
-// - diagram 16:9: three small boxes in one row, 41% of the height bare above and below: dead-space is right;
-// - quote 16:9: the card is 54% of the frame, a hair under the 0.55 hero bar, and its type fills the card, so the finding
-//   is arguably a false positive; keynote takes no `fill` (controller ruling), so it is listed, not hidden.
+// - diagram 16:9: three small boxes in one row, 41% of the height bare above and below: dead-space is right.
+// (The quote card at 54% of the frame was a false positive under the 0.55 hero bar; at 0.50 it has no finding.)
 const KNOWN = Object.freeze({
   'free 16:9': ['creative dead-space shots[0]'],
   'free 9:16': ['creative dead-space shots[0]'],
   'diagram 16:9': ['creative dead-space shots[0]'],
-  'quote 16:9': ['creative scale-contrast shots[0]'],
 });
 
 // A striped PNG, built by hand so a browser can decode it: a stand-in screenshot.

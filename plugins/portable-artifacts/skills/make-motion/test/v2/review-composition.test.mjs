@@ -30,8 +30,34 @@ test('a small card alone in the frame: the empty band is 768 of 1728 across, the
 test('a block across the safe width and most of its height fires neither', () => {
   assert.deepEqual(compositionFindings([box('block', [96, 96, 1728, 700])], ctx(), DEFAULT_FILL), []);
 });
-test('the calibrated defaults: an empty band of 40% of a side, a hero under 55% of it', () => {
-  assert.deepEqual({ ...DEFAULT_FILL }, { band: 0.4, hero: 0.55 });
+test('the calibrated defaults: an empty band of 35% of a side, a hero under 50% of it', () => {
+  assert.deepEqual({ ...DEFAULT_FILL }, { band: 0.35, hero: 0.5 });
+});
+test('the percent in a message is rounded down, so a hero at 54.6% never reads as 55% against a bar it is under', () => {
+  const [found] = compositionFindings([box('hero', [100, 100, 0.496 * 1728, 300])], ctx(), { band: 1, hero: 0.5 });
+  assert.match(found.message, /^the hero, "hero", reaches 49% of the frame/);
+  const [bare] = compositionFindings([box('card', [96, 96, 1728, 285])], ctx(), DEFAULT_FILL); // 603 of 888 is bare: 67.9%
+  assert.match(bare.message, /leaves 67% of its height empty/);
+});
+test('a captioned shot is measured against the safe rectangle less the room its captions reserve (ctx.captionZone): the reserved strip is not empty space and a hero that clears it is not small', () => {
+  const zone = [200, 800, 1500, 160]; // the caption layout's zone, in the bottom of the safe rectangle (96..984)
+  const wide = [box('body', [96, 96, 1728, 500])];
+  assert.deepEqual(rules(compositionFindings(wide, ctx(), DEFAULT_FILL)), ['dead-space'], 'uncaptioned: 388 of 888 bare below it');
+  assert.deepEqual(compositionFindings(wide, ctx({ captionZone: zone }), DEFAULT_FILL), [], 'captioned: 204 of 704 bare');
+  const c = compositionOf(wide, ctx({ captionZone: zone }));
+  assert.ok(Math.abs(c.band.share - 204 / 704) < 1e-9);
+  const tall = [box('title', [300, 200, 700, 400])];
+  assert.deepEqual(rules(compositionFindings(tall, ctx(), DEFAULT_FILL)).includes('scale-contrast'), true, 'uncaptioned: 45% of the height');
+  assert.deepEqual(rules(compositionFindings(tall, ctx({ captionZone: zone }), DEFAULT_FILL)).includes('scale-contrast'), false, 'captioned: 400 of 704 is 57%');
+  assert.ok(Math.abs(compositionOf(tall, ctx({ captionZone: zone })).hero.extent - 400 / 704) < 1e-9);
+});
+test('a caption zone at the top takes the top of the safe rectangle; a zone that is not a box, or takes all of it, changes nothing', () => {
+  const tree = [box('body', [96, 400, 1728, 584])];
+  const top = compositionOf(tree, ctx({ captionZone: [200, 96, 1500, 150] }));
+  assert.ok(Math.abs(top.band.share - (400 - 246) / 738) < 1e-9, 'the safe top moves to 246: 154 of 738 bare above');
+  assert.deepEqual(compositionOf(tree, ctx({ captionZone: undefined })).band, compositionOf(tree, ctx()).band);
+  assert.deepEqual(compositionOf(tree, ctx({ captionZone: [0, 0, 'x', 1] })).band, compositionOf(tree, ctx()).band);
+  assert.deepEqual(compositionOf(tree, ctx({ captionZone: [0, 96, 1920, 888] })).band, compositionOf(tree, ctx()).band);
 });
 test('a figure over its label with the lower 43% bare: dead-space names the bottom, and a hero at 58% of the width is large enough', () => {
   const found = compositionFindings([box('figure', [400, 220, 1000, 240]), box('label', [400, 520, 1000, 80])], ctx(), DEFAULT_FILL);
@@ -143,11 +169,11 @@ test('the cap keeps the three worst composition findings, says how many it dropp
   assert.equal(COMPOSITION_CAP, 3);
   const kept = capComposition([f('dead-space', 0.05, 0), f('still', undefined, 1), f('scale-contrast', 0.3, 2), f('dead-space', 0.1, 3), f('dead-space', 0.2, 4), f('scale-contrast', 0.01, 5)]);
   assert.deepEqual(kept.map((x) => x.t), [1, 2, 3, 4]);
-  assert.equal(kept.find((x) => x.t === 3).message, 'm (2 more shots have a composition finding; fix the worst first)');
+  assert.equal(kept.find((x) => x.t === 3).message, 'm (2 more composition findings are left out; fix the worst first)');
   assert.equal(kept.find((x) => x.t === 2).message, 'm');
   assert.deepEqual(capComposition([f('dead-space', 0.05, 0)]).map((x) => x.message), ['m']);
   const one = capComposition([f('dead-space', 0.5, 0), f('dead-space', 0.4, 1), f('dead-space', 0.3, 2), f('dead-space', 0.2, 3)]);
-  assert.equal(one.find((x) => x.t === 2).message, 'm (1 more shot has a composition finding; fix the worst first)');
+  assert.equal(one.find((x) => x.t === 2).message, 'm (1 more composition finding is left out; fix the worst first)');
 });
 test('a shot rests on its last frame, audited whole', () => {
   const timeline = { fps: 30, shots: [{ id: 'a', index: 0, start: 0, end: 2, duration: 2 }, { id: 'b', index: 1, start: 2, end: 3, duration: 1 }] };

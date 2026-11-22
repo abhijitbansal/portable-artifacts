@@ -77,16 +77,17 @@ before(() => {
 });
 after(() => rmSync(exampleDir, { recursive: true, force: true }));
 
-// The composition findings (W2 Task 3) an example gets, by "<kind> <look> <format>": the same sparse frames review-browser.test.mjs
-// names (a caption is not an element, so captions on change none of them), as "<kind> <rule>".
+// The composition findings (W2 Task 3) an example gets, by "<kind> <look> <format>", as "<kind> <rule>": the same sparse frames
+// review-browser.test.mjs names. The caption zone the layout reserves is left out of what is measured (ctx.captionZone), so
+// captions on add none: the timeline and the screen that were flagged only with captions on (their layouts clear the zone)
+// have no finding here.
 const SPARSE = ['creative dead-space'];
 const KNOWN = Object.freeze({
   'free desk 16:9': SPARSE, 'number desk 16:9': SPARSE, 'diagram desk 16:9': SPARSE, 'free desk 9:16': SPARSE,
   'number desk 9:16': SPARSE, 'timeline desk 9:16': SPARSE, 'free pop 16:9': SPARSE, 'diagram pop 16:9': SPARSE,
   'free pop 9:16': SPARSE, 'list pop 9:16': SPARSE,
-  'statement desk 16:9': ['creative scale-contrast'],
-  // captions on keep the timeline and the screen clear of the caption zone: the frame above it is sparse (46% and 41% bare)
-  'timeline desk 16:9': SPARSE, 'screen pop 16:9': SPARSE,
+  'statement desk 16:9': SPARSE, 'list desk 16:9': SPARSE, // left-flush: 36% of the width bare on the right, 36% of the height at the top
+  'timeline desk 16:9': SPARSE,
 });
 
 for (const [mode, look, format] of EXAMPLE_COMBOS) {
@@ -104,15 +105,16 @@ for (const [mode, look, format] of EXAMPLE_COMBOS) {
   }
 }
 
-// The composition findings of the gate films, as "<kind> <rule> <shot>": desk `how` has a hero the message prints as 55% of the
-// frame, just under the 0.55 bar; pop `proof` leaves 42% of its height bare, and its `count` figure reaches 51% over a smaller delta.
+// The composition findings of the gate films, as "<kind> <rule> <shot>" (frames viewed, .scratch/motion-steals-w2/t3/png-gate-*):
+// desk `problem`, `how` and `close` are left-flush statements with the right 35 to 36% bare (they read well filled: edge cases
+// of the 0.35 band); pop `hook` and `local` are a three-line block with 39% of the height bare below it (top-heavy, they read sparse).
 const GATE_KNOWN = Object.freeze({
-  'gate-desk': ['creative scale-contrast how'],
-  'gate-pop': ['creative dead-space proof', 'creative scale-contrast count'],
+  'gate-desk': ['creative dead-space problem', 'creative dead-space how', 'creative dead-space close'],
+  'gate-pop': ['creative dead-space hook', 'creative dead-space local'],
 });
 
 for (const [name, extra] of [['gate-desk', { captions: true }], ['gate-pop', { captions: true }]]) {
-  test(`${name} with captions on has no review finding`, async (t) => {
+  test(`${name} with captions on has only its known review findings`, async (t) => {
     const film = gate(name, extra);
     const session = await open(t, film); if (!session) return;
     const proof = buildTimeline(film, { fps: FPS }).shots.find((s) => s.id === 'proof');
