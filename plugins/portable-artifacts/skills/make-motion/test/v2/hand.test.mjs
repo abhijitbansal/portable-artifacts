@@ -153,6 +153,24 @@ test('text is written, never faded: no text or path node of a hand shot has an o
   assert.ok(all(nodes).some((n) => n.id.startsWith('name') && n.tracks.reveal), 'the label is revealed by its clip');
 });
 
+test('a written text keeps its glyph tracks and its own line tracks, line by line', async () => {
+  const { node } = await import('../../engine/graph/node.mjs');
+  const { track } = await import('../../engine/time/track.mjs');
+  const out = expanded();
+  const name = all(out.nodes).find((n) => n.id === 'name');
+  const lineFades = name.props.layout.lines.map((_, k) => track([{ t: 0, v: 0 }, { t: 1 + k, v: 1 }]));
+  const glyphFade = track([{ t: 0, v: 0 }, { t: 1, v: 1 }]);
+  const marked = node('text', 'name', name.props, {
+    tracks: name.tracks, wordTracks: name.wordTracks, depth: name.depth, glyphTracks: [[{ opacity: glyphFade }]], lineTracks: lineFades.map((y) => ({ y })),
+  });
+  const nodes = handLayer(out.nodes.map((n) => (n.id === 'name' ? marked : n)), out.timing, out.ctx);
+  const parts = all(nodes).filter((n) => n.type === 'text' && n.id.startsWith('name'));
+  assert.equal(parts.length, lineFades.length);
+  parts.forEach((part) => assert.strictEqual(part.glyphTracks?.[0][0].opacity, glyphFade, `${part.id}: glyph tracks kept`));
+  const kept = parts.map((part) => part.lineTracks?.[0]?.y);
+  assert.ok(lineFades.length > 0 && kept.every((y, k) => y === lineFades[k]), 'each line node carries its own line track as index 0');
+});
+
 test('frame 0 of a board holds at least one fully drawn element and the hand resting at its end', () => {
   for (const format of ['16:9', '9:16']) {
     const built = filmFor([BOARD], LOOK, format);

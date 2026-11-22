@@ -40,6 +40,12 @@ export function glyphRollup(glyphs) {
   return { opacity: mean((g) => unit01(g.opacity)), dx: mean((g) => g.x), dy: mean((g) => g.y), scale: mean((g) => g.scale) };
 }
 
+// How near the identity (opacity 1, offsets 0 px, scale 1) a letter or a line must be to count as at rest. Springs and eases
+// end on their exact value, so this only absorbs float noise; it equals the frame review's settle tolerance.
+export const REST_TOLERANCE = 0.002;
+const atRest = (g) => Math.abs(g.opacity - GLYPH_IDENTITY.opacity) <= REST_TOLERANCE && Math.abs(g.x) <= REST_TOLERANCE
+  && Math.abs(g.y) <= REST_TOLERANCE && Math.abs(g.scale - GLYPH_IDENTITY.scale) <= REST_TOLERANCE;
+
 /**
  * `glyphs` as the draw reads them for a word of `count` graphemes: one normalised entry per grapheme, a missing one at the
  * identity (a short list leaves the rest in place).
@@ -52,15 +58,19 @@ export const paddedGlyphs = (glyphs, count) => Array.from({ length: count }, (_,
  * How far a word has arrived, as the draw puts it on screen: { opacity, scale }. The opacity is the word's own (clamped)
  * times the mean of its letters' (glyphRollup) times its line's (clamped); the scale is the word's own times the mean of its
  * letters' times its line's. Each opacity factor is clamped before the product, so an overshoot ease on one cannot make up
- * for another that has not arrived. A word is at rest only when its letters and its line are.
+ * for another that has not arrived. `rest` is true only when EVERY letter and the line are within REST_TOLERANCE of the
+ * identity (opacity 1, offsets 0, scale 1): the means above hide letters that overshoot and undershoot, or that are fully
+ * opaque and still sliding, so a word has landed only when `rest` says so.
  * @param {{ opacity: number, scale: number }} own the word's own sampled values
  * @param {{ opacity: number, x: number, y: number, scale: number }[] | null} glyphs its letters, one per grapheme (padded), or null
- * @param {{ opacity: number, scale: number } | undefined} line its line's sampled values
+ * @param {{ opacity: number, x: number, y: number, scale: number } | undefined} line its line's sampled values
+ * @returns {{ opacity: number, scale: number, rest: boolean }}
  */
 export function seenOf(own, glyphs, line) {
   const rolled = glyphs && glyphs.length > 0 ? glyphRollup(glyphs) : null;
   return {
     opacity: unit01(own.opacity) * (rolled ? rolled.opacity : 1) * unit01(line?.opacity ?? 1),
     scale: own.scale * (rolled ? rolled.scale : 1) * (line?.scale ?? 1),
+    rest: (glyphs ?? []).every(atRest) && (line === undefined || atRest(normaliseGlyph(line))),
   };
 }

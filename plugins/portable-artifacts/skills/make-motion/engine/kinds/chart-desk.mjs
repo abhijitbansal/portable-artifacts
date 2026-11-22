@@ -4,7 +4,7 @@
 // labels in the label face; the source line bottom left in the label face's small caps, beside the caption band on a
 // wide frame and over it on a tall one. Pure and DOM-free.
 import { registries } from '../registry.mjs';
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { gridX } from '../looks/index.mjs';
 import { pathPoints } from '../devices/shared.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
@@ -98,7 +98,7 @@ function sourceLine(shot, ctx, data, style, { left, right, caption }) {
 }
 
 // A text node carrying the lines its kind left out (props.dropped: the review's 'dropped' rule).
-const withDropped = (n, what) => node(n.type, n.id, { ...n.props, dropped: what }, { tracks: n.tracks, wordTracks: n.wordTracks });
+const withDropped = (n, what) => node(n.type, n.id, { ...n.props, dropped: what }, { tracks: n.tracks, ...textTracksOf(n) });
 
 // The annotation (data.annotation: { face }, ledger): the highlighted value in `face` beside its mark, on the label
 // device's leader, which ends (on its dot) just inside the mark's far end: a bar's right end (the note where the value

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { track } from '../../engine/time/track.mjs';
-import { node } from '../../engine/graph/node.mjs';
+import { node, textTracksOf } from '../../engine/graph/node.mjs';
 import { sampleGraph, stateKey } from '../../engine/graph/sample.mjs';
 import { camera, applyCamera } from '../../engine/graph/camera.mjs';
 
@@ -336,6 +336,20 @@ test('glyph and line tracks on a non-text node, or an unknown glyph or line trac
   assert.throws(() => glyphNode({ lineTracks: [{ glow: hold(1) }] }), /unknown track 'glow'; accepted: opacity, x, y, scale/);
   assert.throws(() => glyphNode({ glyphTracks: 'no' }), /glyphTracks must be an array/);
   assert.throws(() => glyphNode({ lineTracks: [{ x: 3 }] }), /must be a track/);
+});
+
+test('textTracksOf is what a copy of a text passes on: word, glyph and line tracks together', () => {
+  const t = hold(1);
+  const original = glyphNode({ wordTracks: [{ opacity: t }], glyphTracks: [[{ opacity: t }]], lineTracks: [{ y: t }] });
+  const copy = node('text', 't', original.props, { tracks: original.tracks, ...textTracksOf(original) });
+  assert.deepEqual([copy.wordTracks[0].opacity, copy.glyphTracks[0][0].opacity, copy.lineTracks[0].y], [t, t, t]);
+  const bare = node('text', 't', glyphProps(), { tracks: {}, ...textTracksOf(glyphNode({})) });
+  assert.equal(bare.glyphTracks, undefined, 'a text without them copies to a node without them');
+});
+
+test('a sampled word and line report whether every letter and the line are at rest', () => {
+  const [s] = sampleGraph([glyphNode({ glyphTracks: [[{ x: AT(0, 1) }]], lineTracks: [{ opacity: hold(1) }] })], 0.5);
+  assert.deepEqual([s.seen[0].rest, s.seen[1].rest], [false, true], 'word 0 has a letter off its place; word 1 only a line at rest');
 });
 
 test('glyph and line tracks follow the node step', () => {

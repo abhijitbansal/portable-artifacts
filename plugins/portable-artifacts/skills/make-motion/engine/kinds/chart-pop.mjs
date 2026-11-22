@@ -2,7 +2,7 @@
 // value under it as a numeral in the display face that punches in (an object entrance) on the word that names it, and
 // big marks filling the area's width under that, labelled directly; no reference lines (look.kinds.chart.refs). The
 // source line, when given, small at the bottom. The plot keeps clear of the caption band. Pure and DOM-free.
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { landing } from '../devices/shared.mjs';
 import { track } from '../time/track.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, fontFor } from './shared.mjs';
@@ -68,7 +68,7 @@ function numeralNode(shot, ctx, set, { cx, cy, at }) {
 
 // `nodes` with the text `id` marked as not fitting (layout.overflow), as new objects.
 function flagOverflow(nodes, id) {
-  const rebuilt = (n, props, children) => node(n.type, n.id, props, { tracks: n.tracks, children, depth: n.depth, step: n.step, wordTracks: n.wordTracks });
+  const rebuilt = (n, props, children) => node(n.type, n.id, props, { tracks: n.tracks, children, depth: n.depth, step: n.step, ...textTracksOf(n) });
   return nodes.map((n) => (n.id === id
     ? rebuilt(n, { ...n.props, layout: { ...n.props.layout, overflow: true } }, n.children)
     : rebuilt(n, n.props, flagOverflow(n.children, id))));

@@ -110,7 +110,7 @@ function enterLine(ctx, line, tracks) {
   if (opacity < 1) ctx.globalAlpha *= opacity;
   if (tracks.x !== 0 || tracks.y !== 0) ctx.translate(tracks.x, tracks.y);
   if (tracks.scale !== 1) {
-    const centre = line.x + line.width / HALF;
+    const centre = (line.x ?? 0) + (line.width ?? 0) / HALF; // a hand-built line may carry no width: its start, never NaN
     ctx.translate(centre, line.y);
     ctx.scale(tracks.scale, tracks.scale);
     ctx.translate(-centre, -line.y);

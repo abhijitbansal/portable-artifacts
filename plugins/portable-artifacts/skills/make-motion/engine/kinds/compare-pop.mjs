@@ -7,7 +7,7 @@
 // picture is a cut-out over its tag, at most `picture` of the stack area's height, `pictureGap` above the tag. Pure and
 // DOM-free.
 import { registries } from '../registry.mjs';
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { landing, colourOf } from '../devices/shared.mjs';
 import { layoutText } from '../text/layout.mjs';
@@ -225,7 +225,7 @@ function sideColours(part, k, ctx, data, { turn, both }) {
     const count = n.props.layout.lines.reduce((sum, l) => sum + l.words.length, 0);
     const base = n.wordTracks?.length === count ? n.wordTracks : Array.from({ length: count }, () => ({}));
     const props = { ...n.props, fill: full };
-    return node('text', n.id, props, { tracks: n.tracks, ...(swaps ? { wordTracks: base.map((w) => ({ ...w, fill: stepped(full) })) } : { wordTracks: n.wordTracks }) });
+    return node('text', n.id, props, { tracks: n.tracks, ...textTracksOf(n), ...(swaps ? { wordTracks: base.map((w) => ({ ...w, fill: stepped(full) })) } : {}) });
   };
   return part.children.map((n) => {
     // only the title's lines recolour: its beat bar and knockout copy (data.beatAt) keep the bar's colours

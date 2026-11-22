@@ -206,8 +206,9 @@ export function textStatesIn(sampled) {
 export const textScalesIn = (sampled) => new Map([...textStatesIn(sampled)].map(([id, state]) => [id, state.scale]));
 
 // A word has arrived when it is at opacity 1, and is at rest when it is also at its resting scale (an emphasis pulse
-// scales a word up and back): `rest`, the scale it holds on most of its shot's frames (ctx.restWords), else 1.
-const isWordAtRest = (word, rest = 1) => (word?.opacity ?? 1) >= 1 && Math.abs((word?.scale ?? 1) / rest - 1) <= SETTLE_TOLERANCE;
+// scales a word up and back): `rest`, the scale it holds on most of its shot's frames (ctx.restWords), else 1. A word with
+// letters or a line (seen.rest) is at rest only when each of them is: their means hide one that is still moving.
+const isWordAtRest = (word, rest = 1) => (word?.opacity ?? 1) >= 1 && word?.rest !== false && Math.abs((word?.scale ?? 1) / rest - 1) <= SETTLE_TOLERANCE;
 
 // A text is settled when it stands within SETTLE_TOLERANCE of the scale it has on its shot's last frame: an entrance
 // spring, an emphasis pulse or a camera push passes through other scales on its way and is not judged on them.

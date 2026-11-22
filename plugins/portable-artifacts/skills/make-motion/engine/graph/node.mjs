@@ -86,6 +86,9 @@ function checkLineTracks(lines, type) {
 
 const freezeEntry = (entry) => (entry === undefined ? undefined : Object.freeze({ ...entry }));
 
+/** The word, glyph and line track options of node `n`, for a copy that keeps them all: `node(type, id, props, { tracks, ...textTracksOf(n) })`. */
+export const textTracksOf = (n) => ({ wordTracks: n.wordTracks, glyphTracks: n.glyphTracks, lineTracks: n.lineTracks });
+
 function checkChildren(children) {
   if (!Array.isArray(children)) throw new Error('children must be an array of nodes');
   children.forEach((child, i) => {

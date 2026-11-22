@@ -85,13 +85,13 @@ const GLOW = { color: '#ffd24a', alpha: 0.8, radius: 12 };
 const ID = { opacity: 1, x: 0, y: 0, scale: 1 };
 
 // One word on one line at (0, 0), centred on the origin (its left is -width / 2), drawn through drawFrame.
-function drawWord(text, trackValues, { glow, shift = 0, font = FONT, reserve, lines } = {}) {
+function drawWord(text, trackValues, { glow, shift = 0, font = FONT, reserve, lines, widthless = false } = {}) {
   const ctx = fakeContext();
   const width = widthOf(text);
   const { glyphs, ...wordTracks } = trackValues; // a sampled node carries the glyph values beside the words' (sampled.glyphs)
   const node = {
     type: 'text', id: 't', x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, reveal: 1, blur: 0, children: [],
-    props: { font, layout: { lines: [{ x: 0, y: 0, width, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }], ...(reserve ? { reserve } : {}) }, ...(glow ? { glow } : {}) },
+    props: { font, layout: { lines: [{ x: 0, y: 0, ...(widthless ? {} : { width }), words: [{ text, x: -width / 2 + shift, width, index: 0 }] }], ...(reserve ? { reserve } : {}) }, ...(glow ? { glow } : {}) },
     words: [wordTracks],
     ...(glyphs ? { glyphs: [glyphs] } : {}),
     ...(lines ? { lines } : {}),
@@ -342,6 +342,12 @@ test('a line at opacity 0 draws nothing, glow included; a line at its rest value
   const rest = drawWord('ABC', word(), { lines: [LINE_ID] });
   const bare = drawWord('ABC', word());
   assert.deepEqual(rest.fills.map(({ text, x, y, scale, alpha }) => ({ text, x, y, scale, alpha })), bare.fills.map(({ text, x, y, scale, alpha }) => ({ text, x, y, scale, alpha })));
+});
+
+test('a hand-built line with no width scales about its start: a finite transform, never NaN', () => {
+  const { fills } = drawWord('ABC', word(), { lines: [{ ...LINE_ID, scale: 2 }], widthless: true });
+  assert.equal(fills.length, 1);
+  assert.ok(Number.isFinite(fills[0].x) && Number.isFinite(fills[0].y) && fills[0].scale === 2);
 });
 
 test('a line track composes with a word track and with letters still arriving', () => {

@@ -17,7 +17,8 @@ import { glyphRollup } from '../../engine/graph/rollup.mjs';
 import { auditFrame, hasVisibleWord, landedTexts, textLandings, wordSeen } from '../../engine/review/frame.mjs';
 import { inspectNodes } from '../../engine/review/inspect-nodes.mjs';
 import { showsItself } from '../../engine/review/marks.mjs';
-import { safeRectFor, restingByShot } from '../../scripts/v2/review.mjs';
+import '../../engine/kinds/index.mjs';
+import { safeRectFor, restingByShot, hookFindings } from '../../scripts/v2/review.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
 const ctx = (extra = {}) => {
@@ -65,6 +66,58 @@ test('a text whose first line has not arrived but whose second line has no track
   assert.equal(textLandings([s], ctx()).length, 1, 'the text is on screen through its second line');
 });
 
+// A word has landed only when every letter and the line rest: a mean hides the one still moving.
+test('letters fully opaque but still sliding have not landed; once they rest the text has', () => {
+  const slide = track([{ t: 0, v: 24 }, { t: 1, v: 0, ease: 'linear' }]);
+  const n = sampledText({ glyphTracks: [[{ opacity: hold(1), x: slide }, { opacity: hold(1) }]] });
+  assert.equal(textLandings(annotatedAt(n, 0.5), ctx())[0].landed, false);
+  assert.equal(textLandings(annotatedAt(n, 1), ctx())[0].landed, true);
+  assert.equal(sampleGraph([n], 0.5)[0].seen[0].rest, false);
+  assert.equal(sampleGraph([n], 1)[0].seen[0].rest, true);
+});
+
+test('letters that overshoot and undershoot, their mean scale about 1, have not landed', () => {
+  // 'word' has four letters: 1.2, 0.8, 1, 1 is a mean of exactly 1
+  const n = sampledText({ glyphTracks: [[{ scale: hold(1.2) }, { scale: hold(0.8) }]] });
+  const [s] = sampleGraph([n], 0);
+  assert.equal(s.seen[0].scale, 1);
+  assert.equal(s.seen[0].rest, false);
+  assert.equal(textLandings(annotatedAt(n, 0), ctx())[0].landed, false);
+});
+
+test('a line fully opaque and at scale but still moving has not landed', () => {
+  const n = sampledText({ lineTracks: [{ y: track([{ t: 0, v: 30 }, { t: 1, v: 0, ease: 'linear' }]) }] });
+  assert.equal(textLandings(annotatedAt(n, 0.5), ctx())[0].landed, false);
+  assert.equal(textLandings(annotatedAt(n, 1), ctx())[0].landed, true);
+});
+
+// ---- the frame-0 hook check counts words as the viewer sees them ----
+
+const heroNode = (opts) => node('text', 'hero', { layout: layoutOf(2), font: { family: 'Fraunces', size: 96 }, fill: '#000000', x: 200, y: 400, role: 'hero' }, opts);
+const filmOf = (mode = 'viral') => ({ mode, shots: [{ id: 'hook', show: 'statement' }] });
+const zero = (n) => [{ frame: 0, tree: annotate(sampleGraph([n], 0)) }];
+
+test('a hero whose letters are not on frame 0 is a hook finding, whatever its words say', () => {
+  const hidden = heroNode({ wordTracks: [{}, {}], glyphTracks: [[{ opacity: hold(0) }], [{ opacity: hold(0) }]] });
+  const [found] = hookFindings(filmOf(), {}, zero(hidden));
+  assert.equal(found.rule, 'hook');
+  assert.match(found.message, /2 of its 2 words are not on screen yet/);
+  const first = heroNode({ glyphTracks: [[{ opacity: hold(1) }, { opacity: hold(0) }]] });
+  assert.equal(hookFindings(filmOf(), {}, zero(first)).length, 1, 'the first letter alone is not all of its text');
+});
+
+test('a hero whose line is not on frame 0 is a hook finding, with or without word tracks', () => {
+  assert.equal(hookFindings(filmOf(), {}, zero(heroNode({ lineTracks: [{ opacity: hold(0) }] }))).length, 1);
+  assert.equal(hookFindings(filmOf(), {}, zero(heroNode({ wordTracks: [{}, {}], lineTracks: [{ opacity: hold(0) }] }))).length, 1);
+  assert.equal(hookFindings(filmOf(), {}, zero(heroNode({ lineTracks: [{ y: hold(30) }] }))).length, 1, 'a line still sliding is not all on screen');
+});
+
+test('a hero with letters and line at rest on frame 0 is not a hook finding, and a pro film is not held to it', () => {
+  const rest = heroNode({ wordTracks: [{}, {}], glyphTracks: [[{ opacity: hold(1) }]], lineTracks: [{ opacity: hold(1) }] });
+  assert.deepEqual(hookFindings(filmOf(), {}, zero(rest)), []);
+  assert.deepEqual(hookFindings(filmOf('pro'), {}, zero(heroNode({ lineTracks: [{ opacity: hold(0) }] }))), []);
+});
+
 test('a line at rest opacity but off its scale has not landed', () => {
   const n = sampledText({ lineTracks: [{ scale: track([{ t: 0, v: 0.9 }, { t: 1, v: 1, ease: 'linear' }]) }] });
   assert.equal(textLandings(annotatedAt(n, 0.5), ctx())[0].landed, false);
@@ -89,7 +142,7 @@ test('--inspect reports a text mid-entrance as not landed', () => {
 test('wordSeen is the roll-up laid over the word where there is one, and the word where there is none', () => {
   const rolled = sampleGraph([sampledText({ wordTracks: [{ x: hold(7) }, {}], glyphTracks: [[{ opacity: hold(0) }, { opacity: hold(1) }]] })], 0)[0];
   // 'word' has four graphemes: the two with tracks (0 and 1) and two at the identity, a mean of 0.75
-  assert.deepEqual(wordSeen(rolled, 0), { opacity: 0.75, x: 7, y: 0, scale: 1, fill: '#000000' }, "the word's other values stay");
+  assert.deepEqual(wordSeen(rolled, 0), { opacity: 0.75, x: 7, y: 0, scale: 1, fill: '#000000', rest: false }, "the word's other values stay; a letter at 0 is not at rest");
   assert.deepEqual(wordSeen(rolled, 1), { opacity: 1, x: 0, y: 0, scale: 1, fill: '#000000' }, 'a word with neither is as it is');
   const bare = sampleGraph([sampledText({ wordTracks: [{ opacity: hold(0.25) }, {}] })], 0)[0];
   assert.equal(bare.seen, undefined);

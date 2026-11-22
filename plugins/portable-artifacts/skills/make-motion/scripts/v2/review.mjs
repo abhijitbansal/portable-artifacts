@@ -450,7 +450,7 @@ export function hookFindings(film, timeline, snapshots) {
   const texts = [];
   const walk = (n) => { if (n.type === 'text' && n.props?.role === 'hero') texts.push(n); (n.children ?? []).forEach(walk); };
   zero.tree.forEach(walk);
-  const [shown, all] = texts.reduce((sum, n) => [sum[0] + (n.words ?? []).filter((w) => w.opacity > 0).length, sum[1] + (n.words ?? []).length], [0, 0]);
+  const [shown, all] = texts.reduce((sum, n) => [sum[0] + seenWords(n).filter((w) => w.opacity > 0 && w.rest !== false).length, sum[1] + seenWords(n).length], [0, 0]); // seen: its letters and line count
   if (all === 0 || shown === all) return [];
   return [{
     kind: 'mechanical', shot: first.id, path: 'shots[0]', t: 0, rule: 'hook', node: '',
