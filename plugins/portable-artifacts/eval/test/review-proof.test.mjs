@@ -273,6 +273,17 @@ test('runProof and runCase throw before any session unless the budget is a posit
   assert.equal(fs.existsSync(marker), false, 'no session may start without a cap');
 });
 
+test('runProof without maxTotal caps the proof at runs x films x budget, never at Infinity', async () => {
+  const dir = tmp();
+  const { films } = checkSheets({ sheetsDir: sheetsFolder(), planted: PLANTED });
+  // a host that exits at once: every session is recorded as unreadable, and nothing is billed
+  const host = { cmd: [process.execPath, '-e', 'process.exit(1)', '{prompt}'], budgetArgs: ['--max-budget-usd', '{budget}'] };
+  const out = await runProof({ films, planted: PLANTED, runs: 2, host, budget: 1.5, timeoutSec: 10, outDir: dir, tmpDir: tmp() });
+  assert.equal(out.maxTotal, 2 * 5 * 1.5);
+  assert.equal(out.cases.length, 10, 'with the default cap every session starts');
+  assert.equal(out.stopped, null);
+});
+
 test('a session whose host cannot start leaves no workdir behind', async () => {
   const dir = tmp();
   const work = tmp();
@@ -331,6 +342,19 @@ test('--max-total defaults to runs x films x budget, is printed before the proof
     assert.match(bad2.stderr, /--max-total must be a positive number of dollars/);
   }
   assert.equal(fs.existsSync(marker), false);
+});
+
+test('--max-total below --budget is refused up front (exit 2): not one session could start', () => {
+  const { bin, marker } = fakeClaude('honest');
+  const out = tmp();
+  const r = proof(bin, ['--budget', '2', '--max-total', '1.5', '--sheets', sheetsFolder(), '--out', out]);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--max-total 1\.5 is below --budget 2/);
+  assert.equal(fs.existsSync(marker), false, 'no host started');
+  assert.deepEqual(fs.readdirSync(out), [], 'no result folder made');
+  // exactly one session fits: allowed
+  const ok = proof(bin, ['--runs', '1', '--budget', '2', '--max-total', '2', '--sheets', sheetsFolder(), '--dry-run']);
+  assert.equal(ok.status, 0, ok.stderr);
 });
 
 test('the films run good first, then the planted ones, and a reviewer reply in a stream is read as the agent\'s', () => {

@@ -171,15 +171,17 @@ async function runCase({ name, run: n, film, host, budget, timeoutSec, caseDir, 
  * session that could take the spend past it: spend so far is the cost the streams reported, and a session with no cost counts
  * as its full cap. -> { score, cases, stopped } where `stopped` is a reason string or null.
  */
-export async function runProof({ films, planted, runs, host, budget, timeoutSec, outDir, tmpDir, maxTotal = Infinity, onCase = () => {}, log = () => {} }) {
+export async function runProof({ films, planted, runs, host, budget, timeoutSec, outDir, tmpDir, maxTotal, onCase = () => {}, log = () => {} }) {
   requireBudget(budget);
+  // No total given: the worst case of the whole proof, never "no cap".
+  const cap = maxTotal ?? runs * fixtureNames(planted).length * budget;
   const cases = [];
   let spent = 0;
   let stopped = null;
   for (let n = 1; n <= runs && !stopped; n += 1) {
     for (const name of fixtureNames(planted)) {
-      if (spent + budget > maxTotal + 1e-9) {
-        stopped = `stopped before ${name} run ${n}: ${spent.toFixed(2)} USD spent, and one more session capped at ${budget} USD could pass --max-total ${maxTotal}`;
+      if (spent + budget > cap + 1e-9) {
+        stopped = `stopped before ${name} run ${n}: ${spent.toFixed(2)} USD spent, and one more session capped at ${budget} USD could pass --max-total ${cap}`;
         break;
       }
       log(`▶ ${name} run ${n}/${runs}`);
@@ -192,7 +194,7 @@ export async function runProof({ films, planted, runs, host, budget, timeoutSec,
   }
   if (stopped) log(stopped);
   const results = cases.filter((c) => c.counted).map(({ fixture, run: n, verdict, notes }) => ({ fixture, run: n, verdict, notes }));
-  return { score: scoreProof(results, planted, { runs }), cases, stopped };
+  return { score: scoreProof(results, planted, { runs }), cases, stopped, maxTotal: cap };
 }
 
 const USAGE = 'usage: node eval/review-proof.mjs --runs 3 --budget <usd> [--max-total <usd>] [--sheets <dir>] [--timeout sec] [--out dir] [--dry-run] [--help]\n';
@@ -225,6 +227,9 @@ export async function main(argv) {
   if (!Number.isInteger(runs) || runs < 1) return usage(`--runs must be a positive whole number, got "${opts.runs}"`);
   if (opts['max-total'] !== undefined && !(Number.isFinite(Number(opts['max-total'])) && Number(opts['max-total']) > 0)) {
     return usage(`--max-total must be a positive number of dollars, got "${opts['max-total']}"`);
+  }
+  if (opts['max-total'] !== undefined && Number(opts['max-total']) < budget) {
+    return usage(`--max-total ${Number(opts['max-total'])} is below --budget ${budget}: not even one session could start`);
   }
   const timeoutSec = Number(opts.timeout);
   if (!(timeoutSec > 0)) return usage(`--timeout must be a positive number of seconds, got "${opts.timeout}"`);

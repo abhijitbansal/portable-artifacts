@@ -332,13 +332,22 @@ test('the reviewer reads the film spec and checks each shot against its say line
   assert.match(REVIEWER_INSTRUCTIONS, /film path \(the film's JSON spec/);
   assert.match(REVIEWER_INSTRUCTIONS, /Read the film file/);
   assert.match(REVIEWER_INSTRUCTIONS, /"say"/);
-  assert.match(REVIEWER_INSTRUCTIONS, /against its "say" line/);
+  assert.match(REVIEWER_INSTRUCTIONS, /everything a shot's "say" line says the viewer can see is true of what its sheets show/);
+  assert.match(REVIEWER_INSTRUCTIONS, /each shot belongs to the film's subject/);
   assert.match(REVIEWER_INSTRUCTIONS, /mismatch is a P0/);
   assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /context only/);
   assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /cannot play or decode a film/);
   const first = REVIEWER_INSTRUCTIONS.indexOf('pictures alone');
-  const second = REVIEWER_INSTRUCTIONS.indexOf('against its "say" line');
+  const second = REVIEWER_INSTRUCTIONS.indexOf('Second look');
   assert.ok(first > 0 && second > first, 'pictures alone comes first, the narration check second');
+});
+
+// The proof films plant a wrong number, a wrong highlighted mark, a picture that contradicts "the red button" and an
+// unrelated shot. If the checklist named those classes, a pass would show that it follows a list, not that it can review.
+test('the reviewer checklist names none of the planted defect classes, only the general check', () => {
+  for (const named of [/a number,/i, /highlighted mark/i, /named object/i, /the subject of the shot/i, /red button/i, /\bhighlight/i, /wrong (number|mark|label|colou?r)/i]) {
+    assert.doesNotMatch(REVIEWER_INSTRUCTIONS, named, String(named));
+  }
 });
 
 test('the reviewer says what to do when the film file will not open', () => {
