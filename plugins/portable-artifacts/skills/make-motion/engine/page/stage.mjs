@@ -247,9 +247,9 @@ async function init() {
     if (state.cut.family === 'shader' && post.cuts.ran.includes(state.cut.name)) {
       drawShot(ctx, { ...state, t });
       const { shader } = registries.cuts.get(state.cut.name);
-      return { from: cutPictures.outgoing(state), shader: state.cut.name, params: shaderUniforms(shader, { p: state.cut.p, direction: state.cut.direction, canvas, ground: state.background }) };
+      return { from: cutPictures.outgoing(state, captions), shader: state.cut.name, params: shaderUniforms(shader, { p: state.cut.p, direction: state.cut.direction, canvas, ground: state.background }) };
     }
-    cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas, look), t);
+    cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas, look), t, captions);
     return null;
   };
   const keys = frameKeys({ frameState, fps, grainNow: () => grain });

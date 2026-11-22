@@ -19,13 +19,14 @@ export function createCutPictures({ w, h, drawShot }) {
     return new OffscreenCanvas(w, h);
   };
 
-  /** The outgoing picture of the window `state` is in (frameAt's `from`): redrawn when the shot or the film second it
-   *  stands at (`from.t`) differs from the picture held, so a frozen outgoing shot is drawn once and a live one each frame. */
-  function outgoingOf(state) {
-    if (outgoing?.shot === state.from.shot && outgoing.t === state.from.t) return outgoing.canvas;
+  /** The outgoing picture of the window `state` is in (frameAt's `from`): redrawn when the shot, the film second it
+   *  stands at (`from.t`) or whether the film's captions are drawn (`captions`: the caller strips them from `state` when
+   *  not) differs from the picture held, so a frozen outgoing shot is drawn once and a live one each frame. */
+  function outgoingOf(state, captions = true) {
+    if (outgoing?.shot === state.from.shot && outgoing.t === state.from.t && outgoing.captions === captions) return outgoing.canvas;
     const target = outgoing?.canvas ?? canvas();
     drawShot(target.getContext('2d'), { background: state.from.background, sampled: state.from.sampled, t: state.from.t });
-    outgoing = { shot: state.from.shot, t: state.from.t, canvas: target };
+    outgoing = { shot: state.from.shot, t: state.from.t, captions, canvas: target };
     return target;
   }
 
@@ -69,9 +70,10 @@ export function createCutPictures({ w, h, drawShot }) {
   /**
    * Composes frame `state` (inside a window: frameAt's { background, sampled, cut, from }) at film second `t` onto ctx
    * as `recipe` poses it (a layer cut's layers()). ctx must be at the identity with nothing left in its state.
+   * `captions`: whether `state` still holds the film's captions (see outgoingOf).
    */
-  function compose(ctx, state, recipe, t) {
-    const pictures = { from: outgoingOf(state), to: incomingOf(state, t) };
+  function compose(ctx, state, recipe, t, captions = true) {
+    const pictures = { from: outgoingOf(state, captions), to: incomingOf(state, t) };
     const backdrop = recipe.backdrop === null ? null : (recipe.backdrop === 'to' ? state.background : state.from.background);
     ctx.fillStyle = backdrop ?? state.background;
     ctx.fillRect(0, 0, w, h);

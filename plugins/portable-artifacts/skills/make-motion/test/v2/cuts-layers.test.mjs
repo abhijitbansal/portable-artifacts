@@ -1,6 +1,7 @@
 // The layer cuts (transitions plan Task 3): crossfade, fade, wipe, iris, zoom and blur are pure recipes for composing the
 // outgoing and the incoming picture; the page composes them (engine/page/cut-pictures.mjs). And frameAt inside a layer
-// window returns the incoming shot live plus the outgoing one frozen at its end.
+// window returns the incoming shot live plus the outgoing one sampled past its end (still moving; frozen at its end for a
+// node cut and in a look drawn by hand), and --list cuts says which.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { listEntries, formatList } from '../../scripts/v2/list.mjs';
@@ -8,6 +9,7 @@ import { registries } from '../../engine/registry.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm, outgoingTime } from '../../engine/graph/film.mjs';
 import { measure, canvasOf, filmOf, near, FPS } from './helpers/kinds.mjs';
+import { handLook } from './helpers/hand-look.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
 const LAYERS = ['crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'];
@@ -154,18 +156,24 @@ test('which cuts take the outgoing shot live: a layer or shader cut in a look wi
   assert.equal(outgoingTime({ family: 'layer' }, marker, 3, 0.2), 3);
 });
 
-test('a node cut, and a layer cut in a hand look, keep the outgoing shot frozen at its end with no live key', () => {
-  const { built, D, timeline } = driftFilm('slide');
-  const start = timeline.shots[1].start;
-  const node = built.frameAt(start + 0.1);
-  assert.equal(node.from, undefined, 'a node cut has no from: its apply() composes both shots');
-  const hand = filmOf([{ id: 'a', show: 'statement', text: 'Hello there', hold: 2 }, { id: 'b', show: 'statement', text: 'And again', hold: 2, cut: 'crossfade' }], 'marker');
-  const handTimeline = buildTimeline(hand, { fps: FPS });
-  const handBuilt = buildFilm({ film: hand, timeline: handTimeline, measure, canvas: canvasOf('16:9') });
-  const frame = handBuilt.frameAt(handTimeline.shots[1].start + 0.1);
-  assert.equal(frame.from?.live, undefined);
-  assert.deepEqual(frame.from.sampled, handBuilt.sampleShot(0, handTimeline.shots[0].duration));
-  assert.equal(D, timeline.shots[0].duration);
+test('a node cut has no outgoing sample to keep moving: its window holds both shots in one frame', () => {
+  const { built, timeline } = driftFilm('slide');
+  assert.equal(built.frameAt(timeline.shots[1].start + 0.1).from, undefined, 'a node cut has no from: its apply() composes both shots');
+});
+
+// the only look with `hand` data (marker) lists no layer cut, so the case is built here: desk's data and a hand (helpers/hand-look.mjs)
+test('a layer cut in a look drawn by hand keeps the outgoing shot frozen at its end, with no live key', () => {
+  const hand = filmOf([{ id: 'a', show: 'statement', text: 'Hello there', hold: 2 }, { id: 'b', show: 'statement', text: 'And again', hold: 2, cut: 'crossfade' }], handLook());
+  const timeline = buildTimeline(hand, { fps: FPS });
+  const built = buildFilm({ film: hand, timeline, measure, canvas: canvasOf('16:9') });
+  const D = timeline.shots[0].duration, end = timeline.shots[0].end;
+  for (const local of [0, 0.1, 0.3]) {
+    const frame = built.frameAt(timeline.shots[1].start + local);
+    assert.equal(frame.cut.name, 'crossfade');
+    assert.equal('live' in frame.from, false, `local ${local}`);
+    assert.equal(frame.from.t, end, `local ${local}`);
+    assert.deepEqual(frame.from.sampled, built.sampleShot(0, D), `local ${local}`);
+  }
 });
 
 test('--list cuts says which cuts keep the outgoing shot moving', () => {

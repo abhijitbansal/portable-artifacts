@@ -1,0 +1,61 @@
+{
+  "note": "Every frame inside a layer or shader cut window of the film, digested over the incoming shot, the cut and its progress, and the outgoing shot with its film second and live flag. Made after motion-steals W2 Task 8, when the outgoing shot began to keep moving past its end: a window whose outgoing shot freezes again, or is carried on differently, changes its sha. Regenerate with a stated reason if the film or a look changes under it, never to clear a red test.",
+  "film": "cuts-desk",
+  "windows": {
+    "into dissolve": {
+      "frames": 15,
+      "live": true,
+      "sha": "f833514e37d5115c99ae35dc72a449ceb3fc94e6e5259210917f1bab2f8d475c"
+    },
+    "into dip": {
+      "frames": 12,
+      "live": true,
+      "sha": "8b920742511f834262885160507bfa98f2469a0c676704f6f57ce342549ab4cd"
+    },
+    "into page": {
+      "frames": 12,
+      "live": true,
+      "sha": "e25ea92d0e532a0421ed296a879aebf04b338134bb1073fa9d38c9599d3d0a6c"
+    },
+    "into steps": {
+      "frames": 12,
+      "live": true,
+      "sha": "9a068fc5c144af2d8f6f486b4b6e811aa749eb1e8adee452471db901a7d0309f"
+    },
+    "into circle": {
+      "frames": 12,
+      "live": true,
+      "sha": "48c1f72979cfd8ecd1940c3bcdc828be47125bc354e35b04772e21564e1a8974"
+    },
+    "into focus": {
+      "frames": 24,
+      "live": true,
+      "sha": "29afd766ce58f20dc3e2e859304148d3061ad3cd2937e0363ebef1b26468a780"
+    },
+    "into curl": {
+      "frames": 18,
+      "live": true,
+      "sha": "71ed5e790e96d6881caf53867a9dbeb968aeb2c2627b13a2368b5d5fcd98f554"
+    },
+    "into gust": {
+      "frames": 18,
+      "live": true,
+      "sha": "b09e0682c2070d84ebc6c212537940c0d84432231f9fff3bcf77b51183c74dbb"
+    },
+    "into slats": {
+      "frames": 18,
+      "live": true,
+      "sha": "3cc7f91a2d474f9fe71d786109bc294d8c84beced024f6d1c442cac5002937de"
+    },
+    "into drop": {
+      "frames": 18,
+      "live": true,
+      "sha": "58851794b07a38fcc3770e7849476dd7a215c9ac6c14e63e9e12e300186795d9"
+    },
+    "into warp": {
+      "frames": 18,
+      "live": true,
+      "sha": "934556e0f59e4dadce6c993a2e05a1445b2bce37c586fbfaa8d6e6cac7f72dda"
+    }
+  }
+}
