@@ -425,3 +425,15 @@ the text band in pop, cosmos and poster, so the two touch. The bottom of the saf
 - **B:** end the bar on the safe-zone line (`y = insets.top - h`, about 284 to 290 px): it shares no pixel with any band
   but sits 6 px inside the area the platform may cover.
 - **C:** let `overlay-covers` also judge the bar's box (about 5 lines), so a text under the bar is flagged.
+
+## make-motion letter entrances: decided by how the browser draws a word (branch feat/motion-steals, 2026-11-22)
+
+A `letters` entrance draws a word glyph by glyph only when that matches the whole word pixel for pixel on a scratch
+canvas; otherwise the word arrives as one block. The check runs in the browser at render time, so on another system
+(macOS against Linux CI) or after a Chromium or font update a borderline word can switch between the two.
+
+- **A (default, shipped):** keep the pixel check; the docs scope "two renders give the same frames" to the same machine,
+  browser build and fonts, as frame hashes already are.
+- **B:** decide from shaping data instead (no ligature or mark sequences, no kern pairs the per-glyph advance misses),
+  so the choice is the same on every system, at the cost of more words arriving as one block.
+- **C:** pin a per-look table of the words the example films use and assert it on each platform in CI.
