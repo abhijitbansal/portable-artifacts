@@ -337,7 +337,8 @@ function expandEnd(shot, ctx) {
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'title', behind });
   // the mark is pinned to the frame (fixed) as a desk card, a ledger tag or a product end's tag: the camera does not move it,
   // so a cut that opens from it (cut.at: "mark") reads it as drawn (graph/film.mjs drawnCentre). Elsewhere (a wordmark's
-  // text, a pop kicker or picture) it is an ordinary camera node and needs no entry.
+  // text, a pop kicker or picture) it is an ordinary camera node and needs no targetNodes entry. A wordmark card that
+  // left its ask or mark out (props.dropped) gives that target the title's box (end-mark.mjs), so a cut still opens from it.
   const pinned = parts.nodes.find((n) => n.id === `${shot.id}.mark` && n.props.fixed === true);
   return {
     nodes: placeDevices([fieldNode(shot, ctx), ...parts.nodes], devices),

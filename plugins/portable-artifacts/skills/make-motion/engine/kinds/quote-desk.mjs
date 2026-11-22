@@ -300,9 +300,12 @@ export function expandDeskQuote(shot, ctx, given, times, hero) {
   const group = data.card === false ? node('group', hero, { x: cx, y: cy }, { children }) : withCard(ctx, hero, box, lay, children, times, data);
   const words = wordBoxes(placed.layout, cx + placed.x, cy + placed.y);
   const attr = lay.attr.layout;
+  const text = unionBox(words);
+  // an attribution left out (props.dropped) keeps the text's box: the kind lists `by` as a target without knowing the
+  // measure, so a cut or an on event aimed at it must still find a box (the review says what was left out)
   const boxes = {
-    card: box, text: unionBox(words), ...Object.fromEntries(words.map((b, i) => [`word:${i}`, b])),
-    ...(lay.dropped.length ? {} : { by: capBox(cx - lay.w / HALF + lay.attrX, cy + attrY + attr.lines[0].y, attr.width, attr.size) }),
+    card: box, text, ...Object.fromEntries(words.map((b, i) => [`word:${i}`, b])),
+    by: lay.dropped.length ? text : capBox(cx - lay.w / HALF + lay.attrX, cy + attrY + attr.lines[0].y, attr.width, attr.size),
   };
   if (plan === null) return { nodes: [group], boxes };
   // over the wrapped card's corner: `overlap` of its width in, or more where the frame margin asks (never more than the

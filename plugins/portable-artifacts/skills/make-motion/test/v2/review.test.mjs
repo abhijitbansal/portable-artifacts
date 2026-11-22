@@ -801,7 +801,7 @@ test('frameContext marks the last whole frame of a shot as resting, and a shot o
   assert.deepEqual([at(59).peers, at(119).peers], [false, true]);
 });
 
-test('restingByShot reads a shot\'s caption zone from the caption nodes its frames carry: the union of their zones, none when it has no caption', () => {
+test('restingByShot reads a shot\'s caption zone from the caption nodes its resting frame carries, none when it has no caption', () => {
   const timeline = { fps: 30, frameCount: 60, duration: 2, shots: [{ id: 'a', index: 0, start: 0, end: 1, duration: 1 }, { id: 'b', index: 1, start: 1, end: 2, duration: 1 }] };
   const caption = (id, zone) => ({ ...bar(id, [200, 900, 100, 40]), props: { fill: '#111111', d: 'M0 0H1V1H0Z', caption: { zone, end: 1, hero: null, emphasis: [], marks: [] } } });
   const snapshots = [
@@ -812,6 +812,18 @@ test('restingByShot reads a shot\'s caption zone from the caption nodes its fram
   const resting = restingByShot(timeline, snapshots);
   assert.deepEqual(resting.get('a').captionZone, [200, 800, 1100, 170]);
   assert.equal('captionZone' in resting.get('b'), false);
+});
+
+test('restingByShot measures the caption zone on the resting frame only: a caption a neighbour\'s words draw early in the shot is not on it', () => {
+  const timeline = { fps: 30, frameCount: 60, duration: 2, shots: [{ id: 'a', index: 0, start: 0, end: 1, duration: 1 }, { id: 'b', index: 1, start: 1, end: 2, duration: 1 }] };
+  const caption = (id, zone) => ({ ...bar(id, [200, 900, 100, 40]), props: { fill: '#111111', d: 'M0 0H1V1H0Z', caption: { zone, end: 1, hero: null, emphasis: [], marks: [] } } });
+  const snapshots = [
+    { frame: 35, tree: [bar('body', [96, 96, 1000, 400]), caption('b.captions.0', [200, 800, 1100, 170])] },
+    { frame: 59, tree: [bar('body', [96, 96, 1000, 400])] },
+  ];
+  assert.equal('captionZone' in restingByShot(timeline, snapshots).get('b'), false, 'no caption on the resting frame, so no zone');
+  const resting = restingByShot(timeline, [...snapshots.slice(0, 1), { frame: 59, tree: [bar('body', [96, 96, 1000, 400]), caption('b.captions.1', [300, 840, 900, 130])] }]);
+  assert.deepEqual(resting.get('b').captionZone, [300, 840, 900, 130], 'the zone the resting frame carries, not the union with the early one');
 });
 
 test('frameContext hands the shot\'s caption zone on to the frame review', () => {

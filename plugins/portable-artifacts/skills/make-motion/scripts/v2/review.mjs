@@ -170,8 +170,9 @@ function modalWordScales(trees, lastTree) {
 /**
  * shot id -> what its sampled frames say about its texts (see engine/review/frame.mjs): the scale each text
  * (restScales) and each of its words (restWords) holds on most of its frames is the scale it rests at; and, for a shot
- * whose frames carry caption nodes, `captionZone`, the union of the zones the caption layout reserved (the nodes'
- * props.caption.zone: the composition rules measure the frame less that room).
+ * whose resting (last) frame carries caption nodes, `captionZone`, the union of the zones those nodes reserved (their
+ * props.caption.zone: the composition rules measure the frame less that room). A caption drawn only earlier in the shot
+ * (a neighbour's words heard over the cut) is not on the resting frame, so its room is not taken out.
  * @param {{ fps: number, shots: { id: string, start: number, end: number }[] }} timeline
  * @param {{ frame: number, tree: object[] }[]} snapshots
  */
@@ -181,7 +182,7 @@ export function restingByShot(timeline, snapshots) {
     const first = Math.round(shot.start * timeline.fps), last = Math.round(shot.end * timeline.fps) - 1;
     const tree = byFrame.get(last);
     const trees = snapshots.filter((snap) => snap.frame >= first && snap.frame <= last).map((snap) => snap.tree);
-    const captionZone = captionZoneIn(trees, shot.id);
+    const captionZone = tree ? captionZoneIn([tree], shot.id) : null;
     return [shot.id, tree ? { restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree), ...(captionZone ? { captionZone } : {}) } : {}];
   }));
 }

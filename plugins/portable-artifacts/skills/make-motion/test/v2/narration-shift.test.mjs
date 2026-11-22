@@ -181,6 +181,17 @@ test('a word anchor on a word a trail leaves behind the cut is an error at the a
   assert.match(errors[0], /^shots\[0\]\.on\[0\]\.at: "word:six" names a word that is heard after the shot has ended /);
 });
 
+test('a film whose narration field is refused is not also judged on a shifted timeline: only the field error is printed', () => {
+  // a lead and a trail on one cut is refused at the field; on its own the lead would put b's first word before the shot
+  const both = { ...FILM, shots: [{ ...FILM.shots[0], narration: { trail: 0.3 } }, { ...FILM.shots[1], ...underline('word:seven'), narration: { lead: 0.5 } }, FILM.shots[2]] };
+  assert.deepEqual(errorsOf(both), ['shots[1].narration.lead: shot "a" already trails over this cut (its narration.trail); keep one of the two']);
+});
+
+test('narration on a shot with no say is refused alone: a\'s trail, which would leave its last word behind the cut, is not judged', () => {
+  const held = { ...FILM, shots: [{ ...FILM.shots[0], ...underline('word:six'), narration: { trail: 1 } }, { id: 'b', show: 'statement', text: 'Hold', hold: 2, narration: { trail: 0.3 } }, FILM.shots[2]] };
+  assert.deepEqual(errorsOf(held), ['shots[1].narration: a shot with no "say" has no narration to move; remove "narration"']);
+});
+
 test('a voiced film is judged the same way on its measured timeline (anchorSpanErrors)', () => {
   const words = base.shots.map((s) => ({ id: s.id, seconds: s.words.at(-1).end, sentences: [{ words: s.words.map(({ text, start, end }) => ({ text, start, end })) }] }));
   const film = withOn('a', { ...underline('word:six'), narration: { trail: 1 } });

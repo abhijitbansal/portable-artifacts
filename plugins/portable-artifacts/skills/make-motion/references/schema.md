@@ -111,12 +111,12 @@ A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", 
 Two `creative` findings judge how a shot fills its frame. Each is judged once per shot, on its resting frame: a shot mid-entrance, a frame inside a cut, and a frame that is all picture (a ground or a full-bleed image) give none. The caption zone, when captions are on, is taken out of the safe area first. At most 3 a film reach the report, the largest overshoots; the last kept finding says how many were left out.
 
 - `dead-space`: the longest empty band of the safe area reaches `band` of its width or height. Fix: let the hero take more of the frame, add a second element, or use a look that fills with type.
-- `scale-contrast`: the hero is the largest element and leads the next by at least 1.5 times, but covers less than `hero` of the frame. Fix: set it larger, crop in on it, or give it a second mass. A kind that lays out equals (the engine marks it `peers`: `list`, `compare`, `timeline`, `feed`) is not judged, since a slug or a divider is its "second" element.
+- `scale-contrast`: the hero is the largest element and leads the next by at least 1.5 times in area, but its extent (the larger of its width and its height, each as a share of the safe area) is under `hero`. Fix: set it larger, crop in on it, or give it a second mass. A kind that lays out equals (the engine marks it `peers`: `list`, `compare`, `timeline`, `feed`) is not judged, since a slug or a divider is its "second" element.
 
 | Look data | Meaning |
 |---|---|
 | `fill` | `{ "band", "hero" }`, each a number above 0 and at most 1. Defaults 0.35 and 0.50. Set only where a look's layouts are measured and viewed to fill well under them |
-| `kinds.statement.fillShort` | `{ "words", "height", "toWide", "linesWide", "max" }`. A statement of at most `words` words may take `height` of the band, up to column `toWide` and `linesWide` lines on a wide frame, and take a size cap of `max` units in place of 300. `words` and `height` are required. `desk`, `cosmos` and `keynote` set `fillShort`; the other looks keep their usual share |
+| `kinds.statement.fillShort` | `{ "words", "height", "toWide", "linesWide", "max" }`. A statement of at most `words` words may set its text block up to `height` of the composition band's height, up to column `toWide` and `linesWide` lines on a wide frame, and take a size cap of `max` units in place of 300. `words` and `height` are required. `desk`, `cosmos` and `keynote` set `fillShort`; the other looks keep their usual share |
 
 `desk` and `ledger` set `fill.band` to 0.40 (`ledger` also `hero` to 0.45): their flush-left statements and lists leave 35 to 39% of the width bare beside the slug and read filled, so the default would flag them. That is a ruled trade, and it has a cost: the 0.40 band also lets through two `desk` shapes that were viewed as sparse, the 16:9 statement and the 16:9 timeline. Look at those two on the sheets even when no finding is printed.
 
