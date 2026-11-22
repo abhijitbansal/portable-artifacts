@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { AGENT_HOSTS, AGENT_NAME, agentFile, INSTRUCTIONS, tomlString, writeAgentFile } from '../agents.mjs';
+import { AGENT_HOSTS, AGENT_NAME, agentFile, INSTRUCTIONS, REVIEWER_HOSTS, REVIEWER_INSTRUCTIONS, REVIEWER_NAME, reviewerFile, tomlString, writeAgentFile } from '../agents.mjs';
 
 const PHRASES = [
   /already artifact-builder/,
@@ -223,4 +223,37 @@ test('cli: unknown host, missing dir or unknown command exit 2 with usage and wr
     assert.match(r.stderr, /usage: .*agents\.mjs write <claude\|copilot\|codex> <agents-dir>/);
   }
   assert.equal(fs.existsSync(dir), false);
+});
+
+// --- the reviewer (motion-reviewer): Claude Code only, reads and changes nothing --------------------------------
+
+test('the reviewer is motion-reviewer, for Claude Code only', () => {
+  assert.equal(REVIEWER_NAME, 'motion-reviewer');
+  assert.deepEqual([...REVIEWER_HOSTS], ['claude']);
+  assert.throws(() => reviewerFile('codex'), /unknown reviewer host: codex/);
+  assert.throws(() => reviewerFile('copilot'), /unknown reviewer host: copilot/);
+});
+
+test('the reviewer file pins its model and can only read', () => {
+  const { fileName, content } = reviewerFile('claude');
+  assert.equal(fileName, 'motion-reviewer.md');
+  assert.match(content, /^---\nname: motion-reviewer\ndescription: [^\n]+\nmodel: opus\ntools: Read\n---\n/);
+  assert.ok(content.includes(REVIEWER_INSTRUCTIONS));
+});
+
+test('the reviewer instructions hold the protocol', () => {
+  for (const phrase of ['You are already motion-reviewer', 'Never delegate', 'references/reviewing.md', 'Never score', 'P0', 'P1', 'P2', 'pictures alone', 'You cannot listen', '"verdict"', '"weakest"', '"unchecked"', 'Reply with only']) {
+    assert.ok(REVIEWER_INSTRUCTIONS.includes(phrase), phrase);
+  }
+  assert.ok(!REVIEWER_INSTRUCTIONS.includes("'''"));
+});
+
+test('the reviewer brief names no folder to list: Read cannot list one', () => {
+  assert.match(REVIEWER_INSTRUCTIONS, /"sheets"/);
+  assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /\b(ls|glob|list the folder|list the directory)\b/i);
+});
+
+test('the operator file and CLI are unchanged by the reviewer', () => {
+  assert.deepEqual([...AGENT_HOSTS], ['claude', 'copilot', 'codex']);
+  assert.equal(agentFile('claude').fileName, 'artifact-builder.md');
 });

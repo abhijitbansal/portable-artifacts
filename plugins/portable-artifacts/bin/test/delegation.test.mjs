@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reviewerFile } from '../../shared/agents.mjs';
 
 // No SKILL.md pins a model. The session model is the director (intake, spec, viewing, creative calls) and a cheap
 // `artifact-builder` agent is the operator (one command, mechanical fixes). Every skill carries the same section that
@@ -81,6 +82,14 @@ for (const skill of DELEGATING) {
     assert.ok(fs.existsSync(path.join(SKILLS, skill, 'scripts', 'make.mjs')), `${skill}/scripts/make.mjs exists`);
   });
 }
+
+test('the plugin ships the reviewer file, equal to what shared/agents.mjs builds', () => {
+  assert.equal(fs.readFileSync(path.join(SKILLS, '../agents/motion-reviewer.md'), 'utf8'), reviewerFile('claude').content);
+});
+
+test('no SKILL.md names the reviewer in its Director and operator section', () => {
+  for (const skill of DELEGATING) assert.ok(!section(read(skill)).includes('motion-reviewer'), skill);
+});
 
 // Guardrail proofs: each rule above fires on a document that breaks it.
 test('guardrail proof: a frontmatter with model: haiku or effort: low is caught, one without is not', () => {

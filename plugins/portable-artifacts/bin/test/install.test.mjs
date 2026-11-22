@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { targetsFor, agentTargetsFor, HOSTS, expandRequires, npmCommand, swapIn, UsageError } from '../install.mjs';
-import { agentFile } from '../../shared/agents.mjs';
+import { agentFile, reviewerFile } from '../../shared/agents.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.resolve(here, '../install.mjs');
@@ -556,6 +556,49 @@ test('a claude install writes artifact-builder.md and a gemini install writes no
   assert.doesNotMatch(g.stdout, /agent:/);
   for (const dir of ['.claude/agents', '.github/agents', '.codex/agents']) assert.equal(fs.existsSync(path.join(gProj, dir)), false, dir);
   for (const dir of ['.claude/agents', '.copilot/agents', '.codex/agents']) assert.equal(fs.existsSync(path.join(gHome, dir)), false, dir);
+});
+
+const claudeReviewer = (proj) => path.join(proj, '.claude/agents/motion-reviewer.md');
+
+test('a claude install writes motion-reviewer.md beside artifact-builder.md; copilot and codex installs write none', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runInstall(['claude', '--project', proj], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(claudeReviewer(proj), 'utf8'), reviewerFile('claude').content);
+  assert.ok(r.stdout.split('\n').includes(`agent: ${claudeReviewer(proj)}`), r.stdout);
+  assert.ok(fs.existsSync(claudeAgent(proj)));
+
+  const only = tmp();
+  const o = runRaw(['claude', '--project', only, '--agents-only'], home);
+  assert.equal(o.status, 0, o.stderr);
+  assert.equal(fs.readFileSync(claudeReviewer(only), 'utf8'), reviewerFile('claude').content);
+
+  for (const host of ['copilot', 'codex', 'agents']) {
+    const p = tmp();
+    const h = runInstall([host, '--project', p], tmp());
+    assert.equal(h.status, 0, `${host}: ${h.stderr}`);
+    assert.doesNotMatch(h.stdout, /motion-reviewer/, host);
+    for (const dir of ['.github/agents', '.codex/agents', '.claude/agents']) {
+      const abs = path.join(p, dir);
+      if (fs.existsSync(abs)) assert.deepEqual(fs.readdirSync(abs).filter((f) => f.startsWith('motion-reviewer')), [], `${host} ${dir}`);
+    }
+  }
+});
+
+test('an existing motion-reviewer.md is kept unless --force', () => {
+  const home = tmp();
+  const file = path.join(home, '.claude/agents/motion-reviewer.md');
+  assert.equal(runRaw(['claude', '--agents-only'], home).status, 0);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+  fs.writeFileSync(file, 'hand edited');
+  const r2 = runRaw(['claude', '--agents-only'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.ok(r2.stdout.split('\n').includes(`agent: kept existing ${file}`), r2.stdout);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'hand edited');
+  const r3 = runRaw(['claude', '--agents-only', '--force'], home);
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
 });
 
 test('the agents host still writes only the copilot and codex files', () => {

@@ -3,6 +3,7 @@
 //   node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps]
 //   node bin/install.mjs <host> [--project <dir>] --agents-only [--force]   (agent file only: no skills, no preflight, no npm)
 // claude, codex, copilot and agents also get the cheap-model artifact-builder agent file (kept if present unless --force).
+// claude also gets the read-only motion-reviewer agent file, the same way.
 // Each host reads SKILL.md folders from its own documented locations; the
 // skill itself is the slash command there (/name, or $name in Codex).
 // A skill's package.json "portableArtifacts": {"requires": [...]} pulls in sibling skills first.
@@ -11,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { agentFile, writeAgentFile } from '../shared/agents.mjs';
+import { agentFile, REVIEWER_HOSTS, reviewerFile, writeAgentFile } from '../shared/agents.mjs';
 import { parseCli, UsageError, exitUsage } from '../shared/cli.mjs';
 import { cmdLine } from '../shared/doctor.mjs';
 
@@ -260,18 +261,21 @@ function preflight(plan, dstRoot, { force }) {
 function installAgents(targets, { force }) {
   let failed = false;
   for (const { host, dir } of targets) {
-    const { fileName, content } = agentFile(host);
-    const file = path.join(dir, fileName);
-    try {
-      const result = writeAgentFile(dir, file, content, force);
-      if (result === 'kept') process.stdout.write(`agent: kept existing ${file}\n`);
-      else if (result === 'not-file') {
+    const files = [agentFile(host)];
+    if (REVIEWER_HOSTS.includes(host)) files.push(reviewerFile(host));
+    for (const { fileName, content } of files) {
+      const file = path.join(dir, fileName);
+      try {
+        const result = writeAgentFile(dir, file, content, force);
+        if (result === 'kept') process.stdout.write(`agent: kept existing ${file}\n`);
+        else if (result === 'not-file') {
+          failed = true;
+          process.stderr.write(`install: agent: ${file} is not a file\n`);
+        } else process.stdout.write(`agent: ${file}\n`);
+      } catch (e) {
         failed = true;
-        process.stderr.write(`install: agent: ${file} is not a file\n`);
-      } else process.stdout.write(`agent: ${file}\n`);
-    } catch (e) {
-      failed = true;
-      process.stderr.write(`install: agent: could not write ${file} (${e.message})\n`);
+        process.stderr.write(`install: agent: could not write ${file} (${e.message})\n`);
+      }
     }
   }
   return failed;
