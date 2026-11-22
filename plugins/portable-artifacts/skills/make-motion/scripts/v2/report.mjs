@@ -109,7 +109,7 @@ function postText({ post, cuts }) {
 // The timing part of the frames line: where the render's time went, in ms; nothing when no render ran.
 const timingText = (timing) => (timing ? `, draw ${timing.drawMs} capture ${timing.captureMs} encode ${timing.encodeMs} check ${timing.checkMs} ms` : '');
 
-/** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look,
+/** The report of a run in its state `state` (see run.mjs), with every key present (`inspect` only for --inspect, `look` only for an experimental look,
  *  `kinds` only for a film that uses a parked kind, `cuts` only for a film with shader cuts). */
 export function reportOf(state) {
   const mechanical = state.findings.some((f) => f.kind === 'mechanical');
@@ -133,6 +133,7 @@ export function reportOf(state) {
     findings: state.findings,
     provenance: state.provenance ?? null,
     ...(state.poster ? { poster: state.poster } : {}), // --poster: { file, frame, seconds }
+    ...(state.inspect ? { inspect: state.inspect } : {}), // --inspect: { png, json, frame, seconds, shot }
     ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
     ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed }
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
@@ -217,6 +218,7 @@ export function formatText(report, { sheetsDir }) {
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
   const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame${timingText(report.timing)}); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);
+  if (report.inspect) lines.push(`inspect: ${report.inspect.png}, ${report.inspect.json}`);
   const sound = soundLine(report.audio);
   if (sound !== null) lines.push(sound);
   return lines.join('\n');

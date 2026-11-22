@@ -30,6 +30,7 @@ import { readBeatsFile } from './sound/beats-file.mjs';
 import { snapFilm } from './sound/snap.mjs';
 import { posterPath, writePoster } from './poster.mjs';
 import { filmFrame, filmSeconds } from './film-time.mjs';
+import { inspectDir, writeInspect } from './inspect.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
@@ -407,6 +408,30 @@ async function makePoster(options, loaded, state, io) {
   }
 }
 
+// filmFrame, with a time past the end said under this flag's name: film-time.mjs words it for --poster (poster.mjs posterFrame).
+function inspectFrame(ref, film, timeline) {
+  try {
+    return filmFrame(ref, film, timeline);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('--poster ')) err.message = `--inspect ${err.message.slice('--poster '.length)}`;
+    throw err;
+  }
+}
+
+// --inspect: one frame of the film as a PNG and a JSON dump (inspect.mjs) in <out stem>.inspect/ beside the MP4 path, on its
+// timeline (measured for a voiced film), no review, no sound, no ffmpeg.
+async function makeInspect(options, loaded, state, io) {
+  const frame = inspectFrame(options.inspect, loaded.film, loaded.timeline);
+  const dir = inspectDir(outputPaths(options).out);
+  const session = await openSession(loaded, { browser: io.browser });
+  try {
+    state.inspect = await stage(state, io.log, 'inspect', () => writeInspect({ session, frame, dir }));
+  } finally {
+    state.findings = [...state.findings, ...sessionFindings(session)];
+    await session.close();
+  }
+}
+
 // ---- the preview ---------------------------------------------------------------------------------------------------------
 
 // The voice of a previewed film, or { made: null, notice } when it cannot be made on this machine (the optional voice
@@ -485,8 +510,9 @@ async function execute(options, state, io) {
   for (const entry of state.kinds) io.log(experimentalKindLine(entry));
   // an emphasis device the look does not draw takes the look's own emphasis: one info line per event, never a finding
   for (const entry of withLookEmphasis(film).moved) io.log(fallbackNotice(resolveLook(film).name, entry));
-  // --poster: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.
-  if (typeof options.poster === 'string') filmSeconds(options.poster, film, loaded.timeline); // the timeline loadFilm built: estimated for a voiced film
+  // --poster and --inspect: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.
+  const reference = options.poster ?? options.inspect;
+  if (typeof reference === 'string') filmSeconds(reference, film, loaded.timeline); // the timeline loadFilm built: estimated for a voiced film
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
   const voiced = film.voice !== undefined && options.outline !== true;
   const made = !voiced ? null
@@ -507,6 +533,10 @@ async function execute(options, state, io) {
   if (clips === null) return;
   if (typeof options.poster === 'string') {
     await makePoster(options, { film, timeline, specDir, prepared: loaded.prepared, clips }, state, io);
+    return;
+  }
+  if (typeof options.inspect === 'string') {
+    await makeInspect(options, { film, timeline, specDir, prepared: loaded.prepared, clips }, state, io);
     return;
   }
   await soundReviewRender({ options, loaded, timeline, made, clips, state, io });

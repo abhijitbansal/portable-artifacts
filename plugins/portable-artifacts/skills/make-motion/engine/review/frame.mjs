@@ -60,6 +60,7 @@ import { GROUND_ID } from '../looks/grounds.mjs';
 import { DEFAULT_FILL, isFillShare } from '../looks/fill.mjs';
 import '../modes/index.mjs';
 
+export { inspectNodes } from './inspect-nodes.mjs'; // --inspect's node listing, in a file of its own (this one is at its size limit)
 export const MIN_TEXT_UNITS = 28;
 export const MAX_TEXT_SIZES = 3;
 export const MIN_HERO_RATIO = 3;
@@ -72,12 +73,12 @@ const SAME_SIZE_RATIO = 1.1;
 const SETTLE_TOLERANCE = 0.002;
 // Text may reach this far past the safe area (units) before it is outside: a line set flush on the edge by its measured
 // ink stays within it through the last 0.2% of a punch.
-const SAFE_TOLERANCE_UNITS = 1;
+export const SAFE_TOLERANCE_UNITS = 1;
 // The safe-area rule also allows this share of the text's size (em) for the ink a canvas reports a little wide. Linux's
 // canvas gives a large word's ink as a pixel-rounded outset of the real glyph bounds, and macOS gives them tight. CI run
 // 44475322956 (Archivo 900 extra-condensed at 280 px) against macOS: the right edge of "TOTAL" 3.37 units wider, its left
 // edge 4.23, "l" 2.04, ascent 2.63; under 120 px the outsets were under 1 unit. 0.015 em is the largest measured, 4.23 of 280.
-const INK_OUTSET_EM = 0.015;
+export const INK_OUTSET_EM = 0.015;
 const EPSILON = 1e-6;
 const MECHANICAL = 'mechanical';
 const CREATIVE = 'creative';
@@ -93,11 +94,11 @@ const WORD_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1 });
 
 // The accumulated scale of a node: its own scale (the camera's zoom is folded into the top-level nodes) times its
 // non-uniform scale, which counts as the geometric mean of the two axes.
-const scaleOf = (n) => (n.scale ?? 1) * Math.sqrt((n.scaleX ?? 1) * (n.scaleY ?? 1));
+export const scaleOf = (n) => (n.scale ?? 1) * Math.sqrt((n.scaleX ?? 1) * (n.scaleY ?? 1));
 const roleOf = (n) => n.props?.role ?? 'body';
 const wordsOf = (layout) => layout.lines.flatMap((line) => line.words);
-const isBox = (box) => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite);
-const hasWords = (layout) => Array.isArray(layout?.lines) && layout.lines.some((line) => Array.isArray(line.words) && line.words.length > 0);
+export const isBox = (box) => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite);
+export const hasWords = (layout) => Array.isArray(layout?.lines) && layout.lines.some((line) => Array.isArray(line.words) && line.words.length > 0);
 
 // How far a line's glyphs reach above and below its baseline, in the text's own pixels: measured when the snapshot has it
 // for this line, else from the cap line and the line's descender and accent glyphs.
@@ -188,7 +189,7 @@ function hiddenNow(n) {
   return hidden.length === 0 ? NO_WORDS : new Set(hidden);
 }
 
-const hasVisibleWord = (n) => !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => w.opacity > 0);
+export const hasVisibleWord = (n) => !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => w.opacity > 0);
 
 /** text node id -> { scale, opacity, node } in a sampled tree: its accumulated scale (its own, its groups' and the
  *  camera's), how big it stands, and its accumulated opacity, how much of it shows. */
@@ -215,7 +216,7 @@ const isWordAtRest = (word, rest = 1) => (word?.opacity ?? 1) >= 1 && Math.abs((
 const isSettled = (id, scale, resting) => !resting?.has(id) || Math.abs(scale / resting.get(id) - 1) <= SETTLE_TOLERANCE;
 
 // One visible text as the rules see it, or null when its box cannot be measured.
-function measured(n, o, s, unit, ctx) {
+export function measured(n, o, s, unit, ctx) {
   const hidden = hiddenNow(n);
   const rests = ctx.restWords?.get(n.id);
   const wordsIn = !Array.isArray(n.words) || wordsOf(n.layout).every((w) => hidden.has(w.index) || isWordAtRest(n.words[w.index], rests?.[w.index]));
@@ -261,7 +262,7 @@ const pathOf = (ctx) => `shots[${ctx.shotIndex ?? ctx.shotId}]`;
 const finding = (ctx, kind, rule, node, message, role, suggest) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}), ...(suggest ? { suggest } : {}) });
 const units = (n) => Number(n.toFixed(1));
 
-function outsideSafe([x, y, w, h], safe, slack) {
+export function outsideSafe([x, y, w, h], safe, slack) {
   return x < safe.left - slack || y < safe.top - slack || x + w > safe.right + slack || y + h > safe.bottom + slack;
 }
 
