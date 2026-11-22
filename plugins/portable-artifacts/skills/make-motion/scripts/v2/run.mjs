@@ -408,20 +408,10 @@ async function makePoster(options, loaded, state, io) {
   }
 }
 
-// filmFrame, with a time past the end said under this flag's name: film-time.mjs words it for --poster (poster.mjs posterFrame).
-function inspectFrame(ref, film, timeline) {
-  try {
-    return filmFrame(ref, film, timeline);
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith('--poster ')) err.message = `--inspect ${err.message.slice('--poster '.length)}`;
-    throw err;
-  }
-}
-
 // --inspect: one frame of the film as a PNG and a JSON dump (inspect.mjs) in <out stem>.inspect/ beside the MP4 path, on its
 // timeline (measured for a voiced film), no review, no sound, no ffmpeg.
 async function makeInspect(options, loaded, state, io) {
-  const frame = inspectFrame(options.inspect, loaded.film, loaded.timeline);
+  const frame = filmFrame(options.inspect, loaded.film, loaded.timeline, '--inspect'); // a time past the end is said under --inspect
   const dir = inspectDir(outputPaths(options).out);
   const session = await openSession(loaded, { browser: io.browser });
   try {

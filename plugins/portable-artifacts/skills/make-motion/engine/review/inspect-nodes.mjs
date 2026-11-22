@@ -1,7 +1,8 @@
 // The node listing of --inspect (scripts/v2/inspect.mjs): every node that shows on one frame, as plain numbers a reader can
 // check against the PNG. It measures with the frame review's own measure (engine/review/frame.mjs), so a text's height, ink
 // and safe-area verdict here are the numbers the review rules judge. Pure and DOM-free; it never throws: a text that
-// cannot be measured is listed without its `text` report. frame.mjs re-exports inspectNodes.
+// cannot be measured is listed without its `text` report. A file of its own because frame.mjs is at its size limit; it
+// imports the measure from frame.mjs, which imports nothing from here.
 import { unitOf } from '../units.mjs';
 import { INK_OUTSET_EM, SAFE_TOLERANCE_UNITS, hasVisibleWord, hasWords, isBox, measured, outsideSafe, scaleOf } from './frame.mjs';
 

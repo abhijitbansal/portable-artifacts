@@ -60,7 +60,6 @@ import { GROUND_ID } from '../looks/grounds.mjs';
 import { DEFAULT_FILL, isFillShare } from '../looks/fill.mjs';
 import '../modes/index.mjs';
 
-export { inspectNodes } from './inspect-nodes.mjs'; // --inspect's node listing, in a file of its own (this one is at its size limit)
 export const MIN_TEXT_UNITS = 28;
 export const MAX_TEXT_SIZES = 3;
 export const MIN_HERO_RATIO = 3;

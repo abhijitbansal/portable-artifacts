@@ -5,7 +5,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { inspectNodes } from '../../engine/review/frame.mjs';
+import { inspectNodes } from '../../engine/review/inspect-nodes.mjs';
+import { cutWindowAt } from '../../engine/graph/film.mjs';
+import { filmFrame } from '../../scripts/v2/film-time.mjs';
+import { filmFor, filmOf } from './helpers/kinds.mjs';
 import { registries } from '../../engine/registry.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { cutAt } from '../../scripts/v2/inspect.mjs';
@@ -112,7 +115,55 @@ test('a shot shorter than its cut\'s window is in the window to its last frame',
   assert.equal(cutAt(film, timeline, 35).p, 0.8333, 'the window is the shot: its length is the cut\'s');
 });
 
+test('cutWindowAt is the engine\'s window: the cut, how far, and the outgoing shot with the second it is read at', () => {
+  const film = filmWith('crossfade');
+  const timeline = buildTimeline(film, { fps: FPS });
+  const found = cutWindowAt(film, timeline, 36);
+  assert.equal(found.cut.name, 'crossfade');
+  assert.equal(found.p, 0.5);
+  assert.equal(found.live, true);
+  assert.deepEqual([found.shot, found.from, found.outgoingT], [1, 0, 1.2]);
+  assert.equal(cutWindowAt(film, timeline, 42), null);
+  assert.equal(cutWindowAt(film, timeline, 5), null);
+});
+
+// cutAt and the page's frameAt read the window from one engine function; this holds them together on every frame of a film
+// with a crossfade (layer), a slide (node), a flood (layer, a look-grounded colour) and a cross-zoom (shader).
+test('cutAt agrees with frameAt on every frame of a film with a crossfade, a node cut, a flood and a shader cut', () => {
+  const film = filmOf([shot('a'), shot('b', 'crossfade'), shot('c', 'slide'), shot('d', 'flood'), shot('e', 'cross-zoom')]);
+  const timeline = buildTimeline(film, { fps: FPS });
+  const built = filmFor(film.shots);
+  const seen = new Set();
+  for (let frame = 0; frame < timeline.frameCount; frame += 1) {
+    const state = built.frameAt(frame / FPS);
+    const found = cutAt(film, timeline, frame);
+    if (state.cut === undefined) {
+      if (found !== null) { assert.equal(found.family, 'node', `frame ${frame}: only a node cut has a window with no cut in the frame`); seen.add('node'); }
+      continue;
+    }
+    assert.notEqual(found, null, `frame ${frame}`);
+    const outgoing = timeline.shots[state.from.shot];
+    assert.equal(found.name, state.cut.name, `frame ${frame}`);
+    assert.equal(found.family, state.cut.family);
+    assert.ok(Math.abs(found.p - state.cut.p) < 1e-4, `frame ${frame}: p ${found.p} vs ${state.cut.p}`);
+    assert.equal(found.from.shot, outgoing.id);
+    assert.ok(Math.abs(found.from.seconds - (state.from.t - outgoing.start)) < 1e-3, `frame ${frame}: outgoing second`);
+    assert.equal(found.from.live, state.from.live === true);
+    seen.add(found.family);
+  }
+  assert.deepEqual([...seen].sort(), ['layer', 'node', 'shader']);
+  const slide = [...Array(timeline.frameCount).keys()].filter((frame) => cutAt(film, timeline, frame)?.name === 'slide');
+  assert.ok(slide.length > 0 && slide.every((frame, k) => k === 0 || frame === slide[k - 1] + 1), 'the node cut has one run of frames');
+});
+
 // ---- the flag ---------------------------------------------------------------------------------------------------------
+
+test('a time past the end is worded under the flag it came from', () => {
+  const film = filmWith('cut');
+  const timeline = buildTimeline(film, { fps: FPS });
+  assert.throws(() => filmFrame('40', film, timeline), /^Error: --poster 40: past the end \(the film is 2\.0 s\)/);
+  assert.throws(() => filmFrame('40', film, timeline, '--inspect'), /^Error: --inspect 40: past the end \(the film is 2\.0 s\)/);
+});
 
 test('--inspect takes a film time and reads as the mode it is', () => {
   assert.equal(parseMakeArgs(['f.json', '--inspect', 'rows@end']).inspect, 'rows@end');

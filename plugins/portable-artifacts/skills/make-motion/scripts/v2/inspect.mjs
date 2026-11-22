@@ -1,15 +1,15 @@
 // make.mjs --inspect <film time>: one moment of the film as a PNG and a JSON dump. The PNG is the film's own frame, post
 // pass and captions included; the JSON lists every node on it (engine/review/inspect-nodes.mjs: id, box, opacity, and for a
 // text its height in units, its ink and whether it left the safe area), the safe rectangle and, inside a cut's window, the
-// cut. Inside a layer or shader cut's window the PNG shows two shots and `nodes` only the incoming one (the page's
+// cut. Inside a layer or shader cut's window the PNG is the cut's composition at `p`: the outgoing shot (still moving) and
+// the incoming one, each as faded, moved or covered as the cut's recipe has it at that `p`, so one of them may be partly or
+// wholly gone (a crossfade shows both only for p between 0.3 and 0.5). `nodes` lists the incoming shot alone (the page's
 // __snapshot, engine/page/stage.mjs), so `cut` names the outgoing shot and the second it stands at. No review, no sound,
 // no ffmpeg: the browser writes the picture.
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { outgoingTime, resolveLook, shotTime } from '../../engine/graph/film.mjs';
-import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
-import { shotAtFrame } from '../../engine/review/pacing.mjs';
-import { inspectNodes } from '../../engine/review/frame.mjs';
+import { cutWindowAt } from '../../engine/graph/film.mjs';
+import { inspectNodes } from '../../engine/review/inspect-nodes.mjs';
 import { unitOf } from '../../engine/units.mjs';
 import { frameContext } from './review.mjs';
 
@@ -24,20 +24,14 @@ export const inspectDir = (videoOut) => path.join(path.dirname(videoOut), `${pat
  * The cut whose window frame `frame` is in, or null (the film's first shot, a hard cut, a frame past the window): { name,
  * family, p, from: { shot, seconds, live } }. `p` is how far the cut has come (0 on its first frame); `from.shot` is the
  * outgoing shot's id and `from.seconds` the second of that shot the page draws it at, which a layer or shader cut keeps
- * moving past the shot's end (`live`), and any other cut, or a look drawn by hand, holds at its last frame. It is the window
- * engine/graph/film.mjs frameAt opens: the cut's own length, or the shot's when that is shorter.
+ * moving past the shot's end (`live`), and any other cut, or a look drawn by hand, holds at its last frame. The window is the
+ * engine's own (engine/graph/film.mjs cutWindowAt, the one frameAt opens): the cut's own length, or the shot's when shorter.
  */
 export function cutAt(film, timeline, frame) {
-  const shot = shotAtFrame(timeline, frame);
-  if (shot.index === 0) return null;
-  const look = resolveLook(film);
-  const cut = resolveShotCut(film, shot.index, { look, shotDuration: shot.duration });
-  const local = shotTime(frame / timeline.fps, shot.start);
-  if (cut === null || cut.dur === 0 || local >= cut.dur) return null;
-  const from = timeline.shots[shot.index - 1];
-  // outgoingTime adds the seconds into the window to the shot's length only for a live outgoing shot: a zero-length shot read at 1 s says which
-  const live = outgoingTime(cut, look, 0, 1) > 0;
-  return { name: cut.name, family: cut.family, p: round(local / cut.dur, SECONDS_DECIMALS), from: { shot: from.id, seconds: round(outgoingTime(cut, look, from.duration, local), OUTGOING_DECIMALS), live } };
+  const found = cutWindowAt(film, timeline, frame);
+  if (found === null) return null;
+  const { cut } = found;
+  return { name: cut.name, family: cut.family, p: round(found.p, SECONDS_DECIMALS), from: { shot: timeline.shots[found.from].id, seconds: round(found.outgoingT, OUTGOING_DECIMALS), live: found.live } };
 }
 
 // Both files written whole or not at all: each to a partial beside it, renamed once every partial is written.
@@ -56,8 +50,8 @@ function writeWhole(files) {
  * Draws `frame` on the session's page, and writes `<dir>/<frame>.png` and `<dir>/<frame>.json`. The JSON: { frame, seconds,
  * shot, timed, canvas: { w, h }, unit, safe: { left, top, right, bottom }, cut: { name, family, p, from } | null, nodes }.
  * `shot` is the shot the frame belongs to (the incoming one inside a window). `nodes` are as the page's __snapshot gives
- * them: inside a layer or shader cut's window the incoming shot's alone, though the PNG shows both; a node cut moves both
- * shots' nodes in one tree, which `nodes` lists as drawn. -> { png, json, frame, seconds, shot }.
+ * them: inside a layer or shader cut's window the incoming shot's alone, whatever the PNG shows of the outgoing one at that
+ * `p`; a node cut moves both shots' nodes in one tree, which `nodes` lists as drawn. -> { png, json, frame, seconds, shot }.
  */
 export async function writeInspect({ session, frame, dir }) {
   const { page, film, timeline, info } = session;

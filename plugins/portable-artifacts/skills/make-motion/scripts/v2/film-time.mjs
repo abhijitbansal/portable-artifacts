@@ -99,12 +99,13 @@ export function filmSeconds(ref, film, timeline) {
 /**
  * The frame `ref` names: round(seconds * fps), at most the last frame. The film's end (duration is frameCount / fps) is
  * the last frame, so `end` and `end-0.01` name it; only a time strictly past the end is refused, with an error naming the
- * film's length (as poster.mjs words it). A time before the start is refused with the same length.
+ * film's length (as poster.mjs words it, under `flag`: the flag the reference came from, --poster by default). A time
+ * before the start is refused with the same length.
  */
-export function filmFrame(ref, film, timeline) {
+export function filmFrame(ref, film, timeline, flag = '--poster') {
   const seconds = filmSeconds(ref, film, timeline);
   const length = timeline.duration.toFixed(LENGTH_DECIMALS);
   if (seconds < 0) throw new FilmTimeError(`film time ${JSON.stringify(echoValue(ref))} is before the start of the film (${seconds.toFixed(LENGTH_DECIMALS)} s; the film is ${length} s)`, shotIdsOf(film, timeline));
-  if (seconds > timeline.duration + END_EPSILON) return posterFrame(seconds, timeline, ref); // past the last frame: it throws, naming the length
+  if (seconds > timeline.duration + END_EPSILON) return posterFrame(seconds, timeline, ref, flag); // past the last frame: it throws, naming the length
   return Math.min(Math.round(seconds * timeline.fps), timeline.frameCount - 1) + 0; // + 0: a frame that rounds to -0 is frame 0
 }

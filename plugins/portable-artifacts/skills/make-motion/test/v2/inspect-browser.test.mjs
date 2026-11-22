@@ -29,6 +29,15 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 
 const inspect = (time, folder = dir) => runMake({ specPath: path.join(folder, 'fade.json'), inspect: time, out: null });
 const dumpOf = (report) => JSON.parse(readFileSync(report.inspect.json, 'utf8'));
+const BLANK_SPREAD = 20; // a picture whose red channel varies by less than this over the whole frame is one flat colour
+
+// The PNG, read once: its size, and the spread of its red channel (a blank frame has none).
+function pictureOf(report) {
+  const { width, height, channels, data } = readPng(readFileSync(report.inspect.png));
+  let low = 255, high = 0;
+  for (let i = 0; i < data.length; i += channels) { low = Math.min(low, data[i]); high = Math.max(high, data[i]); }
+  return { width, height, spread: high - low };
+}
 
 test('make.mjs --inspect writes the PNG and the JSON, and the report names both', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
@@ -37,8 +46,9 @@ test('make.mjs --inspect writes the PNG and the JSON, and the report names both'
   assert.equal(report.inspect.png, path.join(dir, 'out', 'fade.inspect', '15.png'));
   assert.equal(report.inspect.json, path.join(dir, 'out', 'fade.inspect', '15.json'));
   assert.deepEqual([report.inspect.frame, report.inspect.seconds, report.inspect.shot], [15, 0.5, 'off']);
-  const picture = readPng(readFileSync(report.inspect.png));
+  const picture = pictureOf(report);
   assert.deepEqual([picture.width, picture.height], [1920, 1080]);
+  assert.ok(picture.spread > BLANK_SPREAD, `the picture is not blank (red spread ${picture.spread})`);
   const dump = dumpOf(report);
   assert.equal(dump.shot, 'off');
   assert.equal(dump.cut, null);
@@ -61,6 +71,9 @@ test('inside a crossfade the dump says which cut, how far, and which shot is goi
   if (!await browserAvailable()) return t.skip('no browser');
   const { report, exitCode } = await inspect('1.2'); // frame 36: 0.2 s into the 0.4 s window
   assert.equal(exitCode, 0, JSON.stringify(report.findings));
+  const picture = pictureOf(report); // the cut's composition at p 0.5: the outgoing shot is already cleared, the incoming one arriving
+  assert.deepEqual([picture.width, picture.height], [1920, 1080]);
+  assert.ok(picture.spread > BLANK_SPREAD, `the picture is not blank (red spread ${picture.spread})`);
   const dump = dumpOf(report);
   assert.equal(dump.shot, 'next', 'the shot the frame belongs to is the incoming one');
   assert.equal(dump.cut.name, 'crossfade');
@@ -68,7 +81,7 @@ test('inside a crossfade the dump says which cut, how far, and which shot is goi
   assert.ok(dump.cut.p > 0 && dump.cut.p < 1, `p ${dump.cut.p}`);
   assert.equal(dump.cut.from.shot, 'off');
   assert.equal(dump.cut.from.live ? dump.cut.from.seconds > 1 : dump.cut.from.seconds === 1, true, `outgoing second ${dump.cut.from.seconds}`);
-  assert.deepEqual(dump.nodes.map((n) => n.id).filter((id) => ['edge', 'bar'].includes(id)), ['bar'], 'the PNG shows both shots; the nodes only the incoming one');
+  assert.deepEqual(dump.nodes.map((n) => n.id).filter((id) => ['edge', 'bar'].includes(id)), ['bar'], 'the nodes list the incoming shot alone, whatever the picture shows of the outgoing one at this p');
   return undefined;
 });
 

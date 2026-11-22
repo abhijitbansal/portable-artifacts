@@ -187,6 +187,32 @@ export function outgoingTime(cut, look, duration, local) {
   return isLiveOutgoing(cut, look) ? duration + local : duration;
 }
 
+// The window a frame is in, from the shot's resolved cut and its length (`cutDur`), the seconds into the shot (`local`), the
+// film's look and the outgoing shot's duration: null outside it (no cut, a hard cut, or past the window), else { cut, p,
+// live, outgoingT }: how far the cut has come, whether the outgoing shot is live, and the second of the outgoing shot the
+// window reads it at. frameAt and cutWindowAt both read the window here, so they cannot disagree.
+function windowOf(cut, cutDur, local, look, outgoingDuration) {
+  if (!cut || local >= cutDur) return null;
+  return { cut, p: local / cutDur, live: isLiveOutgoing(cut, look), outgoingT: outgoingTime(cut, look, outgoingDuration, local) };
+}
+
+/**
+ * The cut window frame `frame` of `film` is in, on `timeline`, or null: { cut, p, live, shot, from, outgoingT } where `cut`
+ * is the cut that opens shot `shot` (the resolved cut: name, family, direction), `p` how far it has come (0 on its first
+ * frame), `from` the outgoing shot's index, `live` whether that shot keeps moving through the window (isLiveOutgoing), and
+ * `outgoingT` the second of it the window reads (its own seconds). The same window buildFilm's frameAt opens, for a node cut
+ * and a smear as well as a layer or shader cut; a hard cut and the film's first shot have none.
+ */
+export function cutWindowAt(film, timeline, frame) {
+  const t = frame / timeline.fps;
+  const index = timeline.shots.findLastIndex((s) => s.start <= t + 1 / TIME_DECIMALS);
+  if (index <= 0) return null;
+  const shot = timeline.shots[index];
+  const cut = resolveShotCut(film, index, { look: lookOfShot(film, index) }); // the shot's own look, as expandOne resolves it
+  const found = windowOf(cut, cut ? Math.min(cut.dur, shot.duration) : 0, shotTime(t, shot.start), resolveLook(film), timeline.shots[index - 1].duration);
+  return found && { ...found, shot: index, from: index - 1 };
+}
+
 // A shot's camera at time t past its end `duration`: held at its end, with the pan carried on at the speed it ended with
 // (the last frame's travel, at `fps`); zoom and rotate hold. A drift keys end at the shot's duration, so a plain hold
 // would stop the picture dead as the cut begins.
@@ -359,10 +385,11 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
     const index = shotIndexAt(t);
     const shot = shots[index];
     const local = shotTime(t, shot.start);
-    if (!shot.cut || local >= shot.cutDur) return { background: shot.background, sampled: sampleShot(index, local) };
+    const opening = windowOf(shot.cut, shot.cutDur, local, look, shots[index - 1]?.duration);
+    if (opening === null) return { background: shot.background, sampled: sampleShot(index, local) };
     const prev = shots[index - 1];
-    const live = isLiveOutgoing(shot.cut, look);
-    const from = sampleShot(index - 1, outgoingTime(shot.cut, look, prev.duration, local));
+    const { live } = opening;
+    const from = sampleShot(index - 1, opening.outgoingT);
     // a layer or shader cut composes two pictures in the page: the incoming shot live and the outgoing one, still moving
     // (`live`) in a look drawn without a hand, else frozen at its end (`t`: the film second it stands at, the time its
     // fields are painted with)
@@ -370,14 +397,14 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
       return {
         background: shot.background,
         sampled: sampleShot(index, local),
-        cut: { name: shot.cut.name, family: shot.cut.family, p: local / shot.cutDur, direction: shot.cut.direction, ...(shot.origin ? { at: shot.origin } : {}) },
+        cut: { name: shot.cut.name, family: shot.cut.family, p: opening.p, direction: shot.cut.direction, ...(shot.origin ? { at: shot.origin } : {}) },
         from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration + (live ? local : 0), ...(live ? { live: true } : {}) },
       };
     }
     // `landing`: the incoming shot as the cut ends, for a cut that carries the one hand from the outgoing pose to where the
     // incoming board's writing starts (cuts/hands.mjs); only a look with a hand has one
     const landing = look.hand ? sampleShot(index, shot.cutDur) : undefined;
-    const args = { from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, background: shot.background, direction: shot.cut.direction, ...(landing ? { landing } : {}) };
+    const args = { from, to: sampleShot(index, local), p: opening.p, canvas, look, background: shot.background, direction: shot.cut.direction, ...(landing ? { landing } : {}) };
     // the smear, when the resolved cut asks for it (the shot's, the root cut's or the look's cutStyle), inside the window
     if (shot.cut.smear && args.p > 0 && args.p < 1) return smearedFrame(shot, args, 1 / (timeline.fps * shot.cutDur));
     return { background: shot.background, sampled: shot.cut.entry.apply(args) };
