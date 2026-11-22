@@ -8,6 +8,7 @@ import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
 import { planSheets } from './plan.mjs';
+import { sliceSheets } from './slice.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from './layout.mjs';
 import { reviewFilm } from './review.mjs';
 
@@ -75,20 +76,24 @@ function clearOwnSheets(dir) {
 }
 
 /**
- * @param {{ specPath?: string, dir: string, session?: object, signal?: AbortSignal }} opts a session (openSession) is
- *   used and left open when given; otherwise the film at specPath is loaded and opened here and closed after.
+ * @param {{ specPath?: string, dir: string, session?: object, signal?: AbortSignal, slice?: object | null }} opts a session
+ *   (openSession) is used and left open when given; otherwise the film at specPath is loaded and opened here and closed
+ *   after. `slice` (slice.mjs sliceOf): only the sheets of that slice are written and reviewed, and the folder is not
+ *   emptied: only the files the slice rewrites change.
  * @returns {Promise<{ files: string[], findings: object[] }>} the sheet paths and the review findings (see review.mjs)
  */
-export async function writeSheets({ specPath, dir, session, signal }) {
+export async function writeSheets({ specPath, dir, session, signal, slice = null }) {
   const own = session === undefined;
   const open = own ? await openSession(loadFilm(specPath)) : session;
   try {
     signal?.throwIfAborted(); // an interrupt that came during the launch must not delete the last run's sheets
-    clearOwnSheets(dir);
+    if (slice === null) clearOwnSheets(dir);
+    else mkdirSync(dir, { recursive: true });
     const [w, h] = canvasSize(open.film);
+    const planned = planSheets(open.film, open.timeline);
     const files = [];
-    for (const sheet of planSheets(open.film, open.timeline)) files.push(await writeOne(open, sheet, dir, { w, h }, signal));
-    return { files, findings: await reviewFilm({ session: open, signal }) };
+    for (const sheet of slice === null ? planned : sliceSheets(planned, slice)) files.push(await writeOne(open, sheet, dir, { w, h }, signal));
+    return { files, findings: await reviewFilm({ session: open, signal, slice }) };
   } finally {
     if (own) await open.close();
   }

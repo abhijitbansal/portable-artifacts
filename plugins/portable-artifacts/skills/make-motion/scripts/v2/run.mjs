@@ -31,6 +31,7 @@ import { snapFilm } from './sound/snap.mjs';
 import { posterPath, writePoster } from './poster.mjs';
 import { filmFrame, filmSeconds } from './film-time.mjs';
 import { inspectDir, writeInspect } from './inspect.mjs';
+import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf } from './slice.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
@@ -116,18 +117,26 @@ function outputPaths(options) {
   return { out, sheetsDir: path.join(path.dirname(out), `${path.basename(out, path.extname(out))}.sheets`) };
 }
 
-// The stages that need the page: the sheets and the audit, then (unless --no-render) the video.
+// The report's `slice`: the frames and shots a --shot or --range run covers, whether the film's sound is left out of it (a
+// slice is always silent: the sound is mastered for the whole film), and the review rules a slice does not run.
+const sliceReport = (slice, film, clips) => ({
+  from: slice.from, to: slice.to, frames: slice.to - slice.from + 1, shots: slice.shots, silent: film.voice !== undefined || wantsSound(film, clips), skipped: [...SLICE_SKIPPED],
+});
+
+// The stages that need the page: the sheets and the audit, then (unless --no-render, or a slice: its video is made apart) the video.
 async function reviewAndRender({ options, loaded, made, sound, state, io: { signal, log, browser } }) {
   const { out, sheetsDir } = outputPaths(options);
   state.sheetsDir = sheetsDir;
+  const slice = sliceOf(options, loaded.film, loaded.timeline); // on the timeline the film is drawn with (measured, and after music.snap)
+  if (slice !== null) state.slice = sliceReport(slice, loaded.film, loaded.clips);
   const session = await openSession(loaded, { browser });
   try {
     state.post = session.info.post;
     state.cuts = session.info.cuts ?? null; // the shader cuts the page ran or replaced (engine/page/post.mjs)
-    const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal }));
+    const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal, slice }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);
-    if (!options.noRender) {
+    if (!options.noRender && slice === null) {
       const tags = stampTags({ generatedBy: loaded.film.generatedBy, flags: options.provenance ?? {}, provenance: loaded.film.provenance });
       const rendered = await stage(state, log, 'render', () => {
         log('make: render started');
@@ -503,6 +512,7 @@ async function execute(options, state, io) {
   // --poster and --inspect: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.
   const reference = options.poster ?? options.inspect;
   if (typeof reference === 'string') filmSeconds(reference, film, loaded.timeline); // the timeline loadFilm built: estimated for a voiced film
+  checkSlice(options, film, loaded.timeline); // --shot and --range likewise: a shot the film lacks, a reference that names nothing
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
   const voiced = film.voice !== undefined && options.outline !== true;
   const made = !voiced ? null
@@ -540,13 +550,14 @@ async function soundReviewRender({ options, loaded, timeline, made, clips, state
   const { film, specDir } = loaded;
   const sounded = wantsSound(film, clips);
   // The cue and bed WAVs live in a work folder of this run only, removed on every way out of it.
-  const work = sounded && !options.noRender ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
+  const renders = !options.noRender && !isSlice(options); // a slice makes sheets and a review, no video (its MP4 is a later step)
+  const work = sounded && renders ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
   try {
     const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
     if (planned === null) return;
     // --subtitles: the caption file from the timeline the film is drawn with (after music.snap), before the browser starts
     if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out });
-    if (!options.noRender) await findFfmpeg(); // fail before the browser starts, naming how to fix it
+    if (renders) await findFfmpeg(); // fail before the browser starts, naming how to fix it
     io.signal?.throwIfAborted();
     await reviewAndRender({ options, loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made, sound: planned.sound, state, io });
   } finally {

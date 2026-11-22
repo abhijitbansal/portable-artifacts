@@ -114,7 +114,7 @@ function cutSheet(film, timeline, index) {
     const progress = progressLabel(timeline, span, frame);
     return progress === null ? plain : { ...plain, label: `${plain.label} ${MIDDLE_DOT} ${progress}` };
   });
-  return { name: `cut-${from.id}-${to.id}.png`, kind: 'cut', shot: to.id, tiles };
+  return { name: `cut-${from.id}-${to.id}.png`, kind: 'cut', shot: to.id, windowFrom: span.first, tiles };
 }
 
 // A name used before gets -2, -3 ... until it is free, so a shot called "cut-a-b" cannot overwrite the strip of the cut
@@ -134,8 +134,9 @@ function uniqueNames(sheets) {
 }
 
 /**
- * @returns {{ name: string, kind: 'shot' | 'cut', shot: string, tiles: { role: 'frame' | 'landing' | 'phone', frame: number, t: number, label: string, width?: number }[] }[]}
- *   shot sheets in film order, then the cut strips
+ * @returns {{ name: string, kind: 'shot' | 'cut', shot: string, windowFrom?: number, tiles: { role: 'frame' | 'landing' | 'phone', frame: number, t: number, label: string, width?: number }[] }[]}
+ *   shot sheets in film order, then the cut strips; `windowFrom` (a strip only) is the first frame of the cut's window, the
+ *   frame a slice (slice.mjs) reads to say whether the strip belongs to it
  */
 export function planSheets(film, timeline) {
   const shots = timeline.shots.map((_, index) => shotSheet(film, timeline, index));

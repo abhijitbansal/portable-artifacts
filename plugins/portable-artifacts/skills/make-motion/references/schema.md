@@ -155,7 +155,9 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 | `findings` | `[{ kind, shot, path, message, t?, rule?, suggest? }]` (see below): `t` and `rule` are on a review finding, `suggest` only where the rule has a fix value |
 | `provenance` | `{ comment, artist }` as stamped into the MP4, or `null` |
 
-These keys appear only when they apply: `poster`, `inspect`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
+These keys appear only when they apply: `poster`, `inspect`, `slice`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
+
+`slice` is `{ from, to, frames, shots, silent, skipped }`, on a `--shot` or `--range` run only: the frames it covers, the shots it touches, whether the film's sound is left out, and the review rules it does not run (`references/tools.md`, "One shot or a range").
 
 A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `path` and says what to change; it makes `ok` false. A `creative` finding is a call for the author and never fails the run. A parked kind is not a finding: it renders, and the report's `kinds` lists it. Every rule a finding can name, with what it asks and the value that fixes it, is in `references/rules.md`.
 

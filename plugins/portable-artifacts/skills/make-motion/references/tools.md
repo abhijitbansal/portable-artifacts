@@ -1,10 +1,10 @@
 # Tools for looking at one moment
 
-Small commands that draw or measure one part of a film without a whole-film render. This page grows as they arrive: film time first (the one way every command names a moment), then the commands that read it: `--inspect` today.
+Small commands that draw or measure one part of a film without a whole-film render. This page grows as they arrive: film time first (the one way every command names a moment), then the commands that read it: `--inspect`, `--shot` and `--range` today.
 
 ## Film time
 
-One grammar names a moment of the film. `--poster` and `--inspect` read it today; the commands that follow on this page read the same text. It is read after the film's timeline exists, so a word anchor means the word as this film is timed.
+One grammar names a moment of the film. `--poster`, `--inspect`, `--shot` and `--range` read it today; the commands that follow on this page read the same text. It is read after the film's timeline exists, so a word anchor means the word as this film is timed.
 
 | Write | It means |
 |---|---|
@@ -56,3 +56,23 @@ The JSON:
 Each node is `{ id, type, role?, bbox: [x, y, w, h], opacity, offFrame, text? }`. `bbox` is in canvas pixels. `opacity` is the node's own times those of the groups around it; a node at 0 is left out with everything inside it. `offFrame` is true when the box is not wholly inside the canvas. A text also has `text: { sizeUnits, smallestUnits, ink, landed, outsideSafe }`: `sizeUnits` is the height a viewer reads (in units), `smallestUnits` that of the smallest word on screen, `ink` the box of its glyphs `[x, y, w, h]` in pixels, `landed` whether every word shown is at rest and the text fully opaque, and `outsideSafe` whether its ink leaves the safe rectangle by more than the review allows. These are the numbers the review rules judge (`min-size`, `safe-area`), measured on this one frame; `landed` does not judge whether a camera move has settled, which the review does over the whole shot.
 
 Inside a cut's window the picture and the nodes can disagree, and `cut` says how: `{ name, family, p, from: { shot, seconds, live } }`. `p` is how far the cut has come (0 on its first frame, below 1 inside the window). `from.shot` is the outgoing shot and `from.seconds` the second of that shot the page draws it at: a layer or shader cut (`family` `layer`, `shader`) keeps the outgoing shot moving past its end (`live`: true), and any other cut, or a look drawn by hand, holds it at its last frame. Inside a layer or shader cut's window the PNG is the cut's composition at `p`: each shot is faded, moved or covered as that cut's recipe has it at that `p`, so one of them may be partly or wholly gone. A crossfade, for one, clears the outgoing shot by `p` 0.5 and brings the incoming one in from `p` 0.3, so both show only between 0.3 and 0.5; at 0.5 you see the incoming shot alone, still faint. `nodes` lists the incoming shot alone whatever the picture shows, so a text of the outgoing shot can be in the picture and not in the list; `cut.from` says which shot is going out and where it stands. A cut of family `node` moves the nodes of both shots in one tree, and `nodes` lists them as drawn.
+
+## One shot or a range
+
+`--shot <id>` and `--range <from>..<to>` make the review sheets and the review findings of one slice of the film, so a fix to one shot is checked without a whole-film pass. The slice is a run of frames, both ends inclusive: `--shot rows` is the first to the last frame of `rows`; `--range` takes two film times as above on each side of `..` (`--range rows@1..rows@end`, `--range 2.5..6`, `--range hook..rows@word:3`). A shot id alone as the second time is that shot's start; write `<id>@end` for its last frame. A range is named `range-<from>-<to>` by its frames, a shot by its id.
+
+```
+node <skill-dir>/scripts/make.mjs film.json --shot rows --sheets-only --json
+node <skill-dir>/scripts/make.mjs film.json --range hook@1..rows@end-0.5 --json
+```
+
+The frames are the film's own, asked for by their number in the film, so a tile of a slice is the picture the full run draws at that frame. The report gains `slice: { from, to, frames, shots, silent, skipped }`, only on this run: the frames covered, the shots they touch, whether the film's sound is left out (`silent`: the film has a voice or sound, and a slice never plays it), and `skipped`, the rules a slice does not run.
+
+What is written and what is judged:
+
+- **Sheets.** Only the sheets of the slice are made, into the usual `<out stem>.sheets/` folder, and only the files they rewrite change: the other PNGs there stay as the last run left them. A shot's sheet keeps the tiles whose frame is inside the slice and is left out when none is. A cut's strip is made when the first frame of its window is inside the slice, and then whole, with its side frames, even where they fall outside it.
+- **Review.** The audit frames inside the slice are judged. The last frame of every shot the slice touches is drawn as well, but not judged: it tells the review where each text of that shot comes to rest, so a frame in mid-motion is not mistaken for a finished one. So is the last frame of the shot before a cut whose window opens inside the slice: a `match` is compared with it. `still` is read over the slice's frames alone, so a picture that held still before the slice began does not count. `cut-window`, `match`, `hook`, a kind's own findings and a hand look's findings are given only for the shots the slice touches (`match` only where the cut's window opens inside the slice, `hook` only when frame 0 is in it). `unsettled` is judged only for a shot the slice covers from its first frame to its last.
+- **Not run.** `loop`, `cut-variety` and `sameness` read the whole film, so a slice leaves them out; the report's `skipped` says so, and so does the text form. Run the film without `--shot` for them.
+- **No MP4.** A slice run writes the sheets and the review and no video: `output` is `null`.
+
+`--shot` and `--range` do not go with each other or with `--poster`, `--poster-out`, `--inspect`, `--outline`, `--phonemes`, `--batch`, `--subtitles`, `--workers` or `--preview`; `--sheets-only`, `--out` and `--exact` are accepted. A shot the film lacks is exit 2 with the list of shots in `error.hint`; a `--range` with no `..`, or one that runs backwards (its first frame after its last), is exit 2 naming the form; a time past the end or one that names nothing is refused as above. On a voiced film the shot and the references are checked on the estimated timeline before the voice is made, and the range's order after, on the measured one.

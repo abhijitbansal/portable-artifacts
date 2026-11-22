@@ -3,9 +3,10 @@
 import { parseCli, UsageError } from '../../shared/cli.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { MAX_WORKERS, autoWorkers } from './workers.mjs';
+import { rangeParts } from './range-form.mjs';
 
 export const LIST_NAMES = Object.freeze(['kinds', 'looks', 'modes', 'devices', 'moves', 'cuts', 'fields', 'voices']);
-export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--inspect', '--batch', '--subtitles', '--workers', '--preview', '--open']);
+export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--inspect', '--shot', '--range', '--batch', '--subtitles', '--workers', '--preview', '--open']);
 const USAGE = `node scripts/make.mjs <film.json>; accepted flags: ${FLAGS.join(', ')}; exit codes: 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted`;
 const OPTIONS = Object.freeze({
   out: { type: 'string' },
@@ -24,6 +25,8 @@ const OPTIONS = Object.freeze({
   poster: { type: 'string' },
   'poster-out': { type: 'string' },
   inspect: { type: 'string' },
+  shot: { type: 'string' },
+  range: { type: 'string' },
   batch: { type: 'string' },
   subtitles: { type: 'string' },
   workers: { type: 'string' },
@@ -38,9 +41,11 @@ const MODE_CONFLICTS = Object.freeze({
   inspect: ['out', 'batch', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'subtitles', 'workers', 'exact'],
   phonemes: ['outline', 'out', 'no-render', 'sheets-only', 'poster', 'batch', 'subtitles'],
   poster: ['out', 'batch', 'no-render', 'sheets-only', 'outline', 'phonemes', 'subtitles', 'inspect'],
+  shot: ['range', 'batch', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'subtitles', 'workers'],
+  range: ['shot', 'batch', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'subtitles', 'workers'],
   batch: ['poster', 'outline', 'phonemes', 'subtitles'],
   subtitles: ['outline', 'phonemes', 'poster', 'batch'],
-  preview: ['out', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'batch', 'subtitles', 'workers', 'exact'],
+  preview: ['out', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'shot', 'range', 'batch', 'subtitles', 'workers', 'exact'],
 });
 const BATCH_KEYS_RE = /\{(index|[a-zA-Z][a-zA-Z0-9]*)\}/;
 const PROVENANCE_FLAGS = Object.freeze(['model', 'effort', 'agent']);
@@ -121,6 +126,14 @@ function inspectFlag(values) {
   return values.inspect;
 }
 
+// --shot <id> and --range <from>..<to>: the text as written, read once the film's timeline exists (slice.mjs). A --range with no
+// ".." is refused here, before the film is read.
+function sliceFlags(values) {
+  if (values.shot === '') throw new UsageError('--shot takes a shot id: the id of one shot of the film');
+  if (values.range !== undefined) rangeParts(values.range);
+  return { shot: values.shot ?? null, range: values.range ?? null };
+}
+
 // --workers <1-8 | auto> (default 1): the pages that capture the frames, in the run's one browser (workers.mjs).
 function workersFlag(text) {
   if (text === undefined) return 1;
@@ -139,14 +152,14 @@ function modeFlags(values) {
     throw new UsageError(`--subtitles takes one of: ${SUBTITLE_FORMATS.join(', ')}; got ${JSON.stringify(values.subtitles)}`);
   }
   if (values.open === true && values.preview !== true) throw new UsageError('--open needs --preview: it opens the preview page in your browser');
-  return { phonemes: values.phonemes === true, preview: values.preview === true, open: values.open === true, ...posterFlags(values), inspect: inspectFlag(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, workers: workersFlag(values.workers) };
+  return { phonemes: values.phonemes === true, preview: values.preview === true, open: values.open === true, ...posterFlags(values), inspect: inspectFlag(values), ...sliceFlags(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, workers: workersFlag(values.workers) };
 }
 
 /**
  * @param {string[]} argv the arguments after the script name
  * @returns {{ specPath: string | null, out: string | null, json: boolean, noRender: boolean, outline: boolean, list: string | null, exact: boolean, all: boolean,
  *   provenance: { model?: string, effort?: string, agent?: string, noProvenance: boolean }, phonemes: boolean,
- *   poster: string | null, posterOut: string | null, inspect: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null }}
+ *   poster: string | null, posterOut: string | null, inspect: string | null, shot: string | null, range: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null }}
  * @throws {UsageError} for a removed version 1 flag (with `hint`: what to do instead), an unknown or misspelled flag, a
  *   bad --list value, a missing or extra film path, an --out that is not .mp4, or a stamp flag that is refused
  */
