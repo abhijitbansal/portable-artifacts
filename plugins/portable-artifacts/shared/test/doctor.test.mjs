@@ -980,6 +980,17 @@ const REVIEWER_PROJECT = "/p/.claude/agents/motion-reviewer.md";
 const rctx = (files, dirs = ["/h/.claude"]) => ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", exists: (p) => p in files || dirs.includes(p), readFile: readerOf(files) });
 const WRITE_REVIEWER_USER = ["/n/node", "/s/make-motion/shared/agents.mjs", "write-reviewer", "claude", "/h/.claude/agents", "--force"];
 
+// Format 2 had the reviewer judge pictures alone and treat the film as context: an install made then must be updated.
+const REVIEWER_FORMAT_2 = REVIEWER_CURRENT.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 2 -->`);
+
+test("builderAgent: an installed format 2 motion-reviewer.md is outdated and --fix rewrites only that file", async () => {
+  const c = rctx({ [BUILDER_USER]: CURRENT_TEXT, [REVIEWER_USER]: REVIEWER_FORMAT_2 });
+  assert.equal(await builderAgent().check(c), false);
+  const m = (await diagnose([builderAgent()], c)).missing[0];
+  assert.deepEqual(m.outdated, [REVIEWER_USER]);
+  assert.deepEqual(builderAgent().fix(c).auto, [WRITE_REVIEWER_USER]);
+});
+
 test("builderAgent: our own older motion-reviewer.md at user level is outdated, and --fix rewrites only that file", async () => {
   const c = rctx({ [BUILDER_USER]: CURRENT_TEXT, [REVIEWER_USER]: REVIEWER_OURS_OLD });
   assert.equal(await builderAgent().check(c), false);
@@ -1049,9 +1060,9 @@ test("builderAgent: a stale builder with our own older reviewer: the installer l
 });
 
 // A higher format number is a newer file written by a newer skill: never downgraded, never reported as a problem.
-const REVIEWER_NEWER = REVIEWER_CURRENT.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 3 -->`);
+const REVIEWER_NEWER = REVIEWER_CURRENT.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 4 -->`);
 
-test("builderAgent: a newer reviewer file (format 3 against 2) is left alone: no failure, no auto fix, an info line that this skill is older", async () => {
+test("builderAgent: a newer reviewer file (format 4 against 3) is left alone: no failure, no auto fix, an info line that this skill is older", async () => {
   for (const where of [REVIEWER_USER, REVIEWER_PROJECT]) {
     const c = rctx({ [BUILDER_USER]: CURRENT_TEXT, [where]: REVIEWER_NEWER });
     assert.equal(await builderAgent().check(c), true, where);
@@ -1176,7 +1187,7 @@ test("builderAgent: doctor --fix never rewrites a project-level reviewer, even o
   assert.equal(read(projectAgents, "motion-reviewer.md"), REVIEWER_OURS_OLD);
 });
 
-test("builderAgent: doctor --fix on a fake HOME never downgrades a newer reviewer file (format 3), and says this skill is older", async () => {
+test("builderAgent: doctor --fix on a fake HOME never downgrades a newer reviewer file (format 4), and says this skill is older", async () => {
   const { agents, c } = fakeMachine({ user: REVIEWER_NEWER });
   const r = await diagnose([builderAgent()], c);
   assert.equal(r.ok, true);

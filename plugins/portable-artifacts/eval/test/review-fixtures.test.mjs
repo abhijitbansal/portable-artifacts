@@ -100,8 +100,21 @@ test('two-squares.png is a 1280x720 PNG', () => {
   assert.ok(buf.length < 100_000, 'a flat picture stays small');
 });
 
+// A summary is copied to results/ whether the proof passed or failed (the failed branch of Step 7 keeps the numbers), so
+// only one that says PASSED counts as a recorded pass.
+const recordedPass = (files) => files.some(({ name, text }) => /^summary-motion-reviewer-.*\.md$/.test(name) && text.includes('**PASSED**'));
+
 test('references/reviewing.md names the reviewer only once a passing proof is recorded', () => {
   const text = fs.readFileSync(path.join(mm, 'references/reviewing.md'), 'utf8');
-  const recorded = fs.readdirSync(path.join(evalDir, 'results')).some((f) => /^summary-motion-reviewer-.*\.md$/.test(f));
-  assert.equal(text.includes('motion-reviewer'), recorded);
+  const dir = path.join(evalDir, 'results');
+  const files = fs.readdirSync(dir).map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), 'utf8') }));
+  assert.equal(text.includes('motion-reviewer'), recordedPass(files));
+});
+
+test('a failed proof summary is not a recorded pass; a passed one is', () => {
+  const name = 'summary-motion-reviewer-2026-12-01.md';
+  assert.equal(recordedPass([{ name, text: '- **FAILED**. Defects found per film: ...' }]), false);
+  assert.equal(recordedPass([{ name, text: '- **PASSED**. Defects found per film: ...' }]), true);
+  assert.equal(recordedPass([{ name: 'summary-other.md', text: '**PASSED**' }]), false, 'only the reviewer summaries count');
+  assert.equal(recordedPass([]), false);
 });

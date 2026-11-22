@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { isReviewerAgent, parseReply, replyText } from '../review-reply.mjs';
-import { fixtureNames, loadPlanted } from '../review-proof.mjs';
+import { checkSheets, fixtureNames, loadPlanted, runProof } from '../review-proof.mjs';
 import * as F from './helpers/stream-fixtures.mjs';
 
 const made = [];
@@ -85,11 +85,12 @@ test('a real hand-back, with its notice and indented lines, is read as the revie
 
 // --- the harness, with a fake claude ---
 
-function fakeClaude(mode) {
+// extra.breakOn / extra.breakPath: on that call number the fake removes that folder, so the next session's workdir cannot be built.
+function fakeClaude(mode, extra = {}) {
   const bin = tmp();
   const marker = path.join(bin, 'calls.jsonl');
   const cfg = path.join(bin, 'cfg.json');
-  fs.writeFileSync(cfg, JSON.stringify({ mode, planted: PLANTED, good: goodReply }));
+  fs.writeFileSync(cfg, JSON.stringify({ mode, planted: PLANTED, good: goodReply, ...extra }));
   fs.writeFileSync(path.join(bin, 'claude'), `#!${process.execPath}
 const fs = require('fs');
 if (process.argv[2] === '--version') { console.log('9.9.9 (fake)'); process.exit(0); }
@@ -97,6 +98,7 @@ const cfg = JSON.parse(fs.readFileSync(${JSON.stringify(cfg)}, 'utf8'));
 const film = JSON.parse(fs.readFileSync('film.json', 'utf8'));
 const report = fs.readFileSync('film.report.json', 'utf8');
 fs.appendFileSync(${JSON.stringify(marker)}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd(), agentFile: fs.existsSync('.claude/agents/motion-reviewer.md'), checklist: fs.existsSync('skills/make-motion/references/reviewing.md'), examples: fs.existsSync('skills/make-motion/references/examples'), picture: fs.existsSync('two-squares.png'), sheet: fs.existsSync('film.sheets/shot-1.png'), sheetsExist: JSON.parse(report).sheets.every((s) => fs.existsSync(s)), report, subagentModel: process.env.CLAUDE_CODE_SUBAGENT_MODEL ?? null }) + '\\n');
+if (cfg.breakOn && fs.readFileSync(${JSON.stringify(marker)}, 'utf8').trim().split('\\n').length === cfg.breakOn) fs.rmSync(cfg.breakPath, { recursive: true, force: true });
 const ids = film.shots.map((s) => s.id);
 const figure = film.shots.find((s) => s.id === 'figure');
 const chart = film.shots.find((s) => s.id === 'chart');
@@ -256,6 +258,79 @@ test('a reviewer that fails every film, the good one too, does not pass', () => 
   assert.equal(results.score.falseFails, 2);
   assert.equal(results.score.pass, false);
   for (const name of Object.keys(PLANTED)) assert.equal(results.score.found[name], 2, name);
+});
+
+// --- budget guard, partial results, total cap ---
+
+test('runProof and runCase throw before any session unless the budget is a positive number', async () => {
+  const dir = tmp();
+  const marker = path.join(dir, 'started');
+  const host = { cmd: [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x')`, '{prompt}'], budgetArgs: ['--max-budget-usd', '{budget}'] };
+  const { films } = checkSheets({ sheetsDir: sheetsFolder(), planted: PLANTED });
+  for (const bad of [undefined, 0, -1, '', 'abc', NaN, Infinity, null]) {
+    await assert.rejects(runProof({ films, planted: PLANTED, runs: 1, host, budget: bad, timeoutSec: 5, outDir: dir, tmpDir: dir }), /budget/, String(bad));
+  }
+  assert.equal(fs.existsSync(marker), false, 'no session may start without a cap');
+});
+
+test('a session whose host cannot start leaves no workdir behind', async () => {
+  const dir = tmp();
+  const work = tmp();
+  const { films } = checkSheets({ sheetsDir: sheetsFolder(), planted: PLANTED });
+  await assert.rejects(runProof({ films, planted: PLANTED, runs: 1, host: { cmd: null }, budget: 2, timeoutSec: 5, outDir: dir, tmpDir: work }));
+  assert.deepEqual(fs.readdirSync(work), [], 'the workdir is removed in a finally');
+});
+
+test('the budget reaches the host as the parsed number: " 2" and 1e1 become 2 and 10', () => {
+  const { bin, marker } = fakeClaude('honest');
+  for (const [typed, sent] of [[' 2', '2'], ['1e1', '10']]) {
+    fs.rmSync(marker, { force: true });
+    const r = proof(bin, ['--runs', '1', `--budget=${typed}`, '--sheets', sheetsFolder(), '--out', tmp()]);
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    for (const c of calls(marker)) assert.deepEqual(c.argv.slice(-2), ['--max-budget-usd', sent], typed);
+  }
+});
+
+test('each finished case is written to results.jsonl at once: a failure mid-proof keeps the sessions already billed', () => {
+  const sheets = sheetsFolder();
+  // the second call removes the third film's sheets, so its workdir cannot be built
+  const { bin, marker } = fakeClaude('honest', { breakOn: 2, breakPath: path.join(sheets, 'chart-wrong-mark.sheets') });
+  const out = tmp();
+  const r = proof(bin, ['--runs', '1', '--budget', '2', '--sheets', sheets, '--out', out]);
+  assert.equal(r.status, 1, 'the run ends in an error, not a pass');
+  assert.match(r.stderr, /chart-wrong-mark/);
+  assert.equal(calls(marker).length, 2);
+  const lines = fs.readFileSync(path.join(out, 'motion-reviewer', 'results.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(lines.map((c) => [c.fixture, c.counted]), [['good', true], ['number-mismatch', true]]);
+  assert.ok(lines.every((c) => c.costUsd === 0.5), 'the cost of the billed sessions is kept');
+});
+
+test('--max-total stops before a session that could pass the cap, records it, and the proof fails', () => {
+  const { bin, marker } = fakeClaude('honest');
+  const out = tmp();
+  // each fake session costs 0.5 and the cap per session is 2: the 4th session could reach 3.5 > 3
+  const r = proof(bin, ['--runs', '1', '--budget', '2', '--max-total', '3', '--sheets', sheetsFolder(), '--out', out]);
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stdout, /Total spend cap \(--max-total\): 3\.00 USD/);
+  assert.equal(calls(marker).length, 3);
+  const results = JSON.parse(fs.readFileSync(path.join(out, 'motion-reviewer', 'results.json'), 'utf8'));
+  assert.equal(results.maxTotal, 3);
+  assert.match(results.stopped, /--max-total 3/);
+  assert.equal(results.score.pass, false);
+  assert.match(fs.readFileSync(path.join(out, 'motion-reviewer', 'summary.md'), 'utf8'), /Stopped early: .*--max-total 3/);
+});
+
+test('--max-total defaults to runs x films x budget, is printed before the proof starts, and must be a positive number', () => {
+  const { bin, marker } = fakeClaude('honest');
+  const sheets = sheetsFolder();
+  const r = proof(bin, ['--runs', '2', '--budget', '2', '--sheets', sheets, '--dry-run']);
+  assert.match(r.stdout, /Total spend cap \(--max-total\): 20\.00 USD/);
+  for (const bad of ['0', 'abc', '-1']) {
+    const bad2 = proof(bin, ['--budget', '2', `--max-total=${bad}`, '--sheets', sheets]);
+    assert.equal(bad2.status, 2, bad);
+    assert.match(bad2.stderr, /--max-total must be a positive number of dollars/);
+  }
+  assert.equal(fs.existsSync(marker), false);
 });
 
 test('the films run good first, then the planted ones, and a reviewer reply in a stream is read as the agent\'s', () => {

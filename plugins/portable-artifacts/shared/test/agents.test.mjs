@@ -274,7 +274,7 @@ test('the reviewer keeps reviewing.md\'s measured exception and its quoted, not 
 });
 
 test('the reviewer file carries a dedicated marker comment line, never a phrase of the prose', () => {
-  assert.equal(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 2 -->`);
+  assert.equal(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 3 -->`);
   assert.match(REVIEWER_FINGERPRINT, /^<!-- portable-artifacts: motion-reviewer$/);
   const { content } = reviewerFile('claude');
   assert.ok(content.split('\n').includes(REVIEWER_CURRENT_MARKER), 'the marker is a line of its own');
@@ -288,7 +288,8 @@ test('reviewerFileState: current, older, newer and foreign (no fingerprint line)
   const withFormat = (n) => cur.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format ${n} -->`);
   assert.equal(reviewerFileState(cur), 'current');
   assert.equal(reviewerFileState(withFormat(1)), 'older');
-  assert.equal(reviewerFileState(withFormat(3)), 'newer', 'a higher number is a newer file: never downgraded');
+  assert.equal(reviewerFileState(withFormat(2)), 'older', 'an installed format 2 file (no narration check) reads as older and gets updated');
+  assert.equal(reviewerFileState(withFormat(4)), 'newer', 'a higher number is a newer file: never downgraded');
   assert.equal(reviewerFileState(withFormat(10)), 'newer', 'the number is compared as a number, not as text');
   assert.equal(reviewerFileState(cur.replace(`${REVIEWER_CURRENT_MARKER}\n`, '')), 'foreign', 'our text without the marker line is not fingerprinted');
   assert.equal(reviewerFileState('---\nname: motion-reviewer\n---\nmy own team reviewer\n'), 'foreign');
@@ -323,6 +324,25 @@ test('the reviewer carries the why of the weakest shot, and says to quote the no
 
 test('the reviewer text never says the agent opens the film (Read cannot decode a video)', () => {
   assert.doesNotMatch(fs.readFileSync(AGENTS, 'utf8'), /opens the film/i);
+});
+
+// The sheets show no narration: a number, a highlighted mark or "the red button" can be wrong only against the film's
+// "say" line. So the film path is the JSON spec, the reviewer reads it, and pictures-alone stays as the first look.
+test('the reviewer reads the film spec and checks each shot against its say line, after a pictures-alone first look', () => {
+  assert.match(REVIEWER_INSTRUCTIONS, /film path \(the film's JSON spec/);
+  assert.match(REVIEWER_INSTRUCTIONS, /Read the film file/);
+  assert.match(REVIEWER_INSTRUCTIONS, /"say"/);
+  assert.match(REVIEWER_INSTRUCTIONS, /against its "say" line/);
+  assert.match(REVIEWER_INSTRUCTIONS, /mismatch is a P0/);
+  assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /context only/);
+  assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /cannot play or decode a film/);
+  const first = REVIEWER_INSTRUCTIONS.indexOf('pictures alone');
+  const second = REVIEWER_INSTRUCTIONS.indexOf('against its "say" line');
+  assert.ok(first > 0 && second > first, 'pictures alone comes first, the narration check second');
+});
+
+test('the reviewer says what to do when the film file will not open', () => {
+  assert.match(REVIEWER_INSTRUCTIONS, /a film file that will not open/);
 });
 
 test('cli: `write claude <dir>` also writes motion-reviewer.md; copilot and codex write none', () => {

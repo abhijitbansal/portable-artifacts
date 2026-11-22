@@ -96,7 +96,7 @@ export function reviewPrompt(work) {
   return [
     `Review the finished film with the ${REVIEWER_NAME} agent: start it with the Agent tool (subagent_type ${REVIEWER_NAME}).`,
     'Give it this brief:',
-    `skill directory ${path.join(work, 'skills/make-motion')}; film ${path.join(work, NEUTRAL_FILM)}; report ${path.join(work, NEUTRAL_REPORT)} (its "sheets" array names every sheet PNG, and the sheets are in this folder).`,
+    `skill directory ${path.join(work, 'skills/make-motion')}; film ${path.join(work, NEUTRAL_FILM)} (the film's JSON spec: its "say" lines are the narration); report ${path.join(work, NEUTRAL_REPORT)} (its "sheets" array names every sheet PNG, and the sheets are in this folder).`,
     'When it replies, answer with its JSON reply exactly as it gave it, and nothing else.',
     'Do not review the film yourself and do not open the sheets: the proof is of the agent.',
   ].join(' ');
@@ -104,7 +104,7 @@ export function reviewPrompt(work) {
 
 const mdCell = (s) => String(s ?? '-').replace(/\s+/g, ' ').replaceAll('|', '\\|');
 
-export function summarizeProof({ score, cases, commandLine, pluginVersion, hostVersion, budget, runs, date }) {
+export function summarizeProof({ score, cases, commandLine, pluginVersion, hostVersion, budget, runs, date, films = 5, stopped = null }) {
   const models = [...new Set(cases.map((c) => c.operatorModel).filter(Boolean))];
   const directors = [...new Set(cases.map((c) => c.directorModel).filter(Boolean))];
   const cost = cases.reduce((sum, c) => sum + (typeof c.costUsd === 'number' ? c.costUsd : 0), 0);
@@ -112,11 +112,12 @@ export function summarizeProof({ score, cases, commandLine, pluginVersion, hostV
     `# Reviewer proof: ${REVIEWER_NAME}, ${date}`,
     '',
     `- Command: \`${commandLine}\``,
-    `- Plugin version ${pluginVersion}; host \`${HOST}\`, CLI ${hostVersion}; ${runs} runs of 5 films, each session capped at ${budget} USD.`,
+    `- Plugin version ${pluginVersion}; host \`${HOST}\`, CLI ${hostVersion}; ${runs} runs of ${films} films, each session capped at ${budget} USD.`,
     `- Bar: every planted defect found in all ${runs} runs (a fail verdict with a P0 or P1 note on the planted shot), and at most ${MAX_FALSE_FAILS} false fail on the good film.`,
     `- **${score.pass ? 'PASSED' : 'FAILED'}**. Defects found per film: ${Object.entries(score.found).map(([f, n]) => `${f} ${n}/${runs}`).join(', ')}. False fails on the good film: ${score.falseFails}.`,
     `- Agent that ran, read from the stream: ${mdCell([...new Set(cases.map((c) => c.agent).filter(Boolean))].join(', ') || 'none')}; model of the agent's own messages: ${mdCell(models.join(', ') || 'none seen')}; director model: ${mdCell(directors.join(', ') || 'none seen')}.`,
     `- Cost read from the streams: ${cost.toFixed(2)} USD over ${cases.length} sessions.`,
+    ...(stopped ? [`- Stopped early: ${stopped}.`] : []),
     '',
     ...(score.problems.length ? ['Problems:', '', ...score.problems.map((p) => `- ${p}`), ''] : []),
     '| film | run | delegated | verdict | notes (level, shot) | cost USD | counted |',
@@ -128,13 +129,26 @@ export function summarizeProof({ score, cases, commandLine, pluginVersion, hostV
 }
 
 // One billed session. Returns the case record; `counted` says whether the reply is the reviewer agent's own and valid.
+// lib.mjs expandCmd drops the cap silently when the budget is falsy, so a caller that forgot it would start uncapped billed
+// sessions. Both exported entry points refuse that: the budget is a positive number of dollars, or nothing starts.
+function requireBudget(budget) {
+  if (typeof budget !== 'number' || !Number.isFinite(budget) || budget <= 0) {
+    throw new TypeError(`a billed proof needs a budget: a positive number of dollars per session, got ${String(budget)}`);
+  }
+}
+
 async function runCase({ name, run: n, film, host, budget, timeoutSec, caseDir, tmpDir }) {
+  requireBudget(budget);
   const work = prepareWork({ name, film, tmpDir });
   fs.mkdirSync(caseDir, { recursive: true });
   const transcript = path.join(caseDir, 'transcript.txt');
-  const argv = expandCmd(host, { prompt: reviewPrompt(work), cwd: work, budget });
-  const r = await run(argv, { cwd: work, env: {}, dropEnv: MODEL_ENV_VARS, timeoutMs: timeoutSec * 1000, logFile: transcript });
-  fs.rmSync(work, { recursive: true, force: true });
+  let r;
+  try {
+    const argv = expandCmd(host, { prompt: reviewPrompt(work), cwd: work, budget });
+    r = await run(argv, { cwd: work, env: {}, dropEnv: MODEL_ENV_VARS, timeoutMs: timeoutSec * 1000, logFile: transcript });
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
   const session = readSession(transcript, { specName: NEUTRAL_FILM });
   const record = {
     fixture: name, run: n, seconds: r.seconds, timedOut: r.timedOut,
@@ -151,22 +165,37 @@ async function runCase({ name, run: n, film, host, budget, timeoutSec, caseDir, 
   return { ...record, counted: true, verdict: parsed.reply.verdict, notes: parsed.reply.notes, weakest: parsed.reply.weakest, unchecked: parsed.reply.unchecked };
 }
 
-/** Run every film `runs` times, run-major so an early stop leaves balanced data. -> { score, cases }. */
-export async function runProof({ films, planted, runs, host, budget, timeoutSec, outDir, tmpDir, log = () => {} }) {
+/**
+ * Run every film `runs` times, run-major so an early stop leaves balanced data. `onCase(record)` is called as each session
+ * finishes (main appends it to results.jsonl, so an error later keeps what was billed). `maxTotal` stops the proof before a
+ * session that could take the spend past it: spend so far is the cost the streams reported, and a session with no cost counts
+ * as its full cap. -> { score, cases, stopped } where `stopped` is a reason string or null.
+ */
+export async function runProof({ films, planted, runs, host, budget, timeoutSec, outDir, tmpDir, maxTotal = Infinity, onCase = () => {}, log = () => {} }) {
+  requireBudget(budget);
   const cases = [];
-  for (let n = 1; n <= runs; n += 1) {
+  let spent = 0;
+  let stopped = null;
+  for (let n = 1; n <= runs && !stopped; n += 1) {
     for (const name of fixtureNames(planted)) {
+      if (spent + budget > maxTotal + 1e-9) {
+        stopped = `stopped before ${name} run ${n}: ${spent.toFixed(2)} USD spent, and one more session capped at ${budget} USD could pass --max-total ${maxTotal}`;
+        break;
+      }
       log(`▶ ${name} run ${n}/${runs}`);
       const c = await runCase({ name, run: n, film: films[name], host, budget, timeoutSec, caseDir: path.join(outDir, `${name}-run${n}`), tmpDir });
       cases.push(c);
+      spent += typeof c.costUsd === 'number' ? c.costUsd : budget;
+      onCase(c);
       log(`  ${c.counted ? c.verdict : `not counted: ${c.excluded}`}  ${typeof c.costUsd === 'number' ? `${c.costUsd.toFixed(2)} USD` : ''}`);
     }
   }
+  if (stopped) log(stopped);
   const results = cases.filter((c) => c.counted).map(({ fixture, run: n, verdict, notes }) => ({ fixture, run: n, verdict, notes }));
-  return { score: scoreProof(results, planted, { runs }), cases };
+  return { score: scoreProof(results, planted, { runs }), cases, stopped };
 }
 
-const USAGE = 'usage: node eval/review-proof.mjs --runs 3 --budget <usd> [--sheets <dir>] [--timeout sec] [--out dir] [--dry-run] [--help]\n';
+const USAGE = 'usage: node eval/review-proof.mjs --runs 3 --budget <usd> [--max-total <usd>] [--sheets <dir>] [--timeout sec] [--out dir] [--dry-run] [--help]\n';
 
 function usage(msg) {
   process.stderr.write(`${msg}\n${USAGE}`);
@@ -179,7 +208,7 @@ export async function main(argv) {
     ({ values: opts } = parseArgs({
       args: argv,
       options: {
-        runs: { type: 'string', default: String(PROOF_RUNS) }, budget: { type: 'string' }, sheets: { type: 'string' },
+        runs: { type: 'string', default: String(PROOF_RUNS) }, budget: { type: 'string' }, 'max-total': { type: 'string' }, sheets: { type: 'string' },
         timeout: { type: 'string', default: String(DEFAULT_TIMEOUT_SEC) }, out: { type: 'string' },
         'dry-run': { type: 'boolean', default: false }, help: { type: 'boolean', short: 'h', default: false },
       },
@@ -191,8 +220,12 @@ export async function main(argv) {
   // The first refusal: no cap, no billed session. Checked before anything is read, so nothing can start by accident.
   if (opts.budget === undefined) return usage('this proof is billed per session and needs --budget <usd>, the cap for one session');
   if (!(Number.isFinite(Number(opts.budget)) && Number(opts.budget) > 0)) return usage(`--budget must be a positive number of dollars, got "${opts.budget}"`);
+  const budget = Number(opts.budget); // the parsed number goes to the host, not the text as typed (" 2", 1e1)
   const runs = Number(opts.runs);
   if (!Number.isInteger(runs) || runs < 1) return usage(`--runs must be a positive whole number, got "${opts.runs}"`);
+  if (opts['max-total'] !== undefined && !(Number.isFinite(Number(opts['max-total'])) && Number(opts['max-total']) > 0)) {
+    return usage(`--max-total must be a positive number of dollars, got "${opts['max-total']}"`);
+  }
   const timeoutSec = Number(opts.timeout);
   if (!(timeoutSec > 0)) return usage(`--timeout must be a positive number of seconds, got "${opts.timeout}"`);
 
@@ -209,8 +242,11 @@ export async function main(argv) {
   } finally {
     fs.rmSync(probe, { recursive: true, force: true });
   }
-  const sessions = fixtureNames(planted).length * runs;
-  process.stdout.write(`${sessions} sessions on host ${HOST} (${fixtureNames(planted).length} films, ${runs} runs each), at most ${opts.budget} USD each: ${(sessions * Number(opts.budget)).toFixed(2)} USD worst case.\n`);
+  const filmCount = fixtureNames(planted).length;
+  const sessions = filmCount * runs;
+  const maxTotal = opts['max-total'] === undefined ? sessions * budget : Number(opts['max-total']);
+  process.stdout.write(`${sessions} sessions on host ${HOST} (${filmCount} films, ${runs} runs each), at most ${budget} USD each: ${(sessions * budget).toFixed(2)} USD worst case.\n`);
+  process.stdout.write(`Total spend cap (--max-total): ${maxTotal.toFixed(2)} USD. No session starts that could take the spend past it.\n`);
   if (opts['dry-run']) { process.stdout.write('dry run: nothing was started\n'); return 0; }
 
   const host = readJson(path.join(here, 'hosts.json'))[HOST];
@@ -222,14 +258,28 @@ export async function main(argv) {
   const outDir = path.resolve(opts.out ?? path.join(here, 'results', stamp), 'motion-reviewer');
   fs.mkdirSync(outDir, { recursive: true });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-review-proof-run-'));
-  const { score, cases } = await runProof({ films, planted, runs, host, budget: opts.budget, timeoutSec, outDir, tmpDir, log: (l) => process.stdout.write(`${l}\n`) });
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  // Each case is appended as it finishes: an error mid-proof (or Ctrl-C) keeps what was already billed.
+  const jsonl = path.join(outDir, 'results.jsonl');
+  let proof;
+  try {
+    proof = await runProof({
+      films, planted, runs, host, budget, timeoutSec, outDir, tmpDir, maxTotal,
+      onCase: (c) => fs.appendFileSync(jsonl, `${JSON.stringify(c)}\n`),
+      log: (l) => process.stdout.write(`${l}\n`),
+    });
+  } catch (e) {
+    process.stderr.write(`the proof stopped on an error: ${e.message}\nthe sessions that finished are in ${jsonl}\n`);
+    return 1;
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+  const { score, cases, stopped } = proof;
   const pluginVersion = readJson(path.resolve(here, '../.claude-plugin/plugin.json')).version;
   const summary = summarizeProof({
-    score, cases, runs, budget: opts.budget, date, pluginVersion, hostVersion: check.out.trim().split('\n')[0],
+    score, cases, runs, budget, date, pluginVersion, hostVersion: check.out.trim().split('\n')[0], films: filmCount, stopped,
     commandLine: `node eval/review-proof.mjs ${argv.join(' ')}`,
   });
-  fs.writeFileSync(path.join(outDir, 'results.json'), `${JSON.stringify({ host: HOST, agent: REVIEWER_NAME, runs, budget: opts.budget, score, cases }, null, 2)}\n`);
+  fs.writeFileSync(path.join(outDir, 'results.json'), `${JSON.stringify({ host: HOST, agent: REVIEWER_NAME, runs, budget, maxTotal, stopped, score, cases }, null, 2)}\n`);
   fs.writeFileSync(path.join(outDir, 'summary.md'), summary);
   process.stdout.write(`\n${summary}\nresults: ${outDir}\n`);
   return score.pass ? 0 : 1;
