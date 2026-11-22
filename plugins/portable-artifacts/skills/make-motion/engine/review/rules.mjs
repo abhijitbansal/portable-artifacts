@@ -81,9 +81,9 @@ export const RULES = Object.freeze([
   rule('hand-edge', [MECHANICAL], 'hand', 'The hand crosses the top or left frame edge.'),
   // outline: the spec alone, before anything is drawn
   rule('cut-variety', [CREATIVE], 'outline', 'More than two thirds of a film\'s cuts are one cut type.',
-    { capped: true, suggest: 'cuts', ask: 'Does each cut say something different about how the two shots relate?' }),
+    { capped: true, suggest: 'cuts', evidence: 'measured', ask: 'Does each cut say something different about how the two shots relate?' }),
   rule('sameness', [CREATIVE], 'outline', 'Three or more shots in a row share one kind, one cut or one move.',
-    { capped: true, suggest: 'cuts', ask: 'Would a different kind, cut or move show some of these ideas better?' }),
+    { capped: true, suggest: 'cuts', evidence: 'measured', ask: 'Would a different kind, cut or move show some of these ideas better?' }),
 ]);
 
 /** Every rule id, in registry order. */

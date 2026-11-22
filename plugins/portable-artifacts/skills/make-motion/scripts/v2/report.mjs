@@ -192,13 +192,16 @@ function verdict(report) {
   return validated && report.stages.every((s) => s.ok) ? 'valid' : 'invalid';
 }
 
+/** One finding as a line of the text form: `<kind>: <path>: <message>`. */
+export const findingLine = (f) => `${f.kind}: ${f.path}: ${f.message}`;
+
 /**
  * The text form of a report: `valid`, `invalid`, `failed` or `interrupted` (verdict), a line per finding, then where
  * things went and the frame counts.
  */
 export function formatText(report, { sheetsDir }) {
   const lines = [verdict(report)];
-  for (const f of report.findings) lines.push(`${f.kind}: ${f.path}: ${f.message}`);
+  for (const f of report.findings) lines.push(findingLine(f));
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);

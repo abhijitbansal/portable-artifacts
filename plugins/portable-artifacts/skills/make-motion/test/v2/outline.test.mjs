@@ -64,6 +64,39 @@ test('a silent film keeps its plain outline: no note', () => {
   assert.equal(JSON.parse(run.stdout).outlineNote, undefined);
 });
 
+// six shots, five of them arriving by a slide: cut-variety, and the same slide three seams running
+const SLIDES = [free('a', 2), ...['b', 'c', 'd', 'e', 'f'].map((id) => free(id, 2, 'slide'))];
+
+test('--outline names a film built of one cut: a creative finding with the cuts to use instead, and the exit code stays 0', () => {
+  const run = make([writeFilm('slides', { version: 2, look: 'desk', shots: SLIDES }), '--outline', '--json']);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  const report = JSON.parse(run.stdout);
+  assert.equal(report.ok, true);
+  assert.equal(report.findings[0].rule, 'cut-variety');
+  assert.equal(report.findings[0].kind, 'creative');
+  assert.equal(report.findings[0].path, 'shots[1].cut');
+  assert.ok(report.findings[0].suggest.cuts.length > 0 && !report.findings[0].suggest.cuts.includes('slide'));
+  assert.ok(report.findings.every((f) => f.kind === 'creative' && typeof f.rule === 'string'), JSON.stringify(report.findings));
+  assert.ok(report.findings.filter((f) => f.rule === 'sameness').length <= 2, 'capped at two');
+});
+
+test('the text form prints each finding after the note, as "creative: <path>: <message>"', () => {
+  const run = make([writeFilm('slides-text', { version: 2, look: 'desk', voice: { name: 'af_heart' }, shots: SLIDES }), '--outline']);
+  assert.equal(run.status, 0, run.stderr);
+  const lines = run.stdout.trim().split('\n');
+  const note = lines.findIndex((line) => line.startsWith('note: '));
+  assert.ok(note >= SLIDES.length, lines.join('\n'));
+  assert.ok(lines.slice(note + 1).length > 0 && lines.slice(note + 1).every((line) => line.startsWith('creative: ')), lines.join('\n'));
+  assert.ok(lines.at(-1).startsWith('creative: '));
+});
+
+test('a film with varied cuts has no finding in its outline', () => {
+  const shots = [free('a', 2), free('b', 2, 'slide'), free('c', 2, 'wipe'), free('d', 2, 'crossfade'), free('e', 2, 'cut')];
+  const run = make([writeFilm('varied', { version: 2, look: 'desk', shots }), '--outline', '--json']);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout).findings.filter((f) => f.rule === 'cut-variety'), []);
+});
+
 test('music.snap with a beats file: the outline shows the cuts where the snap moves them', () => {
   writeClicks(path.join(dir, 'm.wav'), { bpm: 120, seconds: 1 });
   writeBeatsFile(path.join(dir, 'm.beats.json'), { source: 'm.wav', bpm: 120, confidence: 1, beats: Array.from({ length: 21 }, (_, k) => k / 2) });

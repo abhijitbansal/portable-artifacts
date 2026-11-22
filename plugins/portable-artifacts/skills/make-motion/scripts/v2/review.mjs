@@ -18,6 +18,7 @@ import { registries } from '../../engine/registry.mjs';
 import { shotTime, lookOfShot } from '../../engine/graph/film.mjs';
 import { auditFrame, textStatesIn, textLandings, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
 import { regionMarkIds } from '../../engine/review/regions.mjs';
+import { outlineFindings, capCreative } from '../../engine/review/outline.mjs';
 import { aimedAtOf } from '../../engine/review/dropped.mjs';
 import { showsWordsOf } from '../../engine/captions/index.mjs';
 import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
@@ -463,7 +464,8 @@ export async function reviewFilm({ session, signal }) {
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
   const loop = await loopFindings(session); // root loop: true (loop.mjs)
   const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings
-  return [...deduped, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop].sort((a, b) => a.t - b.t);
+  const found = [...deduped, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...outlineFindings(film, timeline)];
+  return capCreative(found).sort((a, b) => a.t - b.t);
 }
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });

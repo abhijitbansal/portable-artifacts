@@ -10,6 +10,7 @@ import { MIN_TEXT_UNITS, MAX_TEXT_SIZES, MIN_HERO_RATIO, OVERLAP_UNITS, WORD_OVE
 import { MIN_CONTRAST } from '../../engine/review/contrast.mjs';
 import { COVER_SECONDS } from '../../engine/hand/index.mjs';
 import { DEFAULT_FILL } from '../../engine/looks/fill.mjs';
+import { MIN_SEAMS, REPEATED_CUT_SHARE, SAME_RUN, CREATIVE_CAP } from '../../engine/review/outline.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/looks/index.mjs';
 
@@ -24,8 +25,9 @@ const SCANNED = ['engine/review/frame.mjs', 'engine/review/contrast.mjs', 'engin
 // The forms a rule must be written in to be seen: a literal `rule: 'x'` field, and the two helpers' `finding(ctx?, KIND, 'x', ...)`,
 // single-quoted, on one line, with the id in lowercase letters, digits and hyphens. A rule built any other way is invisible here.
 const FORMS = [/rule: '([a-z0-9-]+)'/g, /\bfinding\((?:ctx, )?(?:MECHANICAL|CREATIVE|'mechanical'|'creative'), '([a-z0-9-]+)'/g];
-// Rules registered before the file that emits them exists: Task 3 creates engine/review/outline.mjs and empties this.
-const EXPECTED_LATER = ['cut-variety', 'sameness'];
+// Rules registered before the file that emits them exists: none now (engine/review/outline.mjs emits the two outline rules).
+// A later wave that registers a rule ahead of its emitter lists the id here until the emitter lands.
+const EXPECTED_LATER = [];
 
 // Limit of the comment strip: a string holding whitespace then `//`, or holding `/*`, would hide the code after it from the
 // scan. No scanned file has one today.
@@ -68,8 +70,8 @@ test('every rule the code emits is registered, and every registered rule is emit
   assert.deepEqual(RULE_IDS.filter((id) => !emittedIds(SCANNED).has(id) && !EXPECTED_LATER.includes(id)), []);
 });
 
-// The scan finds 36 emitted ids at HEAD; the two outline rules in EXPECTED_LATER make 38 (the plan's 38 already counts W2's
-// dead-space and scale-contrast; W1's render-check problems are errors, not findings, so they add none).
+// The scan finds all 38 registered ids (the plan's 38 counts W2's dead-space and scale-contrast and the two outline rules;
+// W1's render-check problems are errors, not findings, so they add none).
 test('the registry holds 38 rules, each id once, each with a summary', () => {
   assert.equal(RULE_IDS.length, 38);
   assert.equal(new Set(RULE_IDS).size, 38);
@@ -115,7 +117,7 @@ test('[R2-12] every rule states its evidence, and every creative rule asks a que
     assert.ok(['measured', 'convention', 'unmeasured'].includes(rule.evidence), rule.id);
     assert.equal(rule.kinds.includes('creative'), typeof rule.ask === 'string' && rule.ask.endsWith('?'), rule.id);
   }
-  assert.deepEqual(RULES.filter((r) => r.evidence === 'measured').map((r) => r.id).sort(), ['dead-space', 'scale-contrast']);
+  assert.deepEqual(RULES.filter((r) => r.evidence === 'measured').map((r) => r.id).sort(), ['cut-variety', 'dead-space', 'sameness', 'scale-contrast']);
   assert.deepEqual(RULES.filter((r) => r.evidence === 'convention').map((r) => r.id), ['contrast']);
   for (const row of docRows()) {
     assert.equal(row.evidence.split(':')[0], ruleOf(row.id).evidence, row.id);
@@ -134,6 +136,14 @@ test('[R2-12] a measured row cites files that ship, a convention row names its s
     for (const rel of ['references/calibration.md', 'engine/looks/fill.mjs']) assert.ok(cited.includes(rel), `${id} cites ${rel}`);
     for (const rel of cited) assert.ok(fs.existsSync(path.join(MOTION, rel)), `${id} cites ${rel}, which does not exist`);
     assert.ok(cell.includes('DEFAULT_FILL'), id);
+    assert.doesNotMatch(cell, /\.scratch|\b[0-9a-f]{7}\b/, `${id}: a scratch path or a commit does not survive a squash merge`);
+  }
+  for (const id of ['cut-variety', 'sameness']) {
+    const cell = rows.get(id).evidence;
+    const cited = cell.match(CITED) ?? [];
+    for (const rel of ['references/calibration.md', 'engine/review/outline.mjs']) assert.ok(cited.includes(rel), `${id} cites ${rel}`);
+    for (const rel of cited) assert.ok(fs.existsSync(path.join(MOTION, rel)), `${id} cites ${rel}, which does not exist`);
+    assert.match(cell, /\(29 example films/, id);
     assert.doesNotMatch(cell, /\.scratch|\b[0-9a-f]{7}\b/, `${id}: a scratch path or a commit does not survive a squash merge`);
   }
   assert.match(rows.get('contrast').evidence, /^convention: WCAG 2/);
@@ -161,7 +171,13 @@ test('[R2-12] the numbers rules.md and the registry state are the ones the code 
     ['dead-space', ['summary'], `(${percent(desk.band)}% in desk and ledger)`],
     ['scale-contrast', ['summary'], `under ${percent(DEFAULT_FILL.hero)}% of the safe area`],
     ['scale-contrast', ['summary'], `(${percent(ledger.hero)}% in ledger)`],
+    ['cut-variety', ['fix'], `fewer than ${MIN_SEAMS} cuts`],
+    ['cut-variety', ['summary'], 'two thirds'],
+    ['sameness', ['fix'], `first ${CREATIVE_CAP} findings`],
   ];
+  assert.equal(REPEATED_CUT_SHARE, 2 / 3, 'the summary says "two thirds"');
+  assert.equal(SAME_RUN, 3, 'the summary says "Three or more"');
+  assert.ok(ruleOf('sameness').summary.startsWith('Three or more'));
   const rows = new Map(docRows().map((row) => [row.id, row]));
   for (const [id, fields, text] of checks) {
     for (const field of fields) {

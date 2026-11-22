@@ -17,6 +17,7 @@ import { registries } from '../../engine/registry.mjs';
 import { PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { withLookEmphasis, fallbackNotice } from '../../engine/kinds/emphasis-fallback.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
+import { outlineFindings, capCreative } from '../../engine/review/outline.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
 import { openSession, pageErrorMessage, machineMessage, canvasSize } from './session.mjs';
@@ -494,6 +495,8 @@ async function execute(options, state, io) {
   if (options.outline || options.outlineMeasured) {
     const drawn = outlineTimeline(loaded, timeline);
     Object.assign(state, { outline: outlineOf(film, drawn.timeline), outlineNote: outlineNote(film, options, drawn.snapped) });
+    // the two spec-only rules: creative, so `ok` and the exit code stay as they were
+    state.findings =[...state.findings, ...capCreative(outlineFindings(film, drawn.timeline)).map(reviewFinding)];
     return;
   }
   // A film's video clips are probed, and their frames taken from (or decoded into) the cache beside the video (clips.mjs).
