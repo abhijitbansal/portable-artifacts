@@ -25,7 +25,8 @@ import { openSession } from './session.mjs';
 import { withStamp } from './stamp.mjs';
 import { captureParallel, workerRanges } from './workers.mjs';
 
-// The voice steps, loaded only for a voiced film: a silent film imports nothing of the voice.
+// The voice steps, loaded when a film is voiced. A silent film still loads voice/master.mjs through output-check.mjs (the
+// check opens the finished MP4 with its ownMp4Input), but never voice/remaster.mjs or any optional voice package.
 const voiceSteps = async () => ({ ...await import('./voice/master.mjs'), ...await import('./voice/remaster.mjs') });
 
 export const JPEG_QUALITY = 98;
@@ -169,8 +170,9 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress, clock
 /**
  * The page and console messages of every page of the run, for a stall's "last page messages". Each page has its own
  * session and its own `errors`, and the stage clock does not know which page stalled, so all of them are read: one page
- * unlabelled, several as `page N: message`, each giving its newest TAIL_LINES / pages messages (at least one) so the pages
- * share the lines the stall error keeps.
+ * unlabelled, several as `page N: message`, each giving its newest TAIL_LINES / pages messages (at least one). The stall
+ * error keeps max(TAIL_LINES, workers) lines (pageClock), which is never fewer than one per page, so every page's share
+ * reaches it. The clock does not know which page stalled, so none is picked.
  * @param {{ errors?: string[] }[]} sessions the first page's session, then the extra pages' (encodeWithWorkers)
  */
 export function pageMessages(sessions) {
@@ -178,6 +180,13 @@ export function pageMessages(sessions) {
   const share = Math.max(1, Math.floor(TAIL_LINES / sessions.length));
   return sessions.flatMap((s, k) => (s.errors ?? []).slice(-share).map((message) => `page ${k + 1}: ${message}`));
 }
+
+/**
+ * The stage clock of a run: its stall error reads the messages of every page in `sessions`, and keeps at least one line per
+ * worker (more than TAIL_LINES for 6 to 8 workers), so the line count never drops the page that stalled.
+ * @param {{ frames: number, sessions: { errors?: string[] }[], workers: number }} opts `rest` goes to createStageClock
+ */
+export const pageClock = ({ frames, sessions, workers, ...rest }) => createStageClock({ frames, tail: () => pageMessages(sessions), tailLines: Math.max(TAIL_LINES, workers), ...rest });
 
 // --workers: the first page plus one opened through openPage per further range (workers.mjs), closed after. Each extra
 // session is in `sessions` (the clock's message source) while it is open.
@@ -285,7 +294,7 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     if (encoded !== null) steps.judgeLevel(encoded.level, loudness, subject, judgement);
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact, stamp: steps === null ? stamp : [] })], signal);
     const sessions = [open]; // the pages the stall error reads its messages from; encodeWithWorkers adds the extra ones
-    const clock = createStageClock({ frames: open.timeline.frameCount, tail: () => pageMessages(sessions) });
+    const clock = pageClock({ frames: open.timeline.frameCount, sessions, workers });
     const captured = workers > 1 && openPage ? await encodeWithWorkers({ session: open, sessions, encoder, exact, signal, onProgress, workers, openPage, clock }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress, clock });
     await clock.time('encode', open.timeline.frameCount - 1, () => encoder.finish());
     encoder = null;

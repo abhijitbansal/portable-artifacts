@@ -23,7 +23,7 @@ const STDERR_LINES = 5;
 // plugin requires 5.1 for a silent film, so the flag is chosen by the version ffmpeg says it is.
 const FPS_MODE_FROM = { major: 5, minor: 1 };
 const VERSION_LINE = /ffmpeg version n?(\d+)\.(\d+)/i;
-const versions = new Map(); // ffmpeg path -> its version, read once
+const versions = new Map(); // ffmpeg path -> its version, kept once ffmpeg has answered
 
 /** { major, minor } from the first line `ffmpeg -version` prints, or null for a build that carries no number (a git build). */
 export function versionOf(text) {
@@ -34,13 +34,18 @@ export function versionOf(text) {
 // A probe that does not answer in this long counts as no version, which gets the modern flag.
 export const VERSION_PROBE_TIMEOUT_MS = 5000;
 
-/** The version of the ffmpeg at `ffmpeg`, read once per path; null when it does not say, cannot be run or does not answer in time. `probe` is for tests. */
+/**
+ * The version of the ffmpeg at `ffmpeg`; null when it does not say, cannot be run or does not answer in time. An answer
+ * (a version, or a build that carries no number) is kept per path; a probe that failed or timed out is not, so one slow
+ * answer on a loaded machine does not decide the flag for the rest of the process. `probe` is for tests.
+ */
 export function ffmpegVersion(ffmpeg, probe = spawnSync) {
-  if (!versions.has(ffmpeg)) {
-    const run = probe(ffmpeg, ['-version'], { encoding: 'utf8', timeout: VERSION_PROBE_TIMEOUT_MS });
-    versions.set(ffmpeg, run.status === 0 ? versionOf(run.stdout.split('\n')[0] ?? '') : null);
-  }
-  return versions.get(ffmpeg);
+  if (versions.has(ffmpeg)) return versions.get(ffmpeg);
+  const run = probe(ffmpeg, ['-version'], { encoding: 'utf8', timeout: VERSION_PROBE_TIMEOUT_MS });
+  if (run.status !== 0) return null;
+  const version = versionOf(run.stdout.split('\n')[0] ?? '');
+  versions.set(ffmpeg, version);
+  return version;
 }
 
 const knowsFpsMode = (version) => version === null || version === undefined

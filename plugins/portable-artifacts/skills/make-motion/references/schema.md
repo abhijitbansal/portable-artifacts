@@ -148,7 +148,7 @@ A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `pa
 
 Three render errors come from the checks the render makes on itself, and each leaves no MP4:
 
-- `render stalled in the <stage> stage at frame N of M: ...; last page messages: ...`: a stage (draw, capture, encode or check) gave no answer for 120 s, or the browser timed out. With `--workers` the messages are those of every page, as `page N: message`. Run again, and with `--workers 1` if it keeps happening.
+- `render stalled in the <stage> stage at frame N of M: ...; last page messages: ...`: a stage (draw, capture, encode or check) gave no answer for 120 s, or the browser timed out. With `--workers` the messages come from every page, as `page N: message`, a few lines from each (at least one, and the error keeps at least one per worker), because the render does not know which page stalled. Run again, and with `--workers 1` if it keeps happening.
 - `render check: the finished file holds N frames, the timeline has M`: the finished file does not hold the frames the timeline has. The encode lost or added frames. Run again with `--workers 1`, then with `--exact`.
 - `render check: the finished file's picture is blank: none of its N frames has any detail`: the finished film is blank. Check that the shots draw something: a film of one `free` shot with only a `background` validates and draws nothing. It is an error and not a finding, because the film is valid and the file is useless.
 

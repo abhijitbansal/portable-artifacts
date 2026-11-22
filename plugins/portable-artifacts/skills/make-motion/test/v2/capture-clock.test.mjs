@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStageClock, stallError } from '../../scripts/v2/capture-clock.mjs';
 import { describeError, formatText } from '../../scripts/v2/report.mjs';
-import { encodeWithWorkers, heldFlags, pageMessages, shootFrame } from '../../scripts/v2/render.mjs';
+import { encodeWithWorkers, heldFlags, pageClock, pageMessages, shootFrame } from '../../scripts/v2/render.mjs';
 import { captureParallel } from '../../scripts/v2/workers.mjs';
 import { fakeTimers } from './helpers/fake-timers.mjs';
 
@@ -158,6 +158,25 @@ test('--workers: a stall on a later page reports that page\'s messages, not the 
     await assert.rejects(encodeWithWorkers({ session: first, sessions, encoder: { write: async () => {} }, exact: false, workers: 2, openPage: async () => second, clock }),
       /^Error: render stalled in the draw stage at frame 4 of 4: no answer in 0\.02 s; last page messages: page 1: first page is quiet \| page 2: page\.on error: lost the GPU$/);
     assert.deepEqual(sessions, [first], 'the second page is left out of the list again once it is closed');
+  } finally {
+    release();
+  }
+});
+
+test('--workers 8: more pages than the error keeps lines, and the stalled page\'s messages still reach the error', async () => {
+  const release = keepAlive();
+  try {
+    const workers = 8;
+    const frames = 8;
+    const quiet = (errors) => ({ page: fakePage(), errors, timeline: { frameCount: frames }, close: async () => {} });
+    const first = quiet(['first page is quiet']);
+    const extra = [quiet([]), quiet(['p3']), quiet(['p4']), quiet(['p5']), quiet(['p6']), quiet(['p7']), quiet(['p8'])];
+    extra[0] = { ...quiet(['page.on error: lost the GPU']), page: fakePage({ seek: () => new Promise(() => {}) }) };
+    const sessions = [first];
+    const clock = pageClock({ frames, sessions, workers, stallMs: 20 });
+    let opened = 0;
+    await assert.rejects(encodeWithWorkers({ session: first, sessions, encoder: { write: async () => {} }, exact: false, workers, openPage: async () => extra[opened++], clock }),
+      /last page messages: page 1: first page is quiet \| page 2: page\.on error: lost the GPU \| page 3: p3 \| page 4: p4 \| page 5: p5 \| page 6: p6 \| page 7: p7 \| page 8: p8$/);
   } finally {
     release();
   }

@@ -58,6 +58,20 @@ test('the version probe is given a time limit, and one that runs out counts as n
   assert.deepEqual(ffmpegVersion('/probe/ok', () => ({ status: 0, stdout: 'ffmpeg version 4.4.2 x\n' })), { major: 4, minor: 4 });
 });
 
+test('a probe that failed is not remembered; an answer is, including "no version number"', () => {
+  let calls = 0;
+  const probe = (answers) => () => { calls++; return answers.shift(); };
+  const slow = { status: null, error: new Error('spawnSync ETIMEDOUT'), stdout: null };
+  const answers = [slow, { status: 0, stdout: 'ffmpeg version 4.4.2 x\n' }];
+  assert.equal(ffmpegVersion('/probe/retry', probe(answers)), null, 'the slow answer is no version for that call');
+  assert.deepEqual(ffmpegVersion('/probe/retry', probe(answers)), { major: 4, minor: 4 }, 'the next call asks again');
+  assert.deepEqual(ffmpegVersion('/probe/retry', probe(answers)), { major: 4, minor: 4 }, 'and the answer is kept');
+  assert.equal(calls, 2);
+  assert.equal(ffmpegVersion('/probe/git', probe([{ status: 0, stdout: 'ffmpeg version N-1234-gabc\n' }])), null);
+  assert.equal(ffmpegVersion('/probe/git', probe([])), null, 'a build with no number is a definite answer and is kept');
+  assert.equal(calls, 3);
+});
+
 test('a film whose every frame is flat is blank; one frame with detail is enough', () => {
   assert.match(outputProblem({ decoded: 3, stds: [0, 0.4, 1.4], frames: 3 }), /picture is blank: none of its 3 frames/);
   assert.equal(outputProblem({ decoded: 3, stds: [0, 0, 9], frames: 3 }), null);

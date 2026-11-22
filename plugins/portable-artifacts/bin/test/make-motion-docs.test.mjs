@@ -139,6 +139,7 @@ test('SKILL.md folds the storyline pick into the one intake round and routes the
   assert.match(intake, /three storylines/);
   assert.match(intake, /references\/story\.md/);
   assert.ok(intake.indexOf('three storylines') < intake.indexOf('do not ask again'), 'the pick comes before "do not ask again"');
+  assert.match(intake, /\(with a person there, a film over 15 s still asks its storylines\)/, 'the skip-the-round exception names the person too');
   const step1 = skill.split('\n').find((l) => l.startsWith('1. Pick the film'));
   assert.ok(step1.includes('teaching check') && step1.includes('storylines') && step1.includes('references/story.md'), 'step 1 routes to both');
   assert.ok(section(read('references/story.md'), 'Three storylines').includes('no second question'));
@@ -179,6 +180,11 @@ test('captions are advised only for kinds that do not show their own words', () 
   }
   assert.ok(/its own words|their own words/.test(line), 'the line says a statement is its own words');
   assert.ok(!/\bwith `captions`/.test(line), 'it does not pair captions with a statement');
+  for (const kind of ['chart', 'diagram']) assert.equal(registries.kinds.get(kind).showsWords, false, `${kind} is captionable`);
+  const media = registries.kinds.get('media');
+  assert.equal(media.showsWords({}), false, 'a media clip with no caption is captioned');
+  assert.equal(media.showsWords({ caption: 'x' }), true, 'a media shot with its own caption is never captioned');
+  assert.ok(/media[^.]*(no|without)[^.]*caption of its own/.test(line), 'the line says a media shot with its own caption gets none');
 });
 
 test('tells.md has one section per look, never a banned list', () => {

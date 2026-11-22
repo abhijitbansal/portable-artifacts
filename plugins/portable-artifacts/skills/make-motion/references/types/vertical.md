@@ -19,7 +19,7 @@ The film is meant for a feed, often watched with the sound off, by someone who h
 
 ## Devices
 
-- A `statement` that reads from frame 0. It is its own words, as a `number` and a `compare` are, so `captions` go on the shots that are not (a `chart`, a `diagram`, a `media` clip) for the viewer who has no sound.
+- A `statement` that reads from frame 0. It is its own words, as a `number` and a `compare` are, so `captions` go on the shots that are not (a `chart`, a `diagram`, a `media` clip with no caption of its own: a media shot that has one is never captioned) for the viewer who has no sound.
 - A `punch` or `slide` cut where the next shot is a new thing, to change the picture at least every 3 seconds. On every cut it is the pop look's tell (references/tells.md).
 - A `number` that lands on the word that says it.
 - A `compare` for before and after.

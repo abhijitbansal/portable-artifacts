@@ -18,24 +18,24 @@ export const STAGE_STALL_MS = 120_000;
 export const TAIL_LINES = 5;
 const MS_PER_SECOND = 1000;
 
-/** The error of a stalled stage: names the stage, the frame (1-based in the text), the cause and the page's last messages. */
-export function stallError({ stage, frame, frames, cause, tail }) {
-  const said = tail.slice(-TAIL_LINES).join(' | ') || 'none';
+/** The error of a stalled stage: names the stage, the frame (1-based in the text), the cause and the last `keep` page messages. */
+export function stallError({ stage, frame, frames, cause, tail, keep = TAIL_LINES }) {
+  const said = tail.slice(-keep).join(' | ') || 'none';
   return new Error(`render stalled in the ${stage} stage at frame ${frame + 1} of ${frames}: ${cause}; last page messages: ${said}`);
 }
 
 /**
  * @param {{ frames: number, stallMs?: number, tail?: () => string[], now?: () => number,
  *   timers?: { setTimeout: Function, clearTimeout: Function } }} opts `tail` gives the page and console errors so far
- *   (session.errors); `now` is the clock in milliseconds; `timers` are the stall timers' source (tests inject their own).
+ *   (session.errors) and `tailLines` how many of them the error keeps (TAIL_LINES unless raised); `now` is the clock in milliseconds; `timers` are the stall timers' source (tests inject their own).
  *   The handle `timers.setTimeout` returns must have an `unref()` method (Node's does; a browser's number does not).
  * @returns {{ time<T>(stage: string, frame: number, fn: (control: { beat: () => void, signal: AbortSignal }) => Promise<T>): Promise<T>,
  *   totals(): Record<string, number> }}
  *   On the parallel path `totals()` sums the stage times of every page, so it can exceed the wall time.
  */
-export function createStageClock({ frames, stallMs = STAGE_STALL_MS, tail = () => [], now = () => performance.now(), timers = { setTimeout, clearTimeout } }) {
+export function createStageClock({ frames, stallMs = STAGE_STALL_MS, tail = () => [], tailLines = TAIL_LINES, now = () => performance.now(), timers = { setTimeout, clearTimeout } }) {
   const spent = Object.fromEntries(STAGES.map((stage) => [stage, 0]));
-  const stall = (stage, frame, cause) => stallError({ stage, frame, frames, cause, tail: tail() });
+  const stall = (stage, frame, cause) => stallError({ stage, frame, frames, cause, tail: tail(), keep: tailLines });
   return {
     async time(stage, frame, fn) {
       if (!STAGES.includes(stage)) throw new Error(`stage must be one of ${STAGES.join(', ')}`);
