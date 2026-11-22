@@ -2,8 +2,10 @@
 // outline of a film, and the shape of a finding. Pure: it builds strings and objects.
 //
 // The report has the same keys on every path, so a reader never has to guess which exist:
-//   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings,
-//   provenance
+//   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, timing,
+//   findings, provenance
+// `timing` is { drawMs, captureMs, encodeMs }, the milliseconds the render spent in each stage of a frame (summed across
+// pages with --workers, so it can exceed `seconds`), null until a render ran.
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
 // ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, a voice that cannot be made, an interrupt).
 // `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
@@ -31,6 +33,7 @@ const secondsText = (n) => n.toFixed(SECOND_DECIMALS);
 
 // A hint for a message that carries none of its own.
 const HINTS = Object.freeze([
+  [/^render stalled in the /, 'the browser or ffmpeg stopped answering at that stage; run again, and with --workers 1 if it keeps happening'], // first: its page messages may match a later pattern
   [/^cannot read /, 'give the path of an existing film .json file; a relative path is read from the current directory'],
   [/^.* is not a regular file/, 'give the path of a film .json file, not a folder or a device'],
   [/^ffmpeg failed/, 'ffmpeg refused the frames; the lines above are its own words. Retry with --exact, or check the disk space'],
@@ -100,6 +103,9 @@ function postText({ post, cuts }) {
   return `${post}, shader cuts: ${cuts.ran.length}`;
 }
 
+// The timing part of the frames line: where the render's time went, in ms; nothing when no render ran.
+const timingText = (timing) => (timing ? `, draw ${timing.drawMs} capture ${timing.captureMs} encode ${timing.encodeMs} ms` : '');
+
 /** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look,
  *  `kinds` only for a film that uses a parked kind, `cuts` only for a film with shader cuts). */
 export function reportOf(state) {
@@ -120,6 +126,7 @@ export function reportOf(state) {
     msPerFrame: state.msPerFrame,
     bytes: state.bytes,
     mbps: state.mbps,
+    timing: state.timing ?? null,
     findings: state.findings,
     provenance: state.provenance ?? null,
     ...(state.poster ? { poster: state.poster } : {}), // --poster: { file, frame, seconds }
@@ -135,7 +142,7 @@ export function reportOf(state) {
 /** The report of a run that never began (a usage error): empty, with the error. */
 export const errorReport = (error) => reportOf({
   validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
-  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null,
+  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, timing: null,
 });
 
 const plainNarration = (shot) => (typeof shot.say === 'string' ? parseSay(shot.say).plain : '');
@@ -192,7 +199,7 @@ export function formatText(report, { sheetsDir }) {
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
-  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
+  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame${timingText(report.timing)}); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);
   const sound = soundLine(report.audio);
   if (sound !== null) lines.push(sound);

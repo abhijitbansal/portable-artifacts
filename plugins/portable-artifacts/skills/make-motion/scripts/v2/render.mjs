@@ -19,6 +19,7 @@ export { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/modes/index.mjs'; // registers the modes whose loudness a voiced film is mastered to
 import { loadFilm } from './pipeline.mjs';
+import { createStageClock } from './capture-clock.mjs';
 import { openSession } from './session.mjs';
 import { withStamp } from './stamp.mjs';
 import { captureParallel, workerRanges } from './workers.mjs';
@@ -131,11 +132,18 @@ export function sweepPartials(dir, { olderThanMs = PARTIAL_MAX_AGE_MS, now = Dat
 // Which of frames from..to equal their predecessor under the capture key.
 const heldChunk = (page, from, to) => page.evaluate(([a, b]) => window.__heldFlags(a, b, true), [from, to]);
 
-async function capture(page, exact) {
-  return page.screenshot(exact ? { type: 'png' } : { type: 'jpeg', quality: JPEG_QUALITY });
+const capture = (page, exact) => page.screenshot(exact ? { type: 'png' } : { type: 'jpeg', quality: JPEG_QUALITY });
+
+/**
+ * Frame `i` on `page`: the seek that draws it (timed as `draw`), then its screenshot (timed as `capture`). Both capture
+ * paths, one page and --workers, take their pictures through this one function, so both are timed and both stall by name.
+ */
+export async function shootFrame(page, i, { exact, clock }) {
+  await clock.time('draw', i, () => page.evaluate((k) => window.__seek(k), i));
+  return clock.time('capture', i, () => capture(page, exact));
 }
 
-async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
+async function encodeFrames({ session, encoder, exact, signal, onProgress, clock }) {
   const { page, timeline } = session;
   const frames = timeline.frameCount;
   let previous = null;
@@ -146,11 +154,10 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
     for (let k = 0; k < held.length; k++) {
       signal?.throwIfAborted();
       if (previous === null || !held[k]) {
-        await page.evaluate((i) => window.__seek(i), from + k);
-        previous = await capture(page, exact);
+        previous = await shootFrame(page, from + k, { exact, clock });
         captured++;
       }
-      await encoder.write(previous);
+      await clock.time('encode', from + k, () => encoder.write(previous));
       onProgress?.({ frame: from + k + 1, frames, captured });
     }
   }
@@ -158,13 +165,17 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
 }
 
 // --workers: the first page plus one opened through openPage per further range (workers.mjs), closed after.
-async function encodeWithWorkers({ session, encoder, exact, signal, onProgress, workers, openPage }) {
+async function encodeWithWorkers({ session, encoder, exact, signal, onProgress, workers, openPage, clock }) {
   const frames = session.timeline.frameCount;
   const extra = [];
   try {
     for (let k = 1; k < workerRanges(frames, workers).length; k++) extra.push(await openPage());
     const pages = [session.page, ...extra.map((s) => s.page)];
-    return await captureParallel({ pages, frames, capture: (page) => capture(page, exact), write: (buffer) => encoder.write(buffer), onProgress, signal });
+    return await captureParallel({
+      pages, frames, onProgress, signal,
+      shoot: (page, i) => shootFrame(page, i, { exact, clock }),
+      write: (buffer, frame) => clock.time('encode', frame, () => encoder.write(buffer)),
+    });
   } finally {
     await Promise.all(extra.map((s) => s.close()));
   }
@@ -195,7 +206,10 @@ const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, mu
  *   stamp: the provenance tags as ffmpeg arguments (stamp.mjs stampArgs), written by the last step that writes the
  *   output: the encode of a film with neither a voice nor sound, else the mux.
  * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
- *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null, cues: number, music: object | null } | null }>}
+ *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null, cues: number, music: object | null } | null,
+ *   timing: { drawMs: number, captureMs: number, encodeMs: number } }>}
+ *   timing: whole milliseconds spent in each stage (capture-clock.mjs); with --workers it is summed across pages, so it can
+ *   exceed `seconds`. A stage that does not answer in 120 s, or a browser TimeoutError, rejects with an error that names it.
  *   audio: the sound as measured in the finished file (lufs null, with a note, when it is too short to measure), with the
  *   cue count and the music summary of the plan; null with neither a voice nor sound (and then the video is exactly what
  *   it was: no audio step runs). A level more than 1 LU off the mode's target, or a true peak over its ceiling, fails
@@ -247,8 +261,9 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     const judgement = { noVoice: !narrated, heldFrom: encoded?.heldFrom ?? null };
     if (encoded !== null) steps.judgeLevel(encoded.level, loudness, subject, judgement);
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact, stamp: steps === null ? stamp : [] })], signal);
-    const captured = workers > 1 && openPage ? await encodeWithWorkers({ session: open, encoder, exact, signal, onProgress, workers, openPage }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress });
-    await encoder.finish();
+    const clock = createStageClock({ frames: open.timeline.frameCount, tail: () => open.errors ?? [] });
+    const captured = workers > 1 && openPage ? await encodeWithWorkers({ session: open, encoder, exact, signal, onProgress, workers, openPage, clock }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress, clock });
+    await clock.time('encode', open.timeline.frameCount - 1, () => encoder.finish());
     encoder = null;
     const audio = encoded === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run: stampedRunner(run, muxed, stamp), video: partial, audio: encoded.file, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
     renameSync(audio === null ? partial : muxed, out);
@@ -256,7 +271,7 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     const frames = open.timeline.frameCount;
     const bytes = statSync(out).size;
     const mbps = (bytes * BITS_PER_BYTE) / (frames / open.timeline.fps) / MEGA;
-    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio, workers: workers > 1 && openPage ? Math.min(workers, frames) : 1 };
+    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio, workers: workers > 1 && openPage ? Math.min(workers, frames) : 1, timing: clock.totals() };
   } finally {
     if (encoder) await encoder.stop();
     rmSync(partial, { force: true });

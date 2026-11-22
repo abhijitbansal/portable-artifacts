@@ -92,7 +92,7 @@ test('captureParallel: each range takes its own first frame even when it is held
   };
   const pages = [fakePage(), fakePage(), fakePage(), fakePage()];
   const written = [];
-  const captured = await captureParallel({ pages, frames, capture: async (page) => Buffer.from(String(page.state.frame)), write: async (b) => { written.push(b === null ? null : b.toString()); } });
+  const captured = await captureParallel({ pages, frames, shoot: async (page, i) => { await page.evaluate((k) => window.__seek(k), i); return Buffer.from(String(page.state.frame)); }, write: async (b) => { written.push(b === null ? null : b.toString()); } });
   assert.deepEqual(written, ['0', '0', '0', '3', '3', '3', '6', '6', '8', '8']);
   assert.equal(captured, 4, 'one picture per range');
 });

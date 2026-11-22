@@ -62,7 +62,7 @@ const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_
 
 const newState = () => ({
   validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
-  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, outline: null, sheetsDir: null, provenance: null,
+  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, timing: null, outline: null, sheetsDir: null, provenance: null,
 });
 
 // Runs fn and records its stage in state.stages whether it returns or throws; each stage is also said to `log`.
@@ -131,7 +131,7 @@ async function reviewAndRender({ options, loaded, made, sound, state, io: { sign
         return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined, stamp: tagArgs(tags),
           workers: options.workers ?? 1, openPage: () => openSession(loaded, { browser: session.page.context().browser() }) });
       });
-      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, audio: rendered.audio, provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
+      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, timing: rendered.timing, audio: rendered.audio, provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
     }
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];

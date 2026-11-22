@@ -343,6 +343,8 @@ test('a full run renders an H.264 yuv420p MP4 of the film, one frame per film fr
   assert.ok(Math.abs(video.duration - report.frames / FPS) < 0.05, `duration ${video.duration}`);
   assert.deepEqual([video.width, video.height], [1920, 1080]);
   assert.deepEqual(readdirSync(path.dirname(report.output)).filter((f) => f !== 'film.sheets' && f !== 'film.mp4'), []);
+  assert.ok(report.timing.drawMs > 0 && report.timing.captureMs > 0 && report.timing.encodeMs >= 0, JSON.stringify(report.timing));
+  assert.ok(report.timing.drawMs + report.timing.captureMs <= report.seconds * 1000, 'one page: the stage times cannot exceed the render');
 });
 
 test('a held shot is not re-captured every frame: captured is one per grain pattern, and the MP4 still has every frame', async (t) => {
@@ -439,7 +441,7 @@ test('SIGINT during a render leaves no temp files and no browser behind', async 
 
 // ---- the --json contract on every path ----
 
-const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice', 'provenance'];
+const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'timing', 'voice', 'provenance'];
 const shapeOf = (run) => {
   assert.equal(run.stdout.trim().split('\n').length, 1, `one line on stdout, got ${JSON.stringify(run.stdout)}`);
   const report = parse(run);
