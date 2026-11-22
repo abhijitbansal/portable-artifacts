@@ -94,3 +94,13 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
+
+## Ideas credited, no code ported
+
+The following are ideas, rewritten here in our own words and code. No file, table or paragraph from these projects is in this repository.
+
+- **HyperFrames** (HeyGen, Apache-2.0): planning a film around one thing and three storylines; review notes ranked P0 to P2 with no score; the pictures-alone question; a render that stalls names the capture stage it stalled in and shows the console tail (W1).
+- **Rune** (MIT): converting the picture to BT.709 and tagging the stream in the encode (W1).
+- **motionmaxxing** (github.com/Tejashmakwana/motionmaxxing, Apache-2.0): a tell stated with the case where it is right; a cue pass over the script; a standing list of what a review cannot see; decoding the finished file to check its picture (W1).
+- **video-shotcraft** (github.com/Vincentwei1021/video-shotcraft, Apache-2.0): "cannot verify" in place of a guessed baseline; made-up data before a page is captured (W1).
+- **Reelfactory** (reelfactory.dev; a closed product, ideas from its public guides only): the shape of a short's opening and the honest-hook checks (W1).
