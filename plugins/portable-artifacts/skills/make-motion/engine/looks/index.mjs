@@ -276,7 +276,7 @@ function coverEdgeErrors(name, look) {
 const isFraction = (v) => typeof v === 'number' && v >= 0 && v <= 1;
 const CUT_MOTION = Object.freeze({
   punchZoom: [(v) => typeof v === 'number' && v > 1 && v <= 2, 'must be a number above 1 and at most 2'],
-  punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back)'],
+  punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back; spring(<stiffness>,<damping>); cubic-bezier(<x1>,<y1>,<x2>,<y2>); steps(<n>) or steps(<n>,start|end))'],
   smearShutter: [(v) => typeof v === 'number' && v > 0 && v <= 1, 'must be a number above 0 and at most 1'],
   irisAt: [(v) => Array.isArray(v) && v.length === 2 && v.every(isFraction), 'must be two numbers from 0 to 1 (x and y as fractions of the canvas)'],
 });
