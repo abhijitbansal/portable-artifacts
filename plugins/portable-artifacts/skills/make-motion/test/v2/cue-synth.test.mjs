@@ -31,7 +31,7 @@ const OTHER_HASHES = [
 ];
 
 test('the module exports the synthesis and nothing of version 1: no sample loader, no spec-level function', () => {
-  assert.deepEqual(Object.keys(synth).sort(), ['CUE_LAYERS', 'CUE_VARIANTS', 'FM_CLICK_RATIO', 'MAX_HZ', 'SAMPLE_RATE', 'VARIANT_CENTS', 'channelsWav', 'cueWav', 'fmBand', 'layerCue', 'levelled', 'noteHz', 'pinkNoise', 'reverbTail', 'variantRatio', 'widen']);
+  assert.deepEqual(Object.keys(synth).sort(), ['CUE_LAYERS', 'CUE_VARIANTS', 'FM_CLICK_RATIO', 'MAX_HZ', 'SAMPLE_RATE', 'VARIANT_CENTS', 'channelsWav', 'cueWav', 'fmBand', 'layerCue', 'levelled', 'noteHz', 'pinkNoise', 'reverbTail', 'typingLayers', 'variantRatio', 'widen']);
 });
 
 test('every cue of CUE_LAYERS makes the bytes version 1 made, and the table names exactly the nine cues', () => {
