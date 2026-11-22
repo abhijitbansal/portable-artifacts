@@ -1,7 +1,7 @@
 // The board's strips (`board-<n>.jpg`, written by `make.mjs --sheets-only --estimated`) as the storyboard page takes them:
 // read from the board folder, refused when make-explainer would refuse them, and copied beside the plan. Strip n holds the
 // shots (n - 1) * BOARD_PER_STRIP onward, so a strip is tied to its shots by the number in its name, never by its place in a list.
-import { copyFileSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { copyFileSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
 import { BOARD_PER_STRIP } from './plan.mjs';
@@ -50,13 +50,21 @@ export function checkStrips(folder, shotCount) {
   return wanted;
 }
 
+// Whether two paths are one folder, by its identity (device and inode) rather than its spelling: a link, a case alias on a
+// case-insensitive filesystem or a different route to it all match, which a path comparison (even realpath) misses.
+function sameFolder(a, b) {
+  const first = statSync(a);
+  const second = statSync(b);
+  return first.dev === second.dev && first.ino === second.ino;
+}
+
 // The destination folder, ready to take the strips: made if it is not there, refused when it is a link, a file, or the board
 // folder itself (copying a strip onto itself would delete its own source), and emptied of its own board-<n>.jpg files.
 function prepareDest(folder, dest, stillsName) {
   const existing = lstatOrNull(dest);
   if (existing?.isSymbolicLink() === true) throw new UsageError(`--stills: ${stillsName} beside the plan (${dest}) is a symbolic link; remove it or choose another --out`);
   if (existing !== null && !existing.isDirectory()) throw new UsageError(`--stills: ${dest} is in the way: it is not a folder; remove it or choose another --out`);
-  if (existing !== null && realpathSync(dest) === realpathSync(folder)) {
+  if (existing !== null && sameFolder(dest, folder)) {
     throw new UsageError(`--stills: ${folder} is the folder the pictures are copied into (${stillsName} beside the plan); keep the board elsewhere, or choose another --out`);
   }
   mkdirSync(dest, { recursive: true });

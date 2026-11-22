@@ -6,7 +6,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE } from './helpers/session.mjs';
@@ -319,6 +319,24 @@ test('--stills naming the destination through a link is refused too, and the str
   assert.equal(main([writeFilm('long-via-link', LONG), '--out', path.join(dir, 'via-link', 'plan.json'), '--stills', path.join(dir, 'via-link', 'alias')], io), 2);
   assert.match(lines.join(''), /is the folder the pictures are copied into/);
   assert.ok(existsSync(path.join(real, 'board-1.jpg')));
+});
+
+test('--stills naming the copy folder with different letter case (a case-insensitive filesystem) is exit 2 and the strip stays', (t) => {
+  const real = boardFolder('case-alias/plan.stills', { 'board-1.jpg': JPEG });
+  const alias = path.join(dir, 'case-alias', 'PLAN.STILLS');
+  const sameFolder = (() => {
+    try {
+      return statSync(alias).ino === statSync(real).ino;
+    } catch {
+      return false;
+    }
+  })();
+  if (!sameFolder) return t.skip('this filesystem is case-sensitive: PLAN.STILLS is not plan.stills');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-case-alias', LONG), '--out', path.join(dir, 'case-alias', 'plan.json'), '--stills', alias], io), 2, lines.join(''));
+  assert.match(lines.join(''), /is the folder the pictures are copied into/);
+  assert.deepEqual(readFileSync(path.join(real, 'board-1.jpg')), JPEG, 'the source strip is not deleted');
+  return undefined;
 });
 
 test('a regular file named <stem>.stills beside the plan is exit 2 naming it, not a stack trace', () => {
