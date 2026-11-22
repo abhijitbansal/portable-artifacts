@@ -25,7 +25,7 @@ import { UsageError } from '../../shared/cli.mjs';
 
 const FPS = 30;
 // The report's keys on every path (make.test.mjs checks the same list through the CLI).
-const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice', 'provenance'];
+const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'timing', 'voice', 'provenance'];
 
 const FILMS = {
   gate: { version: 2, mode: 'pro', shots: [
