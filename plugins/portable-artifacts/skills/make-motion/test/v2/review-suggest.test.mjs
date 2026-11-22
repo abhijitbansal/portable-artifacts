@@ -9,7 +9,7 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { contrastRatio, nearestPassing } from '../../engine/review/contrast.mjs';
 import { RULES, SUGGEST_KEYS } from '../../engine/review/rules.mjs';
-import { safeRectFor } from '../../scripts/v2/review.mjs';
+import { safeRectFor, dedupeFindings } from '../../scripts/v2/review.mjs';
 import { reviewFinding } from '../../scripts/v2/report.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
@@ -43,6 +43,57 @@ test('nearestPassing falls back to black or white when no palette colour passes'
 
 test('nearestPassing skips a palette value that is not #rrggbb', () => {
   assert.equal(nearestPassing('#ff1010', '#ffffff', { a: 'red', b: '#000000' }), '#000000');
+});
+
+test('nearestPassing measures nearness in OKLab, not in sRGB', () => {
+  // from #c83c3c: #965a5a is nearer in sRGB (65.6 against 87.2), #dc0000 is nearer in OKLab (0.056 against 0.102)
+  const palette = { a: '#965a5a', b: '#dc0000' };
+  assert.ok(Object.values(palette).every((c) => contrastRatio(c, '#ffffff') >= 3), 'both pass');
+  assert.equal(nearestPassing('#c83c3c', '#ffffff', palette), '#dc0000');
+});
+
+test('nearestPassing breaks a tie by palette order, and returns the colour in lower case', () => {
+  // a search over the grey-fill grid found no two distinct #rrggbb colours at the exact same OKLab distance, so the tie is
+  // one colour written twice: either order gives it, and a palette written in upper case still gives a lower-case answer
+  assert.equal(nearestPassing('#ffe14a', '#ffffff', { a: '#B8860B', b: '#b8860b' }), '#b8860b');
+  assert.equal(nearestPassing('#ffe14a', '#ffffff', { a: '#b8860b', b: '#B8860B' }), '#b8860b');
+});
+
+test('nearestPassing takes the nearest colour that passes on every ground', () => {
+  // #444444 is nearest to #555555 and passes on white, but not on #202020; #808080 passes on both
+  const palette = { a: '#444444', b: '#808080' };
+  assert.equal(nearestPassing('#555555', '#ffffff', palette), '#444444');
+  assert.equal(nearestPassing('#555555', ['#ffffff', '#202020'], palette), '#808080');
+});
+
+test('nearestPassing falls back over every ground when none passes them all', () => {
+  // black has 1.6:1 on #303030 as its worst, white has 1.0:1 on white as its worst
+  assert.equal(nearestPassing('#777777', ['#ffffff', '#303030'], { a: '#fefefe' }), '#000000');
+  assert.equal(nearestPassing('#777777', ['#000000', '#cfcfcf'], { a: '#fefefe' }), '#ffffff');
+});
+
+test('a contrast finding over two grounds carries a colour that passes on both', () => {
+  // a light bar under the first word of a line over a mid-grey field: the colour must pass on the bar and on the field
+  const word = (index, x, width) => ({ text: 'word', index, x, width });
+  const width = 192, gap = 40, height = 110;
+  const line = { x: 0, y: 86, width: width * 2 + gap, words: [word(0, 0, width), word(1, width + gap, width)] };
+  const tree = [field('#808080'), { ...at([150, 380, width + 50, height + 40]), type: 'path', id: 'bar', depth: 1, props: { fill: '#f0f0f0' } }, {
+    ...at([200, 400, width * 2 + gap, height]), type: 'text', id: 't', props: { fill: '#e8e8e8' },
+    words: [{ opacity: 1, x: 0, y: 0, scale: 1 }, { opacity: 1, x: 0, y: 0, scale: 1 }],
+    layout: { size: 96, width: width * 2 + gap, height, overflow: false, lines: [line] },
+  }];
+  const look = { ...registries.looks.get('desk'), palette: { a: '#8a8a8a', b: '#303030' } };
+  const [f] = ruled(auditFrame(tree, ctxWith({ look })), 'contrast');
+  assert.ok(f, 'the light words on the light bar fail');
+  assert.equal(f.suggest.color, '#303030'); // #8a8a8a is nearer, but is 1.1:1 on the field
+  assert.ok(['#f0f0f0', '#808080'].every((ground) => contrastRatio(f.suggest.color, ground) >= 3));
+});
+
+test('a suggest survives the film review dedupe and the report mapping', () => {
+  const finding = { kind: 'mechanical', path: 'shots[0]', message: 'm', rule: 'contrast', node: 't', suggest: { color: '#b8860b' } };
+  const [deduped] = dedupeFindings([{ shot: 'hero', t: 1, finding }]);
+  assert.deepEqual(deduped.suggest, { color: '#b8860b' });
+  assert.deepEqual(reviewFinding(deduped).suggest, { color: '#b8860b' });
 });
 
 test('a contrast finding carries the colour, and the colour passes', () => {

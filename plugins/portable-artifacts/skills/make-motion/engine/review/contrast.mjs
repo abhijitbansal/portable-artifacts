@@ -196,13 +196,17 @@ function wordsUnder(node, box) {
 }
 
 /**
- * The #rrggbb colour that fixes a failing text colour: of the palette's colours whose contrast against `ground` is at
- * least `min`, the nearest to `fill` by OKLab distance; when none passes, black or white, whichever has the higher ratio.
- * @param {string} fill @param {string} ground @param {Record<string, string>} palette @param {number} [min]
+ * The #rrggbb colour that fixes a failing text colour: of the palette's colours whose contrast against every one of
+ * `grounds` (the colours the text sits on; one colour is allowed) is at least `min`, the nearest to `fill` by OKLab
+ * distance, the first in palette order on a tie; when none passes them all, black or white, whichever has the higher
+ * lowest ratio over the grounds (black on a tie).
+ * @param {string} fill @param {string | string[]} grounds @param {Record<string, string>} palette @param {number} [min]
  */
-export function nearestPassing(fill, ground, palette, min = MIN_CONTRAST) {
-  const passing = Object.values(palette ?? {}).filter((c) => HEX_COLOUR.test(c) && contrastRatio(c, ground) >= min).map((c) => c.toLowerCase());
-  if (passing.length === 0) return contrastRatio(WHITE, ground) > contrastRatio(BLACK, ground) ? WHITE : BLACK;
+export function nearestPassing(fill, grounds, palette, min = MIN_CONTRAST) {
+  const every = [grounds].flat().filter((g) => contrastRatio(g, WHITE) !== null);
+  const lowest = (c) => Math.min(...every.map((g) => contrastRatio(c, g)));
+  const passing = Object.values(palette ?? {}).filter((c) => HEX_COLOUR.test(c) && lowest(c) >= min).map((c) => c.toLowerCase());
+  if (passing.length === 0) return lowest(WHITE) > lowest(BLACK) ? WHITE : BLACK;
   const from = toOklab(fill);
   const distance = (c) => Math.hypot(...toOklab(c).map((v, i) => v - from[i]));
   return passing.reduce((best, c) => (distance(c) < distance(best) ? c : best));
@@ -221,15 +225,16 @@ export function contrastFindings(texts, sampled, ctx, finding) {
     // not judged against the ground under it; the words it does not reach keep that ground
     const reachedBy = grounds.map(({ box }) => (box === null ? null : wordsUnder(t.node, box)));
     const covered = new Set(reachedBy.flatMap((r) => r ?? []));
-    const worst = grounds.flatMap(({ colour, box }, i) => {
-      const ground = withGlyphGlow(t.node, colour);
+    const groundColours = grounds.map(({ colour }) => withGlyphGlow(t.node, colour));
+    const worst = grounds.flatMap(({ box }, i) => {
+      const ground = groundColours[i];
       const fills = box === null ? (covered.size > 0 ? wordColours(t.node, wordIndices(t.node).filter((w) => !covered.has(w))) : all) : reachedBy[i] === null ? all : wordColours(t.node, reachedBy[i]);
       return fills.map((fill) => ({ fill, ground, ratio: contrastRatio(fill, ground) }));
     }).filter((c) => c.ratio !== null)
       .reduce((low, c) => (low === null || c.ratio < low.ratio ? c : low), null);
     if (worst === null || worst.ratio >= MIN_CONTRAST) return [];
     const ratio = worst.ratio.toFixed(RATIO_DECIMALS);
-    const color = nearestPassing(worst.fill, worst.ground, ctx.look?.palette);
+    const color = nearestPassing(worst.fill, groundColours, ctx.look?.palette); // over every ground, not the worst alone
     return [finding('mechanical', 'contrast', t.node.id, `text "${t.node.id}" is ${worst.fill} on ${worst.ground}, a contrast of ${ratio}:1; it needs at least ${MIN_CONTRAST}:1, so change its colour (the film's accent, or the look) or what lies under it; ${color} passes`, t.role, { color })];
   });
 }
