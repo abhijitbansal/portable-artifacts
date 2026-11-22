@@ -120,10 +120,11 @@ function lineInkOf(ctx) {
 // stand-in of a shader cut the post pass cannot run.
 function cutRecipe(cut, canvas, look) {
   const entry = registries.cuts.get(cut.name);
-  if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas, look });
+  const at = cut.at ?? null; // the canvas point the cut opens from (frameAt's cut.at), a stand-in included
+  if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas, look, at });
   if (entry.family === 'shader') {
     const standIn = standInOf(entry, cut.direction);
-    return standIn.entry.layers({ p: cut.p, direction: standIn.direction, canvas, look });
+    return standIn.entry.layers({ p: cut.p, direction: standIn.direction, canvas, look, at });
   }
   throw new Error(`cut "${cut.name}": the page cannot compose a ${entry.family} cut`);
 }

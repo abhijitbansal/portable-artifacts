@@ -49,11 +49,12 @@ const moveLooks = (name) => Object.fromEntries(registries.looks.names().map((loo
 
 // A cut's entry: its family, its directions (the first the default, or null), its default length, whether it takes
 // `smear`, one valid `cut` value, the listed looks whose palette holds it (every look may use every cut), and whether it
-// shows the outgoing shot still moving (`live`: a layer or shader cut; a node cut holds its last frame).
+// shows the outgoing shot still moving (`live`: a layer or shader cut; a node cut holds its last frame), and whether it can
+// open from a target of the shot before (`at`: a shot's own cut may carry "at").
 const cutPalettes = (name) => registries.looks.names().filter((look) => registries.looks.get(look).cutPalette?.includes(name));
 const cutEntry = (entry, def, name) => ({
   ...entry, family: def.family, directions: def.directions, dur: def.dur, smear: def.smearable === true, example: def.example, palettes: cutPalettes(name),
-  outgoing: def.family === 'node' ? 'frozen' : 'live',
+  outgoing: def.family === 'node' ? 'frozen' : 'live', at: def.origin === true,
 });
 
 function entryOf(listName, name) {
@@ -105,7 +106,7 @@ function cutText(e) {
   const listed = `${first} (default)${rest.length > 0 ? `, ${tail}` : ''}`;
   const directions = first === undefined ? 'no direction' : (takesEdges(e.directions) ? `moves ${listed} (${DIRECTION_MEANING})` : listed);
   const palettes = e.palettes.length > 0 ? `; in the palette of ${e.palettes.join(', ')}` : '';
-  return `${e.family}, ${directions}; ${e.dur === 0 ? 'no window' : `${e.dur} s`}; ${e.smear ? 'takes smear' : 'no smear'}${palettes}; outgoing ${e.outgoing}`;
+  return `${e.family}, ${directions}; ${e.dur === 0 ? 'no window' : `${e.dur} s`}; ${e.smear ? 'takes smear' : 'no smear'}${palettes}; outgoing ${e.outgoing}${e.at ? '; opens from a point (at)' : ''}`;
 }
 
 /** The text --list prints: one block per entry; a kind lists its fields and its example, a move its values per look, a

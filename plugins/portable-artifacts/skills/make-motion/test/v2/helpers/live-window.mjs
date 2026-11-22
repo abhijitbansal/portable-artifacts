@@ -5,7 +5,7 @@
 // both, with the outgoing shot's film second and `live` flag, so a window whose outgoing shot froze again (or was carried
 // on wrongly) changes it. One SHA-256 per window, over the digest of each of its frames. Built with the estimated timeline
 // and the stand-in text measure of helpers/kinds.mjs. This file imports nothing but node:crypto: the engine it reads is
-// passed in, so the same code runs against the working tree (the test) and the generator (.scratch/motion-steals-w2).
+// passed in, so the same code runs against the working tree (the test) and the generator (live-window-fixture.mjs).
 import { createHash } from 'node:crypto';
 
 const DEFAULT_FPS = 30; // a film that names no fps (scripts/v2/spec.mjs DEFAULT_FPS)

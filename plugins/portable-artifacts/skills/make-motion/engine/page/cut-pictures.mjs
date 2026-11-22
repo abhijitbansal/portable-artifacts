@@ -37,7 +37,8 @@ export function createCutPictures({ w, h, drawShot }) {
     return incoming;
   }
 
-  // One picture onto ctx in its pose: alpha, then the clip, then the scale about the centre and the blur.
+  // One picture onto ctx in its pose: alpha, then the clip, then the scale about the pose's origin (the centre when it has
+  // none) and the blur.
   function place(ctx, picture, pose) {
     if (pose.opacity <= 0) return;
     ctx.save();
@@ -53,9 +54,10 @@ export function createCutPictures({ w, h, drawShot }) {
       ctx.clip();
     }
     if (pose.blur > 0) ctx.filter = `blur(${pose.blur}px)`;
-    ctx.translate(w / HALF, h / HALF);
+    const [ox, oy] = pose.origin ?? [w / HALF, h / HALF];
+    ctx.translate(ox, oy);
     ctx.scale(pose.scale, pose.scale);
-    ctx.translate(-w / HALF, -h / HALF);
+    ctx.translate(-ox, -oy);
     ctx.drawImage(picture, 0, 0);
     if (pose.dim > 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0); // the clip stays; the dim covers the whole canvas inside it

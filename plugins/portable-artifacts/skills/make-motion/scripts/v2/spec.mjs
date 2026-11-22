@@ -283,15 +283,21 @@ function checkNarration(shot, base) {
   return { errors, hasLength };
 }
 
-function checkCut(shot, index, base, ctx) {
+// `outgoing`: the shot before, { id, kind, targets } (see checkShots), the cut's `at` names a target of.
+function checkCut(shot, index, base, ctx, outgoing) {
   if (shot.cut === undefined) return [];
-  return cutErrors(shot.cut, pathJoin(base, 'cut'), { look: ctx.look, first: index === 0, regs: ctx.regs });
+  return cutErrors(shot.cut, pathJoin(base, 'cut'), { look: ctx.look, first: index === 0, regs: ctx.regs, outgoing });
 }
 
-// The root `cut`: every shot after the first takes it when it names none, so it is checked as theirs is.
+// The root `cut`: every shot after the first takes it when it names none, so it is checked as theirs is. Its `at` would name
+// a target of a shot before every shot, so it is refused here and the rest of the cut is judged without it.
 function checkRootCut(spec, ctx) {
   if (spec.cut === undefined) return [];
-  return cutErrors(spec.cut, 'cut', { look: ctx.look, regs: ctx.regs });
+  const hasAt = isPlainObject(spec.cut) && spec.cut.at !== undefined;
+  const cut = hasAt ? Object.fromEntries(Object.entries(spec.cut).filter(([key]) => key !== 'at')) : spec.cut;
+  const errors = cutErrors(cut, 'cut', { look: ctx.look, regs: ctx.regs });
+  const atError = { path: 'cut.at', message: '"at" names a target of the shot before, so it goes on a shot\'s own cut, not the film\'s' };
+  return hasAt ? [...errors, atError] : errors;
 }
 
 // The shot as the timeline sees it, so anchors resolve against real word times.
@@ -503,7 +509,8 @@ function checkKindRules(shot, base, ctx, { kind, entry, shapeIsValid }) {
   }));
 }
 
-function checkShot(shot, index, ctx, seen) {
+// `carry.outgoing` is the shot before as a cut's `at` sees it; this shot leaves its own there for the next.
+function checkShot(shot, index, ctx, seen, carry) {
   const base = pathJoin('shots', index);
   const resolved = resolveKind(shot, base, ctx.regs);
   const check = resolved.kind ? shotCheckerFor(resolved.name, resolved.kind) : checkBaseShot;
@@ -513,12 +520,14 @@ function checkShot(shot, index, ctx, seen) {
   // a film with a J or L cut is drawn on its shifted timeline, so its anchors are judged there
   const entry = narration.hasLength ? (ctx.shifted?.timeline?.shots[index] ?? timelineShot(shot, ctx)) : null;
   const targets = kindTargets(resolved.kind, resolved.name, bounded, shape.length === 0);
+  const outgoing = carry.outgoing;
+  carry.outgoing = typeof shot.id === 'string' && resolved.kind ? { id: shot.id, kind: resolved.name, targets } : null;
   return [
     ...resolved.errors,
     ...shape,
     ...checkShotId(shot, base, seen),
     ...narration.errors,
-    ...checkCut(shot, index, base, ctx),
+    ...checkCut(shot, index, base, ctx, outgoing),
     ...checkOn(shot, base, ctx, { entry, targets, kindName: resolved.name, kind: resolved.kind }),
     ...checkSrcFields(shot, base, resolved.kind, ctx.specDir),
     // A voiced film's kind rules run without times here (their timing rules are skipped) and with measured ones after
@@ -531,9 +540,12 @@ function checkShot(shot, index, ctx, seen) {
 function checkShots(spec, ctx) {
   if (!Array.isArray(spec.shots)) return [];
   const seen = new Map();
-  return spec.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => (
-    isPlainObject(shot) ? checkShot(shot, index, ctx, seen) : [{ path: pathJoin('shots', index), message: 'must be object' }]
-  ));
+  const carry = { outgoing: null };
+  return spec.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => {
+    if (isPlainObject(shot)) return checkShot(shot, index, ctx, seen, carry);
+    carry.outgoing = null;
+    return [{ path: pathJoin('shots', index), message: 'must be object' }];
+  });
 }
 
 // --- narration lead and trail (J and L cuts) ---

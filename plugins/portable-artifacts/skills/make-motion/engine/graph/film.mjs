@@ -23,7 +23,7 @@ import { FIELD_ID } from '../kinds/shared.mjs';
 import { stackArea } from '../kinds/stack.mjs';
 import { withLookEmphasis } from '../kinds/emphasis-fallback.mjs';
 import { localMatrix } from '../page/bounds.mjs';
-import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
+import { camera as trackCamera, applyCamera, layeredCamera, pointThroughCamera } from './camera.mjs';
 
 const DEFAULT_MODE = 'pro';
 const DEFAULT_SEED = 1;
@@ -197,6 +197,25 @@ function carriedCamera(cam, duration, t, fps) {
   return { ...end, x: end.x + (end.x - last.x) * frames, y: end.y + (end.y - last.y) * frames };
 }
 
+// ---- where a cut opens from ----
+
+const HALF = 2;
+const centreOf = ([x, y, w, h]) => [x + w / HALF, y + h / HALF];
+
+/**
+ * A shot whose cut names `at` gets `origin`: the centre of the box `at` names in the shot before, where the camera has it as
+ * that shot ends (one fixed point for the whole window). A name the shot before has no box for throws, listing the boxes
+ * it has: a cut never opens from the middle in silence. Any other shot is returned as it is.
+ */
+function withOrigin(shot, index, shots, canvas) {
+  const at = shot.cut?.at ?? null;
+  if (at === null) return shot;
+  const prev = shots[index - 1];
+  const box = prev.boxes[at];
+  if (!box) throw new Error(`shot "${shot.id}": cut at "${at}" has no box in shot "${prev.id}" (have: ${Object.keys(prev.boxes).join(', ')})`);
+  return { ...shot, origin: pointThroughCamera(centreOf(box), prev.cam(prev.duration), canvas) };
+}
+
 // ---- shots ----
 
 // The shot's nodes: its kind's, then its captions (drawn last, pinned over everything) when the film is captioned. `cam`
@@ -235,8 +254,10 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look: filmL
   const box = kind.heroTarget === undefined ? undefined : out.boxes?.[kind.heroTarget];
   const cam = cameraOf(out.camera, canvas, `shot "${shot.id}"`);
   return {
+    id: shot.id,
     start: timing.start,
     duration: timing.duration,
+    boxes: out.boxes ?? {}, // the kind's target boxes at rest: where a cut that opens from one of them (cut.at) starts
     // a look with `hand` data draws the shot with the drawing hand (engine/hand); any other look: the nodes as they are
     nodes: handLayer(groundLayer(withCaptions(out, shot, kind, ctx, film, cam), ctx), timing, ctx),
     cam,
@@ -290,7 +311,8 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   if (!(canvas?.w > 0 && canvas?.h > 0)) throw new Error('buildFilm: canvas must be { w, h }');
   const look = resolveLook(film);
-  const shots = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }));
+  const expanded = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }));
+  const shots = expanded.map((shot, index) => withOrigin(shot, index, expanded, canvas));
 
   // One shot alone at its local time t: sampled, camera applied, the hero carrying its box. Past the shot's end (t above its
   // duration: the outgoing shot of a layer or shader cut, outgoingTime) the nodes are sampled at t, every track holding its
@@ -324,7 +346,7 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
       return {
         background: shot.background,
         sampled: sampleShot(index, local),
-        cut: { name: shot.cut.name, family: shot.cut.family, p: local / shot.cutDur, direction: shot.cut.direction },
+        cut: { name: shot.cut.name, family: shot.cut.family, p: local / shot.cutDur, direction: shot.cut.direction, ...(shot.origin ? { at: shot.origin } : {}) },
         from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration + (live ? local : 0), ...(live ? { live: true } : {}) },
       };
     }

@@ -1,6 +1,6 @@
 // The layer and shader windows of references/examples/v2/cuts-desk.json, pinned (motion-steals W2 Task 8): inside each, the
 // outgoing shot keeps moving past its end. No other golden holds a layer or shader window frame (kinds-frozen reads films
-// of node cuts; baseline-keys.json reads node cuts). The fixture is made by .scratch/motion-steals-w2/task8-live-pin-gen.mjs.
+// of node cuts; baseline-keys.json reads node cuts). The fixture is made by helpers/live-window-fixture.mjs (run it directly).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

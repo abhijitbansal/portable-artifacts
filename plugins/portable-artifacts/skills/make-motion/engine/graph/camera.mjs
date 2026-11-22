@@ -67,19 +67,34 @@ export function camera({ tracks = {}, canvas } = {}) {
 
 const clean = (n) => n + 0; // turns -0 into 0
 
-function moveNode(n, cam, centre) {
-  const k = 1 + n.depth;
+// Where a point at (x, y) of a node at `depth` stands under `cam`: the one arithmetic of moveNode.
+function moveXY(x, y, depth, cam, centre) {
+  const k = 1 + depth;
   const zoom = 1 + (cam.zoom - 1) / k;
   const angle = cam.rotate * DEGREES_TO_RADIANS;
   const cos = Math.cos(angle), sin = Math.sin(angle);
-  const dx = (n.x - centre.x) * zoom, dy = (n.y - centre.y) * zoom;
-  return Object.freeze({
-    ...n,
+  const dx = (x - centre.x) * zoom, dy = (y - centre.y) * zoom;
+  return {
     x: clean(centre.x + dx * cos - dy * sin - cam.x / k),
     y: clean(centre.y + dx * sin + dy * cos - cam.y / k),
-    scale: n.scale * zoom,
-    rotate: n.rotate + cam.rotate,
-  });
+    zoom,
+  };
+}
+
+function moveNode(n, cam, centre) {
+  const moved = moveXY(n.x, n.y, n.depth, cam, centre);
+  return Object.freeze({ ...n, x: moved.x, y: moved.y, scale: n.scale * moved.zoom, rotate: n.rotate + cam.rotate });
+}
+
+/**
+ * Where the point `[x, y]` of a node at `depth` stands under `cam`, by the arithmetic applyCamera moves a node by: a point of
+ * a shot's picture (a target's box centre) as the camera has it at some moment.
+ */
+export function pointThroughCamera([x, y], cam, canvas, depth = 0) {
+  checkCam(cam);
+  checkCanvas(canvas);
+  const moved = moveXY(x, y, depth, cam, { x: canvas.w / HALF, y: canvas.h / HALF });
+  return [moved.x, moved.y];
 }
 
 export function applyCamera(sampled, cam, canvas) {

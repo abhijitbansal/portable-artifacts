@@ -2,8 +2,9 @@
 // the outgoing shot (still moving, past its end; frozen at its end in a look drawn by hand) and the incoming shot live
 // (engine/graph/film.mjs frameAt gives both inside its window). Its entry's layers({ p, direction, canvas }) is a pure recipe for that composition:
 //   { under: 'from' | 'to', from: Pose, to: Pose, backdrop: 'from' | 'to' | null }
-//   Pose = { opacity, clip: { rect: [x, y, w, h] } | { circle: [cx, cy, r] } | null, scale (about the canvas centre),
-//            blur (px), dim (0..1: black laid over the picture inside its clip) }
+//   Pose = { opacity, clip: { rect: [x, y, w, h] } | { circle: [cx, cy, r] } | null, scale (about `origin`), origin:
+//            [x, y] | null (null: the canvas centre), blur (px), dim (0..1: black laid over the picture inside its clip) }
+// An iris and a zoom may be given `at`, a canvas point (a cut's origin, engine/graph/film.mjs): they open from it.
 // `under` is drawn first, `backdrop` names whose background colour is painted under both (null: none, the picture under
 // covers the frame). The recipe eases p itself; at p 0 the composition is the outgoing picture exactly and at p 1 the
 // incoming one. The page composes it in canvas 2D (engine/page/cut-pictures.mjs), so a layer cut is the same picture
@@ -20,7 +21,7 @@ const HALF = 2;
 const WIPE_EDGES = Object.freeze(['right', 'left', 'up', 'down']);
 const IRIS_WAYS = Object.freeze(['in', 'out']);
 
-const pose = (fields = {}) => Object.freeze({ opacity: 1, clip: null, scale: 1, blur: 0, dim: 0, ...fields });
+const pose = (fields = {}) => Object.freeze({ opacity: 1, clip: null, scale: 1, origin: null, blur: 0, dim: 0, ...fields });
 const UNTOUCHED = pose();
 const recipe = (under, from, to, backdrop = null) => Object.freeze({ under, from, to, backdrop });
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -61,26 +62,27 @@ const LAYERS = Object.freeze({
   // a dip: the outgoing shot fades to the incoming background over the first half, the incoming one up over the second
   fade: (e, { p }) => recipe('from', pose({ opacity: 1 - ease(LAYER_EASE)(clamp01(p * HALF)) }), pose({ opacity: ease(LAYER_EASE)(clamp01(p * HALF - 1)) }), 'to'),
   wipe: (e, { direction, canvas }) => recipe('from', UNTOUCHED, pose({ clip: { rect: wipeRect(direction, e, canvas) } })),
-  iris: (e, { p, direction, canvas, look }) => {
+  iris: (e, { p, direction, canvas, look, at }) => {
     const [fx, fy] = look?.cutMotion?.irisAt ?? IRIS_CENTRE;
-    const centre = [fx * canvas.w, fy * canvas.h], reach = cornerReach(canvas, centre);
+    const centre = at ?? [fx * canvas.w, fy * canvas.h], reach = cornerReach(canvas, centre);
     if (direction === 'in') return recipe('from', pose({ dim: IRIS_DIM * clamp01(p / DIM_BY) }), pose({ clip: { circle: [...centre, reach * e] } }));
     return recipe('to', pose({ clip: { circle: [...centre, reach * (1 - e)] } }), UNTOUCHED);
   },
-  zoom: (e, { p, direction }) => recipe('from', pose({ opacity: leaving(p) }), pose({ opacity: arriving(p), scale: lerp(ZOOM_FROM[direction], 1, e) })),
+  zoom: (e, { p, direction, at }) => recipe('from', pose({ opacity: leaving(p) }), pose({ opacity: arriving(p), scale: lerp(ZOOM_FROM[direction], 1, e), origin: at })),
   blur: (e, { p, canvas }) => recipe('from', pose({ opacity: leaving(p) }), pose({ opacity: arriving(p), blur: Math.max(0, BLUR_SHARE * Math.min(canvas.w, canvas.h) * (1 - e)) })),
 });
 
 // A layer cut's registry entry (resolve.mjs reads family, dur, directions, smearable, incomingOnly, example).
-function defineLayer(name, { directions = null, summary, example }) {
+function defineLayer(name, { directions = null, summary, example, origin = false }) {
   const build = LAYERS[name];
   return Object.freeze({
     family: 'layer', dur: LAYER_DUR, summary, example, directions, smearable: false, incomingOnly: false,
-    layers({ p, direction, canvas, look = null }) {
+    ...(origin ? { origin: true } : {}), // the cut may open from a point (`at`, resolve.mjs)
+    layers({ p, direction, canvas, look = null, at = null }) {
       if (!Number.isFinite(p)) throw new Error(`${name}.layers: p must be a finite number, got ${p}`);
       if (directions !== null && !directions.includes(direction)) throw new Error(`${name}.layers: direction must be one of ${directions.join(', ')}, got ${direction}`);
       const q = clamp01(p);
-      return build(ease(LAYER_EASE)(q), { p: q, direction, canvas, look });
+      return build(ease(LAYER_EASE)(q), { p: q, direction, canvas, look, at });
     },
   });
 }
@@ -90,7 +92,7 @@ export const LAYER_CUTS = Object.freeze({
   crossfade: defineLayer('crossfade', { example: 'crossfade', summary: 'The next shot fades in over the last one over 0.4 s.' }),
   fade: defineLayer('fade', { example: { type: 'fade', duration: 0.6 }, summary: 'The last shot fades to the next one\'s background, then the next one fades up, over 0.4 s.' }),
   wipe: defineLayer('wipe', { directions: WIPE_EDGES, example: { type: 'wipe', direction: 'up' }, summary: 'The next shot is uncovered by a straight line that moves the way the direction names: right (the default) starts at the left edge, left at the right edge, up at the bottom edge, down at the top edge, over 0.4 s.' }),
-  iris: defineLayer('iris', { directions: IRIS_WAYS, example: { type: 'iris', direction: 'out' }, summary: 'A circle opens on the next shot (in), or closes on the last one (out), over 0.4 s, about the point the look keeps clear of words (the centre unless it names one).' }),
-  zoom: defineLayer('zoom', { directions: IRIS_WAYS, example: { type: 'zoom', direction: 'out' }, summary: 'The next shot fades in from 1.2 times its size (in) or 0.8 (out) over the last one, over 0.4 s.' }),
+  iris: defineLayer('iris', { origin: true, directions: IRIS_WAYS, example: { type: 'iris', direction: 'out' }, summary: 'A circle opens on the next shot (in), or closes on the last one (out), over 0.4 s, about the point the look keeps clear of words (the centre unless it names one), or about a target of the last shot when the cut has "at".' }),
+  zoom: defineLayer('zoom', { origin: true, directions: IRIS_WAYS, example: { type: 'zoom', direction: 'out' }, summary: 'The next shot fades in from 1.2 times its size (in) or 0.8 (out) over the last one, over 0.4 s, about the centre or about a target of the last shot when the cut has "at".' }),
   blur: defineLayer('blur', { example: 'blur', summary: 'The next shot fades in from a blur over the last one over 0.4 s.' }),
 });
