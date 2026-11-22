@@ -22,7 +22,7 @@ import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
 import { openSession, pageErrorMessage, machineMessage, canvasSize } from './session.mjs';
 import { clipUses, prepareClips, clipAudioTracks } from './clips.mjs';
-import { writeSheets } from './sheets.mjs';
+import { writeBoard, writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
 import { stampTags, tagArgs } from './stamp.mjs';
@@ -145,6 +145,7 @@ async function reviewAndRender({ options, loaded, made, sound, mutedMusic = null
     const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal, slice }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);
+    if (options.estimated === true) state.board = await stage(state, log, 'board', () => writeBoard({ session, dir: sheetsDir, signal, log }));
     if (!options.noRender) {
       const tags = stampTags({ generatedBy: loaded.film.generatedBy, flags: options.provenance ?? {}, provenance: loaded.film.provenance });
       // a slice's video is <name>.<label>.mp4 beside the film's own path, which it never writes, and it is silent
@@ -556,8 +557,10 @@ async function execute(options, state, io) {
   // a film with no voice and no music.snap is drawn on exactly that timeline: a time past its end is refused now, before a clip is decoded
   if (typeof reference === 'string' && film.voice === undefined && film.music?.snap !== true) filmFrame(reference, film, loaded.timeline, typeof options.inspect === 'string' ? '--inspect' : '--poster');
   checkSlice(options, film, loaded.timeline); // --shot and --range likewise: a shot the film lacks, a reference that names nothing
-  // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
-  const voiced = film.voice !== undefined && options.outline !== true;
+  // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so. So does --estimated
+  // (with --sheets-only): its sheets and board are drawn on the estimate, whose times the render later measures.
+  const voiced = film.voice !== undefined && options.outline !== true && options.estimated !== true;
+  if (film.voice !== undefined && options.estimated === true) io.log('make: --estimated: no voice was made; the sheets and the board use estimated timing');
   const made = !voiced ? null
     : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
   if (voiced && made === null) return;

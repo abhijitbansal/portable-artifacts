@@ -95,3 +95,17 @@ node <skill-dir>/scripts/locate.mjs shot.png --cols 5-6 --rows 2-3 --cells 15-30
 Name every strip and cell the target touches. The box is that rectangle grown by a quarter cell, so it holds the target and each edge lies within 1.25 cells of it (a cell of the second grid, plus the pad). A cell label is the first thing in its cell, at the top left. The pictures are at most 1600 px a side.
 
 A PNG the reader takes (8-bit RGB or RGBA) is read directly. Any other format, or a PNG of another kind, is decoded by ffmpeg, one frame; with no ffmpeg that is exit 2 saying so, and a PNG avoids it. A URL, a folder, an `--out` that is the picture, a picture over 2 GiB (more than the reader takes), a strip outside 1 to 9 and a cell outside 1 to 36 are each exit 2 naming the accepted values or the limit.
+
+## A board before any voice
+
+`--estimated` goes with `--sheets-only` and shows the film's shots drawn, with no voice made:
+
+```
+node <skill-dir>/scripts/make.mjs film.json --sheets-only --estimated --out <name>.mp4
+```
+
+- **What it does.** A voiced film keeps its voice unmade: the times are the word-count estimate, as `--outline` has them, so the report says `timed: "estimated"` and `voice: null`, and a recording of your own is neither read nor probed. The run writes the usual sheets, then the board: one tile per shot at its late frame, each stamped as a sheet tile is, six shots to a strip and three tiles across, as JPEG strips at most 1920 px wide, in `<name>.sheets/board/board-1.jpg` on. The report's `board` lists the strips in order. Nothing is rendered.
+- **What it needs.** A browser, as any sheet does, and no voice package or model. A silent film works as it does without the flag.
+- **What it refuses.** `--estimated` without `--sheets-only` is exit 2 (`--estimated needs --sheets-only`), and so is the flag beside `--shot`, `--range`, `--outline`, `--batch` or `--subtitles`: captions timed from an estimate would sit where a real render's captions go. `--poster`, `--inspect`, `--phonemes` and `--preview` refuse `--sheets-only` themselves.
+- **Strips of the last run.** A run without `--estimated` removes the old `board-<n>.jpg` strips (regular files of that name in that `board/` folder only; a slice run leaves them, as it leaves the other sheets), so a storyboard built after a full run of the same film, written to the same `<name>.sheets`, does not carry old pictures. The strips carry no film identity, so some cases leave stale ones: editing the film and running `storyboard.mjs --stills` before any new make run, a `--preview` or `--outline` run, and a run with a different `--out` (it clears the strips of that other folder). Run `--sheets-only --estimated` again after every edit, before `--stills`. A `board` that is a file or a link, or a `board-<n>.jpg` that is not a plain file, is left alone and the run's log says so.
+- **The page.** `storyboard.mjs film.json --out plan.json --stills <name>.sheets/board` copies the strips beside the plan; see `story.md`.

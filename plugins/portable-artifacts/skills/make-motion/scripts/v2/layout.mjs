@@ -11,17 +11,17 @@ export const shotColumns = (canvas) => (canvas.w >= canvas.h ? LANDSCAPE_COLUMNS
 /**
  * @param {{ tiles: { frame: number, label: string, width?: number }[], canvas: { w: number, h: number }, columns: number }} opts
  *   a tile with a `width` (the phone tile) is that wide; the others share the sheet's width across `columns`.
- *   No tile is drawn larger than the frame itself.
+ *   No tile is drawn larger than the frame itself. `maxWidth` (default MAX_SHEET_WIDTH) is the widest the sheet may be.
  * @returns {{ width: number, height: number, placements: { x: number, y: number, w: number, h: number, frame: number, label: string }[] }}
  */
-export function layoutSheet({ tiles, canvas, columns }) {
-  const main = Math.min(canvas.w, Math.floor((MAX_SHEET_WIDTH - SHEET_GAP * (columns + 1)) / columns));
+export function layoutSheet({ tiles, canvas, columns, maxWidth = MAX_SHEET_WIDTH }) {
+  const main = Math.min(canvas.w, Math.floor((maxWidth - SHEET_GAP * (columns + 1)) / columns));
   const ratio = canvas.h / canvas.w;
   let x = SHEET_GAP, y = SHEET_GAP, rowHeight = 0, right = 0;
   const placements = tiles.map((tile) => {
     const w = Math.min(canvas.w, tile.width ?? main);
     const h = Math.round(w * ratio);
-    if (x > SHEET_GAP && x + w + SHEET_GAP > MAX_SHEET_WIDTH) {
+    if (x > SHEET_GAP && x + w + SHEET_GAP > maxWidth) {
       x = SHEET_GAP;
       y += rowHeight + SHEET_GAP;
       rowHeight = 0;

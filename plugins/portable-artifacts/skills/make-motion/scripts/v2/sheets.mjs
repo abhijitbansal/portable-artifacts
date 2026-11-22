@@ -2,12 +2,12 @@
 // cut (plan.mjs says which frames). The page seeks each frame and draws the visible canvas, post pass included, onto a
 // sheet canvas with each tile stamped "<shot id> . <seconds>s" in the bundled mono face; Node lays the tiles out
 // (layout.mjs) and writes the PNG. No ffmpeg and no screenshots. writeSheets also returns the film review's findings.
-import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
-import { planSheets } from './plan.mjs';
+import { planSheets, planBoard, BOARD_COLUMNS, BOARD_JPEG_QUALITY, BOARD_STRIP_WIDTH } from './plan.mjs';
 import { sliceSheets } from './slice.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from './layout.mjs';
 import { reviewFilm } from './review.mjs';
@@ -20,7 +20,7 @@ const STAMP_MIN = 11;
 const STAMP_PAD = 0.4; // of the stamp size
 
 // Runs in the page (Playwright sends its source), so it names only page globals and its own argument.
-async function composeInPage({ width, height, placements, colours }) {
+async function composeInPage({ width, height, placements, colours, format }) {
   const sheet = document.createElement('canvas');
   sheet.width = width;
   sheet.height = height;
@@ -43,8 +43,10 @@ async function composeInPage({ width, height, placements, colours }) {
     ctx.fillStyle = colours.stampInk;
     ctx.fillText(p.label, p.x + pad, p.y + pad);
   }
-  return sheet.toDataURL('image/png').split(',')[1];
+  return sheet.toDataURL(format.mime, format.quality).split(',')[1];
 }
+
+const PNG = Object.freeze({ mime: 'image/png' });
 
 const COLOURS = Object.freeze({ sheet: SHEET_BACKGROUND, stampBackground: STAMP_BACKGROUND, stampInk: STAMP_INK, stampShare: STAMP_SHARE, stampMin: STAMP_MIN, pad: STAMP_PAD });
 
@@ -52,7 +54,7 @@ async function writeOne(session, sheet, dir, canvas, signal) {
   signal?.throwIfAborted();
   const columns = sheet.kind === 'cut' ? CUT_COLUMNS : shotColumns(canvas);
   const { width, height, placements } = layoutSheet({ tiles: sheet.tiles, canvas, columns });
-  const png = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS });
+  const png = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS, format: PNG });
   return writeAtomically(path.join(dir, sheet.name), Buffer.from(png, 'base64'));
 }
 
@@ -75,11 +77,84 @@ function clearOwnSheets(dir) {
   for (const name of readdirSync(dir)) if (name.toLowerCase().endsWith('.png')) rmSync(path.join(dir, name), { force: true });
 }
 
+const BOARD_DIR = 'board';
+const BOARD_FILE_RE = /^board-\d+\.jpg$/;
+const PERCENT = 100;
+const BOARD_FORMAT = Object.freeze({ mime: 'image/jpeg', quality: BOARD_JPEG_QUALITY / PERCENT });
+
+const kindOf = (stat) => (stat.isSymbolicLink() ? 'a symbolic link' : 'not a file');
+
+// Whether `dir` is a folder this run may write in (made when absent). It is looked at with lstat, so a symbolic link is never
+// followed (nothing in its target is deleted or written); anything that is not a plain folder is said so and left alone.
+function boardFolder(dir, log) {
+  const stat = lstatSync(dir, { throwIfNoEntry: false });
+  if (stat === undefined) {
+    mkdirSync(dir, { recursive: true });
+    return true;
+  }
+  if (stat.isDirectory()) return true;
+  log(`make: board: ${dir} is ${stat.isSymbolicLink() ? 'a symbolic link' : 'not a folder'}; no board was written`);
+  return false;
+}
+
+// The folder's own board-N.jpg files are the last run's strips: they go before the new ones are made, so a strip the film no
+// longer needs cannot linger. Any other file in it stays, and so does a board-N.jpg that is not a plain file.
+function clearOwnBoard(dir) {
+  for (const name of readdirSync(dir)) {
+    if (BOARD_FILE_RE.test(name) && lstatSync(path.join(dir, name)).isFile()) rmSync(path.join(dir, name), { force: true });
+  }
+}
+
+/**
+ * A run that writes the whole film's sheets takes away the last run's board strips: they show a film that may have changed, and a
+ * storyboard built from them later would carry stale pictures. A run with --estimated writes new ones straight after. Only the
+ * regular files named board-N.jpg in `<dir>/board` go (the folder is looked at with lstat, so a link or a file there is left alone).
+ * @param {string} dir the sheets folder
+ */
+export function clearStaleBoard(dir) {
+  const boardDir = path.join(dir, BOARD_DIR);
+  if (lstatSync(boardDir, { throwIfNoEntry: false })?.isDirectory() === true) clearOwnBoard(boardDir);
+}
+
+// Whether the strip `file` can be written: nothing is there (clearOwnBoard took a plain file), else it is said and skipped.
+function stripFree(file, log) {
+  const stat = lstatSync(file, { throwIfNoEntry: false });
+  if (stat === undefined) return true;
+  log(`make: board: ${path.basename(file)} is ${kindOf(stat)}; that strip was not written`);
+  return false;
+}
+
+/**
+ * The board (--estimated): the film's shots, BOARD_COLUMNS to a row and BOARD_PER_STRIP to a strip, each tile stamped as a
+ * sheet tile is, written as JPEGs (BOARD_JPEG_QUALITY) at most BOARD_STRIP_WIDTH px wide.
+ * @param {{ session: object, dir: string, signal?: AbortSignal, log?: (line: string) => void }} opts `dir` is the sheets folder: the
+ *   strips go in its `board/`. A `board` that is not a folder (a file, a symbolic link) writes nothing, and a board-N.jpg that is not
+ *   a plain file is left alone and its strip skipped; `log` says so.
+ * @returns {Promise<string[]>} the strip paths written, in order
+ */
+export async function writeBoard({ session, dir, signal, log = () => {} }) {
+  const boardDir = path.join(dir, BOARD_DIR);
+  signal?.throwIfAborted();
+  if (!boardFolder(boardDir, log)) return [];
+  clearOwnBoard(boardDir);
+  const [w, h] = canvasSize(session.film);
+  const files = [];
+  for (const strip of planBoard(session.film, session.timeline)) {
+    signal?.throwIfAborted();
+    const file = path.join(boardDir, strip.name);
+    if (!stripFree(file, log)) continue;
+    const { width, height, placements } = layoutSheet({ tiles: strip.tiles, canvas: { w, h }, columns: BOARD_COLUMNS, maxWidth: BOARD_STRIP_WIDTH });
+    const jpeg = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS, format: BOARD_FORMAT });
+    files.push(writeAtomically(file, Buffer.from(jpeg, 'base64')));
+  }
+  return files;
+}
+
 /**
  * @param {{ specPath?: string, dir: string, session?: object, signal?: AbortSignal, slice?: object | null }} opts a session
  *   (openSession) is used and left open when given; otherwise the film at specPath is loaded and opened here and closed
  *   after. `slice` (slice.mjs sliceOf): only the sheets of that slice are written and reviewed, and the folder is not
- *   emptied: only the files the slice rewrites change.
+ *   emptied: only the files the slice rewrites change. A whole-film run also removes the old board strips (clearStaleBoard).
  * @returns {Promise<{ files: string[], findings: object[] }>} the sheet paths and the review findings (see review.mjs)
  */
 export async function writeSheets({ specPath, dir, session, signal, slice = null }) {
@@ -87,8 +162,10 @@ export async function writeSheets({ specPath, dir, session, signal, slice = null
   const open = own ? await openSession(loadFilm(specPath)) : session;
   try {
     signal?.throwIfAborted(); // an interrupt that came during the launch must not delete the last run's sheets
-    if (slice === null) clearOwnSheets(dir);
-    else mkdirSync(dir, { recursive: true });
+    if (slice === null) {
+      clearOwnSheets(dir);
+      clearStaleBoard(dir);
+    } else mkdirSync(dir, { recursive: true });
     const [w, h] = canvasSize(open.film);
     const planned = planSheets(open.film, open.timeline);
     const files = [];

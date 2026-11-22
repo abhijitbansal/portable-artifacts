@@ -5,6 +5,7 @@
 // answers only through make-explainer's scripts/answers.mjs). Pure, apart from the default list of looks.
 import { parseSay } from '../../engine/script/say.mjs';
 import { listEntries } from './list.mjs';
+import { BOARD_PER_STRIP } from './plan.mjs';
 
 /** A film longer than this many seconds gets a storyboard. */
 export const STORYBOARD_MIN_SECONDS = 20;
@@ -67,12 +68,34 @@ function lookDecision(film, looks) {
   };
 }
 
+// A voiced film's times are an estimate until its voice is made; a silent film has no voice to wait for, so its times are its
+// holds, and it never says "estimated".
+const STILLS_CAPTION = 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.';
+const STILLS_CAPTION_SILENT = 'Timing: this film has no voice, so each shot lasts as long as its hold says.';
+
+// One image section per board strip (`stills`, paths relative to the plan's folder), in order. Strip `board-<n>.jpg` holds the
+// shots (n - 1) * BOARD_PER_STRIP onward, as the board's own layout does: n is read from the file name, so a missing strip
+// shifts nothing (a path with no such name takes its place in the list). A strip with no shot behind it is left out.
+function stillSections(film, stills) {
+  const sections = [];
+  stills.forEach((src, k) => {
+    const n = Number(/board-(\d+)\.jpg$/.exec(src)?.[1] ?? k + 1);
+    const ids = film.shots.slice((n - 1) * BOARD_PER_STRIP, n * BOARD_PER_STRIP).map((s) => s.id);
+    if (ids.length === 0) return;
+    const range = ids.length === 1 ? ids[0] : `${ids[0]} to ${ids.at(-1)}`;
+    const caption = film.voice === undefined ? STILLS_CAPTION_SILENT : STILLS_CAPTION;
+    sections.push({ type: 'image', title: `Shots ${range} as drawn`, label: 'Pictures', src, alt: `Shots ${ids.join(', ')} of the draft film`, caption });
+  });
+  return sections;
+}
+
 /**
  * The make-explainer `plan` page for `film` (defaults filled, as pipeline.mjs loadFilm returns it) on `timeline` (its
  * estimated timeline). `name` titles the page and keys its answers (the film file's name); `looks` are the entries
- * `--list looks` prints (default: list.mjs listEntries('looks')).
+ * `--list looks` prints (default: list.mjs listEntries('looks')); `stills` are the board strips (relative paths), each
+ * shown as a picture after the shots.
  */
-export function storyboardPlan(film, timeline, { name, looks = listEntries('looks') }) {
+export function storyboardPlan(film, timeline, { name, looks = listEntries('looks'), stills = [] }) {
   const count = film.shots.length;
   const total = secondsText(timeline.duration);
   return {
@@ -83,6 +106,7 @@ export function storyboardPlan(film, timeline, { name, looks = listEntries('look
     sections: [
       { type: 'tldr', title: `${count} shots tell it in about ${total} s`, label: 'Summary', text: `${count} shots over about ${total} s, in the ${film.look} look.` },
       { type: 'timeline', title: 'Each shot in order, with what it says', label: 'Shots', items: shotEvents(film, timeline) },
+      ...stillSections(film, stills),
       { type: 'steps', title: 'Your answers go into one build', label: 'What happens next', items: NEXT_STEPS },
       lookDecision(film, looks),
       {

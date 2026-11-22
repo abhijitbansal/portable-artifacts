@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reviewerFile } from '../../shared/agents.mjs';
 
 // No SKILL.md pins a model. The session model is the director (intake, spec, viewing, creative calls) and a cheap
 // `artifact-builder` agent is the operator (one command, mechanical fixes). Every skill carries the same section that
@@ -81,6 +82,108 @@ for (const skill of DELEGATING) {
     assert.ok(fs.existsSync(path.join(SKILLS, skill, 'scripts', 'make.mjs')), `${skill}/scripts/make.mjs exists`);
   });
 }
+
+test('the plugin ships the reviewer file, equal to what shared/agents.mjs builds', () => {
+  assert.equal(fs.readFileSync(path.join(SKILLS, '../agents/motion-reviewer.md'), 'utf8'), reviewerFile('claude').content);
+});
+
+test('no SKILL.md names the reviewer in its Director and operator section', () => {
+  for (const skill of DELEGATING) assert.ok(!section(read(skill)).includes('motion-reviewer'), skill);
+});
+
+// The second reviewer is named in reviewing.md only because a proof passed (eval/results/summary-motion-reviewer-2026-11-22.md,
+// 12 of 12 planted defects, no false fail), and only as an option: a skills-CLI install has no agent file and the director
+// reviews with the same checklist. SKILL.md stays unchanged (its Director and operator section is the same text everywhere).
+const REVIEWING = path.join(SKILLS, 'make-motion/references/reviewing.md');
+const REVIEWING_HEADINGS = ['## Notes', '## Never score', '## Pictures alone', '## Delivery'];
+const SECOND_REVIEWER_PHRASES = ['motion-reviewer', 'optional', 'list of available agents', 'review it yourself with the same checklist', 'sheets', '2026-11-22'];
+
+// The text of the `## Second reviewer` section, or null.
+const secondReviewer = (md) => {
+  const at = md.indexOf('\n## Second reviewer\n');
+  if (at < 0) return null;
+  const rest = md.slice(at + 1);
+  const next = rest.indexOf('\n## ', 3);
+  return next < 0 ? rest : rest.slice(0, next);
+};
+
+test('reviewing.md has a Second reviewer section after its four headings, with the pinned phrases and the proof date', () => {
+  const md = fs.readFileSync(REVIEWING, 'utf8');
+  const heads = md.split('\n').filter((l) => l.startsWith('## '));
+  assert.deepEqual(heads, [...REVIEWING_HEADINGS, '## Second reviewer'], 'the four headings keep their order and the section comes last');
+  const body = secondReviewer(md);
+  assert.ok(body, 'the section exists');
+  for (const phrase of SECOND_REVIEWER_PHRASES) assert.ok(body.includes(phrase), phrase);
+  assert.match(body, /if `motion-reviewer` is in your list of available agents/i);
+  assert.match(body, /otherwise review it yourself with the same checklist/i);
+  assert.match(body, /review\.md/);
+});
+
+// The brief names "the path of the report saved as a JSON file", and make.mjs --json only prints the report: nothing else
+// saves it, so the section says to (the proof's harness pre-saved the file, so only this sentence covers the hand-off).
+test('the Second reviewer section tells the director to save the --json report beside the film and pass that path', () => {
+  const body = secondReviewer(fs.readFileSync(REVIEWING, 'utf8'));
+  assert.ok(body, 'the section exists');
+  assert.match(body, /save the `make\.mjs --json` report beside the film as `<film>\.report\.json` with Write, and pass that path/i);
+  assert.match(body, /It only reads; it changes nothing/);
+  assert.doesNotMatch(body, /It reads and changes nothing/);
+});
+
+// The summary the section cites, read from the section itself, so a later proof cannot update the text and leave the file (or the other way).
+const PLUGIN_ROOT = path.join(SKILLS, '..');
+const CITED_SUMMARY = /`(eval\/results\/summary-motion-reviewer-[0-9-]+\.md)`/;
+
+test('the recorded proof the section cites exists, passed, and names the agent it proved', () => {
+  const cited = CITED_SUMMARY.exec(secondReviewer(fs.readFileSync(REVIEWING, 'utf8')) ?? '');
+  assert.ok(cited, 'the section cites a summary file by its eval/results path');
+  const summary = fs.readFileSync(path.join(PLUGIN_ROOT, cited[1]), 'utf8');
+  assert.match(summary, /\*\*PASSED\*\*/);
+  assert.match(summary, /Agent that ran, read from the stream: motion-reviewer/);
+  assert.match(summary, /model: opus/, 'the summary says the agent file pins opus');
+  assert.doesNotMatch(summary, /account default/, 'the summary names no "account default" model (the director ran on one model too, so the proof cannot tell the pin from the default)');
+  assert.match(summary, /6173284/, 'the summary names the commit of the agent file it proved');
+  const index = fs.readFileSync(path.join(PLUGIN_ROOT, 'eval/results/INDEX.md'), 'utf8');
+  assert.ok(index.split('\n').some((l) => l.includes(path.basename(cited[1])) && l.includes('6173284')), 'the INDEX row names the same commit');
+});
+
+// M3: every planted defect was also readable from film.json (value 24 against "forty two percent", highlight "May" against
+// "March was the peak", region blue against "the red button", a shot id aside), and the scorer never checks `looked`. So the
+// proof shows the agent finds defects stated in the spec and its narration and replies in the agent format; it does not show
+// that it reads pictures. The docs say exactly that, and no more.
+test('the docs claim only what the proof measured: defects found in the spec and its narration, not that it reads pictures', () => {
+  const section = secondReviewer(fs.readFileSync(REVIEWING, 'utf8'));
+  assert.match(section, /defects that the film's spec and its narration state/);
+  assert.match(section, /does not show that it reads pictures/);
+  assert.doesNotMatch(section, /evidence it can read a `say` line against its sheets/);
+  const summary = fs.readFileSync(path.join(PLUGIN_ROOT, 'eval/results/summary-motion-reviewer-2026-11-22.md'), 'utf8');
+  assert.match(summary, /[Ee]very planted defect could also be read from `film\.json` alone/);
+  assert.match(summary, /does not show that the agent reads pictures/);
+  assert.match(summary, /`looked`/, 'the summary says the scorer never checks looked');
+  assert.match(summary, /portable-artifacts:motion-reviewer/, 'the summary says the proof ran a workdir file, not the plugin-prefixed agent');
+  const index = fs.readFileSync(path.join(PLUGIN_ROOT, 'eval/results/INDEX.md'), 'utf8');
+  const row = index.split('\n').find((l) => l.includes('summary-motion-reviewer-2026-11-22.md'));
+  assert.ok(row, 'the INDEX row exists');
+  assert.doesNotMatch(row, /Evidence that it reads a `say` line against its sheets/);
+  assert.match(row, /does not show that it reads pictures/);
+});
+
+// L14: the reviewer file pins model: opus whatever the director runs on, so the section says what that costs.
+test('the Second reviewer section says it is optional, pinned to Opus and once per finished film', () => {
+  const section = secondReviewer(fs.readFileSync(REVIEWING, 'utf8'));
+  assert.match(section, /pinned to Opus/);
+  assert.match(section, /once per finished film/);
+});
+
+test('guardrail proof: the cited-summary pattern reads a path from a section and finds none in prose without one', () => {
+  assert.equal(CITED_SUMMARY.exec('see (`eval/results/summary-motion-reviewer-2026-11-22.md`).')[1], 'eval/results/summary-motion-reviewer-2026-11-22.md');
+  assert.equal(CITED_SUMMARY.exec('see the proof'), null);
+});
+
+test('guardrail proof: the section finder reads a section and returns null for a file without one', () => {
+  assert.equal(secondReviewer('# x\n\n## Delivery\ny\n'), null);
+  assert.match(secondReviewer('## Delivery\ny\n\n## Second reviewer\nbody text\n\n## Later\nz\n'), /body text/);
+  assert.doesNotMatch(secondReviewer('## Delivery\ny\n\n## Second reviewer\nbody text\n\n## Later\nz\n'), /Later/);
+});
 
 // Guardrail proofs: each rule above fires on a document that breaks it.
 test('guardrail proof: a frontmatter with model: haiku or effort: low is caught, one without is not', () => {

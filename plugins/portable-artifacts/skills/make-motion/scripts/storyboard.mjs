@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-// node scripts/storyboard.mjs <film.json> --out <plan.json> [--non-interactive]
+// node scripts/storyboard.mjs <film.json> --out <plan.json> [--stills <board dir>] [--non-interactive]
+// With --stills <dir> (the board/ folder `make.mjs --sheets-only --estimated` wrote) each board-<n>.jpg is copied to
+// <plan stem>.stills/ beside the plan (its old board-<n>.jpg copies cleared first) and shown as a picture after the shots,
+// tied to its shots by the number in its name; only strips with a shot behind them are copied. Exit 2: a folder with no
+// usable strip, a strip that is a symbolic link, not a file or over 1.5 MB, the board folder being that copy folder, a
+// <stem>.stills that is a file or a link, or a copy that fails. After the path a second line says the timing is estimated (for a voiced film), or that the times are the shots' holds (a silent film).
+// Still no browser and no voice.
 // For a draft film longer than 20 s (its length estimated from its narration and holds: no voice is made and no browser
 // starts) it writes a make-explainer `plan` page spec, the storyboard the user answers before the film is built, and
 // prints its path, then the command that builds the page. Skips, with ONE stdout line `storyboard: skipped (<reason>)`,
@@ -11,14 +17,15 @@ import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli } from '../shared/cli.mjs';
+import { checkStrips, copyStrips } from './v2/board-stills.mjs';
 import { loadFilm } from './v2/pipeline.mjs';
 import { SpecError } from './v2/spec.mjs';
 import { STORYBOARD_MIN_SECONDS, storyboardPlan } from './v2/storyboard.mjs';
 
 const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ACCEPTED = '--out <file>, --non-interactive';
-const USAGE = 'node scripts/storyboard.mjs <film.json> --out plan.json [--non-interactive]';
-const OPTIONS = { out: { type: 'string' }, 'non-interactive': { type: 'boolean' } };
+const ACCEPTED = '--out <file>, --non-interactive, --stills <dir>';
+const USAGE = 'node scripts/storyboard.mjs <film.json> --out plan.json [--stills <board dir>] [--non-interactive]';
+const OPTIONS = { out: { type: 'string' }, stills: { type: 'string' }, 'non-interactive': { type: 'boolean' } };
 const MAX_PLAN_BYTES = 1024 * 1024;
 const TENTHS = 10;
 
@@ -33,7 +40,8 @@ function parseArgs(argv) {
   const { values, positionals } = parsed;
   if (positionals.length !== 1) throw new UsageError(`expected one film file, got ${positionals.length}; usage: ${USAGE}`);
   if (values.out === undefined || values.out === '') throw new UsageError(`--out <file> is required: where to write the plan; usage: ${USAGE}`);
-  return { film: positionals[0], out: values.out, nonInteractive: values['non-interactive'] === true };
+  if (values.stills === '') throw new UsageError(`--stills <dir> needs the board folder (the board/ folder of --sheets-only --estimated); usage: ${USAGE}`);
+  return { film: positionals[0], out: values.out, stills: values.stills, nonInteractive: values['non-interactive'] === true };
 }
 
 // The output may not be the film itself (a mistyped --out would destroy the input).
@@ -126,8 +134,18 @@ export function main(argv, { explainerDir = path.join(SKILL_DIR, '..', 'make-exp
     }
     const file = path.resolve(opts.out);
     checkOut(file);
-    writePlan(file, storyboardPlan(loaded.film, loaded.timeline, { name: path.basename(opts.film, path.extname(opts.film)) }));
-    out(`${file}\nbuild: node ${shellQuote(path.join(explainerDir, 'scripts/build.mjs'))} ${shellQuote(file)}\n`);
+    const board = opts.stills === undefined ? null : path.resolve(opts.stills);
+    // The strips are copied before the plan is written, so the plan never names a picture that failed to copy; a plan that then
+    // fails to write leaves only copies that a rerun clears.
+    const stills = board === null ? [] : copyStrips(board, checkStrips(board, loaded.film.shots.length), file);
+    writePlan(file, storyboardPlan(loaded.film, loaded.timeline, { name: path.basename(opts.film, path.extname(opts.film)), stills }));
+    out(`${file}\n`);
+    if (board !== null) {
+      out(loaded.film.voice === undefined
+        ? 'storyboard: the pictures use the shots\' holds as their times (the film has no voice)\n'
+        : 'storyboard: the pictures and the times are on estimated timing (no voice was made)\n');
+    }
+    out(`build: node ${shellQuote(path.join(explainerDir, 'scripts/build.mjs'))} ${shellQuote(file)}\n`);
     return 0;
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;

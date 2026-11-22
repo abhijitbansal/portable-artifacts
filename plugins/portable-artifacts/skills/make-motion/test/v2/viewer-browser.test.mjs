@@ -12,6 +12,7 @@ import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { openSession, launchRunBrowser } from '../../scripts/v2/session.mjs';
 import { guardNetwork } from '../../scripts/lib/browser.mjs';
 import { runPreview, openUrl } from '../../scripts/v2/viewer-run.mjs';
+import { startViewer } from '../../scripts/v2/viewer.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const BAR = (fill) => ({ type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill } });
@@ -135,6 +136,163 @@ test('an edit reloads the page; an invalid edit shows the validator\'s line; a v
   await page.waitForFunction(READY);
   assert.equal(await page.evaluate(() => document.body.classList.contains('invalid')), false);
   assert.equal(await page.textContent('#provenance'), '', 'provenance: false leaves the footer empty');
+});
+
+// ---- the playhead through a reload (engine/page/playhead.mjs) ----
+
+// Each test below runs on its own in-process preview server and its own page (network-guarded, so the "no request left
+// the origin" test below sees them too), so any one of them runs alone or in any order.
+// The same film with every shot held for `hold` seconds.
+const heldFilm = (ground, hold, extra = {}) => { const f = filmOf(ground, extra); return { ...f, shots: f.shots.map((s) => ({ ...s, hold })) }; };
+const SOUND_BYTES = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A preview of `film` and a page on it. `edit(film)` is an edit that validates; `fail(lines)` one that does not.
+async function ownPreview(film, { audio = false, init = null, hash = '' } = {}) {
+  const own = mkdtempSync(path.join(tmpdir(), 'mm-viewer-own-'));
+  const file = path.join(own, 'film.json');
+  writeFileSync(file, JSON.stringify(film));
+  if (audio) writeFileSync(path.join(own, 'sound.m4a'), SOUND_BYTES);
+  const viewer = await startViewer({ loaded: loadFilm(file), audio: audio ? path.join(own, 'sound.m4a') : null });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  if (init) await context.addInitScript(init);
+  const ownPage = await context.newPage();
+  await guardNetwork(ownPage, new URL(viewer.url).origin, (u) => blocked.push(u));
+  const edit = (next) => { writeFileSync(file, JSON.stringify(next)); viewer.update({ loaded: loadFilm(file), audio: audio ? path.join(own, 'sound.m4a') : null }); };
+  // An edit is picked up on the next poll (one second): wait for the reload, then for the page to be ready.
+  const afterEdit = async (change) => {
+    const reload = ownPage.waitForEvent('load');
+    change();
+    await reload;
+    await ownPage.waitForFunction(READY);
+  };
+  const seekTo = async (n) => {
+    await ownPage.$eval('#scrub', (el, i) => { el.value = String(i); el.dispatchEvent(new Event('input')); }, n);
+    await ownPage.waitForFunction((i) => window.__viewer.p.frame === i && !window.__viewer.p.busy, n);
+  };
+  // The pixels frame n of the film now on disk has on the render page.
+  const renderHash = async (n) => {
+    const session = await openSession(loadFilm(file), { browser });
+    try {
+      await session.page.evaluate((i) => window.__seek(i), n);
+      return await sourceHash(session.page);
+    } finally {
+      await session.close();
+    }
+  };
+  const open = async () => { await ownPage.goto(`${viewer.url}${hash}`); await ownPage.waitForFunction(READY); };
+  const close = async () => { await context.close(); await viewer.close(); };
+  return { viewer, page: ownPage, edit, afterEdit, seekTo, renderHash, open, close };
+}
+const withPreview = async (film, opts, run) => {
+  const preview = await ownPreview(film, opts);
+  try {
+    await preview.open();
+    await run(preview);
+  } finally {
+    await preview.close();
+  }
+};
+const isInvalid = (p) => p.evaluate(() => document.body.classList.contains('invalid'));
+
+test('an edit reloads the page on the frame it was showing', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await withPreview(filmOf('#f3eee3'), {}, async (p) => {
+    await p.seekTo(40);
+    await p.afterEdit(() => p.edit(filmOf('#dfe6ee'))); // the same length, a new ground
+    await p.page.waitForFunction(() => window.__viewer?.p.frame === 40 && document.body.dataset.ready === 'true' && location.hash === '#f=40&p=0');
+    assert.equal(await sourceHash(p.page), await p.renderHash(40), "the new film's frame 40");
+  });
+});
+
+test('a film that got shorter clamps to its last frame', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await withPreview(filmOf('#f3eee3'), {}, async (p) => {
+    await p.seekTo(40);
+    await p.afterEdit(() => p.edit({ ...filmOf('#dfe6ee'), shots: filmOf('#dfe6ee').shots.slice(0, 1) })); // one shot of a second: 30 frames (a hold is at least 1)
+    assert.equal(await p.page.evaluate(() => document.body.dataset.ready), 'true');
+    assert.equal(await p.page.evaluate(() => window.__viewer.p.frame), 29);
+    assert.equal(await isInvalid(p.page), false);
+  });
+});
+
+test('an edit that does not validate keeps the frame for the edit that fixes it', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await withPreview(filmOf('#f3eee3'), {}, async (p) => {
+    await p.seekTo(20);
+    await p.afterEdit(() => p.viewer.fail(['shots[0].hold: must be >= 1']));
+    assert.equal(await isInvalid(p.page), true);
+    await p.afterEdit(() => p.edit(filmOf('#dfe6ee')));
+    assert.equal(await isInvalid(p.page), false);
+    await p.page.waitForFunction(() => window.__viewer?.p.frame === 20 && !window.__viewer.p.busy);
+  });
+});
+
+test('a playing silent film is playing again after the reload', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await withPreview(heldFilm('#f3eee3', 3), {}, async (p) => { // 180 frames: it cannot finish between the poll and the check
+    await p.page.click('#play');
+    await p.afterEdit(() => p.edit(heldFilm('#dfe6ee', 3)));
+    assert.equal(await p.page.evaluate(() => window.__viewer.p.playing), true);
+    assert.equal(await p.page.textContent('#play'), 'Pause');
+  });
+});
+
+test('when the browser refuses to play the sound, the player is paused, not stuck', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const refuse = () => { HTMLMediaElement.prototype.play = () => Promise.reject(Object.assign(new Error('refused'), { name: 'NotAllowedError' })); };
+  await withPreview(filmOf('#f3eee3'), { audio: true, init: refuse, hash: '#f=10&p=1' }, async (p) => {
+    await p.page.waitForFunction(() => window.__viewer.p.playing === false && !window.__viewer.p.busy);
+    assert.equal(await p.page.textContent('#play'), 'Play');
+    assert.equal(await p.page.evaluate(() => window.__viewer.p.frame), 10);
+  });
+});
+
+test('a play cut short by a pause (AbortError) is not a refusal: the player keeps playing', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const abort = () => { HTMLMediaElement.prototype.play = () => Promise.reject(Object.assign(new Error('interrupted'), { name: 'AbortError' })); };
+  await withPreview(filmOf('#f3eee3'), { audio: true, init: abort, hash: '#f=10&p=1' }, async (p) => {
+    await sleep(300); // the rejection has been handled by now
+    assert.equal(await p.page.evaluate(() => window.__viewer.p.playing), true);
+    assert.equal(await p.page.textContent('#play'), 'Pause');
+    await p.page.click('#play');
+  });
+});
+
+test('the page is marked as a player only once the saved frame is drawn and play has resumed', async (t) => {
+  if (!browser) return t.skip('no browser');
+  // records the player's state at the moment the page publishes it as window.__viewer
+  const record = () => {
+    let held;
+    Object.defineProperty(window, '__viewer', {
+      configurable: true,
+      get: () => held,
+      set: (v) => { window.__atPublish = { frame: v.p.frame, drawn: v.p.drawn === true, playing: v.p.playing }; held = v; },
+    });
+  };
+  await withPreview(filmOf('#f3eee3'), { init: record, hash: '#f=10&p=1' }, async (p) => {
+    assert.deepEqual(await p.page.evaluate(() => window.__atPublish), { frame: 10, drawn: true, playing: true });
+    await p.page.click('#play');
+  });
+});
+
+test('once a reload has started, a later poll tick neither writes the fragment nor asks again', async (t) => {
+  if (!browser) return t.skip('no browser');
+  // each replaceState call on the page logs a line the test counts (an evaluate on a page with a navigation pending
+  // blocks); the new page's document is held back for 3.5 s, so the old page lives on for three more poll ticks
+  const count = () => { const original = history.replaceState.bind(history); history.replaceState = (...args) => { console.log('playhead-written'); return original(...args); }; };
+  await withPreview(filmOf('#f3eee3'), { init: count }, async (p) => {
+    let writes = 0;
+    p.page.on('console', (message) => { if (message.text() === 'playhead-written') writes += 1; });
+    let hold = true;
+    await p.page.route('**/preview', async (route) => {
+      if (hold && route.request().resourceType() === 'document') await sleep(3500);
+      return route.fallback();
+    });
+    await p.afterEdit(() => p.edit(filmOf('#dfe6ee')));
+    hold = false;
+    assert.equal(writes, 1);
+  });
 });
 
 test('no request left the preview\'s origin', (t) => {

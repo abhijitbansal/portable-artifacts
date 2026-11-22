@@ -1,0 +1,6 @@
+{
+  "number-mismatch": { "shot": "figure" },
+  "chart-wrong-mark": { "shot": "chart" },
+  "picture-contradicts": { "shot": "look" },
+  "orphan-shot": { "shot": "aside" }
+}

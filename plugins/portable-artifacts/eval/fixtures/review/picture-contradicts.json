@@ -1,0 +1,58 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "desk",
+  "format": "16:9",
+  "seed": 5,
+  "shots": [
+    {
+      "id": "claim",
+      "show": "statement",
+      "kicker": "Support desk",
+      "say": "Support tickets fell sharply after the new help page."
+    },
+    {
+      "id": "figure",
+      "show": "number",
+      "value": 42,
+      "suffix": "%",
+      "label": "fewer tickets than the March peak",
+      "say": "Forty two percent fewer tickets than the March peak."
+    },
+    {
+      "id": "chart",
+      "show": "chart",
+      "type": "column",
+      "title": "Tickets per month",
+      "data": [
+        { "label": "Jan", "value": 310 },
+        { "label": "Feb", "value": 340 },
+        { "label": "Mar", "value": 380 },
+        { "label": "Apr", "value": 280 },
+        { "label": "May", "value": 250 },
+        { "label": "Jun", "value": 220 }
+      ],
+      "highlight": "Mar",
+      "say": "March was the peak month, the tall highlighted column, and every month after it was lower.",
+      "source": "support desk export"
+    },
+    {
+      "id": "look",
+      "show": "clipping",
+      "src": "two-squares.png",
+      "say": "Now look at the screen. Press the red button to open the report.",
+      "regions": {
+        "blue": [0.64, 0.46, 0.25, 0.44]
+      },
+      "on": [
+        { "at": "word:button", "do": "highlight", "target": "region:blue" }
+      ]
+    },
+    {
+      "id": "ask",
+      "show": "end",
+      "say": "Read the full support report.",
+      "ask": "Read the support report"
+    }
+  ]
+}

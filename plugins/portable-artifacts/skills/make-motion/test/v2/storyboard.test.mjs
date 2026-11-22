@@ -5,7 +5,8 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE } from './helpers/session.mjs';
@@ -92,6 +93,78 @@ test('the film and timeline passed in are not changed', () => {
   assert.equal(JSON.stringify({ film, timeline }), before);
 });
 
+// ---- the board's pictures ----
+
+const PLAIN_LOOKS = [{ name: 'desk', summary: 'warm paper' }, { name: 'ink', summary: 'black and white' }];
+// The sha256 of JSON.stringify of the LONG film's plan with PLAIN_LOOKS and no stills, taken before the board's pictures existed.
+const PLAN_BEFORE_STILLS = '49fd8406fa6b19087174ad340558a81a45c4485c32cce1f91033150535ccdf7b';
+const MAX_SECTIONS = 40; // make-explainer's limit per page
+const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024; // make-explainer's limit per image
+const JPEG = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
+
+// A film of `count` shots, each 5 s on its (estimated) timeline, as storyboardPlan takes them.
+// `voice` adds a voice to the film: only then is the timeline an estimate (a silent film's times are its holds).
+function synthetic(count, { voice = false } = {}) {
+  const shots = Array.from({ length: count }, (_, i) => ({ id: `s${i + 1}`, show: 'statement', say: 'x y z' }));
+  return { film: { look: 'desk', ...(voice ? { voice: { name: 'af_heart' } } : {}), shots }, timeline: { duration: count * 5, shots: shots.map((_, i) => ({ start: i * 5, end: (i + 1) * 5 })) } };
+}
+
+test('with stills the plan gains one image section per strip, after the shots, each saying the timing is estimated', () => {
+  const { film, timeline } = synthetic(8, { voice: true }); // six shots to a strip: two strips
+  const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS, stills: ['demo.stills/board-1.jpg', 'demo.stills/board-2.jpg'] });
+  const images = plan.sections.filter((s) => s.type === 'image');
+  assert.equal(images.length, 2);
+  assert.equal(plan.sections.indexOf(images[0]), plan.sections.findIndex((s) => s.type === 'timeline') + 1);
+  assert.equal(plan.sections.indexOf(images[1]), plan.sections.indexOf(images[0]) + 1);
+  assert.deepEqual(images.map((i) => i.src), ['demo.stills/board-1.jpg', 'demo.stills/board-2.jpg']);
+  assert.deepEqual(images.map((i) => i.title), ['Shots s1 to s6 as drawn', 'Shots s7 to s8 as drawn']);
+  assert.deepEqual(images.map((i) => i.alt), ['Shots s1, s2, s3, s4, s5, s6 of the draft film', 'Shots s7, s8 of the draft film']);
+  for (const image of images) {
+    assert.equal(image.label, 'Pictures');
+    assert.equal(image.caption, 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.');
+  }
+  assert.equal(plan.sections.at(-1).type, 'verdict');
+});
+
+// L5: a silent film has no voice to wait for, so its times are its holds, not an estimate.
+test('on a silent film the image caption says the times are the holds, and never "estimated"', () => {
+  const { film, timeline } = synthetic(4);
+  const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS, stills: ['demo.stills/board-1.jpg'] });
+  const [image] = plan.sections.filter((s) => s.type === 'image');
+  assert.equal(image.caption, 'Timing: this film has no voice, so each shot lasts as long as its hold says.');
+  assert.doesNotMatch(image.caption, /estimated|no voice was made/i);
+});
+
+test('a strip with no shot behind it (a board left from a longer film) is not put on the page', () => {
+  const { film, timeline } = synthetic(4);
+  const plan = storyboardPlan(film, timeline, { name: 'stale', looks: PLAIN_LOOKS, stills: ['x.stills/board-1.jpg', 'x.stills/board-2.jpg'] });
+  assert.deepEqual(plan.sections.filter((s) => s.type === 'image').map((i) => i.src), ['x.stills/board-1.jpg']);
+});
+
+test('a strip is tied to its shots by the number in its name: board-1 and board-3 with board-2 missing', () => {
+  const { film, timeline } = synthetic(18);
+  const plan = storyboardPlan(film, timeline, { name: 'gap', looks: PLAIN_LOOKS, stills: ['g.stills/board-1.jpg', 'g.stills/board-3.jpg'] });
+  const images = plan.sections.filter((s) => s.type === 'image');
+  assert.deepEqual(images.map((i) => i.src), ['g.stills/board-1.jpg', 'g.stills/board-3.jpg']);
+  assert.deepEqual(images.map((i) => i.title), ['Shots s1 to s6 as drawn', 'Shots s13 to s18 as drawn']);
+  assert.equal(images[1].alt, 'Shots s13, s14, s15, s16, s17, s18 of the draft film');
+});
+
+test('without stills the plan is unchanged', () => {
+  const { film, timeline } = loadFilm(writeFilm('long-nostills', LONG));
+  const plan = storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS });
+  assert.equal(createHash('sha256').update(JSON.stringify(plan)).digest('hex'), PLAN_BEFORE_STILLS);
+  assert.deepEqual(storyboardPlan(film, timeline, { name: 'demo', looks: PLAIN_LOOKS, stills: [] }), plan);
+});
+
+test('a 60-shot film stays within the page\'s 40 sections', () => {
+  const { film, timeline } = synthetic(60);
+  const stills = Array.from({ length: 10 }, (_, i) => `big.stills/board-${i + 1}.jpg`);
+  const { sections } = storyboardPlan(film, timeline, { name: 'big', looks: PLAIN_LOOKS, stills });
+  assert.ok(sections.length <= MAX_SECTIONS, `${sections.length} sections`);
+  assert.equal(sections.filter((s) => s.type === 'image').length, 10);
+});
+
 // ---- the command ----
 
 test('a 30 s film writes a plan make-explainer\'s own validator accepts, and prints the build line', (t) => {
@@ -156,4 +229,188 @@ test('--out missing, an unknown flag, or --out naming the film itself is exit 2'
   const self = run(film, '--out', film);
   assert.equal(self.status, 2);
   assert.deepEqual(JSON.parse(readFileSync(film, 'utf8')), LONG, 'the film is untouched');
+});
+
+// ---- --stills ----
+
+const boardFolder = (name, files = { 'board-1.jpg': JPEG }) => {
+  const folder = path.join(dir, name);
+  mkdirSync(folder, { recursive: true });
+  for (const [file, bytes] of Object.entries(files)) writeFileSync(path.join(folder, file), bytes);
+  return folder;
+};
+const capture = () => {
+  const lines = [];
+  return { lines, io: { out: (s) => lines.push(s), err: (s) => lines.push(s) } };
+};
+
+test('--stills copies the strips beside the plan, and make-explainer\'s validator accepts the page', (t) => {
+  if (EXPLAINER_SKIP) return t.skip(EXPLAINER_SKIP);
+  const board = boardFolder('board-ok');
+  const planFile = path.join(dir, 'with-stills', 'plan.json');
+  const { lines, io } = capture();
+  const code = main([writeFilm('long-stills-cmd', LONG), '--out', planFile, '--stills', board], io);
+  assert.equal(code, 0, lines.join(''));
+  const copy = path.join(path.dirname(planFile), 'plan.stills', 'board-1.jpg');
+  assert.ok(existsSync(copy), 'the strip is beside the plan');
+  assert.deepEqual(readFileSync(copy), JPEG);
+  assert.equal(JSON.parse(readFileSync(planFile, 'utf8')).sections.find((s) => s.type === 'image').src, 'plan.stills/board-1.jpg');
+  assert.equal(lines.join('').split('\n')[0], planFile);
+  const printed = lines.join('').split('\n');
+  assert.equal(printed[1], 'storyboard: the pictures use the shots\' holds as their times (the film has no voice)', 'the second line: LONG is silent, so nothing is estimated');
+  assert.match(printed[2], /^build: node /);
+  const check = spawnSync(process.execPath, [VALIDATE, planFile, '--json'], { encoding: 'utf8' });
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+  assert.deepEqual((JSON.parse(check.stdout).warnings ?? []).filter((w) => w.path !== 'generatedBy'), [], 'no warning either');
+  return undefined;
+});
+
+test('--stills on a voiced film says the pictures and the times are on estimated timing (no voice was made)', (t) => {
+  if (EXPLAINER_SKIP) return t.skip(EXPLAINER_SKIP);
+  const board = boardFolder('board-voiced');
+  const planFile = path.join(dir, 'voiced-stills', 'plan.json');
+  const { lines, io } = capture();
+  const voiced = { ...LONG, voice: { name: 'af_heart' } };
+  assert.equal(main([writeFilm('long-voiced-stills', voiced), '--out', planFile, '--stills', board], io), 0, lines.join(''));
+  assert.equal(lines.join('').split('\n')[1], 'storyboard: the pictures and the times are on estimated timing (no voice was made)');
+  assert.equal(JSON.parse(readFileSync(planFile, 'utf8')).sections.find((s) => s.type === 'image').caption, 'Estimated timing: no voice was made yet, so each shot is as long as its word count says.');
+  return undefined;
+});
+
+test('without --stills nothing is copied and the estimated line is not printed', () => {
+  const planFile = path.join(dir, 'no-stills-cmd', 'plan.json');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-nostills-cmd', LONG), '--out', planFile], io), 0);
+  assert.equal(existsSync(path.join(dir, 'no-stills-cmd', 'plan.stills')), false);
+  assert.equal(lines.some((l) => l.includes('estimated timing')), false);
+});
+
+test('a folder with no strips, a strip that is a link and a strip over 1.5 MB each exit 2 naming the file', () => {
+  const film = writeFilm('long-stills-bad', LONG);
+  const planFile = path.join(dir, 'bad-stills', 'plan.json');
+  const run2 = (board) => {
+    const { lines, io } = capture();
+    const code = main([film, '--out', planFile, '--stills', board], io);
+    return { code, text: lines.join('') };
+  };
+
+  const none = run2(boardFolder('board-none', { 'notes.txt': Buffer.from('x') }));
+  assert.equal(none.code, 2);
+  assert.match(none.text, /board-none/);
+  assert.match(none.text, /board-<n>\.jpg/);
+
+  const missing = run2(path.join(dir, 'no-such-board'));
+  assert.equal(missing.code, 2);
+  assert.match(missing.text, /no-such-board/);
+
+  const linkFolder = boardFolder('board-link', {});
+  writeFileSync(path.join(dir, 'real.jpg'), JPEG);
+  symlinkSync(path.join(dir, 'real.jpg'), path.join(linkFolder, 'board-1.jpg'));
+  const link = run2(linkFolder);
+  assert.equal(link.code, 2);
+  assert.match(link.text, /board-1\.jpg is a symbolic link/);
+
+  const big = run2(boardFolder('board-big', { 'board-1.jpg': Buffer.alloc(MAX_IMAGE_BYTES + 1, 0xff) }));
+  assert.equal(big.code, 2);
+  assert.match(big.text, /board-1\.jpg is \d\.\d\d MB; make-explainer takes at most 1\.5 MB/);
+  assert.equal(existsSync(planFile), false, 'no plan is written when a strip is refused');
+
+  mkdirSync(path.join(dir, 'board-dir', 'board-1.jpg'), { recursive: true }); // a folder where a strip should be
+  const dirStrip = run2(path.join(dir, 'board-dir'));
+  assert.equal(dirStrip.code, 2);
+  assert.match(dirStrip.text, /board-1\.jpg is not a regular file/);
+});
+
+// ---- --stills: the copy never harms a source strip, and a strip is tied to its shots by its number ----
+
+test('--stills naming the folder the strips are copied into (a rerun) is exit 2 and every strip is still there', () => {
+  const folder = boardFolder('rerun/plan.stills', { 'board-1.jpg': JPEG });
+  const planFile = path.join(dir, 'rerun', 'plan.json');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-rerun', LONG), '--out', planFile, '--stills', folder], io), 2);
+  assert.match(lines.join(''), /is the folder the pictures are copied into/);
+  assert.ok(lines.join('').includes(folder), 'names the folder');
+  assert.deepEqual(readFileSync(path.join(folder, 'board-1.jpg')), JPEG, 'the source strip is not deleted');
+  assert.equal(existsSync(planFile), false, 'no plan is written');
+});
+
+test('--stills naming the destination through a link is refused too, and the strip stays', () => {
+  const real = boardFolder('via-link/plan.stills', { 'board-1.jpg': JPEG });
+  symlinkSync(real, path.join(dir, 'via-link', 'alias'));
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-via-link', LONG), '--out', path.join(dir, 'via-link', 'plan.json'), '--stills', path.join(dir, 'via-link', 'alias')], io), 2);
+  assert.match(lines.join(''), /is the folder the pictures are copied into/);
+  assert.ok(existsSync(path.join(real, 'board-1.jpg')));
+});
+
+test('--stills naming the copy folder with different letter case (a case-insensitive filesystem) is exit 2 and the strip stays', (t) => {
+  const real = boardFolder('case-alias/plan.stills', { 'board-1.jpg': JPEG });
+  const alias = path.join(dir, 'case-alias', 'PLAN.STILLS');
+  const sameFolder = (() => {
+    try {
+      return statSync(alias).ino === statSync(real).ino;
+    } catch {
+      return false;
+    }
+  })();
+  if (!sameFolder) return t.skip('this filesystem is case-sensitive: PLAN.STILLS is not plan.stills');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-case-alias', LONG), '--out', path.join(dir, 'case-alias', 'plan.json'), '--stills', alias], io), 2, lines.join(''));
+  assert.match(lines.join(''), /is the folder the pictures are copied into/);
+  assert.deepEqual(readFileSync(path.join(real, 'board-1.jpg')), JPEG, 'the source strip is not deleted');
+  return undefined;
+});
+
+test('a regular file named <stem>.stills beside the plan is exit 2 naming it, not a stack trace', () => {
+  const board = boardFolder('board-file-in-way');
+  mkdirSync(path.join(dir, 'in-the-way'), { recursive: true });
+  const inTheWay = path.join(dir, 'in-the-way', 'plan.stills');
+  writeFileSync(inTheWay, 'a file');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-in-the-way', LONG), '--out', path.join(dir, 'in-the-way', 'plan.json'), '--stills', board], io), 2);
+  assert.ok(lines.join('').includes(inTheWay), lines.join(''));
+  assert.equal(readFileSync(inTheWay, 'utf8'), 'a file', 'the file is untouched');
+});
+
+test('a symbolic link named <stem>.stills beside the plan is exit 2', () => {
+  const board = boardFolder('board-link-dest');
+  mkdirSync(path.join(dir, 'link-dest', 'elsewhere'), { recursive: true });
+  symlinkSync(path.join(dir, 'link-dest', 'elsewhere'), path.join(dir, 'link-dest', 'plan.stills'));
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-link-dest', LONG), '--out', path.join(dir, 'link-dest', 'plan.json'), '--stills', board], io), 2);
+  assert.match(lines.join(''), /is a symbolic link/);
+  assert.equal(existsSync(path.join(dir, 'link-dest', 'elsewhere', 'board-1.jpg')), false, 'nothing was copied through the link');
+});
+
+test('only strips with shots behind them are copied, and old board copies beside the plan are cleared (other files stay)', () => {
+  const board = boardFolder('board-longer', { 'board-1.jpg': JPEG, 'board-3.jpg': JPEG }); // LONG has 4 shots: one strip
+  const stills = path.join(dir, 'tidy', 'plan.stills');
+  mkdirSync(stills, { recursive: true });
+  writeFileSync(path.join(stills, 'board-9.jpg'), 'old copy');
+  writeFileSync(path.join(stills, 'notes.txt'), 'mine');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-tidy', LONG), '--out', path.join(dir, 'tidy', 'plan.json'), '--stills', board], io), 0, lines.join(''));
+  assert.ok(existsSync(path.join(stills, 'board-1.jpg')));
+  assert.equal(existsSync(path.join(stills, 'board-3.jpg')), false, 'a strip with no shot behind it is not copied');
+  assert.equal(existsSync(path.join(stills, 'board-9.jpg')), false, 'an old copy is cleared');
+  assert.equal(readFileSync(path.join(stills, 'notes.txt'), 'utf8'), 'mine');
+  assert.ok(existsSync(path.join(board, 'board-3.jpg')), 'the source folder is never touched');
+});
+
+test('a folder whose strips are all past the film\'s shots is exit 2', () => {
+  const board = boardFolder('board-all-past', { 'board-5.jpg': JPEG });
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('long-all-past', LONG), '--out', path.join(dir, 'all-past', 'plan.json'), '--stills', board], io), 2);
+  assert.match(lines.join(''), /no strip in .* has a shot of this 4-shot film behind it/);
+});
+
+test('with board-1 and board-3 the page puts board-3 on its own shots, found by number', () => {
+  const sixteen = { version: 2, look: 'desk', shots: Array.from({ length: 13 }, (_, i) => ({ id: `n${i + 1}`, show: 'free', hold: 3, background: '#f3eee3', nodes: [BAR] })) };
+  const board = boardFolder('board-gap', { 'board-1.jpg': JPEG, 'board-3.jpg': JPEG });
+  const planFile = path.join(dir, 'gap', 'plan.json');
+  const { lines, io } = capture();
+  assert.equal(main([writeFilm('thirteen', sixteen), '--out', planFile, '--stills', board], io), 0, lines.join(''));
+  const images = JSON.parse(readFileSync(planFile, 'utf8')).sections.filter((s) => s.type === 'image');
+  assert.deepEqual(images.map((i) => i.src), ['plan.stills/board-1.jpg', 'plan.stills/board-3.jpg']);
+  assert.deepEqual(images.map((i) => i.title), ['Shots n1 to n6 as drawn', 'Shots n13 as drawn']);
 });

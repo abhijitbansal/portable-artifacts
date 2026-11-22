@@ -379,7 +379,7 @@ test('schema.md lists the report keys the code builds, and the keys that appear 
   const sometimes = ticks(text.match(/These keys appear only when they apply: ([^\n]*)/)[1]);
   const blank = { validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
   assert.deepEqual(sorted(always), sorted(Object.keys(reportOf(blank))));
-  const full = reportOf({ ...blank, poster: {}, inspect: {}, slice: {}, workers: 2, subtitles: {}, cuts: { ran: ['x'], replaced: [] }, look: {}, kinds: [{}], error: { message: 'x', hint: '' } });
+  const full = reportOf({ ...blank, poster: {}, inspect: {}, slice: {}, board: [], workers: 2, subtitles: {}, cuts: { ran: ['x'], replaced: [] }, look: {}, kinds: [{}], error: { message: 'x', hint: '' } });
   assert.deepEqual(sorted(sometimes), sorted(Object.keys(full).filter((k) => !always.includes(k))));
   assert.deepEqual(Object.keys(errorReport({ message: 'x', hint: '' })).filter((k) => !always.includes(k)), ['error']);
 });

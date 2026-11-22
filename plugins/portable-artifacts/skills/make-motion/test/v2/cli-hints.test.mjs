@@ -139,7 +139,9 @@ test('the --no-music log line says what the run did: rendered only when a video 
     return noMusicLine({ muted: true, renders: rendersVideo(options) });
   };
   assert.match(lineFor(), /the film is rendered without its music/);
-  for (const flags of [['--no-render'], ['--sheets-only'], ['--shot', 'a'], ['--range', '0..1']]) {
+  // a slice renders its own (silent) MP4, so it says rendered, as the film does
+  for (const flags of [['--shot', 'a'], ['--range', '0..1']]) assert.match(lineFor(...flags), /the film is rendered without its music/, flags.join(' '));
+  for (const flags of [['--no-render'], ['--sheets-only']]) {
     const line = lineFor(...flags);
     assert.doesNotMatch(line, /rendered/, flags.join(' '));
     assert.match(line, /the film is planned without its music/, flags.join(' '));

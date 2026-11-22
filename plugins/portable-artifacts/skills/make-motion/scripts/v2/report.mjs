@@ -21,6 +21,7 @@
 // stays in it: the stages that ran, the findings already found. `provenance` is { comment, artist } as stamped into the
 // MP4 (stamp.mjs; both null when the stamp is off), null when no MP4 was written. A film's own fault (it does not
 // validate, the page raises an error about it) is a finding, not an error.
+import path from 'node:path';
 import { parseSay } from '../../engine/script/say.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
 import { isParkedKind, isParkedChartType } from '../../engine/looks/index.mjs';
@@ -109,7 +110,7 @@ function postText({ post, cuts }) {
 // The timing part of the frames line: where the render's time went, in ms; nothing when no render ran.
 const timingText = (timing) => (timing ? `, draw ${timing.drawMs} capture ${timing.captureMs} encode ${timing.encodeMs} check ${timing.checkMs} ms` : '');
 
-/** The report of a run in its state `state` (see run.mjs), with every key present (`inspect` only for --inspect, `slice` only for --shot or --range, `look` only for an experimental look,
+/** The report of a run in its state `state` (see run.mjs), with every key present (`inspect` only for --inspect, `slice` only for --shot or --range, `board` only for --estimated, `look` only for an experimental look,
  *  `kinds` only for a film that uses a parked kind, `cuts` only for a film with shader cuts). */
 export function reportOf(state) {
   const mechanical = state.findings.some((f) => f.kind === 'mechanical');
@@ -135,6 +136,7 @@ export function reportOf(state) {
     ...(state.poster ? { poster: state.poster } : {}), // --poster: { file, frame, seconds }
     ...(state.inspect ? { inspect: state.inspect } : {}), // --inspect: { png, json, frame, seconds, shot }
     ...(state.slice ? { slice: state.slice } : {}), // --shot, --range: { from, to, frames, shots, silent, skipped }
+    ...(state.board ? { board: state.board } : {}), // --estimated: the board strips' paths, in order
     ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
     ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed, level }
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
@@ -142,6 +144,23 @@ export function reportOf(state) {
     ...(state.kinds?.length > 0 ? { kinds: state.kinds } : {}),
     ...(state.error === null ? {} : { error: state.error }),
   };
+}
+
+const absolute = (file, cwd) => (typeof file === 'string' ? path.resolve(cwd, file) : file);
+
+/**
+ * The report with every file path absolute, resolved against `cwd` (the folder make.mjs ran in): `output`, `sheets`, `board`,
+ * `poster.file`, `inspect.png` and `.json`, `subtitles.file`. The --json form uses it, because the second reviewer has only
+ * Read, which needs absolute paths, and is handed a report saved from a run it did not see. Inside a run, and in the text
+ * form, paths stay as the user gave them. A new report is returned; keys the report lacks stay absent.
+ */
+export function absolutePaths(report, cwd = process.cwd()) {
+  const out = { ...report, output: absolute(report.output, cwd), sheets: report.sheets.map((f) => absolute(f, cwd)) };
+  if (report.board) out.board = report.board.map((f) => absolute(f, cwd));
+  if (report.poster) out.poster = { ...report.poster, file: absolute(report.poster.file, cwd) };
+  if (report.inspect) out.inspect = { ...report.inspect, png: absolute(report.inspect.png, cwd), json: absolute(report.inspect.json, cwd) };
+  if (report.subtitles) out.subtitles = { ...report.subtitles, file: absolute(report.subtitles.file, cwd) };
+  return out;
 }
 
 /** The report of a run that never began (a usage error): empty, with the error. */
@@ -219,6 +238,7 @@ export function formatText(report, { sheetsDir }) {
   for (const f of report.findings) lines.push(findingLine(f));
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
+  if (report.board) lines.push(report.board.length === 0 ? 'board: none written' : `board: ${path.dirname(report.board[0])} (${plural(report.board.length, 'strip')})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
   const frameCount = report.slice ? `${report.frames} in the film, ${report.slice.frames} in the slice` : `${report.frames}`;
   const counts = report.output === null ? frameCount : `${frameCount}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame${timingText(report.timing)}); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;

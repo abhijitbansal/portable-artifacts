@@ -144,6 +144,28 @@ export function planSheets(film, timeline) {
   return uniqueNames([...shots, ...cuts]);
 }
 
+/** The board (--estimated): shots to a strip, tiles across a strip, the JPEG quality and the strip's width in px. */
+export const BOARD_PER_STRIP = 6;
+export const BOARD_COLUMNS = 3;
+export const BOARD_JPEG_QUALITY = 80;
+export const BOARD_STRIP_WIDTH = 1920;
+
+/**
+ * The board strips of a film: one tile per shot, at the frame its phone tile uses (85% of the shot), BOARD_PER_STRIP to a
+ * strip, in film order, named `board-1.jpg`, `board-2.jpg` and on. Each tile is labelled as a sheet tile is.
+ * @returns {{ name: string, tiles: { frame: number, t: number, label: string }[] }[]}
+ */
+export function planBoard(film, timeline) {
+  const tiles = timeline.shots.map((shot) => {
+    const { frame, t, label } = tile(timeline, 'phone', frameIn(timeline, shot, shot.start + shot.duration * LATE), shot.id);
+    return { frame, t, label };
+  });
+  return Array.from({ length: Math.ceil(tiles.length / BOARD_PER_STRIP) }, (_, k) => ({
+    name: `board-${k + 1}.jpg`,
+    tiles: tiles.slice(k * BOARD_PER_STRIP, (k + 1) * BOARD_PER_STRIP),
+  }));
+}
+
 /** The frames the audit looks at: every sheet frame (this includes every `on` event's landing + 0.05 s, wherever it
  *  falls), one every 0.25 s, the first frame of each shot (what a cut opens on) and the last frame of each shot (its resting state, which says which words stay hidden), each
  *  once, in order. */
