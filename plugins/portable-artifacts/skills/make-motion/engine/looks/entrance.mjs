@@ -26,8 +26,8 @@ function moveErrors(name, key, move) {
 /**
  * The errors of a look's entrances: each of `letters` and `lines` that has a value takes only its own fields, and none
  * at all in a look drawn by hand (look.hand); a statement entrance (look.kinds.statement.entrance, absent or undefined for
- * the per-word entrance of today) names `letters` or `lines`, a move the look gives a value for, in a composition that reads
- * it (a stack sets its own words).
+ * the per-word entrance of today) names `letters` or `lines`, a move the look gives a value for, in a look that plays it (not
+ * one that opens composed, not a stack, which sets its own words).
  * @returns {string[]}
  */
 export function entranceErrors(name, look) {
@@ -44,6 +44,8 @@ export function entranceErrors(name, look) {
   const at = `look "${name}": kinds.statement.entrance`;
   if (!ENTRANCES.includes(entrance)) return [...errors, `${at} must be "letters" or "lines", got ${shown(entrance)}`];
   if (!isPlainObject(look.moves?.[entrance])) return [...errors, `${at} "${entrance}" needs moves.${entrance}`];
+  // a look that opens composed (look.opens 'set', kinds/shared.mjs opensSet) sets every word from frame 0: nothing to play
+  if (look.opens === 'set') return [...errors, `${at} "${entrance}" is not read by a look that opens composed, which sets its words from frame 0`];
   if (look.composition === 'stack') return [...errors, `${at} "${entrance}" is not read by a stack composition, which sets its own words`];
   return errors;
 }

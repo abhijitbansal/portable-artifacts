@@ -105,12 +105,15 @@ test('composition, emphasis, field, camera, cuts, grain, captions and modes', ()
   assert.deepEqual([...l.modes], ['pro', 'viral']);
 });
 
-test('motion: smooth curves, entrances scale from 0.92 with a fade and a small overshoot that never backs off first, nothing steps', () => {
+test('motion: smooth curves, entrances scale from 0.92 with a fade and a small overshoot that never backs off first, nothing steps but the letters entrance', () => {
   const { moves } = look();
   assert.equal(moves.enter.scale, 0.92);
   assert.equal(moves.enter.dist, undefined, 'entrances scale, they do not travel');
   // the second-wave moves (rise, wipe, slam, pop, settle) are null in the parked look: it does not use them
   for (const [key, move] of Object.entries(moves).filter(([, m]) => m !== null)) assert.equal(move.step, undefined, `${key} is smooth, not stepped`);
+  // the one exception, by ruling (W6 task 4): the letters entrance flickers up on a steps() ease; no other move steps
+  assert.match(moves.letters.ease, /^steps\(/, 'the letters entrance steps');
+  for (const [key, move] of Object.entries(moves).filter(([name, m]) => m !== null && name !== 'letters')) assert.doesNotMatch(move.ease, /^steps\(/, `${key} does not step`);
   for (const key of ['exit', 'emphasize', 'draw', 'count']) assert.match(moves[key].ease, /^inOut/, `${key} eases in and out`);
   const curve = ease(moves.enter.ease);
   const samples = Array.from({ length: 101 }, (_, i) => curve(i / 100));

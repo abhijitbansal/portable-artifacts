@@ -150,6 +150,27 @@ test('a later shot of a viral film, and a matched hero, keep their own entrance'
   assert.equal(hero.wordTracks[0].opacity, undefined);
 });
 
+// The hook rule is the mode's (hookFromFrameZero), not the ghost words': a viral look whose emphasis is the highlight sets
+// no ghosts, and its first shot still shows every word on frame 0.
+test('a viral first shot in a highlight look with an entrance gets no glyph or line tracks', () => {
+  const desk = registries.looks.get('desk');
+  const name = 'desk-viral-test';
+  if (!registries.looks.has(name)) registries.looks.add(name, Object.freeze({ ...desk, name, experimental: true, modes: Object.freeze(['pro', 'viral']) }));
+  for (const [entrance, moves] of [['lines', {}], ['letters', { letters: { ease: 'outCubic', dur: 0.3, stagger: 0.04 } }]]) {
+    const look = registries.looks.get(name);
+    const used = { ...look, moves: { ...look.moves, ...moves }, kinds: { ...look.kinds, statement: { ...look.kinds.statement, entrance } } };
+    for (const index of [0, 1]) {
+      const film = filmOf([FILLER, shotOf('Ship it today')], name, '16:9', { mode: 'viral' });
+      const { ctx } = expandIn(film, index);
+      const out = registries.kinds.get('statement').expand(film.shots[index], { ...ctx, look: used });
+      const hero = all(out.nodes).find((n) => n.type === 'text' && n.props.role === 'hero');
+      assert.equal(ctx.mode.hookFromFrameZero, true);
+      assert.equal(hero.glyphTracks, undefined, `${entrance}, shot ${index}: no glyph tracks`);
+      assert.equal(hero.lineTracks, undefined, `${entrance}, shot ${index}: no line tracks`);
+    }
+  }
+});
+
 test('a look with neither entrance builds the statement it built before: no glyph or line tracks anywhere', () => {
   for (const look of ['pop', 'ledger', 'poster', 'keynote', 'marker']) {
     const out = expandShot(shotOf('Ship it today. It is *plain*.'), look);

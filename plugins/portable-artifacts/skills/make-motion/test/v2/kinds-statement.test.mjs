@@ -29,7 +29,7 @@ import {
 const WORDS = 'desk-words-test';
 if (!registries.looks.has(WORDS)) {
   const desk = registries.looks.get('desk');
-  const { entrance, ...statement } = desk.kinds.statement;
+  const statement = Object.fromEntries(Object.entries(desk.kinds.statement).filter(([key]) => key !== 'entrance'));
   registries.looks.add(WORDS, Object.freeze({ ...desk, name: WORDS, experimental: true, moves: Object.freeze({ ...desk.moves, lines: null }), kinds: Object.freeze({ ...desk.kinds, statement: Object.freeze(statement) }) }));
 }
 

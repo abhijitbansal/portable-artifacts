@@ -28,7 +28,7 @@ export function handLook(name = 'hand-test', extra = {}) {
     // what is written is never faded in: no letters or lines (validateLook refuses them in a look with a hand), so desk's
     // `lines` entrance and the statement's choice of it stay behind
     const moves = Object.freeze({ ...desk.moves, letters: null, lines: null });
-    const { entrance, ...statement } = desk.kinds.statement;
+    const statement = Object.fromEntries(Object.entries(desk.kinds.statement).filter(([key]) => key !== 'entrance'));
     const kinds = Object.freeze({ ...desk.kinds, statement: Object.freeze(statement) });
     registries.looks.add(name, Object.freeze({ ...desk, name, experimental: true, hand, cuts, sounds, overlays, moves, kinds }));
   }

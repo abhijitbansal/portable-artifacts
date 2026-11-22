@@ -114,7 +114,8 @@ export const cosmos = {
   // a soft shadow in a darker navy: depth from light, not from paper
   shadow: { dx: 0, dy: 12, blur: 32, alpha: 0.35, color: '#05081c' },
   // Styling for the devices this look draws. Colours are palette keys (or #rrggbb), sizes are units. Every style is
-  // smooth and round: no tilt, no tape, no hand wobble, no stepped frames.
+  // smooth and round: no tilt, no tape, no hand wobble, no stepped frames (the one steps() ease in the look is its letters
+  // entrance, moves.letters).
   devices: {
     // a neon pill: the deep navy at `alpha` behind the phrase, and round it a soft accent glow (screened, so it only
     // brightens) whose edge falls off over `glow` units. An accent pill at an alpha read as a brown band (rendered).

@@ -261,10 +261,11 @@ function hookTracks(look, at, to, peak) {
 
 // The entrance the look picks for this statement (look.kinds.statement.entrance: 'letters' or 'lines'), or null when the
 // words keep the per-word entrance of today. It applies on the plain path only: never in a mode that reads from frame 0
-// with ghost words (the hook), never to a hero that arrives matched, never in a look that opens composed.
+// (mode.hookFromFrameZero, viral: every word is on screen from the first frame, whatever the emphasis), never to a hero
+// that arrives matched, never in a look that opens composed.
 function entranceOf(ctx, matched) {
   const name = ctx.look.kinds?.statement?.entrance;
-  if (name === undefined || matched || ghostWords(ctx) || opensSet(ctx.look)) return null;
+  if (name === undefined || matched || ctx.mode.hookFromFrameZero === true || opensSet(ctx.look)) return null;
   return name;
 }
 

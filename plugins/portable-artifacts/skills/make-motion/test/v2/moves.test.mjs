@@ -111,7 +111,13 @@ test('a look drawn by hand may not set letters or lines: what is written is neve
 });
 
 test('a stack look takes no statement entrance, because a stack sets its own words', () => {
-  assert.throws(() => validateLook(withEntrance({ look: registries.looks.get('poster'), moves: { lines: LINES }, statement: { entrance: 'lines' } })), /look "entrance-test": kinds\.statement\.entrance "lines" is not read by a stack composition/);
+  assert.throws(() => validateLook(withEntrance({ look: registries.looks.get('pop'), moves: { lines: LINES }, statement: { entrance: 'lines' } })), /look "entrance-test": kinds\.statement\.entrance "lines" is not read by a stack composition/);
+});
+
+test('a look that opens composed takes no statement entrance, because its words are set from frame 0', () => {
+  for (const name of ['poster', 'keynote', 'ledger']) {
+    assert.throws(() => validateLook(withEntrance({ look: registries.looks.get(name), moves: { lines: LINES }, statement: { entrance: 'lines' } })), /look "entrance-test": kinds\.statement\.entrance "lines" is not read by a look that opens composed/, name);
+  }
 });
 
 test('moveOf returns the look entry, did-you-means an unknown name and refuses a null entry naming the look', () => {

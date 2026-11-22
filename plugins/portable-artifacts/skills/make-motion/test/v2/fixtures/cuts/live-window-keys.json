@@ -1,6 +1,7 @@
 {
   "note": "Every frame inside a layer or shader cut window of the film, digested over the incoming shot, the cut and its progress, and the outgoing shot with its film second and live flag. Made after motion-steals W2 Task 8, when the outgoing shot began to keep moving past its end: a window whose outgoing shot freezes again, or is carried on differently, changes its sha. Regenerate with a stated reason if the film or a look changes under it, never to clear a red test.",
   "film": "cuts-desk",
+  "regenerated": "motion-steals W6 task 4 (desk takes the `lines` statement entrance, so a desk statement on one side of a window carries line tracks, not word fades): the 7 windows with a desk statement on one side, into dissolve, dip, page, focus, curl, drop and warp; the other 4 (steps, circle, gust, slats) are unchanged.",
   "windows": {
     "into dissolve": {
       "frames": 15,
