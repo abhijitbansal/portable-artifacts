@@ -22,6 +22,7 @@ import { node } from './node.mjs';
 import { FIELD_ID } from '../kinds/shared.mjs';
 import { stackArea } from '../kinds/stack.mjs';
 import { withLookEmphasis } from '../kinds/emphasis-fallback.mjs';
+import { overlayNodes } from '../overlays/index.mjs';
 import { localMatrix } from '../page/bounds.mjs';
 import { camera as trackCamera, applyCamera, layeredCamera, pointThroughCamera } from './camera.mjs';
 
@@ -415,11 +416,18 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
     return { background: shot.background, sampled: shot.cut.entry.apply(args) };
   };
 
+  // The film's overlays (engine/overlays), built once and sampled at film time with no camera: they belong to the film, so
+  // they are in no shot's nodes, no outgoing picture and no smear layer. [] for a film that asks for none.
+  const overlays = overlayNodes({ film, look, canvas, timeline, assets, viralInsets });
+  const overlayAt = (t) => sampleGraph(overlays, t);
+
   return {
     duration: timeline.duration,
     frameCount: timeline.frameCount,
     look,
     frameAt,
+    overlayAt,
+    hasOverlays: overlays.length > 0,
     sampleAt: (t) => {
       const frame = frameAt(t);
       return frame.smear?.whole ?? frame.sampled;

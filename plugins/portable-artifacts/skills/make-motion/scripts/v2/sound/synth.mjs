@@ -2,7 +2,7 @@
 // voice the cues they already have; sub, paper, marker and the riser are new, pure sample generators seeded from the film
 // seed through engine/seeded.mjs. renderCues lays a cue list (cues.mjs planCues) into one stereo track of the film's
 // length. Nothing here reads a clock or Math.random: the same cues and seed give the same bytes.
-import { CUE_LAYERS, SAMPLE_RATE, cueWav, pinkNoise } from './cue-synth.mjs';
+import { CUE_LAYERS, CUE_VARIANTS, SAMPLE_RATE, cueWav, pinkNoise, variantRatio } from './cue-synth.mjs';
 import { mulberry32 } from '../../../engine/seeded.mjs';
 import { writeWav } from './wav.mjs';
 
@@ -83,27 +83,32 @@ function cueSeed(seed, cue) {
   return (hash ^ seed) >>> 0;
 }
 
+// The noise seed of take `variant` of a cue: the cue's own seed plus the take number (take 0 is cueSeed itself).
+const takeSeed = (seed, cue, variant) => (cueSeed(seed, cue) + variant) >>> 0;
+
 // ---- the new voices ----
 
-function sub() {
+// Each voice takes the take's pitch ratio (variantRatio: exactly 1 for take 0, so take 0 is the voice as it was) and
+// scales its pitch, or the band of its noise, by it.
+function sub(_noise, ratio = 1) {
   let phase = 0;
   const length = frames(SUB.seconds);
   return levelled(Float64Array.from({ length }, (_, i) => {
     const t = i * DT;
-    phase += TWO_PI * sweep(SUB.from, SUB.to, i / length) * DT;
+    phase += TWO_PI * sweep(SUB.from * ratio, SUB.to * ratio, i / length) * DT;
     return Math.sin(phase) * Math.min(1, t / SUB.attack) * Math.exp(-t * SUB.decay);
   }));
 }
 
-function paper(noise) {
+function paper(noise, ratio = 1) {
   const length = frames(PAPER.seconds);
-  const filtered = bandPass(() => noise() * 2 - 1, length, () => PAPER.hz, PAPER.q);
+  const filtered = bandPass(() => noise() * 2 - 1, length, () => PAPER.hz * ratio, PAPER.q);
   return levelled(filtered.map((x, i) => x * Math.min(1, (i * DT) / PAPER.attack) * Math.exp(-(i * DT) / PAPER.tau)));
 }
 
-function marker(noise) {
+function marker(noise, ratio = 1) {
   const length = frames(MARKER.seconds);
-  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(MARKER.from, MARKER.to, u), MARKER.q);
+  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(MARKER.from * ratio, MARKER.to * ratio, u), MARKER.q);
   return levelled(filtered.map((x, i) => {
     const t = i * DT;
     return x * Math.min(1, t / MARKER.attack, (MARKER.seconds - t) / MARKER.release);
@@ -126,22 +131,24 @@ function chirpToPeak(length, lo, hi, curve) {
  * A riser `seconds` long whose peak is its last sample, so it can be placed to end on an anchor: a mix of noise (scaled
  * to at most 1) and a tone ending on 1, always at most 1, under an envelope that rises to the last sample.
  */
-export function riserTo(seconds, { seed } = {}) {
+export function riserTo(seconds, { seed, variant = 0 } = {}) {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) {
     throw new RangeError(`riserTo: seconds must be a positive number, got ${String(seconds)}`);
   }
   checkSeed(seed, 'riserTo');
+  const ratio = variantRatio(variant, 'riserTo');
   const length = Math.max(2, frames(seconds));
   const release = frames(RISER_RELEASE_SECONDS);
-  const pink = pinkNoise(mulberry32(cueSeed(seed, RISER_CUE)));
-  const noisy = bandPass(pink, length, (u) => sweep(RISER.lo, RISER.hi, u ** RISER.curve), RISER.q);
+  const toneHi = RISER.toneHi * ratio;
+  const pink = pinkNoise(mulberry32(takeSeed(seed, RISER_CUE, variant)));
+  const noisy = bandPass(pink, length, (u) => sweep(RISER.lo * ratio, RISER.hi * ratio, u ** RISER.curve), RISER.q);
   const noiseTop = peakOf(noisy) || 1;
-  const tone = chirpToPeak(length, RISER.toneLo, RISER.toneHi, RISER.curve);
+  const tone = chirpToPeak(length, RISER.toneLo * ratio, toneHi, RISER.curve);
   return Float32Array.from({ length: length + release }, (_, i) => {
     if (i >= length) {
       // the release: the tone carried on at its last frequency (cos, as it peaked on sin(pi / 2)), falling linearly to 0
       const k = i - length + 1;
-      return PEAK * Math.cos(TWO_PI * RISER.toneHi * k * DT) * (1 - k / release);
+      return PEAK * Math.cos(TWO_PI * toneHi * k * DT) * (1 - k / release);
     }
     const u = i / (length - 1);
     const w = u ** RISER.toneShape;
@@ -153,9 +160,9 @@ export function riserTo(seconds, { seed } = {}) {
 // The index of a riser's peak in its samples (riserTo): just before its release.
 const riserPeakIndex = (xs) => xs.length - 1 - frames(RISER_RELEASE_SECONDS);
 
-function eraser(noise) {
+function eraser(noise, ratio = 1) {
   const length = frames(ERASER.seconds);
-  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(ERASER.from, ERASER.to, u), ERASER.q);
+  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(ERASER.from * ratio, ERASER.to * ratio, u), ERASER.q);
   return levelled(filtered.map((x, i) => {
     const t = i * DT;
     return x * Math.min(1, t / ERASER.attack, (ERASER.seconds - t) / ERASER.release);
@@ -168,8 +175,8 @@ const NEW_VOICES = Object.freeze({ sub, paper, marker, erase: eraser });
 export const KNOWN_CUES = Object.freeze([...Object.keys(CUE_LAYERS), ...Object.keys(NEW_VOICES)]);
 
 // The left channel of a version 1 cue WAV (centred, so it is the cue's own mono signal) as samples in -1..1.
-function versionOneMono(cue) {
-  const wav = cueWav({ cue });
+function versionOneMono(cue, variant) {
+  const wav = cueWav({ cue, variant });
   const count = (wav.length - WAV_HEADER_BYTES) / (CHANNELS * BYTES_PER_SAMPLE);
   return Float32Array.from({ length: count }, (_, i) => wav.readInt16LE(WAV_HEADER_BYTES + i * CHANNELS * BYTES_PER_SAMPLE) / 32768);
 }
@@ -181,22 +188,25 @@ function withOnset(xs) {
   return Float32Array.from(xs, (x, i) => (i < ramp ? (x * i) / ramp : x));
 }
 
-function rawSamples(cue, seed) {
-  if (cue === RISER_CUE) return riserTo(RISER.seconds, { seed });
-  if (Object.hasOwn(NEW_VOICES, cue)) return NEW_VOICES[cue](mulberry32(cueSeed(seed, cue)));
-  return versionOneMono(cue);
+function rawSamples(cue, seed, variant) {
+  if (cue === RISER_CUE) return riserTo(RISER.seconds, { seed, variant });
+  if (Object.hasOwn(NEW_VOICES, cue)) return NEW_VOICES[cue](mulberry32(takeSeed(seed, cue, variant)), variantRatio(variant));
+  return versionOneMono(cue, variant);
 }
 
 /**
  * The mono 48 kHz samples of `cue`, peaking at PEAK (at most 0.9), starting and ending at 0 (an ONSET_SECONDS rise; the
  * voices' own fades and the riser's release at the end). `seed` (the film seed, an integer 0 to 2^32 - 1, required)
  * seeds the noise of the new voices; the version 1 cues use version 1's own fixed noise, so the seed does not change
- * them. `riser` is riserTo(1.6 s): the version 1 riser fades out its last 5 ms, so its peak is not its end.
+ * them (take 0). `riser` is riserTo(1.6 s): the version 1 riser fades out its last 5 ms, so its peak is not its end.
+ * `variant` (0 to CUE_VARIANTS - 1, default 0) is the take: take k seeds every cue's noise with the take number added
+ * (version 1's fixed noise included) and raises its pitch by VARIANT_CENTS[k] cents; take 0 is the cue as it always was.
  */
-export function cueSamples(cue, { seed } = {}) {
+export function cueSamples(cue, { seed, variant = 0 } = {}) {
   if (!KNOWN_CUES.includes(cue)) throw new RangeError(`unknown cue ${JSON.stringify(cue)}; known cues: ${KNOWN_CUES.join(', ')}`);
   checkSeed(seed, 'cueSamples');
-  return withOnset(rawSamples(cue, seed));
+  variantRatio(variant, 'cueSamples'); // a range check only: it throws a cueSamples-prefixed RangeError for a bad take, before any voice is built
+  return withOnset(rawSamples(cue, seed, variant));
 }
 
 // ---- the track ----
@@ -237,6 +247,20 @@ function addInto(left, right, xs, start, gain, pan) {
   }
 }
 
+// The take each cue plays: the n-th time a name sounds, in time order (ties by list order), is take n % CUE_VARIANTS.
+// -> an array parallel to `cues`.
+function takeNumbers(cues) {
+  const seen = new Map();
+  const takes = new Array(cues.length);
+  const order = cues.map((_, i) => i).sort((a, b) => cues[a].t - cues[b].t || a - b);
+  for (const i of order) {
+    const n = seen.get(cues[i].cue) ?? 0;
+    seen.set(cues[i].cue, n + 1);
+    takes[i] = n % CUE_VARIANTS;
+  }
+  return takes;
+}
+
 /**
  * Writes `out` (through a temporary name, renamed into place): a stereo 48 kHz 16-bit WAV `seconds` long with each
  * cue's samples added from round(t x 48000) (a riser so its peak falls there, its 4 ms release after), scaled by its
@@ -254,16 +278,19 @@ export async function renderCues(cues, { seconds, seed, out }) {
   const length = frames(seconds);
   const left = new Float32Array(length);
   const right = new Float32Array(length);
-  const voices = new Map();
+  const voices = new Map(); // one voice per cue name and take
+  const takes = takeNumbers(cues);
   let dropped = 0;
-  for (const { t, cue, gainDb, pan } of cues) {
+  for (const [index, { t, cue, gainDb, pan }] of cues.entries()) {
     const anchor = Math.round(t * SAMPLE_RATE);
     if (anchor >= length) {
       dropped += 1;
       continue;
     }
-    if (!voices.has(cue)) voices.set(cue, cueSamples(cue, { seed }));
-    const xs = voices.get(cue);
+    const variant = takes[index];
+    const key = `${cue}#${variant}`;
+    if (!voices.has(key)) voices.set(key, cueSamples(cue, { seed, variant }));
+    const xs = voices.get(key);
     addInto(left, right, xs, cue === RISER_CUE ? anchor - riserPeakIndex(xs) : anchor, 10 ** (gainDb / 20), pan);
   }
   await writeWav(out, left, right, { limit: LIMIT });

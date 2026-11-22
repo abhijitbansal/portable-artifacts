@@ -60,6 +60,9 @@ export const RULES = Object.freeze([
     { capped: true, evidence: 'measured', ask: 'Is the empty part of this frame doing a job?' }),
   rule('scale-contrast', [CREATIVE], 'frame', 'The hero leads its neighbours but reaches under 50% of the safe area (45% in ledger).',
     { capped: true, evidence: 'measured', ask: 'Should the hero be the thing the viewer sees first, and is it big enough to be?' }),
+  // frame, from W4: the film's overlays (a logo, a progress bar), which no snapshot holds
+  rule('overlay-covers', [CREATIVE], 'frame', 'A landed text runs under the logo by more than 4 units both ways.',
+    { capped: true, ask: 'Is there a corner of the frame where the logo would not sit under the words?' }),
   // film: what the whole film does
   rule('unsettled', [MECHANICAL], 'film', 'Text never lands within its shot: on every sampled frame it is still arriving or moving.'),
   rule('still', [CREATIVE], 'film', 'The picture holds still for longer than the mode allows.',
@@ -84,6 +87,9 @@ export const RULES = Object.freeze([
     { capped: true, suggest: 'cuts', ask: 'Does each cut say something different about how the two shots relate?' }), // unmeasured: no example film is flagged (calibration.md)
   rule('sameness', [CREATIVE], 'outline', 'Three or more shots in a row share one kind, one cut or one move.',
     { capped: true, suggest: 'cuts', evidence: 'measured', ask: 'Would a different kind, cut or move show some of these ideas better?' }),
+  // poster: the frame --poster writes, judged as a thumbnail
+  rule('poster-read', [CREATIVE], 'poster', 'The largest text on the poster is under 14 px tall on a 180 px thumbnail (84 units).',
+    { suggest: 'minSize', ask: 'Does the poster\'s biggest line still read when the poster is a thumbnail?' }),
 ]);
 
 /** Every rule id, in registry order. */

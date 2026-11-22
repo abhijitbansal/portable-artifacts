@@ -36,6 +36,7 @@ An unknown root field is an error. Only `shots` and `version` are required.
 | `sound` | `"on"` or `"off"` | `on` plays the designed sound cues. In `viral` they play unless the film says `off` |
 | `cues` | array of up to 64 `{ "at", "cue" }` | Your own sound cues. See Sound |
 | `audio` | array of up to 20 `{ "src", "at" }` | Extra sound files. See Sound |
+| `overlays` | `{ "logo": { "src", "corner" }, "progress": true }` | A logo and a progress bar that stay unbroken over every cut. See Overlays |
 | `captions` | boolean | Draws the narration as captions, on shots whose kind does not show its own words. Off by default |
 | `loop` | boolean | `true`: the review checks that the last frame matches the first |
 | `vars` | object | Typed names for `{{name}}` in the film (see Variables) |
@@ -96,7 +97,20 @@ Sound is opt-in. A film with none of `voice`, `music`, `sound`, `cues` or `audio
 - **`cues`**: `[{ "at": 2.5, "cue": "pop" }]`. `at` is seconds from the start of the film, or an anchor. The cue is one of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`, `swoosh`, `drop`, `ding`, `sub`, `paper`, `marker`, `erase`.
 - **`audio`**: `[{ "src": "sounds/ding.wav", "at": 3 }]`. `at` is seconds from the start, 0 or more.
 
+`--no-music` renders the film without its music, for a second delivery with no bed or track. The music is still planned, so `music.snap` moves the cuts as before and the cues sit on that timeline: the picture is the same film. When the render holds any other sound (a voice, cues, extra audio), `report.audio.music` keeps its summary and gains `muted: true`, and the text report's sound line ends `(muted)`; a film whose only sound was the music renders with no audio stream and `report.audio` is `null`. On a film with no music the flag does nothing and says so on the log. It does not go with `--outline`, `--phonemes`, `--poster`, `--poster-out`, `--inspect` or `--preview`.
+
 Every `src` is a file inside the film's folder. A URL, an absolute path or a path that leaves the folder is an error.
+
+## Overlays
+
+`overlays` puts two marks over the film itself, not over a shot, so a cut never moves, fades or breaks them: `{ "logo": { "src": "assets/logo.png", "corner": "top-right" }, "progress": true }`. Each key is optional. An unknown key gets a did-you-mean.
+
+- **`logo`**: a png, jpg, webp or gif inside the film's folder, held to the same rules as a shot's picture; a problem is reported at `overlays.logo.src`. `corner` is `top-left`, `top-right`, `bottom-left` or `bottom-right`; left out, it takes the look's own corner. The logo keeps its proportions and sits in its corner, inset by the look's margin; a very wide one is scaled down to fit the width it has.
+- **`progress`**: `true` draws a thin bar along one edge of the frame that fills from left to right over the film's length. The look sets the edge, thickness and colours. The bar sits on the frame's own edge, never moved in to the band a banded look composes in (`pop`, `cosmos`, `poster` on 9:16). In `viral` mode on a 9:16 frame the frame's edge is the edge of the platform's safe zone, so the bar starts at the top (or ends at the foot) of the safe zone. A banded look's band begins at that same line, so there the bar cannot be kept off the band: it lies in the band's first pixels, and no rule judges a text that reaches it.
+
+The logo stands inside the rectangle the look composes in and, in `viral` mode on a 9:16 frame, inside the platform's safe zone too, so it keeps clear of the platform's caption and buttons. Both are drawn over the composed frame, after the cut; for a shader cut they are laid over the transition's result before the post pass (grain, bloom, halftone). The review's composition rules do not see them, and a moving bar does not stop the `still` finding from firing. The poster and the `loop` check are taken without them; `--inspect` lists them in `overlays`, beside `nodes`. The look decides how each is drawn (`--list looks --json` says which overlays each look draws); asking for an overlay a look does not draw, such as `progress` in `marker`, is an error that names the looks that do.
+
+A progress bar makes every frame a fresh capture, so a film of held shots renders slower with it. Measured, one render each with `make.mjs --json`, fast capture, 30 fps, `desk`, on one machine (2026-11-22): three held shots of 4 s (360 frames) captured 144 frames at 22.2 ms per frame without the bar and 360 frames at 51.9 ms per frame with it, 2.3 times the time. A film that moves on every frame has nothing to lose: four moving statements joined by a slide, a crossfade and a ripple (179 frames) captured all 179 with the bar and with a logo alone, at 63.0 and 63.1 ms per frame.
 
 ## Variables
 
@@ -156,6 +170,8 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 | `provenance` | `{ comment, artist }` as stamped into the MP4, or `null` |
 
 These keys appear only when they apply: `poster`, `inspect`, `slice`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
+
+`subtitles` is `{ file, format, timed, level }`, on a `--subtitles` run only. `level` is `sentence`, or `word` with `--subtitle-words` (needs `--subtitles`): one cue per word, at the film second it is heard (a word that leads or trails its cut keeps its heard time), sorted across the film, each cue held inside the film; words heard at the same moment, within a millisecond of each other (a merged run such as "$5 million"), are one cue, and each cue ends where the next starts, so no two cues overlap. An estimated VTT says so in a `NOTE`; an estimated SRT is refused.
 
 `slice` is `{ from, to, frames, shots, silent, skipped }`, on a `--shot` or `--range` run only: the frames it covers, the shots it touches, whether the film's sound is left out, and the review rules it does not run (`references/tools.md`, "One shot or a range").
 

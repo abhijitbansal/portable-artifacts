@@ -23,7 +23,9 @@ export function handLook(name = 'hand-test', extra = {}) {
     const hand = Object.freeze({ ...HAND, ...extra });
     const cuts = registries.cuts.has('erase') ? [...desk.cuts.filter((c) => c !== 'erase'), 'erase'] : desk.cuts;
     const sounds = Object.freeze({ ...desk.sounds, cut: Object.freeze({ ...desk.sounds.cut, ...(registries.cuts.has('erase') ? { erase: 'erase' } : {}) }) });
-    registries.looks.add(name, Object.freeze({ ...desk, name, experimental: true, hand, cuts, sounds }));
+    // a look drawn by hand draws no progress bar, as marker does not (engine/overlays)
+    const overlays = Object.freeze({ ...desk.overlays, progress: null });
+    registries.looks.add(name, Object.freeze({ ...desk, name, experimental: true, hand, cuts, sounds, overlays }));
   }
   return name;
 }

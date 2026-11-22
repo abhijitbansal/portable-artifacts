@@ -13,7 +13,7 @@ export const SAME_RUN = 3;
 /** Findings of one capped rule a film keeps (of one form, for `sameness`); the rest are counted in the last one kept. */
 export const CREATIVE_CAP = 2;
 /** The rules `capCreative` caps. W2's composition rules (`COMPOSITION_RULES`, frame.mjs) are capped by `capComposition`, by measure. A later rule that is capped by time appends its id. */
-export const CAPPED_HERE = Object.freeze(['cut-variety', 'sameness']);
+export const CAPPED_HERE = Object.freeze(['cut-variety', 'sameness', 'overlay-covers']);
 
 const SHARE_EPSILON = 1e-9;
 
@@ -106,7 +106,7 @@ const capGroup = (f) => (f.rule === 'sameness' ? `sameness ${String(f.node ?? ''
 
 /**
  * At most `CREATIVE_CAP` findings of each rule in `CAPPED_HERE` (of each form, for `sameness`): the earliest stay, in their
- * place in the list, and the last of them says how many were left out and in which shots, one id for each. Every other
+ * place in the list, and the last of them says how many were left out and in which shots, each shot's id once. Every other
  * finding passes through untouched; the input is not changed.
  */
 export function capCreative(findings) {
@@ -125,6 +125,6 @@ export function capCreative(findings) {
   }
   return findings.filter((f) => !dropped.has(f)).map((f) => {
     const more = lastKept.get(f);
-    return more === undefined ? f : { ...f, message: `${f.message} (and ${more.length} more: ${more.map((m) => m.shot).join(', ')})` };
+    return more === undefined ? f : { ...f, message: `${f.message} (and ${more.length} more: ${[...new Set(more.map((m) => m.shot))].join(', ')})` };
   });
 }

@@ -7,9 +7,10 @@
 //   node scripts/make.mjs --list kinds|looks|modes|devices|moves|cuts|fields|voices [--all] [--json]   (--all: experimental looks and parked kinds too)
 //
 // Exit 0: the film is valid and has no mechanical finding. Exit 1: it is invalid, or a mechanical finding exists (the
-// MP4 is still rendered when the film validated), or the page raised an error about it. Exit 2: a usage error or trouble
-// with the machine (a missing file, no browser, no ffmpeg, ffmpeg failing, a crashed or closed browser page, a timeout, a
-// lost WebGL context, a picture the browser cannot decode); `error: { message, hint }` in the JSON, or on stderr,
+// MP4 is still rendered when the film validated; a picture the browser cannot decode is one, at the path that names it),
+// or the page raised an error about it. Exit 2: a usage error or trouble with the machine (a missing file, no browser, no
+// ffmpeg, ffmpeg failing, a crashed or closed browser page, a timeout, a lost WebGL context, a picture the server failed
+// to serve: HTTP n); `error: { message, hint }` in the JSON, or on stderr,
 // says which and how to fix it. Exit 130: stopped by SIGINT or SIGTERM (`error.message` is "interrupted"); a --preview that
 // is already serving is the exception: stopping it is how it ends, exit 0. An exception nobody caught is exit 2 with
 // its message as the error, in a preview and a batch too. The report keeps what was done before a stop. It never opens a dialog and never waits for input.

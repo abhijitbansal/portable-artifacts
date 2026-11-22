@@ -44,7 +44,7 @@ const HINTS = Object.freeze([
   [/^Target crashed/, 'the browser page crashed while drawing the film (it may have run out of memory); run again, and close other heavy programs if it keeps happening'],
   [/has been closed/, 'the browser closed while drawing the film; run again'],
   [/^Timeout \d+ms exceeded/, 'the browser did not answer in time; run again, and check that the machine is not overloaded'],
-  [/^image ".*" could not be loaded/, 'the file is not a picture the browser can decode; replace it with a PNG, JPEG or WebP image'],
+  [/^image ".*" could not be loaded: HTTP \d+/, 'the page server could not read the picture; check that the file is still in the film folder, and run again'],
 ]);
 
 /** { message, hint } for an error's first line: whole with its hint when HINTS knows it (a path in it may hold ". "),
@@ -136,7 +136,7 @@ export function reportOf(state) {
     ...(state.inspect ? { inspect: state.inspect } : {}), // --inspect: { png, json, frame, seconds, shot }
     ...(state.slice ? { slice: state.slice } : {}), // --shot, --range: { from, to, frames, shots, silent, skipped }
     ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
-    ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed }
+    ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed, level }
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
     ...(state.look ? { look: state.look } : {}),
     ...(state.kinds?.length > 0 ? { kinds: state.kinds } : {}),
@@ -173,7 +173,7 @@ function musicText(music) {
   const tempo = music.bpm === null ? `${source} with no steady beat` : `${source} at ${music.bpm} bpm`;
   const landed = music.landed === null || music.cuts === 0 ? '' : `, ${music.landed} of ${plural(music.cuts, 'cut')} on a beat`; // no cuts, no count
   const moved = Array.isArray(music.moved) ? `, ${music.moved.length} moved onto a beat` : ''; // music.snap: how many cuts it moved
-  return `${tempo}${landed}${moved}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}`;
+  return `${tempo}${landed}${moved}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}${music.muted === true ? ' (muted)' : ''}`; // --no-music: planned, not in the file
 }
 
 /** The text form's line for sound: the cue count, the bed or file and its tempo, the cuts on a beat; null for none. */

@@ -143,9 +143,12 @@ test('capCreative caps each sameness form on its own, so kind runs cannot hide t
   assert.equal(kept[1].message, 'kind:b (and 1 more: s3)');
 });
 
-test('the "and n more" count and the shots it lists agree, a shot named once for each finding left out', () => {
-  const found = [1, 2, 3, 4].map((t) => ({ kind: 'creative', rule: 'sameness', node: 'kind:a', shot: t < 3 ? `s${t}` : 's9', t, message: 'm' }));
-  assert.ok(capCreative(found)[1].message.endsWith(' (and 2 more: s9, s9)'));
+test('the "and n more" count is the findings left out, and each shot it lists is named once, in order of first finding', () => {
+  const found = [1, 2, 3, 4, 5].map((t) => ({ kind: 'creative', rule: 'sameness', node: 'kind:a', shot: t < 3 ? `s${t}` : (t === 4 ? 's7' : 's9'), t, message: 'm' }));
+  // s9 holds two of the three findings left out (t 3 and 5), s7 one (t 4)
+  assert.ok(capCreative(found)[1].message.endsWith(' (and 3 more: s9, s7)'));
+  const same = [1, 2, 3, 4].map((t) => ({ kind: 'creative', rule: 'sameness', node: 'kind:a', shot: t < 3 ? `s${t}` : 's9', t, message: 'm' }));
+  assert.ok(capCreative(same)[1].message.endsWith(' (and 2 more: s9)'));
 });
 
 test('capCreative leaves an uncapped rule, and the two composition rules, alone', () => {

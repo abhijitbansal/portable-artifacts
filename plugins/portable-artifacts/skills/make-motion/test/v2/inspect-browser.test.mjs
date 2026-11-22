@@ -9,6 +9,7 @@ import { browserAvailable } from './helpers/session.mjs';
 import '../../scripts/v2/list.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { readPng } from '../../scripts/v2/png.mjs';
+import { pngOf } from './helpers/png.mjs';
 
 const EDGE = { type: 'text', id: 'edge', props: { x: 10, y: 400, text: 'Off the edge', font: { family: 'Geist', weight: 600, size: 96 }, maxWidth: 900, fill: '#ffffff' } };
 const BAR = { type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill: '#ffe14a' } };
@@ -82,6 +83,24 @@ test('inside a crossfade the dump says which cut, how far, and which shot is goi
   assert.equal(dump.cut.from.shot, 'off');
   assert.equal(dump.cut.from.live ? dump.cut.from.seconds > 1 : dump.cut.from.seconds === 1, true, `outgoing second ${dump.cut.from.seconds}`);
   assert.deepEqual(dump.nodes.map((n) => n.id).filter((id) => ['edge', 'bar'].includes(id)), ['bar'], 'the nodes list the incoming shot alone, whatever the picture shows of the outgoing one at this p');
+  return undefined;
+});
+
+test('the dump lists the film\'s overlays beside the nodes, in the same shape, and none for a film without them', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  mkdirSync(path.join(dir, 'assets'), { recursive: true });
+  writeFileSync(path.join(dir, 'assets', 'logo.png'), pngOf(16, 16, () => [0, 255, 0]));
+  writeFileSync(path.join(dir, 'overlaid.json'), JSON.stringify({ ...FILM, overlays: { logo: { src: 'assets/logo.png' }, progress: true } }));
+  const { report, exitCode } = await runMake({ specPath: path.join(dir, 'overlaid.json'), inspect: 'off@start+0.5', out: null });
+  assert.equal(exitCode, 0, JSON.stringify(report.findings));
+  const dump = dumpOf(report);
+  assert.deepEqual(dump.overlays.map((n) => n.id), ['overlay.logo', 'overlay.progress.track', 'overlay.progress.bar']);
+  const shape = (n) => Object.keys(n).filter((k) => k !== 'text').sort(); // the node entries' keys, text apart
+  assert.deepEqual(shape(dump.overlays[0]), shape(dump.nodes[0]));
+  assert.ok(dump.overlays.every((n) => Array.isArray(n.bbox) && n.bbox.length === 4 && n.offFrame === false), JSON.stringify(dump.overlays));
+  assert.ok(dump.nodes.every((n) => !n.id.startsWith('overlay.')), 'the nodes stay the shot\'s alone');
+  const plain = dumpOf((await inspect('off@start+0.5')).report);
+  assert.deepEqual(plain.overlays, []);
   return undefined;
 });
 

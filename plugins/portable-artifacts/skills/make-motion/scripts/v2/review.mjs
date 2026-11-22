@@ -16,7 +16,8 @@
 // anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
 import { shotTime, lookOfShot } from '../../engine/graph/film.mjs';
-import { auditFrame, textStatesIn, textLandings, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
+import { auditFrame, textStatesIn, textLandings, landedTexts, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
+import { overlayCoverFindings } from '../../engine/review/overlay.mjs';
 import { regionMarkIds } from '../../engine/review/regions.mjs';
 import { outlineFindings, capCreative } from '../../engine/review/outline.mjs';
 import { aimedAtOf } from '../../engine/review/dropped.mjs';
@@ -319,6 +320,27 @@ export function settleFindings(film, timeline, restingOf, snapshots) {
   }));
 }
 
+/**
+ * The landed texts of each whole audited frame (a frame inside a cut window is audited as the incoming shot alone, away from
+ * where the cut puts it) set against the logo's box in `overlays` (the page's __snapshotOverlays: the logo stands still, so
+ * one frame's boxes serve them all). Items as dedupeFindings takes them: { shot, t, finding }.
+ */
+export function overlayCoverItems(film, timeline, restingOf, snapshots, overlays, backgrounds = []) {
+  return snapshots.filter((snap) => snap.whole).flatMap((snap) => {
+    const ctx = frameContext(film, timeline, restingOf, snap, backgrounds);
+    return overlayCoverFindings(landedTexts(snap.tree, ctx), overlays, ctx).map((finding) => ({ shot: ctx.shotId, t: ctx.t, finding }));
+  });
+}
+
+// The deduplicated overlay-covers findings of a film that asks for a logo. dedupeFindings is given no shots, so the path stays
+// `overlays.logo` and does not take a field of the shot the text came from.
+async function logoCoverFindings(session, restingOf, snapshots, backgrounds) {
+  const { film, timeline } = session;
+  if (film.overlays?.logo === undefined) return [];
+  const overlays = await session.page.evaluate((i) => window.__snapshotOverlays(i), 0);
+  return dedupeFindings(overlayCoverItems(film, timeline, restingOf, snapshots, overlays, backgrounds));
+}
+
 function pacingFindings(film, timeline, held) {
   const { maxStillSeconds } = registries.modes.get(film.mode ?? DEFAULT_MODE);
   return stillStretches({ held, timeline, maxStillSeconds }).map((s) => ({
@@ -484,10 +506,11 @@ export async function reviewFilm({ session, signal, slice = null }) {
   // a frame finding is kept once, at the first frame of the slice it shows on (dedupeFindings runs after the slice filter)
   const onFrames = [...audited, ...settleFindings(film, timeline, restingOf, snapshots)].filter((item) => slice === null || reported(slice, timeline.fps, { ...item.finding, shot: item.shot, t: item.t }));
   const deduped = capComposition(dedupeFindings(onFrames, film.shots));
+  const covers = await logoCoverFindings(session, restingOf, snapshots, backgrounds); // a landed text under the logo (overlays)
   const still = pacingFindings(film, timeline, await heldFlags(session, signal, slice));
   const loop = slice === null ? await loopFindings(session) : []; // root loop: true (loop.mjs)
   const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings
-  const found = [...deduped, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
+  const found = [...deduped, ...covers, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
   const inside = slice === null ? found : found.filter((f) => reported(slice, timeline.fps, f)); // only what is about the slice
   return capCreative(inside).sort((a, b) => a.t - b.t);
 }

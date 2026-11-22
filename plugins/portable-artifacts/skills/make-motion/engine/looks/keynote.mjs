@@ -121,6 +121,11 @@ export const keynote = {
   captions: 'pill',
   captionWeight: 700,
   post: { grain: 0.012, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'bottom', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   kinds: {
     // one huge headline up to 264 across columns 1 to 11, set whole on frame 0; the sweep on its emphasised word
     // `linesWide` 2: on a wide frame at most two lines when that fits (three one-word lines left the right half empty

@@ -57,10 +57,14 @@ const cutEntry = (entry, def, name) => ({
   outgoing: def.family === 'node' ? 'frozen' : 'live', at: def.origin === true,
 });
 
+// A look's entry: which film-level overlays it draws (an entry that is not null), for `overlays` in a film.
+const lookOverlays = (look) => Object.fromEntries(registries.overlays.names().map((overlay) => [overlay, look.overlays?.[overlay] != null]));
+
 function entryOf(listName, name) {
   const def = registries[listName].get(name);
   const entry = { name, summary: def.summary ?? '', ...(def.experimental === true ? { experimental: true } : {}) };
   if (listName === 'kinds') return kindEntry(entry, def, name);
+  if (listName === 'looks') return { ...entry, overlays: lookOverlays(def) };
   if (listName === 'moves') return { ...entry, looks: moveLooks(name) };
   if (listName === 'cuts') return cutEntry(entry, def, name);
   return entry;

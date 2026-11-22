@@ -106,6 +106,12 @@ export const pop = {
   captions: 'stack',
   // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units; the bar at
+  // the top of the band, clear of the captions under it
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'top', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs, quote.mjs, compare.mjs, chart.mjs);
   // sizes are units or 1-based scale steps.
   kinds: {

@@ -126,6 +126,11 @@ export const marker = {
   captions: 'lower',
   captionVariant: 'plain',
   post: { grain: 0.006, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner; no progress bar, since the look draws every stroke by hand
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: null,
+  },
   // Composition data per kind. screen and code are excluded (no entry: a film asking for one is refused with the looks that
   // support it). Kinds that read data start from desk's (the same editorial composition, margins and steps).
   // PARKED in marker alone (experimental: true on the kind: they validate and render here, and are not listed), each measured on its

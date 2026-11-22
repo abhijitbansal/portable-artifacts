@@ -46,6 +46,19 @@ test('the contract fails on (i) for a copy that repeats the accent hex under a k
   assert.throws(() => check('i', ACCENT_COPY).run(), /look\.devices\.card\.shadow/);
 });
 
+test('the contract fails on (k) for a copy with an overlay left out, and for one whose overlay field is wrong', () => {
+  const { progress, ...rest } = desk.overlays;
+  assert.ok(progress !== undefined, 'desk draws a progress bar');
+  const missing = Object.freeze({ ...desk, name: 'contract-no-progress', experimental: true, overlays: Object.freeze(rest) });
+  assert.throws(() => registries.looks.add('contract-no-progress', missing), /overlays\.progress/);
+  const wrong = Object.freeze({ ...desk, name: 'contract-bad-bar', experimental: true, overlays: Object.freeze({ ...desk.overlays, progress: Object.freeze({ ...progress, edge: 'middle' }) }) });
+  assert.throws(() => registries.looks.add('contract-bad-bar', wrong), /overlays\.progress\.edge/);
+  // validateLook refuses both, so the check reads them from a stub registry
+  assert.doesNotThrow(() => check('k').run(), 'the plain copy passes (k)');
+  assert.throws(() => check('k', 'contract-no-progress', OPTS, { looks: { get: () => missing, has: () => true } }).run(), /overlays\.progress is given/);
+  assert.throws(() => check('k', 'contract-bad-bar', OPTS, { looks: { get: () => wrong, has: () => true } }).run(), /overlays\.progress/);
+});
+
 test('the contract fails on (b) for an experimental look claimed as listed', () => {
   assert.throws(() => check('b', NAME, { ...OPTS, listed: true }).run(), /lists it/);
 });

@@ -31,4 +31,5 @@ export const registries = {
   cuts: createRegistry('cut'),
   fields: createRegistry('field'),
   captions: createRegistry('caption style'),
+  overlays: createRegistry('overlay'),
 };

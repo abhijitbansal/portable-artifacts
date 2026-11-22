@@ -238,6 +238,12 @@ export const cosmos = {
     feed: { lit: { spoken: 'ink', other: 'ink2' }, face: 'display', titleFace: 'label', steps: [2, 3, 4], maxLines: 4, pad: 28, gap: 20, share: 0.82, radius: 36, bold: 700, me: { fill: '#3a3180', text: 'ink' }, them: { fill: '#2e2770', text: 'ink' }, card: { fill: '#2e2770', text: 'ink' }, discs: ['shape', 'shape2', 'ink2'], discText: 'deep', dots: 'ink2', title: 'ink2', lineWidth: 0, shadow: false },
   },
   post: { grain: 0.01, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units; the bar at
+  // the top of the band, clear of the captions under it
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'top', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', flood: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
