@@ -21,6 +21,7 @@ export const COMMON_SHOT_FIELDS = Object.freeze([
   { name: 'say', type: 'string', required: false },
   { name: 'hold', type: 'number', required: false },
   { name: 'cut', type: 'string', required: false },
+  { name: 'narration', type: 'object', required: false },
   { name: 'on', type: 'array', required: false },
 ]);
 

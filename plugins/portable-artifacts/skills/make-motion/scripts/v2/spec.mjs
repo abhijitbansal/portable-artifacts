@@ -9,7 +9,7 @@ import { validateMode } from '../../engine/modes/index.mjs';
 import { listedKinds } from '../../engine/looks/index.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { hintRefusals } from './voice/calls.mjs';
-import { buildTimeline } from '../../engine/script/timing.mjs';
+import { NARRATION_SHIFT_MAX, PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
@@ -89,12 +89,20 @@ const ON_ITEM_SCHEMA = {
   },
 };
 
+const NARRATION_SHIFT_SCHEMA = { type: 'number', minimum: 0, maximum: NARRATION_SHIFT_MAX };
+const NARRATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { lead: NARRATION_SHIFT_SCHEMA, trail: NARRATION_SHIFT_SCHEMA },
+};
+
 const SHOT_PROPERTIES = {
   id: { type: 'string' }, // checkShotId shows the allowed spelling
   show: { type: 'string' },
   say: { type: 'string', minLength: 1, maxLength: SAY_MAX },
   hold: { type: 'number', minimum: HOLD_MIN, maximum: HOLD_MAX },
   cut: {}, // a name or { type, direction?, duration?, smear? }: checkCut says what to write
+  narration: NARRATION_SCHEMA, // { lead?, trail? }: narrationErrors says where it cannot work
   on: { type: 'array', maxItems: ON_MAX, items: ON_ITEM_SCHEMA },
 };
 
@@ -491,6 +499,65 @@ function checkShots(spec, ctx) {
   ));
 }
 
+// --- narration lead and trail (J and L cuts) ---
+
+// The seconds a shot's narration.lead or .trail holds, 0 when it is not a number from 0 to NARRATION_SHIFT_MAX (the
+// schema reports that).
+function shiftOf(shot, key) {
+  const seconds = isPlainObject(shot) && isPlainObject(shot.narration) ? shot.narration[key] : undefined;
+  return typeof seconds === 'number' && seconds > 0 && seconds <= NARRATION_SHIFT_MAX ? seconds : 0;
+}
+
+// What a shot's `narration` cannot do where it is: each error at the field that cannot work.
+function narrationFieldErrors(shots, recording) {
+  return shots.flatMap((shot, index) => {
+    if (!isPlainObject(shot) || !isPlainObject(shot.narration)) return [];
+    const at = pathJoin(pathJoin('shots', index), 'narration');
+    if (shot.say === undefined) return [{ path: at, message: 'a shot with no "say" has no narration to move; remove "narration"' }];
+    if (recording) return [{ path: at, message: 'a recording sets where its own words fall; "narration" works with a made voice or with no voice' }];
+    const errors = [];
+    if (index === 0 && shiftOf(shot, 'lead') > 0) {
+      errors.push({ path: pathJoin(at, 'lead'), message: 'the first shot has nothing before it for its narration to start over; remove "lead"' });
+    }
+    if (index === shots.length - 1 && shiftOf(shot, 'trail') > 0) {
+      errors.push({ path: pathJoin(at, 'trail'), message: 'the last shot has nothing after it for its narration to run over; remove "trail"' });
+    }
+    if (index > 0 && shiftOf(shot, 'lead') > 0 && shiftOf(shots[index - 1], 'trail') > 0) {
+      errors.push({ path: pathJoin(at, 'lead'), message: `shot "${shots[index - 1].id}" already trails over this cut (its narration.trail); keep one of the two` });
+    }
+    return errors;
+  });
+}
+
+// The errors of a PlacementError from the film's estimated timeline: a shift that leaves a shot under 1 s or under its cut.
+// Only when the film is otherwise well-formed enough to be timed; any other failure of the timeline is another check's own error
+// (a bad say, hold, mode or cut is reported where it is), and a film with none of them builds, as loadFilm does next.
+function narrationPlacementErrors(spec, ctx) {
+  if (ctx.mode === null || ctx.fps === null || !saysReady(spec)) return [];
+  if (!spec.shots.some((shot) => shiftOf(shot, 'lead') > 0 || shiftOf(shot, 'trail') > 0)) return [];
+  // only the valid seconds reach the timeline: a refused value is reported by the schema, not twice
+  const shots = spec.shots.map((shot) => (isPlainObject(shot.narration)
+    ? { ...shot, narration: { lead: shiftOf(shot, 'lead'), trail: shiftOf(shot, 'trail') } }
+    : shot));
+  try {
+    buildTimeline({ ...spec, shots }, { fps: ctx.fps, modes: ctx.regs.modes, cuts: ctx.regs.cuts });
+    return [];
+  } catch (err) {
+    return err instanceof PlacementError ? err.errors : [];
+  }
+}
+
+/**
+ * The errors of the `narration` fields of `spec`'s shots, each { path, message }: a lead on the first shot, a trail on
+ * the last, narration on a shot with no say or in a film narrated by a recording, a lead and a trail on the same cut;
+ * and, when none of those fired, a shift that leaves a shot too short on the estimated timeline.
+ */
+export function narrationErrors(spec, ctx) {
+  if (!Array.isArray(spec.shots)) return [];
+  const field = narrationFieldErrors(spec.shots.slice(0, SHOTS_MAX), isRecordingVoice(spec.voice));
+  return field.length > 0 ? field : narrationPlacementErrors(spec, ctx);
+}
+
 // --- match cuts ---
 
 // The node ids a shot puts on screen as its kind reports them (kind.ids), or null when that cannot be known: no
@@ -563,6 +630,7 @@ function collectErrors(spec, specDir, regs) {
     ...settings,
     ...checkRootCut(spec, ctx),
     ...checkShots(spec, ctx),
+    ...narrationErrors(spec, ctx),
     ...checkMatchCuts(spec, regs),
   ];
 }

@@ -53,6 +53,7 @@ A kind adds its own fields on top (`--list kinds`). A shot with a field its kind
 | `say` | string, 1 to 400 characters | The narration of the shot. It sets how long the shot lasts |
 | `hold` | number, 1 to 30 | Seconds a shot with no `say` lasts. A shot takes `say` or `hold`, never both |
 | `cut` | a cut | How the film arrives at this shot (see Cuts). The first shot takes only `"cut"` |
+| `narration` | `{ "lead", "trail" }`, seconds from 0 to 1.5 | Sound across a cut: `lead` starts this shot's narration before its picture, `trail` lets it run into the next shot's picture. Needs `say` |
 | `on` | array of up to 8 events | Devices placed on words of the narration (see Anchors) |
 
 ## Narration markup
