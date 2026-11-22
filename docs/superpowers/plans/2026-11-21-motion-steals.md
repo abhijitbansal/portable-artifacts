@@ -254,6 +254,27 @@ The gallery's eight `film.json` files are copies; their pictures resolve only fr
 - [ ] **Step 2: Fix the date.** `SOURCE_DATE_EPOCH` is 00:00 UTC of the date in the release's changelog heading: 1794960000 for 2026-11-18, plus 86,400 for each day after it (2026-11-21 is 1795219200). Write the value in `inventory.md`; it goes in the pull request body.
 - [ ] **Step 3: List what else shows these films:** `R/docs/media/hero-loop.mp4` and `hero-poster.jpg` (the pro showreel, `R/docs/index.html:81`), `motion-loop.mp4` and `motion-poster.jpg` (the poster look, `:152`), `R/docs/media/thumbs/` (seven files, `R/docs/gallery.html:57-63`), each film's `poster.jpg`, and the durations printed on both pages. `showreel/whats-new` is on disk and not among the register's seven: it is rebuilt, and whether it gets a register item is the owner's call (noted in the report).
 
+### Task F1b: Refresh the showreels with every feature (owner request, 2026-11-22)
+
+The owner asked that the make-motion showreel show every new feature from W1 to W6 and keep what it shows today. This task rewrites the two showreel sources before F2 rebuilds them, so the gallery is still rebuilt once.
+
+**Files:**
+- Modify: `X/showreel-pro.json`, `X/showreel-viral.json`, their `X/showreel-*.review.md` notes, and `X/showreel-assets/` only if a new feature needs a local picture (no network, no generated media)
+- Read first: both sources, `MM/references/schema.md`, `--list kinds`, `--list cuts`, `--list moves`, `--list looks`, and the W1 to W6 commit list (`git log --oneline origin/main..HEAD`)
+
+- [ ] **Step 1: The feature inventory.** Write `SF/showreel-features.md`, a table with one row per feature. Columns: feature, wave or "existing", shown today in pro or viral (yes or no), and the shot that will show it.
+  - Existing features: every kind, each cut the look allows, word anchors, the voice, the music bed and cues, captions.
+  - New features, each only if its wave shipped: composed frames and the cosmos number (W2); a short statement (W2); J and L narration across a cut (W2); a cut whose outgoing shot keeps moving (W2); `at` on iris and zoom, and the colour flood (W2); word-level subtitles in the vertical film (W4); cue variants and the logo and progress overlays (W4); per-glyph and per-line entrances, `cubic-bezier()` and `steps()` easing (W6).
+  - Features with no picture (findings, slices, `--estimated`, the locate helper, the reviewer, the comparison sheet, the BT.709 tags, the MP4 check) are listed as "not filmable". They are shown in the release notes, not in a reel.
+- [ ] **Step 2: Rewrite the two sources.**
+  - `showreel-pro.json` (16:9) carries the widescreen features. `showreel-viral.json` (9:16) carries the vertical features (word subtitles, the hook shape from `references/types/vertical.md`) and repeats a feature only where vertical shows it differently.
+  - Keep every existing feature that still has a row with "yes" in Step 1. Add each new filmable feature once.
+  - Keep each film within its mode's length guidance: `pro` stays at most 20% longer than today, `viral` at most 60 s. When the list does not fit, merge features into one shot (a J cut into a moving outgoing shot) instead of adding shots.
+  - The narration describes what is on screen, per `references/story.md`.
+- [ ] **Step 3: Check, no browser.** `node MM/scripts/make.mjs X/showreel-pro.json --outline --json` and the same for viral. Expected: exit 0, no `mechanical` finding, and every Step 1 row named by its shot. Then run the tests that read the example films: `node --test "P/bin/test/make-motion-docs.test.mjs"` and `node --test --test-concurrency=1 "MM/test/v2/cuts-films.test.mjs"` **[BROWSER]** if it renders. Expected: PASS. A test that pins a showreel's shot list is updated in this commit, and the commit body names it.
+- [ ] **Step 4: Draft render and look. [BROWSER]** One film at a time, after `pgrep`: `node MM/scripts/make.mjs X/showreel-pro.json --json --out SF/draft/showreel-pro.mp4`, then the same for viral. Open every sheet PNG. Mark each Step 1 row "seen" or "not seen". A feature not seen is fixed in the source, never marked seen. Read each review note's findings and update the `.review.md` notes.
+- [ ] **Step 5: Commit (controller).** `docs(release): showreels show every W1 to W6 feature`. The body lists the features added and any feature that does not fit, with the reason. F2 then rebuilds these two films with the others. F3's hero loop and poster come from the new pro reel, and F4 rechecks the home page's showreel plate, its spec excerpt and its detail tags against the new source.
+
 ### Task F2: Rebuild the eight films, one at a time
 
 - [ ] **Step 1: The doctor, per film.** `node MM/scripts/doctor.mjs --json --for X/<source>`. A film with a `voice` needs the voice package and its model. If the doctor reports either missing, stop and ask the owner once (it is a download); do not install unasked.
@@ -328,7 +349,7 @@ A fresh Opus review (`.scratch/research-2026-11-21/plan-review.md`) found one HI
 - MEDIUM: the W2 Task 6 message clamps `left` at 0, so its regex matches. W4 Task 3's detune test compares peak amplitude within 2%.
 - LOW, fixed: W1's stall timer is cleared on settle; parallel `timing` is summed across pages; W3's SKILL.md line count and the list wording; W5's rule-count assertion; two index anchors.
 - Credit lines (LOW): every wave's `THIRD_PARTY_NOTICES.md` credit also names the HyperFrames idea behind W5's board of stills (P9) and kept playhead (P14), W6's kinetic-type entrances (P15) and W1's named capture stage (P17).
-- Owner rulings (2026-11-22): make-explainer ships on this branch (accepted); W5's `--estimated` flag replaces the spec's `--sheets-only` wording (accepted); **[R2-1]** a short or blank finished MP4 fails the render and keeps no file (accepted, not a warning); execution is subagent-driven; no third research round.
+- Owner rulings (2026-11-22): the showreels are rewritten to show every new feature and keep today's (final Task F1b, before the rebuild); make-explainer ships on this branch (accepted); W5's `--estimated` flag replaces the spec's `--sheets-only` wording (accepted); **[R2-1]** a short or blank finished MP4 fails the render and keeps no file (accepted, not a warning); execution is subagent-driven; no third research round.
 - Left open, for the owner: the scope additions the review lists (`overlay-covers`, `hand-covered` rename, `--subtitle-words`, `cut-variety` in the full review, `--list cuts` fields); `cut-variety` reads `cutPalette` where the spec says the look's allowed cuts. Stubbed test steps in W3 to W6 state each assertion in a comment; the implementer writes them in full.
 - The beast plan lives in beast's gitignored scratch: `/Users/abhijitbansal/projects/beast_explainer/.scratch/plans/2026-11-21-phase-g-addendum-research-steals.md`.
 
