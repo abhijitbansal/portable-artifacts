@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { AGENT_HOSTS, AGENT_NAME, agentFile, INSTRUCTIONS, REVIEWER_CURRENT_MARKER, REVIEWER_HOSTS, REVIEWER_INSTRUCTIONS, REVIEWER_NAME, reviewerFile, tomlString, writeAgentFile } from '../agents.mjs';
+import { AGENT_HOSTS, AGENT_NAME, agentFile, INSTRUCTIONS, REVIEWER_CURRENT_MARKER, REVIEWER_FINGERPRINT, reviewerFileState, REVIEWER_HOSTS, REVIEWER_INSTRUCTIONS, REVIEWER_NAME, reviewerFile, tomlString, writeAgentFile } from '../agents.mjs';
 
 const PHRASES = [
   /already artifact-builder/,
@@ -273,10 +273,30 @@ test('the reviewer keeps reviewing.md\'s measured exception and its quoted, not 
   assert.match(REVIEWER_INSTRUCTIONS, /leaves the list only when something the report printed measured it/);
 });
 
-test('the reviewer file carries its current marker, so an older file is told apart', () => {
-  assert.equal(typeof REVIEWER_CURRENT_MARKER, 'string');
-  assert.ok(REVIEWER_CURRENT_MARKER.length > 0);
-  assert.ok(reviewerFile('claude').content.includes(REVIEWER_CURRENT_MARKER));
+test('the reviewer file carries a dedicated marker comment line, never a phrase of the prose', () => {
+  assert.equal(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 2 -->`);
+  assert.match(REVIEWER_FINGERPRINT, /^<!-- portable-artifacts: motion-reviewer$/);
+  const { content } = reviewerFile('claude');
+  assert.ok(content.split('\n').includes(REVIEWER_CURRENT_MARKER), 'the marker is a line of its own');
+  assert.ok(!REVIEWER_INSTRUCTIONS.includes('reply format'), 'no marker text inside the prose');
+  assert.ok(!REVIEWER_INSTRUCTIONS.includes('portable-artifacts: motion-reviewer'));
+  assert.match(content, /^---\nname: motion-reviewer\ndescription: [^\n]+\nmodel: opus\ntools: Read\n---\n/);
+});
+
+test('reviewerFileState: current, ours but older, and foreign (no fingerprint line) are told apart', () => {
+  const cur = reviewerFile('claude').content;
+  assert.equal(reviewerFileState(cur), 'current');
+  assert.equal(reviewerFileState(cur.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 1 -->`)), 'ours');
+  assert.equal(reviewerFileState(cur.replace(`${REVIEWER_CURRENT_MARKER}\n`, '')), 'foreign', 'our text without the marker line is not fingerprinted');
+  assert.equal(reviewerFileState('---\nname: motion-reviewer\n---\nmy own team reviewer\n'), 'foreign');
+  assert.equal(reviewerFileState(`my notes mention ${REVIEWER_CURRENT_MARKER} inline\n`), 'foreign', 'the line must stand alone');
+  assert.equal(reviewerFileState(''), 'foreign');
+});
+
+test('the reviewer carries the why of the weakest shot, and says to quote the not-checked line from reviewing.md', () => {
+  assert.ok(REVIEWER_INSTRUCTIONS.includes('"why"'));
+  assert.match(REVIEWER_INSTRUCTIONS, /not-checked line/);
+  assert.match(REVIEWER_INSTRUCTIONS, /quoted as written/);
 });
 
 test('the reviewer text never says the agent opens the film (Read cannot decode a video)', () => {

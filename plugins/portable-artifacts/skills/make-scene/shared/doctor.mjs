@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
-import { CURRENT_MARKER, REVIEWER_CURRENT_MARKER } from './agents.mjs';
+import { CURRENT_MARKER, reviewerFileState } from './agents.mjs';
 import { missingPackages } from './missing-packages.mjs';
 
 const REPO = 'abhijitbansal/portable-artifacts';
@@ -557,9 +557,11 @@ function outdatedBuilderAgents(ctx) {
 }
 
 // The read-only motion-reviewer file (Claude Code only), user level and project level. It has no copilot or codex form.
-// A file without REVIEWER_CURRENT_MARKER is an older or foreign one: reported as outdated like a stale builder, and
-// (unlike the builder) rewritten by --fix through the writer's write-reviewer --force, because only this file is touched.
-// A missing reviewer is not reported: it would turn every builder-only machine yellow.
+// Each existing file is 'current', 'ours' (carries our fingerprint line but not the current marker) or 'foreign' (no
+// fingerprint: the user's own file). Only a user-level 'ours' file is rewritten by --fix, through the writer's
+// write-reviewer --force, which touches that one file. A foreign file is reported as foreign and never rewritten; a
+// project-level file (often committed) is never rewritten either, so both get a manual line only.
+// A missing reviewer is an info note (builderAgent().presentInfo), never a failure.
 const REVIEWER_PLACES = [['home', '.claude/agents'], ['cwd', '.claude/agents']];
 function reviewerAgentFiles(ctx) {
   const P = pp(ctx);
@@ -569,12 +571,14 @@ function reviewerAgentFiles(ctx) {
     .filter(({ file }) => ctx.exists(file));
 }
 
-function outdatedReviewerAgents(ctx) {
-  return reviewerAgentFiles(ctx).filter(({ file }) => {
+// The existing reviewer files that are not current, with their state. An unreadable file counts as current: nothing to compare.
+function reviewerProblems(ctx) {
+  return reviewerAgentFiles(ctx).flatMap((r) => {
     try {
-      return !ctx.readFile(file).includes(REVIEWER_CURRENT_MARKER);
+      const state = reviewerFileState(ctx.readFile(r.file));
+      return state === 'current' ? [] : [{ ...r, state }];
     } catch {
-      return false;
+      return [];
     }
   });
 }
@@ -592,18 +596,29 @@ export function builderAgent() {
     rank: RANK.other,
     why: (ctx) => {
       const old = outdatedBuilderAgents(ctx).map((f) => f.file);
-      const oldReviewers = outdatedReviewerAgents(ctx).map((f) => f.file);
+      const problems = reviewerProblems(ctx);
+      const ours = problems.filter((r) => r.state === 'ours').map((r) => r.file);
+      const foreign = problems.filter((r) => r.state === 'foreign').map((r) => r.file);
       const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
       const parts = [];
       if (old.length) parts.push(`${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)`);
-      if (oldReviewers.length) parts.push(`${oldReviewers.join(' and ')} is outdated (an older or foreign motion-reviewer file)`);
+      if (ours.length) parts.push(`${ours.join(' and ')} is an older portable-artifacts motion-reviewer file`);
+      if (foreign.length) parts.push(`${foreign.join(' and ')} is not a portable-artifacts motion-reviewer file (left alone)`);
       return parts.length ? `${base}; ${parts.join('; ')}` : base;
     },
     required: false,
     size: '≈2 KB',
     // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
-    check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0 && outdatedReviewerAgents(ctx).length === 0,
+    check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0 && reviewerProblems(ctx).length === 0,
+    // A Claude Code builder with no motion-reviewer.md at either level (and no plugin shipping the agents): one note, never a failure.
+    presentInfo: (ctx) => {
+      const builder = builderAgentFiles(ctx).find((f) => f.host === 'claude');
+      if (!builder || reviewerAgentFiles(ctx).length > 0 || pluginServes(ctx)) return null;
+      const P = pp(ctx);
+      const dir = P.join(builder.file, '..');
+      return { note: `${P.join(dir, 'motion-reviewer.md')} is not installed (the optional read-only second reviewer for Claude Code, from this skill's own writer: node ${P.join(ctx.skillDir, 'shared', 'agents.mjs')} write claude ${dir}; it keeps every existing file)` };
+    },
     // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
     // exists (user level; an existing file is kept). That works for an install made with the skills CLI,
     // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
@@ -614,26 +629,39 @@ export function builderAgent() {
     fix: (ctx) => {
       const P = pp(ctx);
       const old = outdatedBuilderAgents(ctx);
-      const oldReviewers = outdatedReviewerAgents(ctx);
+      const problems = reviewerProblems(ctx);
+      const ours = problems.filter((r) => r.state === 'ours');
+      const foreign = problems.filter((r) => r.state === 'foreign');
       const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
+      const tail = '<path-to-portable-artifacts> is a local checkout, or clone the repo';
+      // The reviewer-only command: replaces just that one file, never the builder.
+      const reviewerCmd = (r) => `node ${writer} write-reviewer claude ${P.join(r.file, '..')} --force (replaces only ${r.file}${r.state === 'foreign' ? ', which is not a portable-artifacts file: keep a copy first' : ''})`;
       if (old.length) {
         const cwd = ctx.cwd ?? process.cwd();
-        const all = [...old, ...oldReviewers];
-        const cmds = [...new Set(all.map(({ host, project }) => `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''}`))];
+        // The installer command writes every agent file of its host in that folder: say which ones it replaces.
+        const cmds = [...new Map(old.map(({ file, host, project }) => {
+          const dir = P.join(file, '..');
+          const files = [file, ...(host === 'claude' ? [P.join(dir, 'motion-reviewer.md')] : [])];
+          return [`${host}|${project}`, `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''} (replaces ${files.join(' and ')})`];
+        })).values()];
         return {
           auto: null,
-          outdated: all.map((f) => f.file),
-          manual: manualAll(`${cmds.join(' ; ')} (replaces the outdated file; <path-to-portable-artifacts> is a local checkout, or clone the repo)`),
-          notes: `${all.map((f) => f.file).join(' and ')} is outdated; the doctor never overwrites a builder agent file, so run the command yourself`,
+          outdated: [...old, ...ours].map((f) => f.file),
+          ...(foreign.length ? { foreign: foreign.map((f) => f.file) } : {}),
+          manual: manualAll(`${[...cmds, ...problems.map(reviewerCmd)].join(' ; ')} (${tail})`),
+          notes: `${old.map((f) => f.file).join(' and ')} is outdated; the doctor never overwrites a builder agent file, so run the command yourself${problems.length ? `; ${problems.map((f) => f.file).join(' and ')} is left alone too` : ''}`,
         };
       }
-      if (oldReviewers.length) {
-        // Only the reviewer file is stale: rewrite just that file, in its own folder (the builder is never touched).
+      if (problems.length) {
+        // Only user-level files of ours are rewritten (one file each, in its own folder); the rest get a manual line.
+        const autoFiles = ours.filter((r) => !r.project);
+        const left = problems.filter((r) => !autoFiles.includes(r));
         return {
-          auto: oldReviewers.map(({ file }) => [ctx.execPath ?? process.execPath, writer, 'write-reviewer', 'claude', P.join(file, '..'), '--force']),
-          outdated: oldReviewers.map((f) => f.file),
-          manual: manualAll(`${oldReviewers.map(({ project }) => `${install} claude --agents-only --force${project ? ` --project ${ctx.cwd ?? process.cwd()}` : ''}`).join(' ; ')} (replaces the outdated file; <path-to-portable-artifacts> is a local checkout, or clone the repo)`),
-          notes: `rewrites ${oldReviewers.map((f) => f.file).join(' and ')} (an older or foreign motion-reviewer file); the artifact-builder file is left alone`,
+          auto: autoFiles.length ? autoFiles.map(({ file }) => [ctx.execPath ?? process.execPath, writer, 'write-reviewer', 'claude', P.join(file, '..'), '--force']) : null,
+          ...(ours.length ? { outdated: ours.map((f) => f.file) } : {}),
+          ...(foreign.length ? { foreign: foreign.map((f) => f.file) } : {}),
+          manual: manualAll(`${problems.map(reviewerCmd).join(' ; ')} (${tail})`),
+          notes: `${autoFiles.length ? `rewrites ${autoFiles.map((f) => f.file).join(' and ')} (our own older motion-reviewer file; the artifact-builder file is left alone)` : 'rewrites nothing'}${left.length ? `; ${left.map((f) => f.file).join(' and ')} is left alone (not ours, or in this project): the doctor never overwrites it` : ''}`,
         };
       }
       const home = ctx.homedir ?? os.homedir();
@@ -678,6 +706,8 @@ export async function diagnose(requirements, ctx) {
     if (fix.stale?.length > 0) entry.stale = fix.stale;
     // An installed file that predates the current text: reported as outdated, not missing. The doctor never overwrites it.
     if (fix.outdated?.length > 0) entry.outdated = fix.outdated;
+    // An installed file that is not ours (no fingerprint): reported as foreign, never overwritten by the doctor.
+    if (fix.foreign?.length > 0) entry.foreign = fix.foreign;
     if (fix.sudoHint) entry.sudoHint = fix.sudoHint;
     missing.push(entry);
   }
@@ -795,7 +825,7 @@ function describe(m, platform) {
   const cmd = m.fix.auto ?? m.fix.manual[platform] ?? m.fix.manual.linux;
   const sudo = m.needsSudo ? ' (needs sudo: run it yourself)' : '';
   const notes = m.notes ? ` Note: ${m.notes}.` : '';
-  const state = m.stale ? `stale (older than the pinned ${m.stale.join(', ')} override${m.stale.length > 1 ? 's' : ''})` : m.outdated ? 'outdated' : 'missing';
+  const state = m.stale ? `stale (older than the pinned ${m.stale.join(', ')} override${m.stale.length > 1 ? 's' : ''})` : m.outdated ? 'outdated' : m.foreign ? 'foreign' : 'missing';
   return `${state} (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
 }
 
