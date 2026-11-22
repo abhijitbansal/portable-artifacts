@@ -447,3 +447,13 @@ the estimated timeline never produces, so no shipped film or test shows it.
 - **A (default, shipped):** leave the kicker on `enter.dur`; the lead is cosmetic.
 - **B:** time it from the entrance actually used (`letters.dur` or `lines.dur` when present), with a test on a film
   whose first word is spoken late, and regenerate the cosmos statement frozen entries it moves.
+
+## make-motion text boxes while letters or lines arrive (branch feat/motion-steals, 2026-11-22)
+
+The review's word boxes (ink, off-frame and overlap checks, `--inspect` and the poster read) use each word's own place,
+not the offset its letters or line still carry mid-entrance. A box drawn on an arriving frame can sit up to the
+entrance distance away from the ink; at rest the two agree, and landing already waits for rest.
+
+- **A (default, shipped):** keep word-level boxes; only frames at rest are judged for placement.
+- **B:** offset each box by its line's and the mean of its letters' x and y while arriving, so `--inspect` mid-entrance
+  shows where the ink is.
