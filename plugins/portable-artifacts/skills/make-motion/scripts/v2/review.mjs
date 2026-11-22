@@ -455,13 +455,22 @@ export function capComposition(findings, cap = COMPOSITION_CAP) {
   });
 }
 
+// The rules that judge a whole shot and sit at its start (or at a time in it that has no frame of its own): a slice that
+// touches the shot reports them, whichever of its frames the slice holds.
+const SHOT_LEVEL_RULES = new Set(['kind', 'cut-window', 'unsettled']);
+
+// Does a slice report this finding? A shot-level one when the slice touches its shot; any other when its time is a frame of
+// the slice (a frame finding is judged per frame, so one whose fault is still on screen inside the slice is there).
+const reported = (slice, fps, finding) => (SHOT_LEVEL_RULES.has(finding.rule) ? slice.shots.includes(finding.shot) : inSlice(slice, fps, finding.t));
+
 /**
  * The film's review findings: every audit moment is snapshotted and judged, and the film-wide rules run. With `slice`
  * (slice.mjs: --shot, --range) every audit frame of each shot it touches is snapshotted and judged, as the full run does (so
- * rest scales, the findings kept once per shot, `match` and `unsettled` are the full run's), and only the findings whose
- * time is inside the slice are reported: the result is the full review cut down to the slice, but for the caps, which count
- * the findings of the touched shots. `still` is read over the slice's frames alone, and `loop`, `cut-variety` and
- * `sameness` (slice.SLICE_SKIPPED) are not run.
+ * rest scales and `match` are the full run's), and only what is about the slice is reported (`reported`): a frame finding
+ * at the first frame of the slice it shows on (a fault on every frame of a shot is reported by a range that starts
+ * mid-shot), a shot-level one (`kind`, `cut-window`, `unsettled`) when the slice touches its shot. The result is the full
+ * review cut down to the slice, but for the caps, which count the findings of the slice. `still` is read over the slice's
+ * frames alone, and `loop`, `cut-variety` and `sameness` (slice.SLICE_SKIPPED) are not run.
  * @param {{ session: object, signal?: AbortSignal, slice?: object | null }} opts session from openSession
  * @returns {Promise<{ kind: 'mechanical' | 'creative', shot: string, path: string, message: string, t: number, rule: string, node: string }[]>}
  */
@@ -472,12 +481,14 @@ export async function reviewFilm({ session, signal, slice = null }) {
   const restingOf = restingByShot(timeline, snapshots, captionsHoldRoom(film));
   const backgrounds = session.info?.backgrounds ?? [];
   const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
-  const deduped = capComposition(dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots));
+  // a frame finding is kept once, at the first frame of the slice it shows on (dedupeFindings runs after the slice filter)
+  const onFrames = [...audited, ...settleFindings(film, timeline, restingOf, snapshots)].filter((item) => slice === null || reported(slice, timeline.fps, { ...item.finding, shot: item.shot, t: item.t }));
+  const deduped = capComposition(dedupeFindings(onFrames, film.shots));
   const still = pacingFindings(film, timeline, await heldFlags(session, signal, slice));
   const loop = slice === null ? await loopFindings(session) : []; // root loop: true (loop.mjs)
   const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings
   const found = [...deduped, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
-  const inside = slice === null ? found : found.filter((f) => inSlice(slice, timeline.fps, f.t)); // only what is about a frame of the slice
+  const inside = slice === null ? found : found.filter((f) => reported(slice, timeline.fps, f)); // only what is about the slice
   return capCreative(inside).sort((a, b) => a.t - b.t);
 }
 

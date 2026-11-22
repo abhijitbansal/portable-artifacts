@@ -482,15 +482,17 @@ const wideFilm = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [
   { id: 'c', show: 'free', hold: 2 },
 ] };
 
-test('a finding about a frame outside the slice is not reported: cut-window and a kind\'s finding are kept by their time', async () => {
+test('a shot-level finding (cut-window, a kind\'s) is reported when the slice touches its shot, whatever frame of it the slice holds, and not for another shot', async () => {
   const tl = buildTimeline(wideFilm, { fps: FPS });
   const tree = [bar('block', [96, 96, 1728, 800])];
   const rules = async (spec) => (await reviewFilm({ session: recordingSession(wideFilm, tree).session, slice: sliceOf(spec, wideFilm, tl) })).map((f) => `${f.rule}@${f.t}`);
   const whole = await rules({ shot: 'b' });
   assert.ok(whole.includes('cut-window@2'), 'control: the window opens at 2.0 s, inside the shot');
   assert.ok(whole.includes('kind@2'), 'control: the statement\'s emphasis finding is at the shot\'s say, 2.0 s');
-  const later = await rules({ range: 'b@1..b@1.5' });
-  assert.deepEqual(later.filter((r) => r.startsWith('cut-window') || r.startsWith('kind')), [], 'both are about frame 60, before frame 90');
+  const later = await rules({ range: 'b@1..b@1.5' }); // frames 90 to 105 of b: the window and the say come before them, but they are about b
+  assert.ok(later.includes('cut-window@2') && later.includes('kind@2'), `a range that starts mid-shot still reports them: ${later}`);
+  const other = await rules({ shot: 'c' });
+  assert.deepEqual(other.filter((r) => r.startsWith('cut-window') || r.startsWith('kind')), [], 'nothing about b in a slice of c');
 });
 
 test('the hook finding belongs to frame 0: a slice that starts after it does not report it', async () => {
@@ -504,17 +506,43 @@ test('the hook finding belongs to frame 0: a slice that starts after it does not
   assert.deepEqual(await hooks({ shot: 'b' }), []);
 });
 
-test('a frame finding first seen before the slice is reported where the full run reports it, so not inside the slice', async () => {
+test('a frame finding first seen before the slice is reported at its first frame inside the slice, where its fault is still on screen', async () => {
   const off = () => [textNode({ id: 'off', size: 132, x: 10 })]; // outside the safe area on every frame
   const tl = buildTimeline(film, { fps: FPS });
   const safeOf = async (slice) => (await reviewFilm({ session: recordingSession(film, off).session, slice })).filter((f) => f.rule === 'safe-area').map((f) => `${f.shot}@${f.t}`);
   const full = await safeOf(null);
   assert.deepEqual(full.map((x) => x.split('@')[0]), ['a', 'b', 'c'], 'control: one finding a shot, at its first audit frame');
-  const inside = (spec) => { const s = sliceOf(spec, film, tl); return full.filter((x) => Number(x.split('@')[1]) * FPS >= s.from && Number(x.split('@')[1]) * FPS < s.to + 1); };
-  for (const spec of [{ range: 'b@1..b@1.9' }, { shot: 'b' }, { range: 'a@1..b@0.5' }]) {
-    assert.deepEqual(await safeOf(sliceOf(spec, film, tl)), inside(spec), JSON.stringify(spec));
+  const spec = { range: 'b@1..b@1.9' }; // frames 90 to 117: b's first sighting (frame 60) is before them
+  const slice = sliceOf(spec, film, tl);
+  const first = auditMoments(film, tl).find((frame) => frame >= slice.from);
+  const part = await safeOf(slice);
+  assert.deepEqual(part, [`b@${first / FPS}`], 'one finding, at the slice\'s first audit frame of b');
+  assert.ok(first > 60, 'the fixture: that is later than the full run\'s first sighting');
+  // a slice that holds the first sighting reports it where the full run does
+  assert.deepEqual(await safeOf(sliceOf({ shot: 'b' }, film, tl)), full.filter((x) => x.startsWith('b@')));
+  assert.deepEqual(await safeOf(sliceOf({ range: 'a@1..b@0.5' }, film, tl)).then((l) => l.map((x) => x.split('@')[0])), ['a', 'b']);
+});
+
+test('a text that is under the minimum size on every frame of a shot fails a --range that starts mid-shot, as it fails the full run', async () => {
+  const small = () => [textNode({ id: 'small', size: 20 })]; // 20 units, under the 28 floor on every frame
+  const tl = buildTimeline(film, { fps: FPS });
+  const minSize = async (slice) => (await reviewFilm({ session: recordingSession(film, small).session, slice })).filter((f) => f.rule === 'min-size' && f.shot === 'b');
+  assert.equal((await minSize(null)).length, 1, 'control: the full run reports it');
+  const part = await minSize(sliceOf({ range: 'b@1..b@end' }, film, tl));
+  assert.equal(part.length, 1, 'a range from b@1 to the end of b reports it too');
+  assert.ok(part[0].t >= 3 && part[0].t < 4, `at a frame of b@1..b@end, which is 3 s to 4 s (t = ${part[0].t})`);
+  assert.match(part[0].message, new RegExp(`at ${part[0].t.toFixed(2)} s`));
+});
+
+test('a slice of the whole film reports what the full review does, but for the rules a slice skips', async () => {
+  const tl = buildTimeline(wideFilm, { fps: FPS });
+  const trees = [() => [textNode({ id: 'small', size: 20 }), textNode({ id: 'off', size: 132, x: 10 })], [bar('block', [96, 96, 1728, 800])]];
+  for (const tree of trees) {
+    const full = await reviewFilm({ session: recordingSession(wideFilm, tree).session });
+    const part = await reviewFilm({ session: recordingSession(wideFilm, tree).session, slice: sliceOf({ range: '0..c@end' }, wideFilm, tl) });
+    const skipped = (f) => SLICE_SKIPPED.includes(f.rule);
+    assert.deepEqual(part, full.filter((f) => !skipped(f)));
   }
-  assert.deepEqual(await safeOf(sliceOf({ range: 'b@1..b@1.9' }, film, tl)), [], 'b\'s first sighting is at frame 60, before frame 90');
 });
 
 test('a slice reads a shot\'s rest scale from all its frames: a pulse at the start of a slice is not taken for its rest', async () => {
