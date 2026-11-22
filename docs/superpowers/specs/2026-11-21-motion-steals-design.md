@@ -54,11 +54,12 @@ Anti-goals (a failure even if it technically works)
   raise the cap.
 - One headless browser at a time on this Mac. No new server route (the preview server is GET and HEAD only by design).
 - Every PR under `plugins/` carries one `plugin.json` bump, one `CHANGELOG.md` heading and the cover Revision.
-- Goldens change only for an intended visual change, stated in the commit. Owner decision: accepted for every wave
-  below; the whole v2 gallery is rebuilt once, in the colour wave (W1), with `SOURCE_DATE_EPOCH` recorded in the PR
-  body. Orchestrator's call, to satisfy AGENTS.md as well: each later visual wave (W2, W4, W6) rebuilds only the
-  gallery pages its change affects, rechecks any affected home-page plate (spec excerpt, size label, tag positions),
-  and records the `SOURCE_DATE_EPOCH` in its PR body. No later wave re-encodes the whole gallery.
+- Goldens change only for an intended visual change, stated in the commit. Owner decisions: golden changes are
+  accepted for every wave below, and the gallery is rebuilt once. Because all waves ship in one PR (section 6), the
+  single rebuild happens in a final phase after every visual change has landed: every v2 gallery page is rebuilt from
+  its source spec, each home-page plate is rechecked (spec excerpt, size label, tag positions), and the
+  `SOURCE_DATE_EPOCH` value goes in the PR body. That one rebuild also satisfies the AGENTS.md rule to rebuild each
+  affected page.
 - Every code fix and guardrail is shown failing first (RED), then passing.
 - HyperFrames and Rune mechanisms are rewritten in our own words and code, with a credit line in
   `THIRD_PARTY_NOTICES.md`. No file is ported (default; `locate.mjs` is rewritten, not copied).
@@ -93,16 +94,19 @@ the inspection tools, then the rest.
 
 ## 6. The decided design: make-motion waves
 
-Each wave is one branch (`feat/motion-steals-wN`) and one PR, merged before the next starts. Items name their
-`PROPOSAL.md` number; surfaces, risks and file anchors are in that file and are not repeated here.
+Owner decision: all waves ship as one PR on one branch (`feat/motion-steals`), with each wave a run of commits
+(`feat(wN):`, `fix(wN):`), one `plugin.json` bump, one `CHANGELOG.md` heading and one cover Revision update. Every
+commit leaves the tree green. A fresh-context review runs at the end of each wave, before that wave's commits are
+pushed. Items name their `PROPOSAL.md` number; surfaces, risks and file anchors are in that file and are not repeated
+here.
 
 **W0, measurements (scratch only, no plugin change).** ffprobe tag table for the gallery and for one fast and one
 `--exact` render; draw/capture/encode split per frame on one fixed film; audio offset of one muxed film with a
 recorded music file; both capture spike arms (CDP `optimizeForSpeed` in JPEG mode, and bytes returned through
-`page.evaluate`) against today's path on that same film, so any capture change that wins lands in W1 and rides the
-single gallery rebuild (orchestrator's call); a per-frame `__snapshot` dump on three films for the motion-gate decision; a test that every frame
+`page.evaluate`) against today's path on that same film, so a capture change that wins is decided early and is in
+place before the final gallery rebuild (orchestrator's call); a per-frame `__snapshot` dump on three films for the motion-gate decision; a test that every frame
 the capture key calls held is pixel-equal to its predecessor. Each result decides a later item, as listed in
-`PROPOSAL.md` section 4. W0 runs at the start of W1 and its results go in the W1 PR body.
+`PROPOSAL.md` section 4. W0 runs first and its results go in the PR body.
 
 **W1, doctrine and colour.**
 - Slim `SKILL.md` to a router; moved text goes to `references/`.
@@ -117,7 +121,7 @@ the capture key calls held is pixel-equal to its predecessor. Each result decide
   converted in one filter on the JPEG path. RED first on `MM/test/v2/make.test.mjs`, plus a flat-patch round trip
   within 2 levels in both capture modes.
 - Step 0 of capture diagnostics (P17): draw, capture and encode split plus the stage name and console tail on a hang.
-- Gallery rebuild, once, from source specs. v2 films only; the 23 orphaned v1 films are not touched (see section 9).
+- (The gallery rebuild is the final phase, after W6; see section 3.)
 
 **W2, composition and cut craft.**
 - Composition and scale (new, from `compose.md`): two creative findings computed from `__snapshot` boxes,
@@ -187,9 +191,17 @@ File layout inside `references/`, the exact wording of doctrine and tells, findi
 fixture design, threshold values (calibrated as stated), the order of items inside a wave, and how each wave's
 measurements are scripted under `.scratch/`.
 
-## 9. Open with the owner
+## 9. Owner decisions recorded
 
-- The 23 orphaned v1 gallery films: archive (delete) them, or leave them. Default: leave them; nothing links them.
-- beast rule Q14 forbids narration across a cut. Reverse it for item 7.6? Default: keep Q14, item 6 parked.
+- The 23 orphaned v1 gallery films stay as they are: not deleted, not rebuilt.
+- beast rule Q14 stays. J and L narration ships in make-motion first (opt-in, W2); beast item 6 is revisited after.
+- All make-motion waves ship as one PR.
 - Kept defaults from the research: a pro film may open on its field (no opening rule); viral captions recommended, not
-  defaulted on; no user fonts or Lottie; no paid beast trial without a quote and the owner's yes.
+  defaulted on; no user fonts or Lottie; no paid beast trial without a quote and the owner's yes; HyperFrames and
+  Rune ideas rewritten in our own code with a credit line, nothing ported.
+
+## 10. Final phase, after W6
+
+Rebuild every v2 gallery page from its source spec, one browser at a time, running `check.mjs` on each and opening its
+`--shots` PNGs; recheck the home-page plates; bump `plugin.json`, write the `CHANGELOG.md` heading, update the cover
+Revision, README and USAGE; run the full local gate from CLAUDE.md; open the PR with the branch test checklist.
