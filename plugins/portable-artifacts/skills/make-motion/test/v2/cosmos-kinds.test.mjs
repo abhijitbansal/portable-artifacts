@@ -9,7 +9,7 @@ import { registries } from '../../engine/registry.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { compositionRect, runInk } from '../../engine/kinds/shared.mjs';
 import { editorialBounds } from '../../engine/kinds/editorial.mjs';
-import { expandIn, filmOf, all, measure, near } from './helpers/kinds.mjs';
+import { expandIn, expandShot, filmOf, all, measure, near } from './helpers/kinds.mjs';
 
 // every kind's example from the registry (a listing may leave a kind out: --list kinds shows only the listed ones)
 const example = (name) => {
@@ -47,6 +47,35 @@ test('number at 9:16: the example with its delta keeps the figure, label and del
     assert.ok(y > yEnd(upper) && y + h < yStart(lower), `${key} in the break`);
     assert.ok(y >= bounds.top && y + h <= bounds.bottom, `${key} inside the band`);
   }
+});
+
+// W2 Task 4: a wide number is centred down the frame (the review measured its content between 0.2 and 0.6 of the height)
+const SAGAN = { id: 'n', show: 'number', value: 778, label: 'million kilometres from the Sun', say: 'Seven hundred seventy eight million kilometres.' };
+
+test('number at 16:9: the figure and its label are centred down the frame, the sun and its line with them', () => {
+  const { boxes, nodes, canvas } = expandShot(SAGAN, 'cosmos', '16:9');
+  const top = boxes.value[1], bottom = boxes.label[1] + boxes.label[3];
+  assert.ok(Math.abs((top + bottom) / 2 - canvas.h / 2) <= 0.03 * canvas.h, `block centre ${(top + bottom) / 2}`);
+  const line = byId(nodes, 'n.line0');
+  const y = Number(/M[\d.]+ ([\d.]+)L/.exec(line.props.d)[1]);
+  assert.ok(y > boxes.value[1] + boxes.value[3] && y < boxes.label[1], 'the line still runs between the figure and its label');
+  assert.equal(byId(nodes, 'n.sun').props.y, y, 'the sun moved with the line');
+  assert.equal(byId(nodes, 'n.earth').props.y, y, 'so did Earth');
+});
+
+test('number at 16:9 with a delta: the figure, label and delta block is centred down the frame', () => {
+  const { boxes, canvas } = expandShot({ ...SAGAN, delta: '+3%' }, 'cosmos', '16:9');
+  const top = boxes.value[1], bottom = boxes.delta[1] + boxes.delta[3];
+  assert.ok(Math.abs((top + bottom) / 2 - canvas.h / 2) <= 0.03 * canvas.h, `block centre ${(top + bottom) / 2}`);
+});
+
+// recorded before the change: the tall sky centres its block already and does not move
+test('number at 9:16: the tall sky is as it was', () => {
+  const { boxes } = expandShot(SAGAN, 'cosmos', '9:16');
+  assert.deepEqual(boxes, {
+    value: [125.66999999999996, 709.74, 753.6600000000001, 331.79999999999995],
+    label: [125, 1089.54, 755, 145.92000000000007],
+  });
 });
 
 test('number: the figure opens in ink, counting, never fading in grey', () => {

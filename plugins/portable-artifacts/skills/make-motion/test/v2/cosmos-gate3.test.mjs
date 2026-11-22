@@ -188,7 +188,9 @@ test('number: no orbit; a straight line runs from the sun\'s disc to the Earth m
   for (const [expand, shot] of [[wideFilm, DISTANCE], [tallFilm, MINUTES]]) {
     const out = expand(shot);
     assert.equal(all(out.nodes).some((n) => /orbit/.test(n.id)), false, 'no orbit');
-    const sun = sunAnchor(look, out.ctx);
+    // W2 Task 4: a wide number moves its sun down with the rest of the block, so the sun is read from its node
+    const sunNode = byId(out.nodes, 'n.sun');
+    const sun = { ...sunAnchor(look, out.ctx), cx: sunNode.props.x, cy: sunNode.props.y };
     const earth = byId(out.nodes, 'n.earth');
     assert.ok(earth, 'the Earth mark at the far end');
     const segs = segmentsOf(out.nodes);
@@ -217,7 +219,7 @@ test('number: the figure and its label never cross the line (above and below it 
       for (const b of boxes) assert.ok(!(seg[0] < b[0] + b[2] && b[0] < seg[0] + seg[2] && seg[1] <= b[1] + b[3] && b[1] <= seg[1] + seg[3]), `${s.id} crosses ${JSON.stringify(b)}`);
     }
     if (isWideOut(out)) {
-      const y = sunAnchor(look, out.ctx).cy;
+      const y = byId(out.nodes, 'n.sun').props.y;
       assert.ok(out.boxes.value[1] + out.boxes.value[3] < y && out.boxes.label[1] > y, 'figure over the line, label under it');
     }
   }

@@ -63,20 +63,27 @@ function lightNodes(id, ctx, { axis, across, from, to, gaps }, times) {
 }
 
 // Wide: the line across at the sun's height from its disc to Earth at the grid's right edge, the figure centred over it,
-// the label under it.
-function wideSky(shot, ctx, fit) {
+// the label under it. The whole block (sun, line, Earth, figure, label, delta) is moved down by one `shift` so the ink of
+// the figure, label and delta is centred on the editorial band: the sun's anchor leaves it above the middle otherwise.
+function wideSky(shot, ctx, fit, labelSize, deltaH) {
   const { look, unit } = ctx;
   const data = look.kinds.number.sky, gap = data.line.gap * unit;
-  const sun = sunAnchor(look, ctx), span = editorialSpan(ctx, 1, look.grid.columns);
+  const anchor = sunAnchor(look, ctx), span = editorialSpan(ctx, 1, look.grid.columns), bounds = editorialBounds(ctx);
   const reach = earthReach(look, unit);
-  const earth = { x: span.x + span.w - reach, y: sun.cy };
-  const x0 = sun.cx + look.sun.disc * sun.r + gap, x1 = earth.x - reach - gap;
+  const x0 = anchor.cx + look.sun.disc * anchor.r + gap, x1 = span.x + span.w - reach - reach - gap;
   const fig = fit(data.fit * (x1 - x0));
+  const set = labelSet(shot, ctx, labelSize, x1 - x0, 'center');
+  const labelH = set.layout.lines.at(-1).y - set.layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * labelSize;
+  const inkTop = anchor.cy - data.above * unit - CAP_HEIGHT * fig.size;
+  const inkBottom = shot.label === undefined ? anchor.cy - data.above * unit + deltaH : anchor.cy + data.labelGap * unit + labelH + deltaH;
+  const shift = (bounds.top + bounds.bottom) / HALF - (inkTop + inkBottom) / HALF;
+  const cy = anchor.cy + shift;
+  const sun = { ...anchor, cy }, earth = { x: span.x + span.w - reach, y: cy };
   const mid = (x0 + x1) / HALF;
   return {
-    fig, earth, sun, align: 'center', figLeft: mid - fig.total / HALF, baseline: sun.cy - data.above * unit,
-    labelTop: sun.cy + data.labelGap * unit, labelLeft: x0, labelWidth: x1 - x0,
-    segments: [[[x0, sun.cy], [x1, sun.cy]]], light: { axis: 'x', across: sun.cy, from: x0, to: x1, gaps: [] },
+    fig, earth, sun, align: 'center', figLeft: mid - fig.total / HALF, baseline: cy - data.above * unit,
+    labelTop: cy + data.labelGap * unit, labelLeft: x0, labelWidth: x1 - x0,
+    segments: [[[x0, cy], [x1, cy]]], light: { axis: 'x', across: cy, from: x0, to: x1, gaps: [] },
   };
 }
 
@@ -113,7 +120,7 @@ export function skyParts(shot, ctx, steps, times, parts, { minSize, maxSize }) {
   const fit = (maxWidth) => parts.figureAt(shot, ctx, { maxWidth, minSize: floor, maxSize, steps });
   const probe = shot.delta === undefined ? null : parts.plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: 0, top: 0, maxWidth: editorialSpan(ctx, 1, look.grid.columns).w, at: 0 });
   const deltaH = probe === null ? 0 : DELTA_GAP * unit + probe.box[3];
-  const sky = isWide(ctx.canvas) ? wideSky(shot, ctx, fit) : tallSky(shot, ctx, fit, labelSize, deltaH);
+  const sky = isWide(ctx.canvas) ? wideSky(shot, ctx, fit, labelSize, deltaH) :tallSky(shot, ctx, fit, labelSize, deltaH);
   const figure = parts.figureGroup(shot, ctx, look.kinds.number.glow ? parts.glowingFigure(sky.fig, ctx, times) : sky.fig, { left: sky.figLeft, baseline: sky.baseline, tracks: {} });
   const labelAt = times.land + look.moves.enter.dur;
   const set = labelSet(shot, ctx, labelSize, sky.labelWidth, 'center');
