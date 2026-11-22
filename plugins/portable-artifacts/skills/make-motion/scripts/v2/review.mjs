@@ -16,7 +16,7 @@
 // anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
 import { shotTime, lookOfShot } from '../../engine/graph/film.mjs';
-import { auditFrame, textStatesIn, textLandings } from '../../engine/review/frame.mjs';
+import { auditFrame, textStatesIn, textLandings, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
 import { regionMarkIds } from '../../engine/review/regions.mjs';
 import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
@@ -204,6 +204,18 @@ export function opensShotAt(film, timeline, frame, whole) {
   return whole === true && frame === openingFrameOf(film, timeline, shot.index);
 }
 
+/**
+ * Is `frame`, audited whole, the frame a shot rests on (its last frame, outside any cut window)? The composition rules
+ * judge a shot there: earlier frames have elements still arriving, and a frame inside a window shows two shots.
+ */
+export function restsShotAt(timeline, frame, whole) {
+  const shot = shotAtFrame(timeline, frame);
+  return whole === true && frame === Math.round(shot.end * timeline.fps) - 1;
+}
+
+// Does the shot's kind lay out equals (kind.peers: list, feed, compare, timeline)? Then scale-contrast is not judged.
+const isPeerShot = (spec) => typeof spec?.show === 'string' && registries.kinds.has(spec.show) && registries.kinds.get(spec.show).peers === true;
+
 // The ctx auditFrame takes for one snapshot: the shot it belongs to, the look and canvas, what the shot's frames say,
 // and the colour painted under the shot (`backgrounds`, per shot, from the page: session.info.backgrounds).
 function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds = []) {
@@ -214,6 +226,8 @@ function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds =
     look, canvas, safe: safeRectFor(canvas, look, registries.modes.get(film.mode ?? DEFAULT_MODE)), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t: frame / timeline.fps,
     isFirstShot: shot.index === 0, ...restingOf.get(shot.id),
     opensShot: opensShotAt(film, timeline, frame, whole),
+    restsShot: restsShotAt(timeline, frame, whole),
+    peers: isPeerShot(film.shots[shot.index]),
     background: backgrounds[shot.index],
     regionMarks: regionMarksOf(film)[shot.index] ?? [],
   };
@@ -371,6 +385,27 @@ export function hookFindings(film, timeline, snapshots) {
   }];
 }
 
+export const COMPOSITION_CAP = 3;
+const COMPOSITION_RULE_IDS = new Set(COMPOSITION_RULES);
+
+/**
+ * At most `cap` composition findings (dead-space, scale-contrast) a film: the ones with the largest `measure` stay, the
+ * smallest of those says how many shots were dropped. Findings of any other rule pass through; the order is unchanged.
+ */
+export function capComposition(findings, cap = COMPOSITION_CAP) {
+  const composition = findings.filter((f) => COMPOSITION_RULE_IDS.has(f.rule));
+  if (composition.length <= cap) return findings;
+  const worst = [...composition].sort((a, b) => b.measure - a.measure).slice(0, cap);
+  const kept = new Set(worst);
+  const last = worst.at(-1), dropped = composition.length - cap;
+  const note = ` (${dropped} more ${dropped === 1 ? 'shot has' : 'shots have'} a composition finding; fix the worst first)`;
+  return findings.flatMap((f) => {
+    if (!COMPOSITION_RULE_IDS.has(f.rule)) return [f];
+    if (!kept.has(f)) return [];
+    return [f === last ? { ...f, message: `${f.message}${note}` } : f];
+  });
+}
+
 /**
  * @param {{ session: object, signal?: AbortSignal }} opts session from openSession
  * @returns {Promise<{ kind: 'mechanical' | 'creative', shot: string, path: string, message: string, t: number, rule: string, node: string }[]>}
@@ -381,7 +416,7 @@ export async function reviewFilm({ session, signal }) {
   const restingOf = restingByShot(timeline, snapshots);
   const backgrounds = session.info?.backgrounds ?? [];
   const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
-  const deduped = dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots);
+  const deduped = capComposition(dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots));
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
   const loop = await loopFindings(session); // root loop: true (loop.mjs)
   const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings

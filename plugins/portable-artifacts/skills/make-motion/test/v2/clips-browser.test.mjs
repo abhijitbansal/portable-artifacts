@@ -85,12 +85,13 @@ test('the clip route serves decoded frames by canonical index only', async (t) =
   }
 });
 
-test('the review sheets take clip frames, and the run reports no finding', async (t) => {
+test('the review sheets take clip frames, and the run reports no finding about the clip', async (t) => {
   if (!ready) return t.skip('no browser or ffmpeg');
   const out = path.join(dir, 'sheets', 'film.mp4');
   const { report, exitCode } = await runMake(options({ out, noRender: true }));
   assert.equal(exitCode, 0, JSON.stringify(report.findings ?? report.error));
-  assert.deepEqual(report.findings, []);
+  // the only finding is the first shot's: its fixture is one 80-unit bar on an empty page (W2 Task 3, dead-space, 46% bare)
+  assert.deepEqual(report.findings.map((f) => [f.kind, f.shot, f.path, /^the frame leaves 46% of its height empty/.test(f.message)]), [['creative', 'open', 'shots[0]', true]]);
   assert.ok(report.stages.some((s) => s.name === 'clips' && s.ok));
   assert.ok(readdirSync(path.join(dir, 'sheets', 'film.sheets')).some((f) => f.endsWith('.png')));
 });

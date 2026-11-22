@@ -171,6 +171,7 @@ registries.kinds.add(KIND, {
   events: (shot, timing) => listTimes(shot, timing).slice(1).map((t) => ({ kind: 'device', device: 'item', t })),
   eventDevices: Object.freeze(['item']), // every device name `events` sends: each look must name a sound for it (sound/cues.mjs)
   lookData: true, // a look ships it only with a kinds.list entry (engine/looks/index.mjs listedKinds)
+  peers: true, // its parts are equals: the review does not judge a hero's scale (frame.mjs scale-contrast)
   numbered: true, // the title is a slug in desk, which shows the shot's place among the numbered shots
   showsWords: true, // its narration is the picture: never captioned (engine/captions)
 });

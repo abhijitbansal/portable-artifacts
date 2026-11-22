@@ -77,6 +77,9 @@ import { marker } from './marker.mjs';
  * @property {{ line?: { color: string, width: number, alpha: number }, shadow?: { color: string, width: number,
  *   alpha: number, steps: number } }} [coverEdge]  the leading edge of a cover cut's sheet (engine/cuts/cover.mjs):
  *   palette colour names, widths in pixels
+ * @property {{ band?: number, hero?: number }} [fill]  where the review's composition rules fire for this look, each a number
+ *   above 0 and at most 1 (checked by validateLook): `band`, the share of a side left empty (dead-space), `hero`, the share of
+ *   the frame a hero must reach (scale-contrast); a key left out takes engine/review/frame.mjs DEFAULT_FILL
  * @property {number} keyline  width of a cut-out's keyline
  * @property {{ dx: number, dy: number, blur: number, alpha: number, color: string }} shadow  offset and blur in units, color #rrggbb
  * @property {Record<string, object>} devices  styling per device name; colours are palette keys or #rrggbb
@@ -278,6 +281,22 @@ function easeProblem(name) {
   }
 }
 
+// look.fill (absent, or { band?, hero? }): the share of a side the review lets stay empty before it says so (dead-space), and
+// the share of the frame a hero must reach (scale-contrast), in place of the defaults (engine/review/frame.mjs
+// DEFAULT_FILL, which reads it through fillOf).
+const FILL_KEYS = Object.freeze(['band', 'hero']);
+const isFillShare = (v) => Number.isFinite(v) && v > 0 && v <= 1;
+
+function fillErrors(name, look) {
+  const fill = look.fill;
+  if (fill === undefined) return [];
+  if (!isPlainObject(fill)) return [`look "${name}": fill must be an object of ${FILL_KEYS.join(', ')}, got ${String(fill)}`];
+  return Object.entries(fill).flatMap(([key, value]) => {
+    if (!FILL_KEYS.includes(key)) return [`look "${name}": fill.${key} is not a field; it takes ${FILL_KEYS.join(', ')}`];
+    return isFillShare(value) ? [] : [`look "${name}": fill.${key} must be a number above 0 and at most 1, got ${typeof value === 'number' ? String(value) : JSON.stringify(value)}`];
+  });
+}
+
 function cutMotionErrors(name, look) {
   const motion = look.cutMotion;
   if (motion === undefined) return [];
@@ -354,6 +373,8 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
   const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look)];
   if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));
+  const fill = fillErrors(look.name, look);
+  if (fill.length > 0) throw new RangeError(fill.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {
     throw new RangeError(`look "${name}": sounds must be { cut, device, emphasis, land }, got ${String(sounds)}`);

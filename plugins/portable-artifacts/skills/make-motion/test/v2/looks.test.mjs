@@ -524,6 +524,26 @@ test('desk, pop and cosmos carry frozen composition data for the end, list, quot
   }
 });
 
+test('a look\'s fill is a band and a hero share, each above 0 and at most 1; anything else is refused by name', () => {
+  const desk = registries.looks.get('desk');
+  const bad = (fill) => () => validateLook({ ...desk, name: 'test-fill', fill });
+  assert.throws(bad({ band: 1.2 }), /look "test-fill": fill\.band must be a number above 0 and at most 1, got 1\.2/);
+  assert.throws(bad({ hero: 0 }), /look "test-fill": fill\.hero must be a number above 0 and at most 1, got 0/);
+  assert.throws(bad({ band: Number.NaN }), /look "test-fill": fill\.band must be a number above 0 and at most 1, got NaN/);
+  assert.throws(bad({ hero: '0.4' }), /look "test-fill": fill\.hero must be a number above 0 and at most 1, got "0\.4"/);
+  assert.throws(bad({ gap: 0.3 }), /look "test-fill": fill\.gap is not a field; it takes band, hero/);
+  assert.throws(bad({ constructor: 0.3 }), /look "test-fill": fill\.constructor is not a field; it takes band, hero/);
+  assert.throws(bad(3), /look "test-fill": fill must be an object of band, hero, got 3/);
+  assert.doesNotThrow(bad({ band: 0.3, hero: 1 }));
+  assert.doesNotThrow(bad({}));
+  for (const name of registries.looks.names.all()) assert.doesNotThrow(() => validateLook({ ...registries.looks.get(name), name }), `${name} is valid`);
+});
+
+test('ledger lowers the hero bar to 0.45 and keeps the default band', () => {
+  assert.deepEqual(registries.looks.get('ledger').fill, { hero: 0.45 });
+  for (const name of registries.looks.names()) if (name !== 'ledger') assert.equal(registries.looks.get(name).fill, undefined, `${name} takes the default fill`);
+});
+
 test('a look may leave kinds out; when it has kinds, each entry must be an object', () => {
   const desk = registries.looks.get('desk');
   const { kinds: _gone, ...bare } = desk;

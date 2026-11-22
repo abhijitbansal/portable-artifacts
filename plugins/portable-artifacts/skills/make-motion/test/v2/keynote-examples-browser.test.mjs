@@ -1,6 +1,6 @@
 // The `keynote` look (experimental) against the review rules in the page: every kind's example (as --list kinds prints
-// it) that keynote ships unparked, in pro at 16:9 and 9:16, reviewed at the sheet moments, comes back with no finding and
-// no page error. The kinds come from the registry, not from a listing: a hidden look is in none, so a sweep built on
+// it) that keynote ships unparked, in pro at 16:9 and 9:16, reviewed at the sheet moments, comes back with no finding
+// beyond those in KNOWN, and no page error. The kinds come from the registry, not from a listing: a hidden look is in none, so a sweep built on
 // listEntries(...).looks would test nothing (the count is asserted). Run with --test-concurrency=1; skips without a
 // browser.
 import test, { before, after } from 'node:test';
@@ -21,6 +21,19 @@ const FORMATS = Object.freeze(['16:9', '9:16']);
 const look = registries.looks.get('keynote');
 const SHIPPED = registries.kinds.names().filter((kind) => supportsKind(look, kind) && !isParkedKind(look, kind));
 const exampleOf = (kind) => listEntries('kinds').find((e) => e.name === kind)?.example ?? registries.kinds.get(kind).example;
+// The composition findings (W2 Task 3) keynote gives on a kind's example, by "<kind> <format>", as "<kind> <rule> <path>"; the
+// quote and diagram frames were viewed (.scratch/motion-steals-w2/t3/png), free is read from its spec, and the examples are
+// shared with the other looks, so their copy stays:
+// - free: one 80-unit bar on an empty page (the kind's minimal example): dead-space is right;
+// - diagram 16:9: three small boxes in one row, 41% of the height bare above and below: dead-space is right;
+// - quote 16:9: the card is 54% of the frame, a hair under the 0.55 hero bar, and its type fills the card, so the finding
+//   is arguably a false positive; keynote takes no `fill` (controller ruling), so it is listed, not hidden.
+const KNOWN = Object.freeze({
+  'free 16:9': ['creative dead-space shots[0]'],
+  'free 9:16': ['creative dead-space shots[0]'],
+  'diagram 16:9': ['creative dead-space shots[0]'],
+  'quote 16:9': ['creative scale-contrast shots[0]'],
+});
 
 // A striped PNG, built by hand so a browser can decode it: a stand-in screenshot.
 function stripedPng(w, h) {
@@ -51,13 +64,13 @@ test('the sweep covers every kind keynote ships: sixteen less the two it parks (
 
 for (const format of FORMATS) {
   for (const kind of SHIPPED) {
-    test(`look keynote: the ${kind} example at ${format} has no finding`, async (t) => {
+    test(`look keynote: the ${kind} example at ${format} has only its known findings`, async (t) => {
       const film = { version: 2, mode: 'pro', look: 'keynote', format, fps: FPS, seed: 3, shots: [exampleOf(kind)] };
       const session = await sessionOrNull(film, { specDir });
       if (!session) { t.skip('no browser'); return; }
       t.after(() => session.close());
       const findings = await reviewFilm({ session });
-      assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule} ${f.path}`), [], findings.map((f) => f.message).join('\n'));
+      assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule} ${f.path}`), KNOWN[`${kind} ${format}`] ?? [], findings.map((f) => f.message).join('\n'));
       assert.deepEqual(session.errors, []);
     });
   }

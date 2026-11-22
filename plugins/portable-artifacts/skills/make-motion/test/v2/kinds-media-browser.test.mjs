@@ -30,13 +30,19 @@ const COMBOS = [['pro', 'desk', '16:9'], ['pro', 'desk', '9:16'], ['viral', 'pop
 // the review rightly says so (kinds-media.test.mjs covers both cases)
 const SHOT = { id: 'm', show: 'media', src: 'photo.png', say: 'Every morning the boats bring in the catch.', caption: 'The morning catch' };
 
+// The composition finding (W2 Task 3) a case gets, by "<fit> <look> <format>": the desk cutout on 16:9 is a card reaching 51%
+// of the frame with its caption under it, a hero under the 0.55 bar (the calibration's cut-out card; scale-contrast is right).
+const KNOWN = Object.freeze({
+  'cutout desk 16:9': ['creative: shots[0]: scale-contrast'],
+});
+
 for (const [mode, look, format] of COMBOS) {
   for (const fit of ['bleed', 'cutout']) {
-    test(`a captioned ${fit} photo in ${look} at ${format} has no review finding`, async (t) => {
+    test(`a captioned ${fit} photo in ${look} at ${format} has only its known review findings`, async (t) => {
       const session = await open(t, { version: 2, mode, look, format, fps: 30, seed: 3, shots: [{ ...SHOT, fit }] });
       if (!session) return;
       const findings = await reviewFilm({ session });
-      assert.deepEqual(findings.map((f) => `${f.kind}: ${f.path}: ${f.message}`), []);
+      assert.deepEqual(findings.map((f) => `${f.kind}: ${f.path}: ${f.rule}`), KNOWN[`${fit} ${look} ${format}`] ?? [], findings.map((f) => f.message).join('\n'));
       assert.deepEqual(session.errors, []);
     });
   }

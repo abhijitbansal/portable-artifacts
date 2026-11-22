@@ -599,25 +599,29 @@ export function openingFindings(sampled, ctx) {
 // ---- composition: where a shot's resting frame is empty, and what leads it ----
 //
 // One measure (compositionOf) and two creative rules over it. An element is a top-level node that shows something (not the
-// field behind the picture plane, not a caption); its box is the union of the boxes of the nodes that show themselves. The
-// band is the longest stretch of the safe rectangle that no element's box enters. The hero is the largest element when it
-// leads the second by HERO_LEAD or more. Both rules are judged once per shot, on its resting frame (ctx.restsShot), and a
-// frame with a ground (an element covering GROUND_SHARE of the canvas) is judged by neither.
+// field behind the picture plane, not a caption, not a fixed overlay such as a slug or a mark: furniture the picture sits
+// among); its box is the union of the boxes of the nodes that show themselves. The band is the longest stretch of the safe
+// rectangle that no element's box enters. The hero is the largest element when it leads the second by HERO_LEAD or more.
+// Both rules are judged once per shot, on its resting frame (ctx.restsShot), and a frame with a ground (an element covering
+// GROUND_SHARE of the canvas) is judged by neither. scale-contrast is also skipped on a shot of peers (ctx.peers: the kind
+// lays out equals, kind.peers), where a slug or a divider is the "second" element and the ratio means nothing.
 
 export const COMPOSITION_RULES = Object.freeze(['dead-space', 'scale-contrast']);
 // The share of the safe rectangle's side left empty, and the share a hero reaches of it, at which a rule fires; a look may
-// give its own as `fill` (looks/index.mjs).
-export const DEFAULT_FILL = Object.freeze({ band: 0.4, hero: 0.4 });
+// give its own as `fill` (looks/index.mjs). Calibrated on ten shipped films (91 shots) with the fixed overlays left out:
+// at a band of 0.40 no film has more than a third of its shots flagged; the cap keeps what reaches the report to three.
+export const DEFAULT_FILL = Object.freeze({ band: 0.4, hero: 0.55 });
 export const HERO_LEAD = 1.5;
 const PERCENT = 100;
 const WHERE = Object.freeze({ left: 'the left', right: 'the right', top: 'the top', bottom: 'the bottom', middle: 'a band through the middle' });
 const SIDE = Object.freeze({ x: 'width', y: 'height' });
 
-const isShare = (v) => Number.isFinite(v) && v >= 0 && v <= 1;
+const isShare = (v) => Number.isFinite(v) && v > 0 && v <= 1;
 
-/** The fill thresholds of a look: DEFAULT_FILL with the look's optional `fill` laid over it; a key that is not a number
- *  from 0 to 1 is ignored (looks/index.mjs validates look data), so it cannot switch a rule off. */
-export const fillOf = (look) => ({ ...DEFAULT_FILL, ...Object.fromEntries(Object.entries(look?.fill ?? {}).filter(([key, v]) => key in DEFAULT_FILL && isShare(v))) });
+/** The fill thresholds of a look: DEFAULT_FILL with the look's optional `fill` laid over it; a key that is not a field, or
+ *  not a number above 0 and at most 1, is ignored (looks/index.mjs validateLook refuses both when the look registers), so
+ *  it cannot switch a rule off. */
+export const fillOf = (look) => ({ ...DEFAULT_FILL, ...Object.fromEntries(Object.entries(look?.fill ?? {}).filter(([key, v]) => Object.hasOwn(DEFAULT_FILL, key) && isShare(v))) });
 
 // A box cut to the canvas, or null when none of it is on the canvas.
 function clipToCanvas([x, y, w, h], canvas) {
@@ -626,12 +630,17 @@ function clipToCanvas([x, y, w, h], canvas) {
 }
 
 // What a node shows in canvas pixels: a text with a layout by its ink, anything else by its bbox; null when it has no
-// usable box. A layout the ink cannot be read from is a defect in the snapshot, not a case to hide: it throws.
+// usable box. A text whose layout the ink cannot be read from is skipped here: visibleTexts reports it once, as the
+// mechanical "could not be measured", so a bad layout never aborts the review.
 function ownBox(n) {
   if (!isBox(n.bbox)) return null;
   if (n.type !== 'text' || !hasWords(n.layout)) return n.bbox;
-  const ink = inkBox(n, hiddenNow(n));
-  return isBox(ink) ? ink : n.bbox;
+  try {
+    const ink = inkBox(n, hiddenNow(n));
+    return isBox(ink) ? ink : n.bbox;
+  } catch {
+    return null;
+  }
 }
 
 // The boxes of the nodes in a subtree that show themselves at an accumulated opacity above 0.
@@ -643,11 +652,16 @@ function shownBoxes(n, opacity) {
 }
 
 // The top-level nodes that show something, as { id, box, area }: not behind the picture plane, not the ground sheet of a
-// grounded look, not the shot's captions (the page's own boundary, page/stage.mjs captionFilter).
+// grounded look, not the shot's captions (the page's own boundary, page/stage.mjs captionFilter), and not a fixed overlay
+// (props.fixed: a slug, a mark, a rule across the frame) other than the shot's own caption card (`<shot>.caption`, the
+// clipping kind's), which is content placed in the free area on purpose.
 function elementsOf(sampled, ctx) {
   const captions = `${ctx.shotId}.captions`;
   const isCaption = (id) => id === captions || id.startsWith(`${captions}.`);
-  const tops = (Array.isArray(sampled) ? sampled : []).filter((n) => !(n.depth > 0) && n.id !== GROUND_ID && !isCaption(String(n.id ?? '')));
+  const card = `${ctx.shotId}.caption`;
+  const isCard = (id) => id === card || id.startsWith(`${card}.`);
+  const isFurniture = (n) => n.props?.fixed === true && !isCard(String(n.id ?? ''));
+  const tops = (Array.isArray(sampled) ? sampled : []).filter((n) => !(n.depth > 0) && n.id !== GROUND_ID && !isCaption(String(n.id ?? '')) && !isFurniture(n));
   return tops.flatMap((n) => {
     const boxes = shownBoxes(n, 1);
     const box = boxes.length > 0 ? clipToCanvas(union(boxes), ctx.canvas) : null;
@@ -716,7 +730,7 @@ export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
     const said = c.elements.length === 0 ? `the frame shows nothing: ${percent}% of its ${side} is empty` : `the frame leaves ${percent}% of its ${side} empty (${WHERE[c.band.where]})`;
     out.push({ ...finding(ctx, CREATIVE, 'dead-space', '', `${said}; let the hero take more of the frame, add a second element, or use a look that fills with type`), measure: c.band.share - fill.band });
   }
-  if (c.hero && c.hero.extent < fill.hero) {
+  if (c.hero && ctx.peers !== true && c.hero.extent < fill.hero) {
     const rest = c.next ? `, and the next largest thing, "${c.next.id}", is smaller still` : ' and stands alone';
     out.push({ ...finding(ctx, CREATIVE, 'scale-contrast', '', `the hero, "${c.hero.id}", reaches ${Math.round(c.hero.extent * PERCENT)}% of the frame${rest}; set it larger, crop in on it, or give it a second mass (a picture, a chart, a card)`), measure: fill.hero - c.hero.extent });
   }
@@ -739,7 +753,8 @@ export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
  *   openingFindings). regionMarks: the ids of the marks the shot draws on its regions (regions.mjs regionMarkIds); a
  *   mark among them that runs past the frame is a finding (region-off-frame), as is a text the frame edge slices during
  *   a close-up (frame-edge). restsShot: the frame is the shot's resting frame (not mid-entrance, not inside a cut's window):
- *   only then are the composition findings (compositionFindings) added.
+ *   only then are the composition findings (compositionFindings) added. peers: the shot's kind lays out equals (kind.peers),
+ *   so scale-contrast is not judged.
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {
