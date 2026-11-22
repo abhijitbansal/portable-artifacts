@@ -13,8 +13,9 @@ import { UsageError } from '../../shared/cli.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
 import { FilmTimeError } from '../../scripts/v2/film-time.mjs';
-import { reviewFilm } from '../../scripts/v2/review.mjs';
+import { auditPlan, reviewFilm } from '../../scripts/v2/review.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
+import { rangeParts } from '../../scripts/v2/range-form.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { formatText, reportOf } from '../../scripts/v2/report.mjs';
 import { SLICE_SKIPPED, sliceAuditPlan, sliceOf, sliceSheets } from '../../scripts/v2/slice.mjs';
@@ -67,8 +68,20 @@ test('the sheets of --shot b are its own sheet and the strip of the cut into it'
 
 test('a range keeps the shot tiles inside it, and a strip only when its window starts inside it', () => {
   const sheets = sliceSheets(planSheets(film, timeline), sliceOf({ range: 'a@1..b@0.5' }, film, timeline));
-  assert.deepEqual(sheets.map((s) => s.name), ['a.png', 'b.png', 'cut-a-b.png']); // the window of b->c starts at 120, outside 30..75
+  assert.deepEqual(sheets.map((s) => s.kind), ['shot', 'shot', 'cut']); // the window of b->c starts at 120, outside 30..75
+  assert.equal(sheets[2].name, 'cut-a-b.png');
   for (const sheet of sheets.filter((s) => s.kind === 'shot')) for (const tile of sheet.tiles) assert.ok(tile.frame >= 30 && tile.frame <= 75, `${sheet.name} ${tile.frame}`);
+});
+
+test('a sheet that keeps only some of its shot\'s tiles is named for the slice, so it cannot overwrite the full run\'s sheet', () => {
+  const all = planSheets(film, timeline);
+  const names = (spec) => sliceSheets(all, sliceOf(spec, film, timeline)).map((s) => s.name);
+  assert.deepEqual(names({ range: 'a@1..b@0.5' }), ['a.partial-range-30-75.png', 'b.partial-range-30-75.png', 'cut-a-b.png']);
+  assert.deepEqual(names({ range: 'b..b@end' }), ['b.png', 'cut-a-b.png'], 'every tile of b is inside: the sheet is whole and keeps its name');
+  assert.deepEqual(names({ shot: 'b' }), ['b.png', 'cut-a-b.png']);
+  const [partial] = sliceSheets(all, sliceOf({ range: 'a@1..b@0.5' }, film, timeline));
+  assert.equal(partial.shot, 'a');
+  assert.ok(partial.tiles.length < all[0].tiles.length);
 });
 
 test('a strip is kept whole, its side frames included, though some lie outside the range', () => {
@@ -80,7 +93,16 @@ test('a strip is kept whole, its side frames included, though some lie outside t
 
 test('a range that starts after a strip\'s window and a shot with no tile left drop their sheets', () => {
   const names = sliceSheets(planSheets(film, timeline), sliceOf({ range: 'b@1..b@1.5' }, film, timeline)).map((s) => s.name);
-  assert.deepEqual(names, ['b.png'], 'cut-a-b.png starts at frame 60, before the range');
+  assert.deepEqual(names, ['b.partial-range-90-105.png'], 'cut-a-b.png starts at frame 60, before the range');
+});
+
+test('a range that starts inside a cut window drops the strip, but the window frames inside it are audited as the page draws them', () => {
+  const slice = sliceOf({ range: 'b@0.2..b@1' }, film, timeline); // frames 66 to 90
+  assert.deepEqual(sliceSheets(planSheets(film, timeline), slice).map((s) => s.name), ['b.partial-range-66-90.png']);
+  const full = new Map(auditPlan(film, timeline).map(([shot, frame]) => [frame, shot]));
+  const part = auditPlan(film, timeline, sliceAuditPlan(film, timeline, slice).map((p) => p.frame));
+  assert.ok(part.some(([shot]) => shot === 1), 'a frame inside the slide window is audited as the incoming shot alone');
+  for (const [shot, frame] of part) assert.equal(shot, full.get(frame), `frame ${frame} is audited as in the full run`);
 });
 
 test('a slice does not change the sheets the film plans (the unsliced plan is untouched)', () => {
@@ -95,21 +117,28 @@ test('a range that ends mid-shot still snapshots that shot\'s last frame, and ju
   assert.ok(plan.filter((p) => p.judged).every((p) => p.frame >= 30 && p.frame <= 75));
 });
 
-test('the slice plan is the full audit frames inside the slice plus the last frame of each shot it touches, in order', () => {
+test('the slice plan is every audit frame of each shot the slice touches, judged only inside the slice, in order', () => {
   const slice = sliceOf({ range: 'a@1..b@0.5' }, film, timeline);
   const plan = sliceAuditPlan(film, timeline, slice);
-  const inside = auditMoments(film, timeline).filter((f) => f >= 30 && f <= 75);
-  assert.deepEqual(plan.filter((p) => p.judged).map((p) => p.frame), inside);
-  assert.deepEqual(plan.filter((p) => !p.judged).map((p) => p.frame), [119], 'the last frame of b, outside the slice (a\'s, frame 59, is inside it)');
-  assert.equal(plan.find((p) => p.frame === 59).judged, true);
-  assert.deepEqual(plan.map((p) => p.frame), [...new Set(plan.map((p) => p.frame))].sort((x, y) => x - y), 'in order, each once');
+  const shotsAB = auditMoments(film, timeline).filter((f) => f <= 119); // the frames of a and b
+  assert.deepEqual(plan.map((p) => p.frame), shotsAB, 'the same frames the full run snapshots in those shots, none of c');
+  assert.deepEqual(plan.filter((p) => p.judged).map((p) => p.frame), shotsAB.filter((f) => f >= 30 && f <= 75));
+  assert.ok(plan.some((p) => p.frame === 119 && !p.judged) && plan.some((p) => p.frame < 30 && !p.judged), 'the ends of both shots outside the range are drawn, not judged');
+});
+
+test('a slice reads a shot\'s rest scales from the same frames the full run does: all of its audit frames, drawn even outside the slice', () => {
+  const plan = sliceAuditPlan(film, timeline, sliceOf({ range: 'b@0..b@0.5' }, film, timeline)); // frames 60 to 75, a part of b
+  const inB = auditMoments(film, timeline).filter((f) => f >= 60 && f <= 119);
+  for (const frame of inB) assert.ok(plan.some((p) => p.frame === frame), `frame ${frame} of b is snapshotted`);
+  assert.ok(plan.filter((p) => !p.judged && p.frame >= 60).length > 0);
 });
 
 test('a last frame that is inside the slice is judged, not a second entry', () => {
   const plan = sliceAuditPlan(film, timeline, sliceOf({ shot: 'b' }, film, timeline));
   assert.equal(plan.filter((p) => p.frame === 119).length, 1);
   assert.equal(plan.find((p) => p.frame === 119).judged, true);
-  assert.deepEqual(plan.filter((p) => !p.judged).map((p) => p.frame), [59], 'a whole shot: every frame but the last of the shot before it (for a match cut) is inside the slice');
+  const unjudged = plan.filter((p) => !p.judged).map((p) => p.frame);
+  assert.deepEqual(unjudged, auditMoments(film, timeline).filter((f) => f < 60), 'only the shot before it (for a match cut) is drawn outside the slice');
 });
 
 // ---- the flags ----
@@ -171,6 +200,59 @@ test('runMake refuses an unknown shot and a backwards range as machine trouble, 
   }
 });
 
+// A voiced film: its timeline is estimated until the voice is made. What the estimate cannot change is refused before the
+// voice: the order of two references in different shots, or two plain seconds. The rest waits for the measured timeline.
+const VOICED = { version: 2, mode: 'pro', fps: FPS, voice: { name: 'af_heart' }, shots: [{ id: 'hook', show: 'statement', say: 'Numbers need sources.' }, { id: 'rows', show: 'statement', text: 'Four rows.', hold: 2 }] };
+const voiceSpy = (calls) => async () => {
+  calls.push('voice');
+  throw Object.assign(new Error('the voice package is not installed'), { hint: 'install it' });
+};
+
+test('a backwards range is refused before the voice when its references are in different shots or are plain seconds', async () => {
+  const dirFor = mkdtempSync(path.join(tmpdir(), 'mm-slice-voice-'));
+  try {
+    const specPath = path.join(dirFor, 'film.json');
+    writeFileSync(specPath, JSON.stringify(VOICED));
+    const run = async (range) => {
+      const calls = [];
+      const { exitCode, report } = await runMake({ specPath, range, out: null }, { synthesise: voiceSpy(calls) });
+      return { calls, exitCode, report };
+    };
+    for (const backwards of ['rows..hook', 'rows@end..hook@start', '5..1']) {
+      const { calls, exitCode, report } = await run(backwards);
+      assert.deepEqual([calls, exitCode], [[], 2], backwards);
+      assert.match(report.error.message, /--range takes <from>\.\.<to>/, backwards);
+    }
+    for (const waits of ['hook@1..hook@0.5', 'rows@end+3..hook', 'rows..rows@0.5', '0..99']) {
+      assert.deepEqual((await run(waits)).calls, ['voice'], `${waits}: the order or the length needs the measured timeline`);
+    }
+  } finally {
+    rmSync(dirFor, { recursive: true, force: true });
+  }
+});
+
+test('on a silent film the estimate is the timeline drawn, so a backwards or past-the-end range is refused whole before anything runs', async () => {
+  const dirFor = mkdtempSync(path.join(tmpdir(), 'mm-slice-silent-'));
+  try {
+    const specPath = path.join(dirFor, 'film.json');
+    writeFileSync(specPath, JSON.stringify(film));
+    const same = await runMake({ specPath, range: 'a@1.5..a@0.5', out: null });
+    assert.equal(same.exitCode, 2);
+    assert.match(same.report.error.message, /--range takes <from>\.\.<to>/);
+    assert.equal(same.report.stages.some((s) => s.name === 'review'), false);
+    const late = await runMake({ specPath, range: '0..99', out: null });
+    assert.equal(late.exitCode, 2);
+    assert.match(late.report.error.message, /--range 99: past the end \(the film is 6\.0 s\)/);
+  } finally {
+    rmSync(dirFor, { recursive: true, force: true });
+  }
+});
+
+test('a range with more than one .. is a usage error naming the form, not a reference that names nothing', () => {
+  assert.throws(() => rangeParts('a..b..c'), (err) => err instanceof UsageError && /--range takes <from>\.\.<to>/.test(err.message));
+  assert.throws(() => parseMakeArgs([FILM_PATH, '--range', 'a..b..c']), /--range takes <from>\.\.<to>/);
+});
+
 test('make.mjs --shot nope exits 2 with the shots and starts no browser; --range 1.5 is refused as a usage error', () => {
   const dirFor = mkdtempSync(path.join(tmpdir(), 'mm-slice-cli-'));
   try {
@@ -197,7 +279,9 @@ test('the report has a slice key only for a slice run, and its text form says wh
   assert.equal('slice' in reportOf(BLANK), false);
   const report = reportOf({ ...BLANK, slice: SLICE_REPORT });
   assert.deepEqual(report.slice, SLICE_REPORT);
-  assert.match(formatText(report, { sheetsDir: 'out/film.sheets' }), /^slice: frames 60 to 119 \(60 frames; shot b\); loop, cut-variety and sameness are not run$/m);
+  const text = formatText(report, { sheetsDir: 'out/film.sheets' });
+  assert.match(text, /^slice: frames 60 to 119 \(60 frames; shot b\); loop, cut-variety and sameness are not run$/m);
+  assert.match(text, /^frames: 180 in the film, 60 in the slice$/m, 'the film\'s frame count is not mistaken for the slice\'s');
 });
 
 // ---- the review of a slice, on a stub page (no browser) ----
@@ -301,7 +385,41 @@ test('a match into the slice\'s first shot is judged (the shot before it is draw
   assert.deepEqual(await matchOf(sliceOf({ shot: 'c' }, matched, tl)), [], 'the cut into b is not in a slice of c');
   assert.deepEqual(await matchOf(sliceOf({ range: 'b@1..b@1.5' }, matched, tl)), [], 'the window of the match opened before this range');
   const plan = sliceAuditPlan(matched, tl, sliceOf({ shot: 'b' }, matched, tl));
-  assert.deepEqual(plan.filter((p) => !p.judged).map((p) => p.frame), [59], 'a\'s last frame is drawn, not judged');
+  assert.deepEqual(plan.filter((p) => !p.judged).map((p) => p.frame), auditMoments(matched, tl).filter((f) => f < 60), 'a, the shot before the match, is drawn, not judged');
+});
+
+test('a match compares the incoming shot\'s first frame drawn alone, even when the range ends inside the window', async () => {
+  const matched = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [
+    { id: 'a', show: 'free', hold: 2 },
+    { id: 'b', show: 'free', hold: 2, cut: 'match' },
+    { id: 'c', show: 'free', hold: 2 },
+  ] };
+  const tl = buildTimeline(matched, { fps: FPS });
+  const front = (id) => ({ ...bar(id, [96, 96, 1728, 800]), depth: 0 });
+  const ALONE = 75; // the match window is frames 60 to 74: b's first frame drawn alone is 75
+  assert.ok(auditMoments(matched, tl).includes(ALONE), 'the fixture: frame 75 is an audit frame');
+  const found = async (treeOf, slice) => (await reviewFilm({ session: recordingSession(matched, treeOf).session, slice })).filter((f) => f.rule === 'match').map((f) => f.shot);
+  const ends = sliceOf({ range: 'a@1..b@0.4' }, matched, tl); // frames 30 to 72: ends inside the window
+  const sharesAtFirstDiffersAtEnd = (frame) => [front(frame === 119 ? 'y' : 'x')];
+  assert.deepEqual(await found(sharesAtFirstDiffersAtEnd, null), [], 'control: the full run compares frame 75, which shares a node with a');
+  assert.deepEqual(await found(sharesAtFirstDiffersAtEnd, ends), [], 'the slice does not compare b\'s last frame instead');
+  const differsAtFirstSharesAtEnd = (frame) => [front(frame === ALONE ? 'y' : 'x')];
+  assert.deepEqual(await found(differsAtFirstSharesAtEnd, null), ['b'], 'control: frame 75 shares nothing with a');
+  assert.deepEqual(await found(differsAtFirstSharesAtEnd, ends), ['b'], 'the slice finds it too');
+});
+
+test('a finding about a frame outside the slice is not reported: cut-window, kind and hook are kept by their time', async () => {
+  const wide = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [
+    { id: 'a', show: 'free', hold: 2 },
+    { id: 'b', show: 'free', hold: 2, cut: { type: 'slide', duration: 1.5 } },
+    { id: 'c', show: 'free', hold: 2 },
+  ] };
+  const tl = buildTimeline(wide, { fps: FPS });
+  const tree = [bar('block', [96, 96, 1728, 800])];
+  const rules = async (spec) => (await reviewFilm({ session: recordingSession(wide, tree).session, slice: sliceOf(spec, wide, tl) })).map((f) => `${f.rule}@${f.t}`);
+  assert.ok((await rules({ shot: 'b' })).includes('cut-window@2'), 'control: the window opens at 2.0 s, inside the shot');
+  assert.deepEqual((await rules({ range: 'b@1..b@1.5' })).filter((r) => r.startsWith('cut-window')), [], 'b\'s window opened at 2.0 s, before frame 90');
+  assert.deepEqual((await rules({ range: 'b@1..b@1.5' })).filter((r) => r.startsWith('hook')), []);
 });
 
 test('cut-window and match findings are judged only for the shots in the slice', async () => {

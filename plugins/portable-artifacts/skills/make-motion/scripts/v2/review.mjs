@@ -29,7 +29,7 @@ import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { auditMoments } from './plan.mjs';
-import { sliceAuditPlan, shotsOpeningIn, shotsWhollyIn } from './slice.mjs';
+import { inSlice, sliceAuditPlan } from './slice.mjs';
 import { pageFinding } from './report.mjs';
 import { loopFindings } from './loop.mjs';
 import { handReviewFindings } from './review-hand.mjs';
@@ -455,20 +455,12 @@ export function capComposition(findings, cap = COMPOSITION_CAP) {
   });
 }
 
-// What a slice review judges, as predicates on a shot id: the findings about a shot the slice does not touch are left out.
-// `settled`: the shots whose every frame is in the slice, the only ones a text can be called "never settles" on (a part of a
-// shot is too few frames for that); `opened`: the shots whose cut window opens inside it, the only ones a match is judged on.
-function scopeOf(timeline, slice) {
-  const touched = new Set(slice.shots), settled = new Set(shotsWhollyIn(timeline, slice)), opened = new Set(shotsOpeningIn(timeline, slice));
-  return { touches: (f) => touched.has(f.shot), settles: (snap) => settled.has(shotAtFrame(timeline, snap.frame).id), opens: (f) => opened.has(f.shot) };
-}
-
 /**
  * The film's review findings: every audit moment is snapshotted and judged, and the film-wide rules run. With `slice`
- * (slice.mjs: --shot, --range) only the audit frames inside it are judged; the last frame of each shot it touches is
- * snapshotted too, for the shot's rest scales, but not judged. `still` is read over the slice's frames alone, `cut-window`,
- * `match`, `hook`, the kinds' and the hand's findings only for the shots it touches, and `loop`, `cut-variety` and `sameness`
- * (slice.SLICE_SKIPPED) are not run.
+ * (slice.mjs: --shot, --range) the audit frames of every shot it touches are snapshotted, as the full run does, but only
+ * those inside it are judged; what is read across a shot (rest scales, `match`, `unsettled`) reads the same frames, and a
+ * finding is reported only when its time is inside the slice, so the result is the full review's, cut down to the slice.
+ * `still` is read over the slice's frames alone, and `loop`, `cut-variety` and `sameness` (slice.SLICE_SKIPPED) are not run.
  * @param {{ session: object, signal?: AbortSignal, slice?: object | null }} opts session from openSession
  * @returns {Promise<{ kind: 'mechanical' | 'creative', shot: string, path: string, message: string, t: number, rule: string, node: string }[]>}
  */
@@ -478,20 +470,16 @@ export async function reviewFilm({ session, signal, slice = null }) {
   const snapshots = await snapshotsOf(session, auditPlan(film, timeline, planned?.map((p) => p.frame)), signal);
   const judgedFrames = planned === null ? null : new Set(planned.filter((p) => p.judged).map((p) => p.frame));
   const judged = judgedFrames === null ? snapshots : snapshots.filter((snap) => judgedFrames.has(snap.frame));
-  const scope = slice === null ? null : scopeOf(timeline, slice);
-  const only = (list) => (scope === null ? list : list.filter(scope.touches)); // the findings about shots in the slice
   const restingOf = restingByShot(timeline, snapshots, captionsHoldRoom(film));
   const backgrounds = session.info?.backgrounds ?? [];
   const audited = judged.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
-  const settle = settleFindings(film, timeline, restingOf, scope === null ? snapshots : judged.filter(scope.settles));
-  const deduped = capComposition(dedupeFindings([...audited, ...settle], film.shots));
+  const deduped = capComposition(dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots));
   const still = pacingFindings(film, timeline, await heldFlags(session, signal, slice));
   const loop = slice === null ? await loopFindings(session) : []; // root loop: true (loop.mjs)
-  const hand = only(await handReviewFindings(session)); // a hand look: the drawing hand's speed, cover and edge findings
-  const matches = matchFindings(film, timeline, snapshots);
-  const found = [...deduped, ...still, ...hand, ...only(kindFindings(film, timeline, session.info?.pictures)), ...hookFindings(film, timeline, snapshots), ...only(cutWindowFindings(film, timeline)),
-    ...(scope === null ? matches : matches.filter(scope.opens)), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
-  return capCreative(found).sort((a, b) => a.t - b.t);
+  const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings
+  const found = [...deduped, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
+  const inside = slice === null ? found : found.filter((f) => inSlice(slice, timeline.fps, f.t)); // only what is about a frame of the slice
+  return capCreative(inside).sort((a, b) => a.t - b.t);
 }
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });

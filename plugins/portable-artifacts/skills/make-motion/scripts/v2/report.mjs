@@ -220,7 +220,7 @@ export function formatText(report, { sheetsDir }) {
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
-  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame${timingText(report.timing)}); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
+  const counts = report.output === null ? (report.slice ? `${report.frames} in the film, ${report.slice.frames} in the slice` : `${report.frames}`) : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame${timingText(report.timing)}); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);
   if (report.inspect) lines.push(`inspect: ${report.inspect.png}, ${report.inspect.json}`);
   if (report.slice) lines.push(sliceLine(report.slice));

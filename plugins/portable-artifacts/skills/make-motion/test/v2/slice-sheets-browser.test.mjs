@@ -53,9 +53,13 @@ test('the sheets of --shot b are the full run\'s sheets, byte for byte; the othe
 
 test('--range names its frames in the report, writes the sheets of the shots it touches and a strip whose window starts inside it', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
+  const whole = Buffer.from('the whole sheets of the last full run');
+  for (const name of ['a.png', 'b.png']) writeFileSync(path.join(SHEETS(), name), whole);
   const part = await run({ range: 'a@1..b@0.5' });
   assert.equal(part.exitCode, 0, JSON.stringify(part.report.findings));
-  assert.deepEqual(part.report.sheets.map((f) => path.basename(f)), ['a.png', 'b.png', 'cut-a-b.png']);
+  assert.deepEqual(part.report.sheets.map((f) => path.basename(f)), ['a.partial-range-30-75.png', 'b.partial-range-30-75.png', 'cut-a-b.png']);
+  assert.ok(bytes('a.png').equals(whole) && bytes('b.png').equals(whole), 'a partial sheet does not overwrite the full run\'s sheet');
+  assert.ok(existsSync(path.join(SHEETS(), 'a.partial-range-30-75.png')));
   assert.deepEqual(part.report.slice, { from: 30, to: 75, frames: 46, shots: ['a', 'b'], silent: false, skipped: ['loop', 'cut-variety', 'sameness'] });
   assert.ok(part.report.stages.some((s) => s.name === 'review' && s.ok));
   return undefined;

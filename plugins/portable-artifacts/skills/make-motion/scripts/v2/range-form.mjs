@@ -12,5 +12,7 @@ export const RANGE_FORM = '--range takes <from>..<to>, two film times (seconds s
 export function rangeParts(text) {
   const at = typeof text === 'string' ? text.indexOf(RANGE_SEPARATOR) : -1;
   if (at <= 0 || at + RANGE_SEPARATOR.length >= text.length) throw new UsageError(RANGE_FORM);
-  return [text.slice(0, at), text.slice(at + RANGE_SEPARATOR.length)];
+  const last = text.slice(at + RANGE_SEPARATOR.length);
+  if (last.includes(RANGE_SEPARATOR)) throw new UsageError(RANGE_FORM); // "a..b..c": one range has one ".."
+  return [text.slice(0, at), last];
 }
