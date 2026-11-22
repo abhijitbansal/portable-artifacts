@@ -332,7 +332,9 @@ test('the reviewer reads the film spec and checks each shot against its say line
   assert.match(REVIEWER_INSTRUCTIONS, /film path \(the film's JSON spec/);
   assert.match(REVIEWER_INSTRUCTIONS, /Read the film file/);
   assert.match(REVIEWER_INSTRUCTIONS, /"say"/);
-  assert.match(REVIEWER_INSTRUCTIONS, /everything a shot's "say" line says the viewer can see is true of what its sheets show/);
+  // every claim, not only the ones that point at the screen: a plain statement of fact in a "say" line is checked too
+  assert.match(REVIEWER_INSTRUCTIONS, /Check each shot's "say" line against what its sheets show: anything it states must be true of the pictures/);
+  assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /the viewer can see/, 'no narrowing to claims about what is on screen');
   assert.match(REVIEWER_INSTRUCTIONS, /each shot belongs to the film's subject/);
   assert.match(REVIEWER_INSTRUCTIONS, /mismatch is a P0/);
   assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /context only/);
