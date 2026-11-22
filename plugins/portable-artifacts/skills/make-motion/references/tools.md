@@ -76,3 +76,17 @@ What is written and what is judged:
 - **No MP4.** A slice run writes the sheets and the review and no video: `output` is `null`.
 
 `--shot` and `--range` do not go with each other or with `--poster`, `--poster-out`, `--inspect`, `--outline`, `--phonemes`, `--batch`, `--subtitles`, `--workers` or `--preview`; `--sheets-only`, `--out` and `--exact` are accepted. A shot the film lacks is exit 2 with the list of shots in `error.hint`; a `--range` with no `..`, or one that runs backwards (its first frame after its last), is exit 2 naming the form; a time past the end or one that names nothing is refused as above. On a voiced film the shot and the references are checked on the estimated timeline before the voice is made, and the range's order after, on the measured one.
+
+## A board before any voice
+
+`--estimated` goes with `--sheets-only` and shows the film's shots drawn, with no voice made:
+
+```
+node <skill-dir>/scripts/make.mjs film.json --sheets-only --estimated --out <name>.mp4
+```
+
+- **What it does.** A voiced film keeps its voice unmade: the times are the word-count estimate, as `--outline` has them, so the report says `timed: "estimated"` and `voice: null`, and a recording of your own is neither read nor probed. The run writes the usual sheets, then the board: one tile per shot at its late frame, each stamped as a sheet tile is, six shots to a strip and three tiles across, as JPEG strips at most 1920 px wide, in `<name>.sheets/board/board-1.jpg` on. The report's `board` lists the strips in order. Nothing is rendered.
+- **What it needs.** A browser, as any sheet does, and no voice package or model. A silent film works as it does without the flag.
+- **What it refuses.** `--estimated` without `--sheets-only` is exit 2 (`--estimated needs --sheets-only`), and so is the flag beside `--shot`, `--range`, `--outline`, `--batch` or `--subtitles`: captions timed from an estimate would sit where a real render's captions go. `--poster`, `--inspect`, `--phonemes` and `--preview` refuse `--sheets-only` themselves.
+- **Strips of the last run.** A run without `--estimated` removes the old `board-<n>.jpg` strips (regular files of that name in that `board/` folder only; a slice run leaves them, as it leaves the other sheets), so a storyboard built afterwards never carries pictures of a film that has changed. A `board` that is a file or a link, or a `board-<n>.jpg` that is not a plain file, is left alone and the run's log says so.
+- **The page.** `storyboard.mjs film.json --out plan.json --stills <name>.sheets/board` copies the strips beside the plan; see `story.md`.
