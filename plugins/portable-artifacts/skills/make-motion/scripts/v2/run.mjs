@@ -117,13 +117,18 @@ function outputPaths(options) {
   return { out, sheetsDir: path.join(path.dirname(out), `${path.basename(out, path.extname(out))}.sheets`) };
 }
 
+const SLICE_SILENT_LINE = 'make: the slice is silent: the sound is mastered for the whole film';
+
+// Where a slice's video goes: the film's output path with `.<label>` before the extension (out/film.rows.mp4).
+const slicePath = (out, label) => path.join(path.dirname(out), `${path.basename(out, path.extname(out))}.${label}${path.extname(out)}`);
+
 // The report's `slice`: the frames and shots a --shot or --range run covers, whether the film's sound is left out of it (a
 // slice is always silent: the sound is mastered for the whole film), and the review rules a slice does not run.
 const sliceReport = (slice, film, clips) => ({
   from: slice.from, to: slice.to, frames: slice.to - slice.from + 1, shots: slice.shots, silent: film.voice !== undefined || wantsSound(film, clips), skipped: [...SLICE_SKIPPED],
 });
 
-// The stages that need the page: the sheets and the audit, then (unless --no-render, or a slice: its video is made apart) the video.
+// The stages that need the page: the sheets and the audit, then (unless --no-render) the video: the film's, or a slice's own.
 async function reviewAndRender({ options, loaded, made, sound, state, io: { signal, log, browser } }) {
   const { out, sheetsDir } = outputPaths(options);
   state.sheetsDir = sheetsDir;
@@ -136,12 +141,16 @@ async function reviewAndRender({ options, loaded, made, sound, state, io: { sign
     const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal, slice }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);
-    if (!options.noRender && slice === null) {
+    if (!options.noRender) {
       const tags = stampTags({ generatedBy: loaded.film.generatedBy, flags: options.provenance ?? {}, provenance: loaded.film.provenance });
+      // a slice's video is <name>.<label>.mp4 beside the film's own path, which it never writes, and it is silent
+      const target = slice === null ? out : slicePath(out, slice.label);
+      const sliceFrames = slice === null ? {} : { frames: { from: slice.from, to: slice.to } };
       const rendered = await stage(state, log, 'render', () => {
+        if (state.slice?.silent) log(SLICE_SILENT_LINE);
         log('make: render started');
-        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined, stamp: tagArgs(tags),
-          workers: options.workers ?? 1, openPage: () => openSession(loaded, { browser: session.page.context().browser() }) });
+        return renderFilm({ out: target, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined, stamp: tagArgs(tags),
+          workers: options.workers ?? 1, openPage: () => openSession(loaded, { browser: session.page.context().browser() }), ...sliceFrames });
       });
       Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, timing: rendered.timing, audio: rendered.audio, provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
     }
@@ -550,8 +559,9 @@ async function soundReviewRender({ options, loaded, timeline, made, clips, state
   const { film, specDir } = loaded;
   const sounded = wantsSound(film, clips);
   // The cue and bed WAVs live in a work folder of this run only, removed on every way out of it.
-  const renders = !options.noRender && !isSlice(options); // a slice makes sheets and a review, no video (its MP4 is a later step)
-  const work = sounded && renders ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
+  const renders = !options.noRender; // a slice renders too (its own silent MP4), so ffmpeg is checked for it as for a film
+  // The cue and bed files are for a film's sound; a slice is silent and writes none (its sound plan still sets the timeline).
+  const work = sounded && renders && !isSlice(options) ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
   try {
     const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
     if (planned === null) return;

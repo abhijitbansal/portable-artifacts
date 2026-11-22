@@ -7,7 +7,7 @@
 // and encoded to AAC before the first frame is captured, so a broken audio chain or a level the film would be refused
 // for fails fast; after the video encode the AAC is muxed into a second partial file, both streams copied, and only that
 // file is renamed to the output. A film with neither a voice nor sound
-// takes none of those steps: its video is exactly what it was before.
+// takes none of those steps: its video is exactly what it was before. A slice (`frames`) is that case too: silent.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -146,13 +146,26 @@ export async function shootFrame(page, i, { exact, clock }) {
   return clock.time('capture', i, () => capture(page, exact));
 }
 
-async function encodeFrames({ session, encoder, exact, signal, onProgress, clock }) {
-  const { page, timeline } = session;
-  const frames = timeline.frameCount;
+// The frames of the film to draw: all of them, or `range` ({ from, to }, inclusive) when a slice is rendered. A range
+// outside the timeline is a mistake of the caller's, said before anything is captured.
+function frameSpan(timeline, range) {
+  if (range === undefined) return { first: 0, last: timeline.frameCount - 1 };
+  const { from, to } = range;
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to >= timeline.frameCount) {
+    throw new Error(`renderFilm: frames ${JSON.stringify(range)} is not a range inside the film's ${timeline.frameCount} frames (from <= to, both whole frame numbers)`);
+  }
+  return { first: from, last: to };
+}
+
+// The frames first..last, each sought by its absolute index (the page draws a frame from its number, grain included). The
+// first frame is always captured: whether it is held is judged against a predecessor this run never sent.
+async function encodeFrames({ session, encoder, exact, signal, onProgress, clock, span, onFrame }) {
+  const { page } = session;
+  const frames = span.last - span.first + 1;
   let previous = null;
   let captured = 0;
-  for (let from = 0; from < frames; from += HELD_CHUNK) {
-    const to = Math.min(frames, from + HELD_CHUNK) - 1;
+  for (let from = span.first; from <= span.last; from += HELD_CHUNK) {
+    const to = Math.min(span.last, from + HELD_CHUNK - 1);
     const held = await heldFlags(page, from, to, clock);
     for (let k = 0; k < held.length; k++) {
       signal?.throwIfAborted();
@@ -161,7 +174,8 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress, clock
         captured++;
       }
       await clock.time('encode', from + k, () => encoder.write(previous));
-      onProgress?.({ frame: from + k + 1, frames, captured });
+      onFrame?.(from + k, previous);
+      onProgress?.({ frame: from + k - span.first + 1, frames, captured });
     }
   }
   return captured;
@@ -190,7 +204,7 @@ export const pageClock = ({ frames, sessions, workers, ...rest }) => createStage
 
 // --workers: the first page plus one opened through openPage per further range (workers.mjs), closed after. Each extra
 // session is in `sessions` (the clock's message source) while it is open.
-export async function encodeWithWorkers({ session, sessions = [session], encoder, exact, signal, onProgress, workers, openPage, clock }) {
+export async function encodeWithWorkers({ session, sessions = [session], encoder, exact, signal, onProgress, workers, openPage, clock, onFrame }) {
   const frames = session.timeline.frameCount;
   const extra = [];
   try {
@@ -203,7 +217,10 @@ export async function encodeWithWorkers({ session, sessions = [session], encoder
       pages, frames, onProgress, signal,
       held: (page, from, to) => heldFlags(page, from, to, clock),
       shoot: (page, i) => shootFrame(page, i, { exact, clock }),
-      write: (buffer, frame) => clock.time('encode', frame, () => encoder.write(buffer)),
+      write: async (buffer, frame) => {
+        await clock.time('encode', frame, () => encoder.write(buffer));
+        onFrame?.(frame, buffer);
+      },
     });
   } finally {
     for (const s of extra) sessions.splice(sessions.indexOf(s), 1);
@@ -216,7 +233,8 @@ const hasSound = (sound) => Boolean(sound?.cues) || Boolean(sound?.music) || (so
 
 // The mode's loudness targets for a film with a voice or sound (validateMode required them when the mode registered); a
 // voiced film rendered without its voice is refused, never rendered silent as if it had none. null: nothing to master.
-function loudnessFor(film, voice, sound) {
+function loudnessFor(film, voice, sound, slice) {
+  if (slice) return null; // a slice is silent: the sound is mastered for the whole film, so a voiced slice needs no voice
   if (voice === undefined && film.voice !== undefined) throw new Error('renderFilm: the film has a voice; pass the voice stage\'s result ({ dir, sidecar }) as `voice`');
   if (voice === undefined && !hasSound(sound)) return null;
   return registries.modes.get(film.mode ?? DEFAULT_MODE).loudness;
@@ -235,6 +253,11 @@ const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, mu
  *   track and the music, as files in the run's work folder), mixed with the voice into one master (voice/master.mjs).
  *   stamp: the provenance tags as ffmpeg arguments (stamp.mjs stampArgs), written by the last step that writes the
  *   output: the encode of a film with neither a voice nor sound, else the mux.
+ *   frames: { from, to } (whole frame numbers, inclusive): render only those frames, each sought by its absolute index, so a
+ *   frame is the one the whole film has at that number; the first is always captured. A slice is silent: no voice or sound
+ *   is mastered or muxed (loudnessFor is null, a voiced film needs no `voice`), `audio` is null and `--workers` does not
+ *   apply. The result's `frames` is then the slice's count. onFrame(index, bytes): called once per frame written, with the
+ *   bytes sent to ffmpeg (the picture of the last captured frame for a held one).
  * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
  *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null, cues: number, music: object | null } | null,
  *   timing: { drawMs: number, captureMs: number, encodeMs: number, checkMs: number } }>}
@@ -262,11 +285,11 @@ export async function masterSoundFile({ film, timeline, voice, sound, work, sign
   return encoded.file;
 }
 
-export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice, sound, stamp = [], workers = 1, openPage }) {
+export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice, sound, stamp = [], workers = 1, openPage, frames: range, onFrame }) {
   const ffmpeg = await findFfmpeg();
   const own = session === undefined;
   const loaded = own ? loadFilm(specPath) : null;
-  const loudness = loudnessFor(own ? loaded.film : session.film, voice, sound);
+  const loudness = loudnessFor(own ? loaded.film : session.film, voice, sound, range !== undefined);
   const open = own ? await openSession(loaded) : session;
   const partial = path.join(path.dirname(out), `.${path.basename(out)}.partial-${process.pid}.mp4`);
   const muxed = path.join(path.dirname(out), `.${path.basename(out)}.voice.partial-${process.pid}.mp4`);
@@ -274,6 +297,8 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
   let work = null;
   const started = performance.now();
   try {
+    const span = frameSpan(open.timeline, range); // refused before anything is written
+    const frames = span.last - span.first + 1; // the frames the video holds: the film's, or the slice's
     const steps = loudness === null ? null : await voiceSteps();
     const run = steps?.ffmpegRunner(ffmpeg, signal);
     // A film with no narration (no voice, or a voice whose shots have no say) is cues and music alone, which may stop
@@ -295,8 +320,10 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact, stamp: steps === null ? stamp : [] })], signal);
     const sessions = [open]; // the pages the stall error reads its messages from; encodeWithWorkers adds the extra ones
     const clock = pageClock({ frames: open.timeline.frameCount, sessions, workers });
-    const captured = workers > 1 && openPage ? await encodeWithWorkers({ session: open, sessions, encoder, exact, signal, onProgress, workers, openPage, clock }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress, clock });
-    await clock.time('encode', open.timeline.frameCount - 1, () => encoder.finish());
+    // A slice is captured by one page (workers split a whole film's frames, not a range of them).
+    const pooled = workers > 1 && openPage && range === undefined;
+    const captured = pooled ? await encodeWithWorkers({ session: open, sessions, encoder, exact, signal, onProgress, workers, openPage, clock, onFrame }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress, clock, span, onFrame });
+    await clock.time('encode', span.last, () => encoder.finish());
     encoder = null;
     const audio = encoded === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run: stampedRunner(run, muxed, stamp), video: partial, audio: encoded.file, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
     // The file about to become the output is decoded and checked first: a wrong frame count or a picture with no detail is a
@@ -304,13 +331,12 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     const finished = audio === null ? partial : muxed;
     // The check stalls when it decodes no frame for the limit, not when the whole film takes that long (`beat`), and a
     // stall kills its ffmpeg (`stalled`).
-    await clock.time('check', open.timeline.frameCount - 1, ({ beat, signal: stalled }) => checkOutput({ ffmpeg, file: finished, frames: open.timeline.frameCount, signal, stalled, beat }));
+    await clock.time('check', span.last, ({ beat, signal: stalled }) => checkOutput({ ffmpeg, file: finished, frames, signal, stalled, beat }));
     renameSync(finished, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
-    const frames = open.timeline.frameCount;
     const bytes = statSync(out).size;
     const mbps = (bytes * BITS_PER_BYTE) / (frames / open.timeline.fps) / MEGA;
-    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio, workers: workers > 1 && openPage ? Math.min(workers, frames) : 1, timing: clock.totals() };
+    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio, workers: pooled ? Math.min(workers, frames) : 1, timing: clock.totals() };
   } finally {
     if (encoder) await encoder.stop();
     rmSync(partial, { force: true });
