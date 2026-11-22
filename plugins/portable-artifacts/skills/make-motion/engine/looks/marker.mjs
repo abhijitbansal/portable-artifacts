@@ -72,7 +72,7 @@ export const marker = {
   // laid a second print over the first, and the hand drew a second frame on it, misaligned; clipping keeps one pinned print
   // and the hand rings the region on it
   camera: { drift: 0, style: 'locked', closeUp: false },
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop', 'erase'],
   cutPalette: ['cut', 'erase'],
   // gate-marker-1 ruling 5: a film that names no cut changes board by the erase or a pan (the next board slides in), in turn;
@@ -204,7 +204,7 @@ export const marker = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: null, zoom: null, blur: null, ripple: null, cube: null,
+    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: null, flood: null, zoom: null, blur: null, ripple: null, cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: 'erase' },
     device: { highlight: null, circle: 'marker', underline: 'marker', arrow: 'marker', bracket: 'marker', cutout: 'click', card: 'marker', tag: 'marker', punch: null, item: 'marker', turn: null,
       label: 'marker', focus: null, route: 'marker', numeral: 'marker', sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,

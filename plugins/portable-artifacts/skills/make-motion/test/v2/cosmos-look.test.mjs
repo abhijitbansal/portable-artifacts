@@ -120,7 +120,7 @@ test('motion: smooth curves, entrances scale from 0.92 with a fade and a small o
 
 test('sounds are the brief values, one for every registered cut, device and kind event device', () => {
   const { sounds } = look();
-  assert.deepEqual({ ...sounds.cut }, { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
+  assert.deepEqual({ ...sounds.cut }, { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', flood: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
     'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'chime', circle: 'chime', underline: 'chime', arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'pop', turn: 'whoosh',

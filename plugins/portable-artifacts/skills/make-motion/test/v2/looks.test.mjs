@@ -20,7 +20,7 @@ import { validateFilm, withFilmDefaults } from '../../scripts/v2/spec.mjs';
 const LANDSCAPE = { w: 1920, h: 1080 };
 const PORTRAIT = { w: 1080, h: 1920 };
 const UHD = { w: 3840, h: 2160 };
-const KNOWN_CUTS = ['cut', 'match', 'slide', 'punch', 'cover', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+const KNOWN_CUTS = ['cut', 'match', 'slide', 'punch', 'cover', 'crossfade', 'fade', 'wipe', 'iris', 'flood', 'zoom', 'blur', 'ripple', 'cube',
   'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop', 'erase'];
 // the ten shader cuts ported from gl-transitions, each with no cue unless a look names one; and the drawing hand's erase
 // (looks-four Task 2), silent in every look but the hand look
@@ -207,7 +207,7 @@ test('pop values are the brief values', () => {
   assert.deepEqual({ ...l.moves.emphasize }, { ease: 'spring(300,12)', dur: 0.2, scale: 1.12 });
   assert.deepEqual({ ...l.moves.draw }, { ease: 'outExpo', dur: 0.2 });
   assert.deepEqual({ ...l.camera }, { drift: 0, style: 'locked' });
-  assert.deepEqual([...l.cutPalette], ['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom']);
+  assert.deepEqual([...l.cutPalette], ['cut', 'punch', 'slide', 'cover', 'zoom', 'flood', 'polka-dots', 'glitch-memories', 'cross-zoom']);
   assert.deepEqual({ ...l.post }, { grain: 0.02, halftone: 0, bloom: 0 });
   assert.deepEqual({ ...l.caps }, { display: true, label: true });
   assert.deepEqual({ ...l.lineHeight }, { display: 0.92, text: 1.15 });
@@ -419,7 +419,7 @@ test('revision 1 look data: desk display line height 1.1; pop word space, recolo
 
 test('desk sounds are the brief values: paper cuts and slides, marker hand marks, a paper card, a click on the landing', () => {
   const { sounds } = registries.looks.get('desk');
-  assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null, ripple: null, cube: null, ...PORTED_CUES({ 'page-curl': 'paper' }) });
+  assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, flood: null, zoom: null, blur: null, ripple: null, cube: null, ...PORTED_CUES({ 'page-curl': 'paper' }) });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
     // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)
@@ -435,7 +435,7 @@ test('desk sounds are the brief values: paper cuts and slides, marker hand marks
 
 test('pop sounds are the brief values: click, whoosh and impact cuts, a pop highlight, an impact punch, a pop on emphasis, a sub on the landing', () => {
   const { sounds } = registries.looks.get('pop');
-  assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh', ...PORTED_CUES({ 'cross-zoom': 'impact', 'glitch-memories': 'click', pixelize: 'click' }) });
+  assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, flood: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh', ...PORTED_CUES({ 'cross-zoom': 'impact', 'glitch-memories': 'click', pixelize: 'click' }) });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
     // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)

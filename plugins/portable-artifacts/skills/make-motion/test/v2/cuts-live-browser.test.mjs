@@ -80,6 +80,40 @@ test('held frames: a window with a live outgoing shot is not held, even when the
   assert.deepEqual(flags, Array(WINDOW - 1).fill(false));
 });
 
+// The colour flood (Task 10), in desk (accent #ffe14a): two flat still shots, red then blue, the second arriving by a flood.
+const FLOOD_WINDOW = 15; // 0.5 s at 30 fps
+const ACCENT = [0xff, 0xe1, 0x4a];
+const LEVELS = 2;
+const INSET = 20;
+const floodFilm = () => ({ version: 2, mode: 'pro', look: 'desk', fps: FPS, seed: 1, shots: [flat('a', '#ff0000', undefined), flat('b', '#0000ff', 'flood')] });
+
+// The pixels of window.__source at the centre and INSET px inside each corner, after seeking `frame` (at `progress` of its cut).
+const samples = (s, frame, progress) => s.page.evaluate(([i, p, inset]) => {
+  window.__seek(i, p === undefined ? {} : { progress: p });
+  const { width, height } = window.__source;
+  const ctx = window.__source.getContext('2d');
+  const at = [[width / 2, height / 2], [inset, inset], [width - inset, inset], [inset, height - inset], [width - inset, height - inset]];
+  return at.map(([x, y]) => [...ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data].slice(0, 3));
+}, [frame, progress, INSET]);
+
+test('flood: the middle of the window is the look\'s accent at the centre and near each corner', async (t) => {
+  const s = await open(t, floodFilm()); if (!s) return;
+  for (const pixel of await samples(s, START + 7, 0.5)) {
+    pixel.forEach((level, k) => assert.ok(Math.abs(level - ACCENT[k]) <= LEVELS, `${pixel} is not ${ACCENT}`));
+  }
+  assert.deepEqual(s.errors, []);
+});
+
+test('flood: the window\'s first frame is the outgoing still and the frame after it the incoming one', async (t) => {
+  const s = await open(t, floodFilm()); if (!s) return;
+  const outgoing = await frameHash(s, START - 1);
+  assert.equal(await frameHash(s, START), outgoing);
+  const incoming = await frameHash(s, START + FLOOD_WINDOW);
+  assert.notEqual(incoming, outgoing);
+  assert.equal(await frameHash(s, START + FLOOD_WINDOW + 5), incoming);
+  assert.notEqual(await frameHash(s, START + 3), outgoing, 'inside the window the frame is neither');
+});
+
 test('a film with no layer or shader cut still makes no second picture', async (t) => {
   const plain = await open(t, film('slide')); if (!plain) return;
   for (const i of [START, START + 6, START + WINDOW - 1]) await plain.page.evaluate((f) => window.__seek(f), i);

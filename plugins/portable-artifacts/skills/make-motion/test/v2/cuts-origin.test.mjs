@@ -12,6 +12,7 @@ import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
 import { listEntries, formatList } from '../../scripts/v2/list.mjs';
+import { allLookNames } from '../../engine/looks/index.mjs';
 import { measure, canvasOf, viralOf, IMAGES, CLIP, FPS, filmOf, expandIn } from './helpers/kinds.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -135,4 +136,42 @@ test('a pinned caption of a stack look is drawn where it was laid out, whatever 
   const drawn = built.sampleShot(0, end).find((n) => n.id === 'a.caption');
   assert.equal(drawn.props.fixed, true);
   close(origin, centre(rest.boxes.caption), 'a fixed text with no tracks of its own');
+});
+
+// The colour flood (Task 10): the look's accent grows from a point over the outgoing picture, then the incoming one opens
+// from the same point over the colour.
+const flood = (p, extra = {}) => registries.cuts.get('flood').layers({ p, direction: null, canvas: CANVAS, look: registries.looks.get('desk'), ...extra });
+const CORNER = Math.hypot(960, 540);
+
+test('flood: the outgoing picture at p 0, the flat accent at p 0.5, the incoming picture at p 1', () => {
+  assert.equal(flood(0).flood.circle[2], 0);
+  assert.equal(flood(0).to.opacity === 0 || flood(0).to.clip.circle[2] === 0, true);
+  const mid = flood(0.5);
+  assert.equal(mid.flood.color, registries.looks.get('desk').palette.accent);
+  assert.ok(mid.flood.circle[2] >= CORNER && mid.to.clip.circle[2] === 0);
+  assert.ok(flood(1).to.clip.circle[2] >= CORNER && flood(1).to.opacity === 1);
+});
+test('flood opens from at, takes no direction, lasts 0.5 s, and every other layer recipe has no flood', () => {
+  assert.deepEqual(flood(0.25, { at: [300, 200] }).flood.circle.slice(0, 2), [300, 200]);
+  assert.deepEqual(flood(0.75, { at: [300, 200] }).to.clip.circle.slice(0, 2), [300, 200]);
+  const entry = registries.cuts.get('flood');
+  assert.deepEqual([entry.family, entry.dur, entry.directions, entry.origin, entry.smearable], ['layer', 0.5, null, true, false]);
+  for (const name of ['crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur']) assert.equal(registries.cuts.get(name).layers({ p: 0.5, direction: registries.cuts.get(name).directions?.[0] ?? null, canvas: CANVAS }).flood, null, name);
+});
+test('a flood may name a target of the shot before: it validates, and the built film gives its window a point', () => {
+  assert.deepEqual(errorsOf(film({ type: 'flood', at: 'region:r' })), []);
+  assert.match(errorsOf(film({ type: 'flood', at: 'region:q' }))[0], /^shots\[1\]\.cut\.at: unknown target "region:q"/);
+  const f = { version: 2, mode: 'pro', look: 'desk', format: '16:9', fps: 30, seed: 1, shots: [CLIP({ id: 'a' }), { id: 'b', show: 'statement', say: 'Next.', cut: { type: 'flood', at: 'region:r' } }] };
+  const timeline = buildTimeline(f, { fps: 30 });
+  const built = buildFilm({ film: f, timeline, measure, assets: IMAGES, canvas: canvasOf('16:9') });
+  const [x, y] = built.frameAt(timeline.shots[1].start + 0.1).cut.at;
+  assert.ok(x > 0 && x < 1920 && y > 0 && y < 1080);
+});
+test('every look names a cue for the flood, lists it where it lists the iris, and pop and poster reach for it', () => {
+  for (const name of allLookNames()) {
+    const look = registries.looks.get(name);
+    assert.ok(look.sounds.cut.flood === null || typeof look.sounds.cut.flood === 'string', name);
+    assert.equal(look.cuts.includes('flood'), look.cuts.includes('iris'), name);
+  }
+  assert.deepEqual(allLookNames().filter((n) => registries.looks.get(n).cutPalette.includes('flood')).sort(), ['pop', 'poster']);
 });

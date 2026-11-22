@@ -111,9 +111,9 @@ export const poster = {
   // a region close-up is a cut to a window of the source round the region (ledger's shares), so a ring on the region
   // stays inside the frame
   camera: { drift: 0, style: 'locked', closeUp: { width: 0.86, height: 0.7, pad: 0.2, minGain: 1.25 } },
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
-  cutPalette: ['cut', 'cover', 'iris', 'wipe', 'punch', 'slide'],
+  cutPalette: ['cut', 'cover', 'iris', 'flood', 'wipe', 'punch', 'slide'],
   // a cover is a hard sheet of the next ground (the bar that wipes is the cut paper): no smear
   // the lead's ruling on gate-poster-3 (ruling 7 revised: no word half sliced on a HELD frame; a sheet that moves every
   // frame holds none): `ease` 'inOutQuad', a steady curve, so the sheet moves every frame (the snap made both covers
@@ -244,7 +244,7 @@ export const poster = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: 'paper', zoom: null, blur: null, ripple: null, cube: null,
+    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: 'paper', flood: 'paper', zoom: null, blur: null, ripple: null, cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: 'click', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'paper',
       label: null, focus: null, route: null, numeral: 'sub', sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,

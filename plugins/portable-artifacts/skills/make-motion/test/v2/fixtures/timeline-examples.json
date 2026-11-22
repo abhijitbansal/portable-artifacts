@@ -184,11 +184,11 @@
   ]
  },
  "cuts-pop.json": {
-  "sha": "7001d87c598fdf8ac2fe56c90979e0765707625f50284137e531c663ee4ea181",
+  "sha": "0d77387eeb719f146f353727951be21d910693233769f128a59c312aeb52f958",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "c75fff42eb30",
-   "frameCount": "3c4ee858b268",
+   "duration": "0e17daca5f3e",
+   "frameCount": "57fb0303e4a6",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -310,19 +310,28 @@
     "sentences": "39e354d14da2"
    },
    {
-    "id": "ea74a31135bc",
+    "id": "4a6875c7cb06",
     "index": "3fdba35f04dc",
     "start": "f1e65b8d8102",
-    "end": "3ac667801eee",
+    "end": "4b422e27ae56",
+    "duration": "a5158d7d2e61",
+    "words": "4cd7d738c068",
+    "sentences": "051d8e2cde24"
+   },
+   {
+    "id": "ea74a31135bc",
+    "index": "8527a891e224",
+    "start": "4b422e27ae56",
+    "end": "82bfef052490",
     "duration": "0faf54c7569c",
     "words": "e9fb8d43a3f7",
     "sentences": "cf9437739b31"
    },
    {
     "id": "24105546e482",
-    "index": "8527a891e224",
-    "start": "3ac667801eee",
-    "end": "c75fff42eb30",
+    "index": "e629fa6598d7",
+    "start": "82bfef052490",
+    "end": "0e17daca5f3e",
     "duration": "cc60e61e2b85",
     "words": "4598dee41d1e",
     "sentences": "eb24826e1f4d"

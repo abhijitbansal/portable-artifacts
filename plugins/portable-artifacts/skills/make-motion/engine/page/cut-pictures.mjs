@@ -69,6 +69,17 @@ export function createCutPictures({ w, h, drawShot }) {
     ctx.restore();
   }
 
+  // A flood cut's disc of one colour, between the picture under and the one over (a radius of 0 paints nothing).
+  function paintFlood(ctx, { color, circle: [cx, cy, r] }) {
+    if (r <= 0) return;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * HALF);
+    ctx.fill();
+    ctx.restore();
+  }
+
   /**
    * Composes frame `state` (inside a window: frameAt's { background, sampled, cut, from }) at film second `t` onto ctx
    * as `recipe` poses it (a layer cut's layers()). ctx must be at the identity with nothing left in its state.
@@ -81,6 +92,7 @@ export function createCutPictures({ w, h, drawShot }) {
     ctx.fillRect(0, 0, w, h);
     const over = recipe.under === 'from' ? 'to' : 'from';
     place(ctx, pictures[recipe.under], recipe[recipe.under]);
+    if (recipe.flood) paintFlood(ctx, recipe.flood);
     place(ctx, pictures[over], recipe[over]);
   }
 

@@ -81,7 +81,7 @@ export const keynote = {
   wordStagger: 0,
   // a slow continuous move through every shot: never still
   camera: { drift: 18, style: 'desk' },
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   // `fade` and `wipe` added for the type cuts (gate-keynote-2 ruling 8: a dip through the ground, the plan's mask reveal)
   cutPalette: ['cut', 'match', 'crossfade', 'zoom', 'blur', 'cross-zoom', 'fade', 'wipe'],
@@ -234,7 +234,7 @@ export const keynote = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: null, zoom: 'whoosh', blur: 'whoosh', ripple: null, cube: null,
+    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: null, flood: null, zoom: 'whoosh', blur: 'whoosh', ripple: null, cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': 'whoosh', wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: null, circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'click', turn: null,
       label: null, focus: null, route: null, numeral: 'sub', sticker: null, sweep: 'chime', duotone: null, halftone: null, zoom: 'whoosh',

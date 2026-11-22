@@ -85,7 +85,7 @@ export const ledger = {
   // no drift: a locked camera keeps the grid on the columns; a region close-up is a cut, not a push, to a window of the
   // source round the region (the CLOSE_UP constants above)
   camera: { drift: 0, style: 'locked', closeUp: { width: CLOSE_UP_WIDTH, height: CLOSE_UP_HEIGHT, pad: CLOSE_UP_PAD, minGain: CLOSE_UP_GAIN } },
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'match', 'fade', 'wipe'],
   cutStyle: {},
@@ -206,7 +206,7 @@ export const ledger = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null, ripple: null, cube: null,
+    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: 'paper', iris: null, flood: null, zoom: null, blur: null, ripple: null, cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: null, circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'click', turn: null,
       label: 'click', focus: null, route: null, numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,

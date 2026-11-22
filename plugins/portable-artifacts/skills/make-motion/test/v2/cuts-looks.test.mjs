@@ -39,7 +39,7 @@ test('every shipped look has a palette: a subset of its cuts, never empty, holdi
 test('the palettes hold the plan\'s starting cuts among those registered, in the look\'s order', () => {
   const registered = (list) => list.filter((cut) => registries.cuts.has(cut));
   assert.deepEqual([...desk().cutPalette], registered(['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade', 'page-curl']));
-  assert.deepEqual([...registries.looks.get('pop').cutPalette], registered(['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom']));
+  assert.deepEqual([...registries.looks.get('pop').cutPalette], registered(['cut', 'punch', 'slide', 'cover', 'zoom', 'flood', 'polka-dots', 'glitch-memories', 'cross-zoom']));
   assert.deepEqual([...registries.looks.get('cosmos').cutPalette], registered(['cut', 'match', 'crossfade', 'fade', 'iris', 'ripple']));
 });
 
