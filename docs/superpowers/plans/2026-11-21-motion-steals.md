@@ -296,6 +296,29 @@ The owner asked that the make-motion showreel show every new feature from W1 to 
 - [ ] **Step 4: Draft render and look. [BROWSER]** One film at a time, after `pgrep`: `node MM/scripts/make.mjs X/showreel-pro.json --json --out SF/draft/showreel-pro.mp4`, then the same for viral. Open every sheet PNG. Mark each Step 1 row "seen" or "not seen". A feature not seen is fixed in the source, never marked seen. Read each review note's findings and update the `.review.md` notes.
 - [ ] **Step 5: Commit (controller).** `docs(release): showreels show every W1 to W6 feature`. The body lists the features added and any feature that does not fit, with the reason. F2 then rebuilds these two films with the others. F3's hero loop and poster come from the new pro reel, and F4 rechecks the home page's showreel plate, its spec excerpt and its detail tags against the new source.
 
+### Task F1c: A "how it works" reel at the top of the site (owner request, 2026-11-22)
+
+The owner asked for a separate reel, placed at the top of the site, that shows how make-motion works. The other three skills (make-explainer, make-diagram, make-dashboard) may appear briefly.
+
+What the reel must show, in this order of weight:
+1. **Cost stays low:** the agent (the director) writes a small closed JSON spec, and a cheap operator model (Haiku) runs the one command and fixes only the findings marked mechanical. Show a real spec excerpt beside its frame.
+2. **Quality:** the review reads every frame (measured ink, contrast, safe area, composition, the rules page with fix values) and the agent views the sheets before it reports.
+3. **Speed:** one command; held frames are reused; one shot or a range renders alone (`--shot`, `--range`, `--inspect`).
+4. **How it works:** spec → validate → render in a local headless browser → ffmpeg → review → sheets.
+5. **Features:** local voice generation (Kokoro, on the machine; no cloud voice), music bed and cues, captions, looks, cuts, vertical shorts.
+6. **Private and free to use:** everything runs on the user's machine, offline except the one voice model download; the plugin is MIT, so what it makes is the user's to use however they want.
+7. **Optionally, a short comparison** with the engines researched (HyperFrames, Remotion, Rune): two or three reasons, each a fact checked at the time of writing against the project's own licence and docs, never a claim we cannot cite (for example, a closed spec an agent cannot break, an offline render with no account, a licence with no seat limit). Leave a comparison out rather than state one we cannot source.
+
+**Files:**
+- Create: `X/how-it-works.json` (16:9; a `pro` film, voiced if the owner has allowed the voice download, else silent with captions), with any picture it needs under `X/how-it-works-assets/`. Every screenshot is a real capture of the repo's own output, never a mock-up.
+- Modify: `R/docs/index.html` (a new first sheet or hero block with the reel, keeping the copy-button contract and the page test's sheet order), `R/docs/gallery.html` (a `reg-item` and the plate count), `R/tests/pytest/test_portable_artifacts_page.py` if it pins the sheet order, and `G/how-it-works/` (the video, poster and spec).
+
+- [ ] **Step 1: Fact sheet.** Write `SF/how-it-works-facts.md`, one line per claim the reel makes, each with its source: a file and line in this repo, or a URL to the other project's licence or docs, read on the day. A claim with no source is cut.
+- [ ] **Step 2: Write the spec.** Follow `references/story.md`: one thing ("a film made by a cheap model from a spec, checked frame by frame, on your machine"), at most 60 to 90 s, each shot showing what its narration says.
+- [ ] **Step 3: Check, draft, look.** `--outline --json` with no mechanical finding; one draft render **[BROWSER]**; open every sheet; fix and re-render until the review is clean, or each creative finding is answered in `X/how-it-works.review.md`.
+- [ ] **Step 4: Put it on the site.** Render the final film with `SOURCE_DATE_EPOCH` set (the same value as F2), cut a muted loop under 2 MB and a poster for the page, and place it at the top of `docs/index.html`. Run the page test, and verify the rendered page at 390 and 1280 wide, light and dark (`shared/shot.mjs`), opening every PNG.
+- [ ] **Step 5: Commit (controller).** `docs(release): a how-it-works reel at the top of the site`.
+
 ### Task F2: Rebuild the eight films, one at a time
 
 - [ ] **Step 1: The doctor, per film.** `node MM/scripts/doctor.mjs --json --for X/<source>`. A film with a `voice` needs the voice package and its model. If the doctor reports either missing, stop and ask the owner once (it is a download); do not install unasked.
