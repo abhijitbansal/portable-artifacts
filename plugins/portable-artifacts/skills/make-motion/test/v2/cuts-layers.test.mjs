@@ -3,11 +3,11 @@
 // window returns the incoming shot live plus the outgoing one frozen at its end.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import '../../scripts/v2/list.mjs';
+import { listEntries, formatList } from '../../scripts/v2/list.mjs';
 import { registries } from '../../engine/registry.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { buildFilm } from '../../engine/graph/film.mjs';
-import { measure, canvasOf } from './helpers/kinds.mjs';
+import { buildFilm, outgoingTime } from '../../engine/graph/film.mjs';
+import { measure, canvasOf, filmOf, near, FPS } from './helpers/kinds.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
 const LAYERS = ['crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'];
@@ -119,14 +119,61 @@ function wipeFilm() {
   return { timeline, built: buildFilm({ film, timeline, measure, canvas: canvasOf('16:9') }) };
 }
 
-test('frameAt inside a wipe\'s window: the incoming shot live, the cut and its progress, the outgoing shot frozen at its end', () => {
+test('frameAt inside a wipe\'s window: the incoming shot live, the cut and its progress, the outgoing shot sampled past its end', () => {
   const { timeline, built } = wipeFilm();
-  const start = timeline.shots[1].start;
+  const start = timeline.shots[1].start, D = timeline.shots[0].duration;
   const frame = built.frameAt(start + 0.2);
   assert.deepEqual(frame.cut, { name: 'wipe', family: 'layer', p: 0.5, direction: 'left' });
   assert.equal(frame.background, '#0000ff');
   assert.deepEqual(frame.sampled, built.sampleShot(1, 0.2));
-  assert.deepEqual(frame.from, { shot: 0, background: '#ff0000', sampled: built.sampleShot(0, timeline.shots[0].duration), t: timeline.shots[0].end });
+  assert.deepEqual(frame.from, { shot: 0, background: '#ff0000', sampled: built.sampleShot(0, D + 0.2), t: timeline.shots[0].end + 0.2, live: true });
+});
+
+// two desk statements (desk drifts: engine/looks/desk.mjs camera.drift) with a hold of 2 each, the second cut in by `cut`
+const driftFilm = (cut) => {
+  const film = filmOf([{ id: 'a', show: 'statement', text: 'Hello there', hold: 2 }, { id: 'b', show: 'statement', text: 'And again', hold: 2, cut }], 'desk');
+  const timeline = buildTimeline(film, { fps: FPS });
+  return { timeline, D: timeline.shots[0].duration, built: buildFilm({ film, timeline, measure, canvas: canvasOf('16:9') }) };
+};
+
+test('a drifting shot keeps drifting past its end at the speed it ended with', () => {
+  const { built, D } = driftFilm('crossfade');
+  const before = driftFilm('cut');
+  const hero = (b, t) => b.sampleShot(0, t).find((n) => n.type === 'text' || n.children?.some((c) => c.type === 'text'));
+  near(hero(built, D + 0.2).x - hero(built, D).x, hero(built, D).x - hero(built, D - 0.2).x, 'the same travel in the same time');
+  assert.notEqual(hero(built, D + 0.2).x, hero(built, D).x);
+  assert.deepEqual(built.sampleShot(0, D - 0.5), before.built.sampleShot(0, D - 0.5)); // inside the shot nothing changes
+  assert.deepEqual(built.sampleShot(0, D), before.built.sampleShot(0, D));
+});
+
+test('which cuts take the outgoing shot live: a layer or shader cut in a look without a hand; a node cut and a hand look hold the end', () => {
+  const desk = registries.looks.get('desk'), marker = registries.looks.get('marker');
+  assert.equal(outgoingTime({ family: 'layer' }, desk, 3, 0.2), 3.2);
+  assert.equal(outgoingTime({ family: 'shader' }, desk, 3, 0.2), 3.2);
+  assert.equal(outgoingTime({ family: 'node' }, desk, 3, 0.2), 3);
+  assert.equal(outgoingTime({ family: 'layer' }, marker, 3, 0.2), 3);
+});
+
+test('a node cut, and a layer cut in a hand look, keep the outgoing shot frozen at its end with no live key', () => {
+  const { built, D, timeline } = driftFilm('slide');
+  const start = timeline.shots[1].start;
+  const node = built.frameAt(start + 0.1);
+  assert.equal(node.from, undefined, 'a node cut has no from: its apply() composes both shots');
+  const hand = filmOf([{ id: 'a', show: 'statement', text: 'Hello there', hold: 2 }, { id: 'b', show: 'statement', text: 'And again', hold: 2, cut: 'crossfade' }], 'marker');
+  const handTimeline = buildTimeline(hand, { fps: FPS });
+  const handBuilt = buildFilm({ film: hand, timeline: handTimeline, measure, canvas: canvasOf('16:9') });
+  const frame = handBuilt.frameAt(handTimeline.shots[1].start + 0.1);
+  assert.equal(frame.from?.live, undefined);
+  assert.deepEqual(frame.from.sampled, handBuilt.sampleShot(0, handTimeline.shots[0].duration));
+  assert.equal(D, timeline.shots[0].duration);
+});
+
+test('--list cuts says which cuts keep the outgoing shot moving', () => {
+  const byName = Object.fromEntries(listEntries('cuts').map((e) => [e.name, e.outgoing]));
+  assert.deepEqual([byName.cut, byName.slide, byName.punch, byName.crossfade, byName.iris, byName.ripple], ['frozen', 'frozen', 'frozen', 'live', 'live', 'live']);
+  const text = formatList('cuts', listEntries('cuts'));
+  assert.match(text, /; outgoing live/);
+  assert.match(text, /; outgoing frozen/);
 });
 
 test('frameAt one frame after the window, and outside any window, returns neither cut nor from', () => {

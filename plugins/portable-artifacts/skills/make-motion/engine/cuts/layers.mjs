@@ -1,6 +1,6 @@
 // The layer cuts: crossfade, fade, wipe, iris, zoom and blur. A layer cut does not move nodes; it composes two pictures,
-// the outgoing shot frozen at its end and the incoming shot live (engine/graph/film.mjs frameAt gives both inside its
-// window). Its entry's layers({ p, direction, canvas }) is a pure recipe for that composition:
+// the outgoing shot (still moving, past its end; frozen at its end in a look drawn by hand) and the incoming shot live
+// (engine/graph/film.mjs frameAt gives both inside its window). Its entry's layers({ p, direction, canvas }) is a pure recipe for that composition:
 //   { under: 'from' | 'to', from: Pose, to: Pose, backdrop: 'from' | 'to' | null }
 //   Pose = { opacity, clip: { rect: [x, y, w, h] } | { circle: [cx, cy, r] } | null, scale (about the canvas centre),
 //            blur (px), dim (0..1: black laid over the picture inside its clip) }

@@ -1,8 +1,9 @@
 // The two pictures of a layer or shader cut (engine/cuts/layers.mjs), composed in canvas 2D before the post pass, so a
-// layer cut is the same picture with or without WebGL. The outgoing picture is a function of the film alone (the
-// outgoing shot frozen at its end, its fields painted at that second), so it is drawn once per shot index and kept; the
-// incoming one is drawn each frame. The canvases are made on the first frame that needs them: a film with no layer or
-// shader cut makes none (`made` counts them, for tests).
+// layer cut is the same picture with or without WebGL. The outgoing picture is a function of the film alone (the outgoing
+// shot at the second its window has reached, its fields painted at that second): a live one moves with the window, so it is
+// drawn again whenever that second changes, and a frozen one (a hand look) stays the same second, so it is drawn once and
+// kept; the incoming one is drawn each frame. The canvases are made on the first frame that needs them: a film with no
+// layer or shader cut makes none (`made` counts them, for tests).
 const HALF = 2;
 
 /**
@@ -18,12 +19,13 @@ export function createCutPictures({ w, h, drawShot }) {
     return new OffscreenCanvas(w, h);
   };
 
-  /** The outgoing picture of the window `state` is in (frameAt's `from`), drawn once per shot index. */
+  /** The outgoing picture of the window `state` is in (frameAt's `from`): redrawn when the shot or the film second it
+   *  stands at (`from.t`) differs from the picture held, so a frozen outgoing shot is drawn once and a live one each frame. */
   function outgoingOf(state) {
-    if (outgoing?.shot === state.from.shot) return outgoing.canvas;
+    if (outgoing?.shot === state.from.shot && outgoing.t === state.from.t) return outgoing.canvas;
     const target = outgoing?.canvas ?? canvas();
     drawShot(target.getContext('2d'), { background: state.from.background, sampled: state.from.sampled, t: state.from.t });
-    outgoing = { shot: state.from.shot, canvas: target };
+    outgoing = { shot: state.from.shot, t: state.from.t, canvas: target };
     return target;
   }
 

@@ -58,7 +58,8 @@ const KEY_DECIMALS = 1e9; // a cut's progress in a key, rounded so float noise c
 const keyOfP = (p) => Math.round(p * KEY_DECIMALS) / KEY_DECIMALS;
 
 // The key of a frame's 2D state. Inside a layer or shader window the sampled nodes are the incoming shot's alone, which
-// can stand still while the cut moves: the key then carries the cut, its direction, its progress and the outgoing shot.
+// can stand still while the cut moves: the key then carries the cut, its direction, its progress and the outgoing shot
+// (and the second it stands at, when it is live).
 // Inside a smeared window they are the still nodes alone (none for a punch): the key carries the smeared cut the same way.
 function stateKeyOf(state) {
   const base = stateKey({ background: state.background, sampled: state.sampled });
@@ -68,7 +69,9 @@ function stateKeyOf(state) {
   }
   if (state.cut === undefined) return base;
   const { name, direction, p } = state.cut;
-  return `${base}|cut:${name}:${direction}:${keyOfP(p)}|from:${state.from.shot}`;
+  // a live outgoing shot stands at a different second each frame: the key carries it, so no such frame reads as held
+  const outgoing = state.from.live === true ? `:t${keyOfP(state.from.t)}` : '';
+  return `${base}|cut:${name}:${direction}:${keyOfP(p)}|from:${state.from.shot}${outgoing}`;
 }
 
 // The keys that say whether two frames look alike, over `frameState(i)`. drawKey: the sampled state, plus the frame itself

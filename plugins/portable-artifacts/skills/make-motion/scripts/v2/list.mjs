@@ -48,10 +48,12 @@ function kindEntry(entry, def, name) {
 const moveLooks = (name) => Object.fromEntries(registries.looks.names().map((look) => [look, registries.looks.get(look).moves?.[name] ?? null]));
 
 // A cut's entry: its family, its directions (the first the default, or null), its default length, whether it takes
-// `smear`, one valid `cut` value, and the listed looks whose palette holds it (every look may use every cut).
+// `smear`, one valid `cut` value, the listed looks whose palette holds it (every look may use every cut), and whether it
+// shows the outgoing shot still moving (`live`: a layer or shader cut; a node cut holds its last frame).
 const cutPalettes = (name) => registries.looks.names().filter((look) => registries.looks.get(look).cutPalette?.includes(name));
 const cutEntry = (entry, def, name) => ({
   ...entry, family: def.family, directions: def.directions, dur: def.dur, smear: def.smearable === true, example: def.example, palettes: cutPalettes(name),
+  outgoing: def.family === 'node' ? 'frozen' : 'live',
 });
 
 function entryOf(listName, name) {
@@ -96,14 +98,14 @@ function moveText(move) {
 }
 
 // A cut's options as one short line: "node, moves left (default), right, up or down (the way the next shot moves on
-// screen: ...); 0.4 s; takes smear", or "layer, in (default) or out; 0.4 s; no smear".
+// screen: ...); 0.4 s; takes smear; outgoing frozen", or "layer, in (default) or out; 0.4 s; no smear; outgoing live".
 function cutText(e) {
   const [first, ...rest] = e.directions ?? [];
   const tail = rest.length < 2 ? rest.join('') : `${rest.slice(0, -1).join(', ')} or ${rest.at(-1)}`;
   const listed = `${first} (default)${rest.length > 0 ? `, ${tail}` : ''}`;
   const directions = first === undefined ? 'no direction' : (takesEdges(e.directions) ? `moves ${listed} (${DIRECTION_MEANING})` : listed);
   const palettes = e.palettes.length > 0 ? `; in the palette of ${e.palettes.join(', ')}` : '';
-  return `${e.family}, ${directions}; ${e.dur === 0 ? 'no window' : `${e.dur} s`}; ${e.smear ? 'takes smear' : 'no smear'}${palettes}`;
+  return `${e.family}, ${directions}; ${e.dur === 0 ? 'no window' : `${e.dur} s`}; ${e.smear ? 'takes smear' : 'no smear'}${palettes}; outgoing ${e.outgoing}`;
 }
 
 /** The text --list prints: one block per entry; a kind lists its fields and its example, a move its values per look, a

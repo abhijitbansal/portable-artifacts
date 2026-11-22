@@ -172,6 +172,31 @@ function heroBox(n, rest) {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 }
 
+// ---- the outgoing shot of a cut ----
+
+// Does a cut show the outgoing shot still moving? A layer or shader cut composes two pictures, so it can; a node cut (and so
+// every smear) moves the nodes themselves from the outgoing shot's last frame, and a look drawn by hand (look.hand) holds
+// the last frame so its one hand does not write on while the board is being left.
+const isLiveOutgoing = (cut, look) => cut.family !== 'node' && !look.hand;
+
+/**
+ * The time, in the outgoing shot's own seconds, at which a cut's window reads that shot: its duration `D` plus `local`, the
+ * seconds into the window, for a cut that shows it live (isLiveOutgoing); else `D`, its last frame.
+ */
+export function outgoingTime(cut, look, duration, local) {
+  return isLiveOutgoing(cut, look) ? duration + local : duration;
+}
+
+// A shot's camera at time t past its end `duration`: held at its end, with the pan carried on at the speed it ended with
+// (the last frame's travel, at `fps`); zoom and rotate hold. A drift keys end at the shot's duration, so a plain hold
+// would stop the picture dead as the cut begins.
+function carriedCamera(cam, duration, t, fps) {
+  const end = cam(duration);
+  const last = cam(duration - 1 / fps);
+  const frames = (t - duration) * fps;
+  return { ...end, x: end.x + (end.x - last.x) * frames, y: end.y + (end.y - last.y) * frames };
+}
+
 // ---- shots ----
 
 // The shot's nodes: its kind's, then its captions (drawn last, pinned over everything) when the film is captioned. `cam`
@@ -267,10 +292,13 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
   const look = resolveLook(film);
   const shots = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }));
 
-  // One shot alone at its local time t: sampled, camera applied, the hero carrying its box.
+  // One shot alone at its local time t: sampled, camera applied, the hero carrying its box. Past the shot's end (t above its
+  // duration: the outgoing shot of a layer or shader cut, outgoingTime) the nodes are sampled at t, every track holding its
+  // last key, and the camera's pan carries on at the speed it ended with (carriedCamera).
   const sampleShot = (index, t) => {
     const shot = shots[index];
-    const sampled = applyCamera(sampleGraph(shot.nodes, t), shot.cam(t), canvas);
+    const cam = t > shot.duration ? carriedCamera(shot.cam, shot.duration, t, timeline.fps) : shot.cam(t);
+    const sampled = applyCamera(sampleGraph(shot.nodes, t), cam, canvas);
     if (!shot.hero) return sampled;
     return Object.freeze(sampled.map((n) => (n.id === shot.hero.id ? Object.freeze({ ...n, bbox: heroBox(n, shot.hero) }) : n)));
   };
@@ -286,16 +314,18 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
     const shot = shots[index];
     const local = shotTime(t, shot.start);
     if (!shot.cut || local >= shot.cutDur) return { background: shot.background, sampled: sampleShot(index, local) };
-    const from = sampleShot(index - 1, shots[index - 1].duration);
-    // a layer or shader cut composes two pictures in the page: the incoming shot live, the outgoing one frozen at its end
-    // (`t`: the film second it froze at, the time its fields are painted with)
+    const prev = shots[index - 1];
+    const live = isLiveOutgoing(shot.cut, look);
+    const from = sampleShot(index - 1, outgoingTime(shot.cut, look, prev.duration, local));
+    // a layer or shader cut composes two pictures in the page: the incoming shot live and the outgoing one, still moving
+    // (`live`) in a look drawn without a hand, else frozen at its end (`t`: the film second it stands at, the time its
+    // fields are painted with)
     if (shot.cut.family !== 'node') {
-      const prev = shots[index - 1];
       return {
         background: shot.background,
         sampled: sampleShot(index, local),
         cut: { name: shot.cut.name, family: shot.cut.family, p: local / shot.cutDur, direction: shot.cut.direction },
-        from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration },
+        from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration + (live ? local : 0), ...(live ? { live: true } : {}) },
       };
     }
     // `landing`: the incoming shot as the cut ends, for a cut that carries the one hand from the outgoing pose to where the
