@@ -3,15 +3,15 @@
 // at the film second it was. Without the field, or with zeros, the timeline is today's, with no new key.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COMMON_SHOT_FIELDS } from '../../scripts/v2/list.mjs'; // also registers the looks, kinds, devices and cuts, as make.mjs does
 import { PlacementError, buildTimeline, narrationStart } from '../../engine/script/timing.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
-import { validateFilm } from '../../scripts/v2/spec.mjs';
+import { SpecError, anchorSpanErrors, validateFilm } from '../../scripts/v2/spec.mjs';
+import { FIXTURE, exampleDigests, firstDifference } from './helpers/example-timelines.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FPS = 30;
@@ -80,14 +80,26 @@ test('a lead on b and a trail on b move both of b\'s seams: the film is as long 
 });
 
 test('the timeline of every example film, built without a voice, is the one frozen before the field existed', () => {
-  const frozen = JSON.parse(readFileSync(path.join(HERE, 'fixtures', 'timeline-examples-sha.json'), 'utf8'));
-  const dir = path.resolve(HERE, '../../references/examples/v2');  const names = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
-  assert.deepEqual(names, Object.keys(frozen), 'every example has a frozen timeline');
-  for (const name of names) {
-    const { timeline } = loadFilm(path.join(dir, name));
-    const sha = createHash('sha256').update(JSON.stringify(timeline)).digest('hex');
-    assert.equal(sha, frozen[name], `${name}: same values, same keys, same order`);
+  // fixtures/timeline-examples.json: regenerate with helpers/example-timelines.mjs (see its header) after adding an example film
+  // or for an intended change of a timeline
+  const frozen = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+  const actual = exampleDigests();
+  assert.deepEqual(Object.keys(actual), Object.keys(frozen), 'every example film has a frozen timeline');
+  for (const [name, digest] of Object.entries(actual)) {
+    assert.equal(firstDifference(digest, frozen[name]), null, `${name}: the timeline is not the frozen one`);
   }
+});
+
+test('the example pin names the film and the first key that differs', () => {
+  const digest = Object.values(exampleDigests())[0];
+  const moved = structuredClone(digest);
+  moved.sha = 'x';
+  moved.shots[1].narrationAt = 'abc';
+  assert.match(firstDifference(moved, digest), /^shots\[1\]: keys are .*narrationAt/);
+  const changed = structuredClone(digest);
+  changed.sha = 'x';
+  changed.shots[0].start = 'abc';
+  assert.equal(firstDifference(changed, digest), 'shots[0].start differs');
 });
 
 test('a measured timeline shifts the same way', () => {
@@ -134,9 +146,58 @@ test('the field is refused where it cannot work, each with its path', () => {
   assert.deepEqual(errorsOf(withOn('b', { narration: { lead: 0.5 } })), []);
 });
 
-test('a shift too long for its shot is a validation error, so loadFilm never throws on it', () => {
+test('a shift too long for its shot is a validation error, and loadFilm refuses it as a SpecError, not a PlacementError', () => {
   const short = { ...FILM, shots: FILM.shots.map((s) => (s.id === 'b' ? { ...s, say: 'Go.', narration: { lead: 1.5 } } : s)) };
   assert.match(errorsOf(short).join('\n'), /^shots\[1\]\.narration\.lead: a lead of 1\.5 s leaves shot "b"/);
+  const file = path.join(specDir, 'too-short.json');
+  writeFileSync(file, JSON.stringify(short));
+  assert.throws(() => loadFilm(file), SpecError);
+});
+
+test('a lead that leaves a shot shorter than the cut that opens it is a validation error naming the cut', () => {
+  const cut = { type: 'crossfade', duration: 2 };
+  assert.deepEqual(errorsOf(withOn('b', { cut })), []);
+  assert.deepEqual(errorsOf(withOn('b', { cut, narration: { lead: 1.5 } })).map((e) => e.replace(/ leaves shot "b" [\d.]+ s/, ' leaves shot "b" N s')),
+    ['shots[1].narration.lead: a lead of 1.5 s leaves shot "b" N s; a shot lasts at least 1 s and at least its cut (2 s)']);
+});
+
+// A shifted film is drawn on the shifted timeline, so an `on` anchor is judged there: past a shortened shot's end, or on a word
+// the cut leaves behind, the device would fire on the shot's edge, unseen.
+const underline = (at) => ({ on: [{ at, do: 'underline' }] });
+
+test('an anchor that lands outside the shot a lead shortened is an error at the anchor, and was fine unshifted', () => {
+  assert.deepEqual(errorsOf(withOn('b', underline(2.733))), []);
+  assert.deepEqual(errorsOf(withOn('b', { ...underline(1), narration: { lead: 1.5 } })), []);
+  const errors = errorsOf(withOn('b', { ...underline(2.733), narration: { lead: 1.5 } }));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^shots\[1\]\.on\[0\]\.at: 2\.733 resolves to 2\.733 s, outside the shot, which runs from 0 to 1\.43 s/);
+});
+
+test('a word anchor on a word a trail leaves behind the cut is an error at the anchor, and was fine unshifted', () => {
+  assert.deepEqual(errorsOf(withOn('a', underline('word:six'))), []);
+  assert.deepEqual(errorsOf(withOn('a', { ...underline('word:one'), narration: { trail: 1 } })), []);
+  const errors = errorsOf(withOn('a', { ...underline('word:six'), narration: { trail: 1 } }));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^shots\[0\]\.on\[0\]\.at: "word:six" names a word that is heard after the shot has ended /);
+});
+
+test('a voiced film is judged the same way on its measured timeline (anchorSpanErrors)', () => {
+  const words = base.shots.map((s) => ({ id: s.id, seconds: s.words.at(-1).end, sentences: [{ words: s.words.map(({ text, start, end }) => ({ text, start, end })) }] }));
+  const film = withOn('a', { ...underline('word:six'), narration: { trail: 1 } });
+  const messages = anchorSpanErrors(film, build(film, { words })).map((e) => `${e.path}: ${e.message}`);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /^shots\[0\]\.on\[0\]\.at: "word:six" names a word that is heard after the shot has ended /);
+  assert.deepEqual(anchorSpanErrors(withOn('a', underline('word:six')), build(FILM, { words })), []);
+});
+
+test('a shift of whole frames at 25 fps: 0.3 s is 8 frames, the film is as long, every word is heard when it was', () => {
+  const plain = build(FILM, { fps: 25 });
+  const led = build(withOn('b', { narration: { lead: 0.3 } }), { fps: 25 });
+  assert.equal(Math.round(led.shots[1].start * 25), Math.round(plain.shots[1].start * 25) + 8);
+  assert.equal(Math.round(led.shots[1].narrationAt * 25), -8);
+  assert.equal(led.frameCount, plain.frameCount);
+  const heard = (timeline) => timeline.shots.flatMap((s) => s.words.map((w) => Math.round((s.start + w.soundStart) * 1e6)));
+  assert.deepEqual(heard(led), heard(plain));
 });
 
 test('a recorded voice refuses the field', () => {
