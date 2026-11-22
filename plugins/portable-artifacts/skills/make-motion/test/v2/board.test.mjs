@@ -8,7 +8,11 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { BOARD_PER_STRIP, BOARD_COLUMNS, BOARD_JPEG_QUALITY, BOARD_STRIP_WIDTH, planBoard, planSheets } from '../../scripts/v2/plan.mjs';
 import { layoutSheet, MAX_SHEET_WIDTH } from '../../scripts/v2/layout.mjs';
-import { reportOf } from '../../scripts/v2/report.mjs';
+import { formatText, reportOf } from '../../scripts/v2/report.mjs';
+import { writeBoard } from '../../scripts/v2/sheets.mjs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 const FPS = 30;
 const SEVEN_SHOT_FILM = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: Array.from({ length: 7 }, (_, i) => ({ id: `s${i + 1}`, show: 'free', hold: 2 + (i % 2) })) };
@@ -27,6 +31,7 @@ test('--estimated is refused beside a flag it cannot serve: a slice, an outline,
   assert.throws(() => parseMakeArgs([...base, '--range', '1..2']), /--estimated does not go with --range/);
   assert.throws(() => parseMakeArgs([...base, '--outline']), /--estimated does not go with --outline/);
   assert.throws(() => parseMakeArgs([...base, '--batch', 'rows.json', '--out', 'x/{index}.mp4']), /--estimated does not go with --batch/);
+  assert.throws(() => parseMakeArgs([...base, '--phonemes']), /does not go with --sheets-only/); // --phonemes refuses --sheets-only first
   assert.throws(() => parseMakeArgs(['f.json', '--no-render', '--estimated']), /--estimated needs --sheets-only/);
   // the modes that already refuse --sheets-only still say so
   assert.throws(() => parseMakeArgs([...base, '--poster', '2']), /does not go with --sheets-only/);
@@ -73,4 +78,73 @@ test('the report carries board only when the run made one', () => {
   const blank = { validated: true, error: null, stages: [], findings: [], sheets: [], output: null, timed: 'estimated', voice: null, audio: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
   assert.equal('board' in reportOf(blank), false);
   assert.deepEqual(reportOf({ ...blank, board: ['/x/board-1.jpg'] }).board, ['/x/board-1.jpg']);
+});
+
+const TEXT_BLANK = { validated: true, error: null, stages: [{ name: 'validate', ok: true, seconds: 0 }], findings: [], sheets: ['a.png'], output: null, timed: 'estimated', voice: null, audio: null, post: 'webgl2', capture: null, frames: 180, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
+
+test('the text form says where the board is and how many strips it has', () => {
+  const two = formatText(reportOf({ ...TEXT_BLANK, board: ['/x/out/film.sheets/board/board-1.jpg', '/x/out/film.sheets/board/board-2.jpg'] }), { sheetsDir: '/x/out/film.sheets' });
+  assert.match(two, /^board: \/x\/out\/film\.sheets\/board \(2 strips\)$/m);
+  const one = formatText(reportOf({ ...TEXT_BLANK, board: ['/x/out/film.sheets/board/board-1.jpg'] }), { sheetsDir: '/x/out/film.sheets' });
+  assert.match(one, /^board: \/x\/out\/film\.sheets\/board \(1 strip\)$/m);
+  assert.match(formatText(reportOf({ ...TEXT_BLANK, board: [] }), { sheetsDir: '/x/out/film.sheets' }), /^board: none written$/m);
+  assert.doesNotMatch(formatText(reportOf(TEXT_BLANK), { sheetsDir: '/x/out/film.sheets' }), /board/);
+});
+
+// ---- writeBoard on a stub page: the folder it is given may hold anything ----
+const stubSession = () => ({ film: SEVEN_SHOT_FILM, timeline, page: { evaluate: async () => Buffer.from('jpeg').toString('base64') } });
+const scratch = () => mkdtempSync(path.join(tmpdir(), 'mm-board-unit-'));
+const logTo = (lines) => (line) => lines.push(line);
+
+test('writeBoard writes its strips and removes only its own board-N.jpg files', async () => {
+  const dir = scratch();
+  try {
+    mkdirSync(path.join(dir, 'board'));
+    writeFileSync(path.join(dir, 'board', 'board-9.jpg'), 'old');
+    writeFileSync(path.join(dir, 'board', 'notes.txt'), 'mine');
+    const files = await writeBoard({ session: stubSession(), dir });
+    assert.deepEqual(files, [path.join(dir, 'board', 'board-1.jpg'), path.join(dir, 'board', 'board-2.jpg')]);
+    assert.deepEqual(readdirSync(path.join(dir, 'board')).sort(), ['board-1.jpg', 'board-2.jpg', 'notes.txt']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a board-1.jpg that is a folder is left alone: that strip is skipped with a message, the others are written', async () => {
+  const dir = scratch();
+  try {
+    mkdirSync(path.join(dir, 'board', 'board-1.jpg'), { recursive: true });
+    writeFileSync(path.join(dir, 'board', 'board-1.jpg', 'keep.txt'), 'mine');
+    const lines = [];
+    const files = await writeBoard({ session: stubSession(), dir, log: logTo(lines) });
+    assert.deepEqual(files, [path.join(dir, 'board', 'board-2.jpg')]);
+    assert.equal(readFileSync(path.join(dir, 'board', 'board-1.jpg', 'keep.txt'), 'utf8'), 'mine');
+    assert.ok(lines.some((l) => /board-1\.jpg is not a file/.test(l)), lines.join('\n'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a board that is a file is left alone: no board is written, with a message', async () => {
+  const dir = scratch();
+  try {
+    writeFileSync(path.join(dir, 'board'), 'mine');
+    const lines = [];
+    assert.deepEqual(await writeBoard({ session: stubSession(), dir, log: logTo(lines) }), []);
+    assert.equal(readFileSync(path.join(dir, 'board'), 'utf8'), 'mine');
+    assert.ok(lines.some((l) => /board is not a folder/.test(l)), lines.join('\n'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a board that is a symbolic link is not followed: nothing in its target is deleted or written', async () => {
+  const dir = scratch();
+  try {
+    const target = path.join(dir, 'elsewhere');
+    mkdirSync(target);
+    writeFileSync(path.join(target, 'board-1.jpg'), 'theirs');
+    symlinkSync(target, path.join(dir, 'board'));
+    const lines = [];
+    assert.deepEqual(await writeBoard({ session: stubSession(), dir, log: logTo(lines) }), []);
+    assert.equal(readFileSync(path.join(target, 'board-1.jpg'), 'utf8'), 'theirs');
+    assert.deepEqual(readdirSync(target), ['board-1.jpg']);
+    assert.ok(lstatSync(path.join(dir, 'board')).isSymbolicLink());
+    assert.ok(lines.some((l) => /board is a symbolic link/.test(l)), lines.join('\n'));
+    assert.equal(existsSync(path.join(target, 'board-2.jpg')), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

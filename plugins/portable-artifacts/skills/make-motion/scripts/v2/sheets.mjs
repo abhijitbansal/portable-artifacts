@@ -2,7 +2,7 @@
 // cut (plan.mjs says which frames). The page seeks each frame and draws the visible canvas, post pass included, onto a
 // sheet canvas with each tile stamped "<shot id> . <seconds>s" in the bundled mono face; Node lays the tiles out
 // (layout.mjs) and writes the PNG. No ffmpeg and no screenshots. writeSheets also returns the film review's findings.
-import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
@@ -82,30 +82,59 @@ const BOARD_FILE_RE = /^board-\d+\.jpg$/;
 const PERCENT = 100;
 const BOARD_FORMAT = Object.freeze({ mime: 'image/jpeg', quality: BOARD_JPEG_QUALITY / PERCENT });
 
+const kindOf = (stat) => (stat.isSymbolicLink() ? 'a symbolic link' : 'not a file');
+
+// Whether `dir` is a folder this run may write in (made when absent). It is looked at with lstat, so a symbolic link is never
+// followed (nothing in its target is deleted or written); anything that is not a plain folder is said so and left alone.
+function boardFolder(dir, log) {
+  const stat = lstatSync(dir, { throwIfNoEntry: false });
+  if (stat === undefined) {
+    mkdirSync(dir, { recursive: true });
+    return true;
+  }
+  if (stat.isDirectory()) return true;
+  log(`make: board: ${dir} is ${stat.isSymbolicLink() ? 'a symbolic link' : 'not a folder'}; no board was written`);
+  return false;
+}
+
 // The folder's own board-N.jpg files are the last run's strips: they go before the new ones are made, so a strip the film no
-// longer needs cannot linger. Any other file in it stays.
+// longer needs cannot linger. Any other file in it stays, and so does a board-N.jpg that is not a plain file.
 function clearOwnBoard(dir) {
-  mkdirSync(dir, { recursive: true });
-  for (const name of readdirSync(dir)) if (BOARD_FILE_RE.test(name)) rmSync(path.join(dir, name), { force: true });
+  for (const name of readdirSync(dir)) {
+    if (BOARD_FILE_RE.test(name) && lstatSync(path.join(dir, name)).isFile()) rmSync(path.join(dir, name), { force: true });
+  }
+}
+
+// Whether the strip `file` can be written: nothing is there (clearOwnBoard took a plain file), else it is said and skipped.
+function stripFree(file, log) {
+  const stat = lstatSync(file, { throwIfNoEntry: false });
+  if (stat === undefined) return true;
+  log(`make: board: ${path.basename(file)} is ${kindOf(stat)}; that strip was not written`);
+  return false;
 }
 
 /**
  * The board (--estimated): the film's shots, BOARD_COLUMNS to a row and BOARD_PER_STRIP to a strip, each tile stamped as a
  * sheet tile is, written as JPEGs (BOARD_JPEG_QUALITY) at most BOARD_STRIP_WIDTH px wide.
- * @param {{ session: object, dir: string, signal?: AbortSignal }} opts `dir` is the sheets folder: the strips go in its `board/`
- * @returns {Promise<string[]>} the strip paths, in order
+ * @param {{ session: object, dir: string, signal?: AbortSignal, log?: (line: string) => void }} opts `dir` is the sheets folder: the
+ *   strips go in its `board/`. A `board` that is not a folder (a file, a symbolic link) writes nothing, and a board-N.jpg that is not
+ *   a plain file is left alone and its strip skipped; `log` says so.
+ * @returns {Promise<string[]>} the strip paths written, in order
  */
-export async function writeBoard({ session, dir, signal }) {
+export async function writeBoard({ session, dir, signal, log = () => {} }) {
   const boardDir = path.join(dir, BOARD_DIR);
   signal?.throwIfAborted();
+  if (!boardFolder(boardDir, log)) return [];
   clearOwnBoard(boardDir);
   const [w, h] = canvasSize(session.film);
   const files = [];
   for (const strip of planBoard(session.film, session.timeline)) {
     signal?.throwIfAborted();
+    const file = path.join(boardDir, strip.name);
+    if (!stripFree(file, log)) continue;
     const { width, height, placements } = layoutSheet({ tiles: strip.tiles, canvas: { w, h }, columns: BOARD_COLUMNS, maxWidth: BOARD_STRIP_WIDTH });
     const jpeg = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS, format: BOARD_FORMAT });
-    files.push(writeAtomically(path.join(boardDir, strip.name), Buffer.from(jpeg, 'base64')));
+    files.push(writeAtomically(file, Buffer.from(jpeg, 'base64')));
   }
   return files;
 }

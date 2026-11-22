@@ -47,8 +47,8 @@ const MODE_CONFLICTS = Object.freeze({
   batch: ['poster', 'outline', 'phonemes', 'subtitles'],
   subtitles: ['outline', 'phonemes', 'poster', 'batch'],
   // --estimated writes the sheets and the board of the whole film: not a slice, an outline or a batch (the modes that refuse
-  // --sheets-only say so from their own side: --estimated needs it)
-  estimated: ['shot', 'range', 'outline', 'batch', 'phonemes'],
+  // --sheets-only say so from their own side: --estimated needs it, so --poster, --inspect, --phonemes and --preview never get here)
+  estimated: ['shot', 'range', 'outline', 'batch'],
   preview: ['out', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'shot', 'range', 'batch', 'subtitles', 'workers', 'exact'],
 });
 const BATCH_KEYS_RE = /\{(index|[a-zA-Z][a-zA-Z0-9]*)\}/;

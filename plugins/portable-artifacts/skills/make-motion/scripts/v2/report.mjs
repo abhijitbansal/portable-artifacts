@@ -21,6 +21,7 @@
 // stays in it: the stages that ran, the findings already found. `provenance` is { comment, artist } as stamped into the
 // MP4 (stamp.mjs; both null when the stamp is off), null when no MP4 was written. A film's own fault (it does not
 // validate, the page raises an error about it) is a finding, not an error.
+import path from 'node:path';
 import { parseSay } from '../../engine/script/say.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
 import { isParkedKind, isParkedChartType } from '../../engine/looks/index.mjs';
@@ -136,7 +137,7 @@ export function reportOf(state) {
     ...(state.inspect ? { inspect: state.inspect } : {}), // --inspect: { png, json, frame, seconds, shot }
     ...(state.slice ? { slice: state.slice } : {}), // --shot, --range: { from, to, frames, shots, silent, skipped }
     ...(state.board ? { board: state.board } : {}), // --estimated: the board strips' paths, in order
-    ...(state.workers ?{ workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
+    ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
     ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed }
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
     ...(state.look ? { look: state.look } : {}),
@@ -220,6 +221,7 @@ export function formatText(report, { sheetsDir }) {
   for (const f of report.findings) lines.push(findingLine(f));
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
+  if (report.board) lines.push(report.board.length === 0 ? 'board: none written' : `board: ${path.dirname(report.board[0])} (${plural(report.board.length, 'strip')})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
   const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame${timingText(report.timing)}); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);

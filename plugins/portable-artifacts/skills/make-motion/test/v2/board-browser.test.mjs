@@ -69,6 +69,32 @@ test('a second run replaces the strips it made, drops a strip the film no longer
   return undefined;
 });
 
+// A recording of your own is read and probed (ffprobe) by the voice stage. The file here is four bytes, "a name, not a
+// recording": without --estimated the probe refuses it (a voice-stage finding); with it nothing reads the recording at all.
+const OWN_WORDS = { segments: [{ words: [[' Every', 0.3], [' row', 0.6], [' has', 0.9], [' a', 1.1], [' source.', 1.3], [' Four', 2.6], [' hundred', 2.9], [' rows.', 3.3]]
+  .map(([word, start]) => ({ word, start, end: Math.round((start + 0.25) * 100) / 100 })) }] };
+
+test('a film with a recording of its own is never read or probed under --estimated', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  writeFileSync(path.join(dir, 'vo-stub.wav'), 'RIFF');
+  writeFileSync(path.join(dir, 'vo.json'), JSON.stringify(OWN_WORDS));
+  const ownPath = path.join(dir, 'own.json');
+  writeFileSync(ownPath, JSON.stringify({ ...FILM, voice: { src: 'vo-stub.wav', words: 'vo.json' } }));
+  const own = path.join(dir, 'own', 'film.mp4');
+  const synthesise = () => { throw new Error('the voice was made'); };
+  const { report, exitCode } = await runMake({ specPath: ownPath, noRender: true, estimated: true, out: own }, { synthesise });
+  assert.equal(exitCode, 0, JSON.stringify(report.findings));
+  assert.equal(report.timed, 'estimated');
+  assert.equal(report.voice, null);
+  assert.deepEqual(report.stages.map((s) => s.name), ['validate', 'timeline', 'review', 'board']);
+  assert.equal(report.board.length, 1);
+  // the guard: the same film without --estimated reaches the voice stage, and its probe refuses the stub
+  const probed = await runMake({ specPath: ownPath, noRender: true, out: own }, { synthesise });
+  assert.equal(probed.exitCode === 0, false, 'the stub is not a recording the probe accepts (or ffprobe is missing)');
+  assert.ok(probed.report.stages.some((s) => s.name === 'voice'), 'without --estimated the voice stage runs');
+  return undefined;
+});
+
 test('--sheets-only alone still makes the voice, and writes no board', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
   const calls = [];

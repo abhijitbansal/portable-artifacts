@@ -136,7 +136,7 @@ async function reviewAndRender({ options, loaded, made, sound, state, io: { sign
     const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal, slice }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);
-    if (options.estimated === true) state.board = await stage(state, log, 'board', () => writeBoard({ session, dir: sheetsDir, signal }));
+    if (options.estimated === true) state.board = await stage(state, log, 'board', () => writeBoard({ session, dir: sheetsDir, signal, log }));
     if (!options.noRender && slice === null) {
       const tags = stampTags({ generatedBy: loaded.film.generatedBy, flags: options.provenance ?? {}, provenance: loaded.film.provenance });
       const rendered = await stage(state, log, 'render', () => {
