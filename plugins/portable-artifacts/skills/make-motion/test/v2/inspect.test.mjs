@@ -129,10 +129,11 @@ test('cutWindowAt is the engine\'s window: the cut, how far, and the outgoing sh
 
 // cutAt and the page's frameAt read the window from one engine function; this holds them together on every frame of a film
 // with a crossfade (layer), a slide (node), a flood (layer, a look-grounded colour) and a cross-zoom (shader).
-// every frame of `film` (built with `look`): cutAt names the window the page's frameAt opens; returns the cut names seen
+// checkParity: every frame of `film` (built with `look`): cutAt names the window the page's frameAt opens; returns the cut
+// names and families seen
 function checkParity(film, look) {
   const timeline = buildTimeline(film, { fps: FPS });
-  const built = filmFor(film.shots, look);
+  const built = filmFor(film.shots, look, '16:9', { seed: film.seed });
   const seen = new Set();
   for (let frame = 0; frame < timeline.frameCount; frame += 1) {
     const state = built.frameAt(frame / FPS);
@@ -165,13 +166,25 @@ test('cutAt agrees with frameAt on every frame of a film with a crossfade, a nod
 
 // the poster look picks its own cut (cutPick: a cover every third shot, in turn up and left, a plain cut where its plates
 // would hide it): the cut is resolved on the shot's grounded look, and the window must still be the page's
-test('cutAt agrees with frameAt on a poster film whose cuts the look picks', () => {
-  const shots = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => shot(id));
-  const { timeline, seen } = checkParity(filmOf(shots, 'poster'), 'poster');
-  assert.ok(seen.has('cover'), `the look's cover was reached: ${[...seen]}`);
-  const shotsOf = (frame) => cutAt(filmOf(shots, 'poster'), timeline, frame)?.from.shot;
-  const opening = new Set([...Array(timeline.frameCount).keys()].map(shotsOf).filter(Boolean));
-  assert.deepEqual([...opening].sort(), ['c', 'f'], 'only every third shot opens on a cut, so only the shots before them are outgoing');
+test('cutAt agrees with frameAt on a poster film whose cuts the look picks, with and without its plates rule dropping one', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  // the shots the look would open on a cover: every third, so d and g; the cut into each, by the shot it opens
+  const coversOf = (film) => {
+    const { timeline, seen } = checkParity(film, 'poster');
+    const into = new Set();
+    for (let frame = 0; frame < timeline.frameCount; frame += 1) { const found = cutAt(film, timeline, frame); if (found) into.add(`${timeline.shots.find((s) => frame >= s.start * FPS && frame < s.end * FPS).id}:${found.name}`); }
+    return { into: [...into].sort(), seen };
+  };
+  // statements only: the plates rule finds no plate (a statement sets none), so d and g both open on the cover
+  const plain = coversOf(filmOf(ids.map((id) => shot(id)), 'poster', '16:9', { seed: 10 }));
+  assert.deepEqual(plain.into, ['d:cover', 'g:cover']);
+  // a screen shot before each (the poster look gives it a plate fill): at this seed (found by search, 10) the plates rule
+  // sees the plate in the colour of d's ground and cuts plainly into d, and keeps the cover into g; the window must
+  // still be the page's
+  const screens = ids.map((id, i) => (i === 2 || i === 5 ? { id, show: 'screen', src: 'shot.png', hold: 1 } : shot(id)));
+  const plated = coversOf(filmOf(screens, 'poster', '16:9', { seed: 10 }));
+  assert.deepEqual(plated.into, ['g:cover'], 'the plates rule dropped the cover into d');
+  assert.ok(plated.seen.has('cover') && plain.seen.has('cover'));
 });
 
 test('cutWindowAt refuses a frame outside the film, as frameAt refuses a time outside it', () => {
