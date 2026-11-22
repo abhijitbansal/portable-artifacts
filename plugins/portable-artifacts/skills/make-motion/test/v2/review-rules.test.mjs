@@ -146,7 +146,7 @@ test('[R2-12] a measured row cites files that ship, a convention row names its s
     const cited = cell.match(CITED) ?? [];
     for (const rel of ['references/calibration.md', 'engine/review/outline.mjs']) assert.ok(cited.includes(rel), `${id} cites ${rel}`);
     for (const rel of cited) assert.ok(fs.existsSync(path.join(MOTION, rel)), `${id} cites ${rel}, which does not exist`);
-    assert.match(cell, /\(29 example films/, id);
+    assert.match(cell, /\(30 example films/, id);
     assert.doesNotMatch(cell, /\.scratch|\b[0-9a-f]{7}\b/, `${id}: a scratch path or a commit does not survive a squash merge`);
   }
   assert.match(rows.get('contrast').evidence, /^convention: WCAG 2/);

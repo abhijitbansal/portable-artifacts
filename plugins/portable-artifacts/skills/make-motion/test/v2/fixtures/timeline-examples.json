@@ -1154,6 +1154,152 @@
    }
   ]
  },
+ "how-it-works.json": {
+  "sha": "500f07d6ca36a9a3daacccc8376ac066b0037e4ab1c4533f3a9dbcfad905ff8d",
+  "top": {
+   "fps": "624b60c58c9d",
+   "duration": "1cb03cf0c108",
+   "frameCount": "f5e9b69ce10f",
+   "timed": "53c7890a0add"
+  },
+  "shots": [
+   {
+    "id": "73473d2159be",
+    "index": "5feceb66ffc8",
+    "start": "5feceb66ffc8",
+    "end": "d787fe9256b7",
+    "duration": "d787fe9256b7",
+    "words": "181e15a575b6",
+    "sentences": "9c24a4a2daab"
+   },
+   {
+    "id": "07c1222a853d",
+    "index": "6b86b273ff34",
+    "start": "d787fe9256b7",
+    "end": "0c3b8ef6a429",
+    "duration": "ffc36d58a786",
+    "words": "114e86a31bb4",
+    "sentences": "500d533ab41c"
+   },
+   {
+    "id": "e95791019eb0",
+    "index": "d4735e3a265e",
+    "start": "0c3b8ef6a429",
+    "end": "76bee57268b7",
+    "duration": "db7dc8ce0762",
+    "words": "20cfcffd241b",
+    "sentences": "a4b2f22b047d"
+   },
+   {
+    "id": "6403d742dd3b",
+    "index": "4e07408562be",
+    "start": "76bee57268b7",
+    "end": "36ce4028850a",
+    "duration": "9525703f57b1",
+    "words": "5fba91d981de",
+    "sentences": "0c567ad4113a"
+   },
+   {
+    "id": "fe1b035d212a",
+    "index": "4b227777d4dd",
+    "start": "36ce4028850a",
+    "end": "1f4439d38d71",
+    "duration": "f6d38561dce3",
+    "words": "ec9a3727fb2e",
+    "sentences": "6317acf343f7"
+   },
+   {
+    "id": "e996ee63bc2d",
+    "index": "ef2d127de37b",
+    "start": "1f4439d38d71",
+    "end": "e86d9d0a3ffd",
+    "duration": "08487ae90312",
+    "words": "a8826f79b2c3",
+    "sentences": "88e78f130715"
+   },
+   {
+    "id": "00229bada7c1",
+    "index": "e7f6c011776e",
+    "start": "e86d9d0a3ffd",
+    "end": "97757da6c783",
+    "duration": "1deda9953c8b",
+    "words": "f84025513874",
+    "sentences": "0e96676eeca4"
+   },
+   {
+    "id": "f742fed25bc8",
+    "index": "7902699be42c",
+    "start": "97757da6c783",
+    "end": "9caec17fb2ed",
+    "duration": "8719c8b9d63c",
+    "words": "7b358387da69",
+    "sentences": "66ceb0f42bd0"
+   },
+   {
+    "id": "d19048bc0368",
+    "index": "2c624232cdd2",
+    "start": "9caec17fb2ed",
+    "end": "becdd6ff15cb",
+    "duration": "77065cda8fe1",
+    "words": "e3553e71e1c4",
+    "sentences": "7693445d9c05"
+   },
+   {
+    "id": "7956aead527d",
+    "index": "19581e27de7c",
+    "start": "becdd6ff15cb",
+    "end": "6208ef0f7750",
+    "duration": "8fbd044d9892",
+    "words": "7689437431f4",
+    "sentences": "79345fd3e979"
+   },
+   {
+    "id": "3b20bb49f7cc",
+    "index": "4a44dc153642",
+    "start": "6208ef0f7750",
+    "end": "296eb766aae3",
+    "duration": "0fa04adf7214",
+    "words": "876fe54eaf20",
+    "sentences": "3421bad9f174"
+   },
+   {
+    "id": "24ed65044b63",
+    "index": "4fc82b26aecb",
+    "start": "296eb766aae3",
+    "end": "45e09a96dd9d",
+    "duration": "2b640621567d",
+    "words": "5e345efc8b38",
+    "sentences": "9dbbca977e24"
+   },
+   {
+    "id": "0c146d18bf10",
+    "index": "6b51d431df5d",
+    "start": "45e09a96dd9d",
+    "end": "9745e94e3743",
+    "duration": "1076c74d3f54",
+    "words": "92a5d7468c27",
+    "sentences": "07fccafff7fe"
+   },
+   {
+    "id": "0438180f5806",
+    "index": "3fdba35f04dc",
+    "start": "9745e94e3743",
+    "end": "55be7e59f59d",
+    "duration": "f26cd202073f",
+    "words": "c7966e9d506e",
+    "sentences": "2a1c3ed6cfe9"
+   },
+   {
+    "id": "97959247360c",
+    "index": "8527a891e224",
+    "start": "55be7e59f59d",
+    "end": "1cb03cf0c108",
+    "duration": "5fa067c1e4cd",
+    "words": "3bb40235237f",
+    "sentences": "c86efca8ad93"
+   }
+  ]
+ },
  "kinds-b-desk.json": {
   "sha": "9700b4b84dcd861743c0403fbd4aa07fb8c5e28eaf4c7384f1a0948802c2186a",
   "top": {
