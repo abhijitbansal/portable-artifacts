@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'no
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE, browserAvailable } from './helpers/session.mjs';
-import { MAX_CUE_WORDS, subtitleCues, subtitleText, ESTIMATE_NOTE } from '../../scripts/v2/subtitles.mjs';
+import { MAX_CUE_WORDS, subtitleCues, subtitleText, writeSubtitles, ESTIMATE_NOTE } from '../../scripts/v2/subtitles.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
@@ -143,6 +143,38 @@ test('make.mjs --subtitles vtt --subtitle-words writes one cue per word and repo
   assert.match(text, /NOTE the word times are estimated/);
   assert.equal(text.split('-->').length - 1, 5, 'five words, five cues');
   return undefined;
+});
+
+const oneShot = (words) => ({ timed: 'measured', duration: 4, shots: [{ id: 'a', start: 0, end: 4, words, sentences: [] }] });
+const noOverlap = (cues) => cues.every((c, i) => c.end > c.start && (i === 0 || c.start >= cues[i - 1].end));
+
+test('words heard at the same second are one cue, their words joined: a merged run reads "$5 million"', () => {
+  const cues = subtitleCues(oneShot([word('Cost', 0, 0.8), word('$5', 1, 1.4), word('million', 1, 1.4), word('now', 1.6, 2)]), { level: 'word' });
+  assert.deepEqual(cues, [{ start: 0, end: 0.8, text: 'Cost' }, { start: 1, end: 1.4, text: '$5 million' }, { start: 1.6, end: 2, text: 'now' }]);
+});
+
+test('a long word that starts with a shorter one ends where the next cue starts, whichever cue is next', () => {
+  // A [1.0-2.0], B [1.0-1.2], C [1.5-1.8]: A and B share a start so they merge; the merged cue stops where C starts
+  const cues = subtitleCues(oneShot([word('A', 1, 2), word('B', 1, 1.2), word('C', 1.5, 1.8)]), { level: 'word' });
+  assert.deepEqual(cues, [{ start: 1, end: 1.5, text: 'A B' }, { start: 1.5, end: 1.8, text: 'C' }]);
+  assert.ok(noOverlap(cues));
+});
+
+test('word cues never overlap, even when words come in no order and share starts', () => {
+  const cues = subtitleCues(oneShot([word('d', 2, 3), word('a', 0, 3.5), word('b', 0, 0.5), word('c', 1, 1.1), word('e', 2, 2.2)]), { level: 'word' });
+  assert.ok(noOverlap(cues), JSON.stringify(cues));
+  assert.deepEqual(cues.map((c) => c.text), ['a b', 'c', 'd e']);
+});
+
+test('writeSubtitles reports the level it wrote, for both levels, and the files differ', () => {
+  const videoOut = path.join(dir, 'unit', 'u.mp4');
+  const sentence = writeSubtitles({ timeline: TIMELINE, format: 'vtt', videoOut });
+  assert.deepEqual(sentence, { file: path.join(dir, 'unit', 'u.vtt'), format: 'vtt', timed: 'measured', level: 'sentence' });
+  const sentenceText = readFileSync(sentence.file, 'utf8');
+  const words = writeSubtitles({ timeline: { ...TIMELINE, duration: 6 }, format: 'vtt', videoOut, level: 'word' });
+  assert.deepEqual(words, { ...sentence, level: 'word' });
+  assert.notEqual(readFileSync(words.file, 'utf8'), sentenceText);
+  assert.match(readFileSync(words.file, 'utf8'), /\nHello\n/);
 });
 
 test('the sentence form is unchanged by the level argument', () => {
