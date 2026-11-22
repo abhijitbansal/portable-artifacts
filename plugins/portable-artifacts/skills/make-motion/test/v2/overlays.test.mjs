@@ -11,7 +11,8 @@ import '../../engine/modes/index.mjs';
 import '../../engine/kinds/index.mjs';
 import { allLookNames, validateLook } from '../../engine/looks/index.mjs';
 import { overlayNodes } from '../../engine/overlays/index.mjs';
-import { resolveLook } from '../../engine/graph/film.mjs';
+import { resolveLook, buildFilm } from '../../engine/graph/film.mjs';
+import { measure } from './helpers/kinds.mjs';
 import { sampleGraph } from '../../engine/graph/sample.mjs';
 import { safeInsets, VIRAL_SAFE_ZONE } from '../../engine/formats.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
@@ -179,6 +180,52 @@ test('--list looks says which overlays each look draws', () => {
   const entries = Object.fromEntries(listEntries('looks').map((e) => [e.name, e.overlays]));
   assert.deepEqual(entries.desk, { logo: true, progress: true });
   assert.deepEqual(entries.marker, { logo: true, progress: false });
+});
+
+// ---- the film: overlayAt, and no overlay node anywhere a cut can reach ----
+
+const THREE_SHOTS = [
+  { id: 'one', show: 'statement', say: 'Your charts lie.' },
+  { id: 'two', show: 'statement', say: 'No cloud.', cut: { type: 'slide', smear: true } },
+  { id: 'three', show: 'statement', say: 'Plain files.', cut: 'crossfade' },
+  { id: 'four', show: 'statement', say: 'One page.', cut: 'ripple' },
+];
+const buildWith = (overlays) => {
+  const film = { version: 2, mode: 'pro', look: 'desk', fps: FPS, seed: 1, shots: THREE_SHOTS, ...(overlays ? { overlays } : {}) };
+  const timeline = buildTimeline(film, { fps: FPS });
+  return buildFilm({ film, timeline, measure, assets: new Map([['assets/logo.png', LOGO]]), canvas: WIDE });
+};
+const overlayIdsIn = (frame) => {
+  const walk = (nodes) => nodes.flatMap((n) => [n.id, ...walk(n.children)]).filter((id) => id.startsWith('overlay.'));
+  const states = [frame.sampled, frame.from?.sampled, frame.smear?.whole, frame.smear?.over, ...(frame.smear?.layers ?? [])].filter(Boolean);
+  return states.flatMap(walk);
+};
+const ON = { logo: { src: 'assets/logo.png' }, progress: true };
+
+test('no frame state holds an overlay node: not the shot, not the outgoing shot, not a smear layer', () => {
+  const built = buildWith(ON);
+  let smeared = 0, composed = 0;
+  for (let i = 0; i <= built.frameCount; i++) {
+    const frame = built.frameAt(i / FPS);
+    smeared += frame.smear ? 1 : 0;
+    composed += frame.from ? 1 : 0;
+    assert.deepEqual(overlayIdsIn(frame), [], `frame ${i}`);
+  }
+  assert.ok(smeared > 0 && composed > 0, `the film exercises a smear (${smeared}) and a two-picture cut (${composed})`);
+});
+
+test('overlayAt gives the logo and the bar at every film second, and nothing for a film without overlays', () => {
+  const built = buildWith(ON);
+  assert.deepEqual(built.overlayAt(1).map((n) => n.id), ['overlay.logo', 'overlay.progress.track', 'overlay.progress.bar']);
+  assert.deepEqual(buildWith(undefined).overlayAt(1), []);
+});
+
+test('overlayAt is sampled at film time with no camera: the bar reveals with the film, the logo does not move', () => {
+  const built = buildWith(ON);
+  const at = (t) => Object.fromEntries(built.overlayAt(t).map((n) => [n.id, n]));
+  assert.ok(Math.abs(at(built.duration / 2)['overlay.progress.bar'].reveal - 0.5) < 1e-9);
+  const [a, b] = [at(0.2)['overlay.logo'], at(built.duration - 0.2)['overlay.logo']];
+  assert.deepEqual([a.x, a.y, a.scale, a.rotate], [b.x, b.y, b.scale, b.rotate]);
 });
 
 test('the logo is one of the pictures the server lists, once, whoever else names it', async (t) => {

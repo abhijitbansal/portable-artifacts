@@ -9,12 +9,14 @@
 // (the old one has taken a WebGL context and cannot give a 2D one) and says why in `unavailable`.
 //
 // createPost(canvas, { grain, halftone, bloom, seed, shaders }) -> { kind: 'webgl2' | '2d', canvas,
-//   render(sourceCanvas, t, cut?), setStrengths, unavailable?: { reason, failed }, dropped, cuts: { ran, replaced,
+//   render(sourceCanvas, t, cut?, overlay?), setStrengths, unavailable?: { reason, failed }, dropped, cuts: { ran, replaced,
 //   reason } }. render throws when the WebGL context is lost or a GL call failed, so a blank frame is never encoded as if
 //   it were good. `shaders` names the shader cuts the film uses (engine/cuts/shaders); they are all compiled here
 //   (post-cut.mjs). `cuts.ran` lists them when every one built; otherwise (no WebGL2, or one would not build) they are all
 //   in `cuts.replaced` with the reason, and the page draws their stand-ins. With `cut` = { from, shader, params } render
-//   runs that shader over `from` and the source first and the effects over its result.
+//   runs that shader over `from` and the source first and the effects over its result. A fourth argument, `overlay` (a
+//   canvas with transparency: the film's logo and progress bar on their own), is laid over that result with premultiplied
+//   alpha, before bloom, halftone and grain; every other frame has its overlays drawn into its source already.
 import { createCutPass, CutShaderError } from './post-cut.mjs';
 
 export const GRAIN_FPS = 12;
@@ -25,7 +27,8 @@ const UINT_MAX = 4294967295;
 const PCG_MULTIPLY = 747796405;
 const PCG_ADD = 2891336365;
 const PCG_WORD = 277803737;
-const EFFECTS_NEEDING_WEBGL = Object.freeze(['halftone', 'bloom']);
+const OVERLAY_UNIT = 3; // the texture unit of the film's overlays; the shader cuts' pictures are 1 and 2
+const EFFECTS_NEEDING_WEBGL =Object.freeze(['halftone', 'bloom']);
 
 /** Which grain pattern shows at time t: it changes GRAIN_FPS times a second. For t = frame / fps this equals
  *  floor(frame * 12 / fps) at every frame of every fps a film can have (test/v2/post-browser.test.mjs checks it). */
@@ -56,6 +59,8 @@ const FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
 uniform sampler2D uFrame;
+uniform sampler2D uOverlay;
+uniform int uHasOverlay;
 uniform ivec2 uSize;
 uniform float uUnit, uGrain, uHalftone, uBloom;
 uniform uint uSeed, uPhase;
@@ -95,6 +100,11 @@ float halftoneDot(vec2 at, float lum) {
 void main() {
   ivec2 p = ivec2(int(gl_FragCoord.x), uSize.y - 1 - int(gl_FragCoord.y));
   vec3 c = fetch(p);
+  // the film's overlays over the picture (premultiplied alpha), before the effects so the grain is one pattern over all
+  if (uHasOverlay == 1) {
+    vec4 o = texelFetch(uOverlay, p, 0);
+    c = o.rgb + c * (1.0 - o.a);
+  }
   if (uBloom > 0.0) c += uBloom * bloomOf(p);
   if (uHalftone > 0.0) c *= 1.0 - uHalftone * halftoneDot(vec2(p), luma(c));
   if (uGrain > 0.0) c += (noise(uvec2(p)) - 0.5) * ${GRAIN_GAIN.toFixed(1)} * uGrain;
@@ -155,6 +165,7 @@ function glPost(gl, canvas, initial, seed, shaders) {
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.uniform1i(at('uFrame'), 0);
+  gl.uniform1i(at('uOverlay'), OVERLAY_UNIT);
   gl.uniform2i(at('uSize'), canvas.width, canvas.height);
   gl.uniform1f(at('uUnit'), Math.min(canvas.width, canvas.height) / REFERENCE_SIDE);
   gl.uniform1ui(at('uSeed'), seed >>> 0);
@@ -174,16 +185,36 @@ function glPost(gl, canvas, initial, seed, shaders) {
     rebind = drawn !== null;
     if (!drawn) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
   };
+  // The film's overlays, a picture with transparency uploaded premultiplied (unit 3: the cut pass has 1 and 2) the moment a
+  // frame has them, made on the first one. Only a shader cut's frame has them here: every other frame has them in its source.
+  let overlayTexture = null;
+  const uploadOverlay = (picture) => {
+    gl.activeTexture(gl.TEXTURE0 + OVERLAY_UNIT);
+    if (overlayTexture === null) {
+      overlayTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, overlayTexture);
+      for (const [name, value] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) {
+        gl.texParameteri(gl.TEXTURE_2D, name, value);
+      }
+    }
+    gl.bindTexture(gl.TEXTURE_2D, overlayTexture);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, picture);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.activeTexture(gl.TEXTURE0);
+  };
   return {
     kind: 'webgl2',
     canvas,
     dropped: [],
     cuts,
     setStrengths(next) { strengths = { ...strengths, ...next }; },
-    render(source, t, cut) {
+    render(source, t, cut, overlay) {
       if (gl.isContextLost()) throw new Error('post pass: the WebGL context was lost');
       if (cut && !cuts.ran.includes(cut.shader)) throw new Error(`post pass: shader cut "${cut.shader}" is not one this film compiled`);
       frameTexture(source, cut);
+      if (overlay) uploadOverlay(overlay);
+      gl.uniform1i(at('uHasOverlay'), overlay ? 1 : 0);
       gl.uniform1f(at('uGrain'), strengths.grain);
       gl.uniform1f(at('uHalftone'), strengths.halftone);
       gl.uniform1f(at('uBloom'), strengths.bloom);

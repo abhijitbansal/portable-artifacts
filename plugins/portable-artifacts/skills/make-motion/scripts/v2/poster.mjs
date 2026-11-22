@@ -1,5 +1,6 @@
 // make.mjs --poster: one still of the film's own frame round(seconds * fps), drawn by the render page with its post
-// pass, captions left out (window.__seek(i, { captions: false }); a page that does not know the option draws them),
+// pass, captions and the film's overlays left out (window.__seek(i, { captions: false, overlays: false }); a page that
+// does not know the options draws them),
 // written as JPEG (quality 92) or PNG by the file's extension. No ffmpeg: the browser writes the picture.
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -42,7 +43,7 @@ export async function posterFindings({ session, frame }) {
  */
 export async function writePoster({ session, frame, file }) {
   const { page, timeline } = session;
-  await page.evaluate((i) => window.__seek(i, { captions: false }), frame);
+  await page.evaluate((i) => window.__seek(i, { captions: false, overlays: false }), frame);
   const png = path.extname(file).toLowerCase() === '.png';
   const picture = await page.screenshot(png ? { type: 'png' } : { type: 'jpeg', quality: POSTER_JPEG_QUALITY });
   mkdirSync(path.dirname(file), { recursive: true });

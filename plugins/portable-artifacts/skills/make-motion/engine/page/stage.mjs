@@ -17,6 +17,7 @@ import { applyFont, createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
 import { createPost, grainPhase } from './post.mjs';
 import { createCutPictures } from './cut-pictures.mjs';
+import { createOverlayLayer } from './overlay-layer.mjs';
 import { createAccumulator } from './accumulate.mjs';
 import { createClipFrames } from './clip-frames.mjs';
 import { resolveShotCut } from '../cuts/resolve.mjs';
@@ -54,6 +55,8 @@ async function loadAssets(srcs) {
   return new Map(srcs.map((src, n) => [src, bitmaps[n]]));
 }
 
+const NO_CUT = Object.freeze({ cut: null, overlay: null }); // a frame the post pass runs no shader cut over
+
 const KEY_DECIMALS = 1e9; // a cut's progress in a key, rounded so float noise cannot split two equal frames
 
 const keyOfP = (p) => Math.round(p * KEY_DECIMALS) / KEY_DECIMALS;
@@ -80,12 +83,15 @@ function stateKeyOf(state, look) {
 // The keys that say whether two frames look alike, over `frameState(i)`. drawKey: the sampled state, plus the frame itself
 // when a field on screen is painted from the time (the sampled state alone does not say such a field moved). captureKey:
 // what frame i looks like once the post pass has run, the 2D key plus the grain pattern when there is grain.
-function frameKeys({ frameState, fps, grainNow, look }) {
+// The film's overlays (the bar moves every frame) are in the captureKey alone, never the drawKey: the stillness rule asks
+// whether the film itself holds still, and a bar that is always moving must not hide that.
+function frameKeys({ frameState, fps, grainNow, look, overlays }) {
   const drawKey = (i) => {
     const state = frameState(i);
     return hasAnimatedField(state.sampled) ? `${stateKeyOf(state, look)}|frame${i}` : stateKeyOf(state, look);
   };
-  const captureKey = (i) => (grainNow() > 0 ? `${drawKey(i)}|grain${grainPhase(i / fps)}` : drawKey(i));
+  const overlayKey = (i) => (overlays.has ? `${drawKey(i)}|overlay:${overlays.key(i / fps)}` : drawKey(i));
+  const captureKey = (i) => (grainNow() > 0 ? `${overlayKey(i)}|grain${grainPhase(i / fps)}` : overlayKey(i));
   return { drawKey, captureKey };
 }
 
@@ -157,14 +163,17 @@ function captionFilter(film) {
 }
 
 // The page's API: what the render, the review and the tests call.
-function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain, snapshotOf, snapshotShot, cutPictures }) {
-  // captions: false leaves the film's captions out of the frame (a poster), the rest drawn as laid out; progress (tests
-  // only) draws a frame inside a cut window at that progress of the cut instead of its own
-  window.__seek = (i, { captions = true, progress } = {}) => {
-    const cut = draw(i, { captions, progress });
-    post.render(source, i / fps, cut ?? undefined);
+function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain, snapshotOf, snapshotShot, cutPictures, overlays, overlaySnapshot }) {
+  // captions: false leaves the film's captions out of the frame (a poster), the rest drawn as laid out; overlays: false
+  // leaves out the film's logo and progress bar (a poster, the loop check); progress (tests only) draws a frame inside a
+  // cut window at that progress of the cut instead of its own
+  window.__seek = (i, { captions = true, overlays: withOverlays = true, progress } = {}) => {
+    const { cut, overlay } = draw(i, { captions, overlays: withOverlays, progress });
+    post.render(source, i / fps, cut ?? undefined, overlay ?? undefined);
   };
   window.__cutCanvases = cutPictures.made; // how many second pictures the cuts have made, for tests
+  Object.defineProperty(window, '__overlayCanvases', { get: overlays.made, configurable: true }); // pictures the overlays have made: 0 without a shader cut or overlays
+  window.__snapshotOverlays = overlaySnapshot;
   window.__snapshotShot = snapshotShot;
   window.__source = source; // the frame before the post pass, for tests
   window.__setPost = (next) => { // new strengths for the next __seek, for tests
@@ -224,6 +233,7 @@ async function init() {
     drawFrame(c, sampled, { assets, canvas, time: t, frames });
   };
   const cutPictures = createCutPictures({ w, h, drawShot });
+  const overlays = createOverlayLayer({ built, assets, canvas, frames });
   const accumulator = createAccumulator({ w, h });
   // A smeared frame (engine/graph/film.mjs): the still nodes, the mean of the moving layers over them, then `over`.
   const drawSmeared = (state, t) => {
@@ -234,39 +244,51 @@ async function init() {
     drawFrame(ctx, over, { assets, canvas, time: t, frames });
   };
   const withoutCaptions = captionFilter(film);
-  // Draws frame i into the source. Returns the shader cut the post pass is to run over it, or null: inside a shader cut's
-  // window the source then holds the incoming picture alone.
-  const draw = (i, { captions = true, progress } = {}) => {
+  // Draws frame i into the source, then the film's overlays over it (never inside a cut's pictures). Returns { cut,
+  // overlay }: the shader cut the post pass is to run over the source, or null (inside a shader cut's window the source
+  // holds the incoming picture alone), and then the overlays' own picture for the post pass to lay over the cut's result.
+  const draw = (i, { captions = true, overlays: withOverlays = true, progress } = {}) => {
     const plain = captions ? frameState(i) : withoutCaptions(frameState(i));
     const state = progress === undefined || plain.cut === undefined ? plain : { ...plain, cut: { ...plain.cut, p: progress } };
     // frame frameCount is the instant the film ends: it can be sampled but there is no frame to draw
     if (i === frameCount) throw new Error(`frame must be an integer in 0..${frameCount - 1} to draw, got ${i}`);
     const t = i / fps;
+    const showOverlays = withOverlays && overlays.has;
+    const finished = () => {
+      if (showOverlays) overlays.onto(ctx, t);
+      return NO_CUT;
+    };
     if (state.smear !== undefined) {
       drawSmeared(state, t);
-      return null;
+      return finished();
     }
     if (state.cut === undefined) {
       drawShot(ctx, { ...state, t });
-      return null;
+      return finished();
     }
     resetContext(ctx);
     if (state.cut.family === 'shader' && post.cuts.ran.includes(state.cut.name)) {
       drawShot(ctx, { ...state, t });
       const { shader } = registries.cuts.get(state.cut.name);
-      return { from: cutPictures.outgoing(state, captions), shader: state.cut.name, params: shaderUniforms(shader, { p: state.cut.p, direction: state.cut.direction, canvas, ground: state.background }) };
+      const cut = { from: cutPictures.outgoing(state, captions), shader: state.cut.name, params: shaderUniforms(shader, { p: state.cut.p, direction: state.cut.direction, canvas, ground: state.background }) };
+      return { cut, overlay: showOverlays ? overlays.picture(t) : null };
     }
     cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas, look, groundsOf(state)), t, captions);
-    return null;
+    return finished();
   };
-  const keys = frameKeys({ frameState, fps, grainNow: () => grain, look });
+  const keys = frameKeys({ frameState, fps, grainNow: () => grain, look, overlays });
+  // the overlays alone at frame i, with their boxes, for the review (`--inspect`) and the tests; none leave __snapshot
+  const overlaySnapshot = (i) => {
+    frameState(i);
+    return snapshotOf(built.overlayAt(i / fps));
+  };
   const snapshotOf = (sampled) => annotate(sampled, { lineInk: lineInkOf(document.createElement('canvas').getContext('2d')) });
   // Shot `index` alone at frame i: only its own nodes, as they stand inside a cut window where both shots are drawn.
   const snapshotShot = (index, i) => {
     frameState(i);
     return snapshotOf(built.sampleShot(index, Math.max(0, shotTime(i / fps, timeline.shots[index].start))));
   };
-  installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, cutPictures, setGrain: (value) => { grain = value; } });
+  installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, cutPictures, overlays, overlaySnapshot, setGrain: (value) => { grain = value; } });
   if (clips.length > 0) {
     // a film with clips: __seek loads the clip frames frame i shows, then draws (it returns a promise; page.evaluate
     // and every caller await it). A film without clips keeps the synchronous __seek.
