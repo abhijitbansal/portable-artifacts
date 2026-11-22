@@ -9,6 +9,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE, browserAvailable } from './helpers/session.mjs';
 import { MAX_CUE_WORDS, subtitleCues, subtitleText, ESTIMATE_NOTE } from '../../scripts/v2/subtitles.mjs';
+import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
+import { UsageError } from '../../shared/cli.mjs';
+import { buildTimeline } from '../../engine/script/timing.mjs';
+import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const word = (text, soundStart, soundEnd) => ({ text, soundStart, soundEnd, start: soundStart, end: soundEnd });
@@ -65,10 +69,82 @@ test('make.mjs --subtitles vtt on a silent film writes the file beside the MP4 p
   assert.equal(run.status, 0, run.stdout + run.stderr);
   const report = JSON.parse(run.stdout);
   const file = path.join(dir, 'out', 'film.vtt');
-  assert.deepEqual(report.subtitles, { file, format: 'vtt', timed: 'estimated' });
+  assert.deepEqual(report.subtitles, { file, format: 'vtt', timed: 'estimated', level: 'sentence' });
   assert.match(readFileSync(file, 'utf8'), /NOTE /);
   const srt = spawnSync(process.execPath, [MAKE, film, '--subtitles', 'srt', '--no-render'], { encoding: 'utf8', timeout: 120_000 });
   assert.equal(srt.status, 2);
   assert.equal(existsSync(path.join(dir, 'out', 'film.srt')), false);
   return undefined;
+});
+
+// ---- --subtitle-words: one cue per word, at the film second it is heard ----
+
+// duration 4. a: start 0, one [0-0.4] two [0.5-0.9] three [1.5-1.9]; b: start 2.0, four [-0.3-0.1] (leads its cut), five [0.2-0.6]
+const WORDS = { timed: 'measured', duration: 4, shots: [
+  { id: 'a', start: 0, end: 2, words: [word('one', 0, 0.4), word('two', 0.5, 0.9), word('three', 1.5, 1.9)], sentences: [{ first: 0, last: 2 }] },
+  { id: 'b', start: 2, end: 4, words: [word('four', -0.3, 0.1), word('five', 0.2, 0.6)], sentences: [{ first: 0, last: 1 }] },
+] };
+
+test('word level: one cue per word, at film time', () => {
+  assert.deepEqual(subtitleCues(WORDS, { level: 'word' }).slice(0, 2), [{ start: 0, end: 0.4, text: 'one' }, { start: 0.5, end: 0.9, text: 'two' }]);
+});
+
+test('a word that leads its cut sorts where it is heard, and the word before it ends there', () => {
+  const cues = subtitleCues(WORDS, { level: 'word' });
+  assert.deepEqual(cues.map((c) => c.text), ['one', 'two', 'three', 'four', 'five']);
+  assert.deepEqual(cues[2], { start: 1.5, end: 1.7, text: 'three' });
+  assert.deepEqual(cues[3], { start: 1.7, end: 2.1, text: 'four' });
+  for (let i = 1; i < cues.length; i++) assert.ok(cues[i].start >= cues[i - 1].end);
+});
+
+test('no cue leaves the film: a trailing word is cut at the duration, one wholly outside is dropped, a negative start is held at 0', () => {
+  const t = { timed: 'measured', duration: 4, shots: [
+    { id: 'a', start: 0, end: 2, words: [word('early', -0.2, 0.3)], sentences: [] },
+    { id: 'b', start: 3, end: 4, words: [word('tail', 0.8, 1.4), word('gone', 1.2, 1.6), word('silent', 0.9, 0.9)], sentences: [] },
+  ] };
+  assert.deepEqual(subtitleCues(t, { level: 'word' }), [{ start: 0, end: 0.3, text: 'early' }, { start: 3.8, end: 4, text: 'tail' }]);
+});
+
+test('through buildTimeline: a shot with narration.lead hears its first word before its picture starts', () => {
+  const film = (extra) => ({ version: 2, mode: 'pro', shots: [
+    { id: 'a', show: 'statement', say: 'One two three four five six.' },
+    { id: 'b', show: 'statement', say: 'Seven eight nine ten eleven twelve.', ...extra },
+  ] });
+  const timeline = buildTimeline(film({ narration: { lead: 0.5 } }), { fps: 30 });
+  const cues = subtitleCues(timeline, { level: 'word' });
+  assert.ok(cues.find((c) => c.text === 'Seven').start < timeline.shots[1].start);
+  for (let i = 1; i < cues.length; i++) assert.ok(cues[i].start >= cues[i - 1].end - 1e-9, 'cues run forward');
+});
+
+test('estimated word times say so in the VTT; an estimated SRT is refused', () => {
+  const estimated = { ...WORDS, timed: 'estimated' };
+  assert.match(subtitleText(estimated, 'vtt', { level: 'word' }), /^WEBVTT\n\nNOTE the word times are estimated from the word count: the film has no voice to measure them by\n\n/);
+  assert.throws(() => subtitleText(estimated, 'srt', { level: 'word' }), /SRT has no comment line/);
+});
+
+test('word level writes a numbered SRT of single words', () => {
+  assert.match(subtitleText(WORDS, 'srt', { level: 'word' }), /^1\n00:00:00,000 --> 00:00:00,400\none\n\n2\n00:00:00,500 --> 00:00:00,900\ntwo\n\n/);
+});
+
+test('--subtitle-words needs --subtitles; with it, subtitleWords is true', () => {
+  assert.throws(() => parseMakeArgs(['f.json', '--subtitle-words']), (err) => err instanceof UsageError && /--subtitle-words needs --subtitles/.test(err.message));
+  assert.equal(parseMakeArgs(['f.json', '--subtitles', 'vtt', '--subtitle-words']).subtitleWords, true);
+  assert.equal(parseMakeArgs(['f.json', '--subtitles', 'vtt']).subtitleWords, false);
+});
+
+test('make.mjs --subtitles vtt --subtitle-words writes one cue per word and reports level word', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const film = path.join(dir, 'words.json');
+  writeFileSync(film, JSON.stringify({ version: 2, shots: [{ id: 'a', show: 'statement', say: 'Every row has a source.' }] }));
+  const run = spawnSync(process.execPath, [MAKE, film, '--subtitles', 'vtt', '--subtitle-words', '--no-render', '--json'], { encoding: 'utf8', timeout: 120_000 });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.equal(JSON.parse(run.stdout).subtitles.level, 'word');
+  const text = readFileSync(path.join(dir, 'out', 'words.vtt'), 'utf8');
+  assert.match(text, /NOTE the word times are estimated/);
+  assert.equal(text.split('-->').length - 1, 5, 'five words, five cues');
+  return undefined;
+});
+
+test('the sentence form is unchanged by the level argument', () => {
+  assert.deepEqual(subtitleCues(TIMELINE, { level: 'sentence' }), subtitleCues(TIMELINE));
 });

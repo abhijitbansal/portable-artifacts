@@ -157,6 +157,8 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 
 These keys appear only when they apply: `poster`, `inspect`, `slice`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
 
+`subtitles` is `{ file, format, timed, level }`, on a `--subtitles` run only. `level` is `sentence`, or `word` with `--subtitle-words` (needs `--subtitles`): one cue per word, at the film second it is heard (a word that leads or trails its cut keeps its heard time), sorted across the film, each cue held inside the film and ending where the next starts. An estimated VTT says so in a `NOTE`; an estimated SRT is refused.
+
 `slice` is `{ from, to, frames, shots, silent, skipped }`, on a `--shot` or `--range` run only: the frames it covers, the shots it touches, whether the film's sound is left out, and the review rules it does not run (`references/tools.md`, "One shot or a range").
 
 A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `path` and says what to change; it makes `ok` false. A `creative` finding is a call for the author and never fails the run. A parked kind is not a finding: it renders, and the report's `kinds` lists it. Every rule a finding can name, with what it asks and the value that fixes it, is in `references/rules.md`.

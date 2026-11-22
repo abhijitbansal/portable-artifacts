@@ -556,7 +556,7 @@ async function soundReviewRender({ options, loaded, timeline, made, clips, state
     const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
     if (planned === null) return;
     // --subtitles: the caption file from the timeline the film is drawn with (after music.snap), before the browser starts
-    if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out });
+    if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out, level: options.subtitleWords ? 'word' : 'sentence' });
     if (renders) await findFfmpeg(); // fail before the browser starts, naming how to fix it
     io.signal?.throwIfAborted();
     await reviewAndRender({ options, loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made, sound: planned.sound, state, io });
