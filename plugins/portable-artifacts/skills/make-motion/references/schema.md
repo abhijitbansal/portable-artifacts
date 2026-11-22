@@ -108,7 +108,7 @@ Every `src` is a file inside the film's folder. A URL, an absolute path or a pat
 - **`logo`**: a png, jpg, webp or gif inside the film's folder, held to the same rules as a shot's picture; a problem is reported at `overlays.logo.src`. `corner` is `top-left`, `top-right`, `bottom-left` or `bottom-right`; left out, it takes the look's own corner. The logo keeps its proportions and sits in its corner, inset by the look's margin.
 - **`progress`**: `true` draws a thin bar along one edge of the frame that fills from left to right over the film's length. The look sets the edge, thickness and colours.
 
-Both stand inside the rectangle the look composes in, so on a short they keep clear of the platform's interface. The look decides how each is drawn (`--list looks --json` says which overlays each look draws); asking for an overlay a look does not draw, such as `progress` in `marker`, is an error that names the looks that do.
+Both stand inside the rectangle the look composes in and, on a short, inside the platform's safe zone too, so they keep clear of its caption and buttons. They are drawn over the composed frame, after the cut; for a shader cut they are laid over the transition's result before the post pass (grain, bloom, halftone). The review's composition rules do not see them, and a moving bar does not stop the `still` finding from firing. The poster and the `loop` check are taken without them. The look decides how each is drawn (`--list looks --json` says which overlays each look draws); asking for an overlay a look does not draw, such as `progress` in `marker`, is an error that names the looks that do.
 
 ## Variables
 

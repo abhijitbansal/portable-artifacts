@@ -176,6 +176,54 @@ test('a logo with no loaded picture is an error naming its field', () => {
   assert.throws(() => overlayNodes(argsFor({ overlays: { logo: { src: 'assets/logo.png' } } }, WIDE, { assets: new Map() })), /overlays\.logo\.src.*assets\/logo\.png/);
 });
 
+test('on a short every look keeps a bottom logo and a bottom bar above the platform interface, and nothing above its top', () => {
+  const insets = safeInsets([TALL.w, TALL.h], VIRAL_SAFE_ZONE);
+  const viral = allLookNames().filter((name) => registries.looks.get(name).modes.includes('viral'));
+  assert.ok(viral.length >= 3, `viral looks: ${viral.join(', ')}`);
+  for (const name of viral) {
+    const look = resolveLook({ version: 2, mode: 'viral', look: name, shots: [SHOT] });
+    for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+      const asked = { logo: { src: 'assets/logo.png', corner }, ...(look.overlays.progress ? { progress: true } : {}) };
+      const film = { version: 2, mode: 'viral', look: name, overlays: asked, shots: [SHOT] };
+      const bottomBar = look.overlays.progress ? { ...look, overlays: { ...look.overlays, progress: { ...look.overlays.progress, edge: 'bottom' } } } : look;
+      for (const drawn of [look, bottomBar]) {
+        const nodes = overlayNodes({ film, look: drawn, canvas: TALL, timeline: buildTimeline(film, { fps: FPS }), assets: new Map([['assets/logo.png', LOGO]]), viralInsets: insets });
+        const logo = nodes.find((n) => n.id === 'overlay.logo').props;
+        const at = `${name} ${corner} ${drawn === look ? 'as shipped' : 'bar at the bottom'}`;
+        assert.ok(logo.y + logo.h <= TALL.h - insets.bottom, `${at}: logo bottom ${logo.y + logo.h} <= ${TALL.h - insets.bottom}`);
+        assert.ok(logo.y >= insets.top && logo.x >= insets.left && logo.x + logo.w <= TALL.w - insets.right, `${at}: logo inside the platform sides and top`);
+        for (const bar of nodes.filter((n) => n.id.startsWith('overlay.progress'))) {
+          const ys = [...bar.props.d.matchAll(/[ML]([\d.]+)[ ,]([\d.]+)/g)].map((m) => Number(m[2]));
+          assert.ok(Math.max(...ys) <= TALL.h - insets.bottom && Math.min(...ys) >= insets.top, `${at}: bar y ${ys}`);
+        }
+      }
+    }
+  }
+});
+
+test('a picture with no size is an error naming the logo, not an infinite or NaN width', () => {
+  for (const bad of [{ width: 200, height: 0 }, { width: 0, height: 100 }, { width: Number.NaN, height: 100 }]) {
+    assert.throws(() => overlayNodes(argsFor({ overlays: { logo: { src: 'assets/logo.png' } } }, WIDE, { assets: new Map([['assets/logo.png', bad]]) })), /overlays\.logo\.src.*assets\/logo\.png.*no size/);
+  }
+});
+
+test('the hand-drawn test look draws no progress bar, as marker does not', async () => {
+  const { handLook } = await import('./helpers/hand-look.mjs');
+  const name = handLook();
+  assert.equal(registries.looks.get(name).overlays.progress, null);
+  assert.notEqual(registries.looks.get(name).overlays.logo, null);
+  const { errors } = validateFilm({ version: 2, look: name, overlays: { progress: true }, shots: [SHOT] }, { specDir });
+  assert.equal(errors[0].path, 'overlays.progress');
+});
+
+test('the looks-that-do hint names only the listed looks: an experimental copy is left out', () => {
+  const desk = registries.looks.get('desk');
+  const copy = 'overlays-hint-copy';
+  if (!registries.looks.has(copy)) registries.looks.add(copy, Object.freeze({ ...desk, name: copy, experimental: true }));
+  const { errors } = validateFilm({ version: 2, look: 'marker', overlays: { progress: true }, shots: [SHOT] }, { specDir });
+  assert.match(errors[0].message, /the looks that do: desk, pop, cosmos, ledger, poster, keynote$/);
+});
+
 test('--list looks says which overlays each look draws', () => {
   const entries = Object.fromEntries(listEntries('looks').map((e) => [e.name, e.overlays]));
   assert.deepEqual(entries.desk, { logo: true, progress: true });
