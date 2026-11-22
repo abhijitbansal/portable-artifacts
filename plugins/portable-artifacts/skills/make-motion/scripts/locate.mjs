@@ -76,6 +76,7 @@ function checkPicture(picture) {
     throw new UsageError(`cannot read ${picture}: no such file`);
   }
   if (stat.isDirectory()) throw new UsageError(`${picture} is a folder; name a picture file`);
+  if (!stat.isFile()) throw new UsageError(`${picture} is not a regular file (a device or a pipe); name a picture file`);
 }
 
 // The folder to write into, made; never the picture itself, and no file it writes may replace the picture.
@@ -134,6 +135,11 @@ export async function main(argv, { out = (s) => process.stdout.write(s), err = (
     await run(parseArgs(argv), out);
     return 0;
   } catch (e) {
+    // A file it cannot read or write (a Node error with a code such as EACCES or ENOTDIR) is an IO problem: one line, exit 2.
+    if (!(e instanceof UsageError) && typeof e?.code === 'string' && typeof e.syscall === 'string') {
+      err(`${String(e.message).split('\n')[0]}\n`);
+      return 2;
+    }
     if (!(e instanceof UsageError)) throw e;
     if (e.help === true) {
       out(`usage: ${e.message}\n`);

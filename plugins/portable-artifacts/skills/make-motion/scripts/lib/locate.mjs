@@ -97,7 +97,7 @@ async function decodeWithFfmpeg(file) {
   const run = spawnSync(ffmpeg, ['-v', 'error', '-nostdin', ...fileInput(file), '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png', '-pix_fmt', 'rgb24', 'pipe:1'],
     { maxBuffer: MAX_FFMPEG_BYTES });
   if (run.status !== 0 || !run.stdout?.length) {
-    const why = String(run.stderr ?? '').trim().split('\n').at(-1) || 'no picture came out';
+    const why = run.error ? (run.error.code ?? run.error.message) : String(run.stderr ?? '').trim().split('\n').at(-1) || 'no picture came out';
     throw new UsageError(`ffmpeg could not read ${path.basename(file)} as a picture: ${why}`);
   }
   return toRgb(readPng(run.stdout));

@@ -449,7 +449,7 @@ registries.kinds.add('clipping', {
     src: 'assets/screenshot.png',
     say: 'Every chart on this page shows its query.',
     caption: 'The query',
-    regions: { query: [0.55, 0.2, 0.35, 0.2] },
+    regions: { query: [0.58, 0.14, 0.37, 0.24] },
     on: [{ at: 'word:query', do: 'circle', target: 'region:query' }],
   },
   schema: {

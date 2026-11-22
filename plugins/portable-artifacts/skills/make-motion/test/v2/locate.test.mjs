@@ -1,9 +1,9 @@
 // The locate helper (motion-steals W3 task 8): a seen target becomes a `regions` box in three plain calls. Geometry,
 // the PNG writer, the digit font, and the command's exit codes. No browser, no model; ffmpeg only where a test says so.
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,8 +15,19 @@ import { pngOf } from './helpers/png.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const LOCATE = path.join(SKILL, 'scripts/locate.mjs');
-const scratch = () => mkdtempSync(path.join(tmpdir(), 'locate-'));
-const run = (args, env = {}) => spawnSync(process.execPath, [LOCATE, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
+const made = [];
+const scratch = () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'locate-'));
+  made.push(dir);
+  return dir;
+};
+after(() => {
+  for (const dir of made) {
+    for (const name of ['locked', 'noaccess']) { try { chmodSync(path.join(dir, name), 0o700); } catch { /* not made in this folder */ } }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+const run = (args, env = {}) => spawnSync(process.execPath, [LOCATE, ...args], { encoding: 'utf8', timeout: 30_000, env: { ...process.env, ...env } });
 
 const TARGET = [0.55, 0.2, 0.1, 0.08]; // [x, y, w, h]
 const CELL = (2 / 9) / 6; // a cell of the grid over two strips
@@ -110,10 +121,19 @@ test('a digit is seven rows of five, and drawNumber inks its pixels', () => {
 });
 
 test('drawNumber writes two digits side by side and clips at the picture edge', () => {
-  const pixels = { width: 20, height: 12, channels: 3, data: Buffer.alloc(20 * 12 * 3, 0) };
-  const size = drawNumber(pixels, { x: 14, y: 8, value: 36, scale: 1, ink: [1, 2, 3], plate: [9, 9, 9] });
+  const [W, H, ink, plate] = [20, 12, [1, 2, 3], [9, 9, 9]];
+  const pixels = { width: W, height: H, channels: 3, data: Buffer.alloc(W * H * 3, 0) };
+  const size = drawNumber(pixels, { x: 14, y: 8, value: 36, scale: 1, ink, plate });
   assert.equal(size.width, (5 + 1 + 5 + 2 * PLATE_PAD) * 1);
-  assert.equal(pixels.data.length, 20 * 12 * 3);
+  const at = (px, py) => [...pixels.data.subarray((py * W + px) * 3, (py * W + px) * 3 + 3)];
+  assert.deepEqual(at(14, 8), plate, 'the plate starts inside the picture');
+  assert.deepEqual(at(W - 1, 8), plate, 'the plate runs past the right edge and is cut there');
+  assert.deepEqual(at(14 + PLATE_PAD, 8 + PLATE_PAD), ink, 'the first digit (3) starts at its ink cell');
+  assert.deepEqual(at(13, 8), [0, 0, 0], 'nothing is drawn left of the plate');
+  assert.deepEqual(at(14, 7), [0, 0, 0], 'nothing is drawn above the plate');
+  const outside = { width: 4, height: 4, channels: 3, data: Buffer.alloc(48, 5) };
+  drawNumber(outside, { x: 10, y: 10, value: 1, scale: 1, ink, plate });
+  assert.ok(outside.data.every((b) => b === 5), 'a plate wholly outside changes nothing');
 });
 
 test('step 1 writes two PNGs no larger than 1600 px a side; step 3 prints the region', () => {
@@ -189,6 +209,40 @@ test('other bad calls exit 2: a folder, a missing file, a half-named region, ste
     assert.equal(r.status, 2, `${args.join(' ')}: ${r.stderr}`);
     assert.equal(r.stdout, '');
   }
+});
+
+// Exit 2 with exactly one stderr line and no stack trace.
+function assertOneLineExit2(r, label) {
+  assert.equal(r.status, 2, `${label}: ${r.stderr}`);
+  assert.equal(r.stdout, '', label);
+  assert.equal(r.stderr.trimEnd().split('\n').length, 1, `${label}: ${r.stderr}`);
+  assert.doesNotMatch(r.stderr, /\n\s+at /, label);
+}
+
+const isRoot = process.getuid?.() === 0;
+test('an unreadable picture exits 2 with one line', { skip: isRoot && 'root reads any file' }, () => {
+  const dir = scratch();
+  const picture = path.join(dir, 'p.png');
+  writeFileSync(picture, pngOf(90, 60, () => [1, 2, 3]));
+  chmodSync(picture, 0o000);
+  assertOneLineExit2(run([picture, '--out', path.join(dir, 'o')]), 'EACCES picture');
+});
+
+test('--out under a file, and an unwritable folder, exit 2 with one line', { skip: isRoot && 'root writes anywhere' }, () => {
+  const dir = scratch();
+  const picture = path.join(dir, 'p.png');
+  writeFileSync(picture, pngOf(90, 60, () => [1, 2, 3]));
+  assertOneLineExit2(run([picture, '--out', path.join(picture, 'x')]), 'ENOTDIR --out');
+  const locked = path.join(dir, 'locked');
+  mkdirSync(locked);
+  chmodSync(locked, 0o500);
+  assertOneLineExit2(run([picture, '--out', locked]), 'EACCES folder');
+  assertOneLineExit2(run([picture, '--out', path.join(locked, 'sub')]), 'EACCES make folder');
+  assertOneLineExit2(run([picture, '--cols', '1-2', '--rows', '1-2', '--cells', '1-2', '--out', locked]), 'EACCES box.png');
+});
+
+test('a device or a pipe is not a picture: exit 2', () => {
+  assertOneLineExit2(run(['/dev/zero', '--out', path.join(scratch(), 'o')]), '/dev/zero');
 });
 
 test('a JPEG without ffmpeg exits 2 and says what to do', () => {
