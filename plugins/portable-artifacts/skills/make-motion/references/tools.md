@@ -39,7 +39,7 @@ node <skill-dir>/scripts/make.mjs film.json --poster rows@end-0.5 --poster-out o
 node <skill-dir>/scripts/make.mjs film.json --inspect rows@end --json
 ```
 
-The PNG is the film's own frame, with the post pass and the captions as the render draws them (`--poster` leaves captions out; here the picture and the node list agree). The report gains `inspect: { png, json, frame, seconds, shot }`, only on this run. `--inspect` does not go with `--out`, `--poster`, `--poster-out`, `--sheets-only`, `--no-render`, `--outline`, `--phonemes`, `--batch`, `--subtitles`, `--workers`, `--exact` or `--preview`. A time past the end or one that names nothing is refused as for `--poster`, with the film's length or the list of shots.
+The PNG is the film's own frame, with the post pass and the captions as the render draws them (`--poster` leaves captions out; here the picture and the node list agree). The report gains `inspect: { png, json, frame, seconds, shot }`, only on this run. `--inspect` does not go with `--out`, `--poster`, `--poster-out`, `--sheets-only`, `--no-render`, `--outline`, `--phonemes`, `--batch`, `--subtitles`, `--workers`, `--exact`, `--no-music` or `--preview`. A time past the end or one that names nothing is refused as for `--poster`, with the film's length or the list of shots.
 
 The JSON:
 
