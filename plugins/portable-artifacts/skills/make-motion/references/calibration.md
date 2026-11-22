@@ -7,7 +7,7 @@ The two composition findings are the only rules whose threshold comes from a tab
 - The last frame of every shot of ten films from `references/examples/v2` (91 shots): `look-cosmos`, `look-poster`, `gate-ledger`, `gate-keynote`, `gate-marker`, `showreel-pro`, `showreel-viral`, `kinds-desk`, `kinds-pop` and `whats-new` (30 shots).
 - `band` is the longest empty stretch of the safe rectangle as a share of its side. `extent` is the hero's larger side over the matching safe side. The safe rectangle is 1800 by 960 on a 1920 by 1080 frame (60 px margins).
 - A fixed overlay (a slug, a mark, a rule) is furniture and does not count as an element. A caption's reserved zone is taken out of the safe rectangle first. A kind that lays out equals (`peers`: `list`, `compare`, `timeline`, `feed`) is not judged for `scale-contrast`.
-- Shots were sorted by eye into "fills well" (12 shots) and "reads empty" (10 shots), then each threshold was set where it separated them, and every shot a threshold flagged was viewed.
+- Shots were sorted by eye into "fills well" (12 shots) and "reads empty" (10 shots), then each threshold was checked against them, and every shot a threshold flagged was viewed. The two sets cross on both measures (for `band`, the emptiest "fills well" shot is at 0.208 and the fullest "reads empty" shot at 0.159), so no value separates them. 0.35 is the lowest `band` that kept every film at or under a third of its shots flagged, after the `desk` and `ledger` overrides below.
 
 ## The values
 
@@ -30,7 +30,7 @@ Share of the 91 shots flagged, and the films with more than a third of their sho
 | 0.35 | 1 (`look-cosmos`, three shots) | 12 of 91 |
 | 0.40 | 0 | 8 of 91, all of them hero findings |
 
-At 0.40 `dead-space` fired on none of the 91 shots, so it missed every shot that reads empty. At 0.35 every shot that reads empty because of a bare band is caught, and only `look-cosmos` has more than a third of its shots flagged (one of three). The hero outcome is the same from 0.50 to 0.55; 0.50 clears the cluster of near misses at 51 to 54%.
+At 0.40 `dead-space` fired on none of the 91 shots, so it missed every shot that reads empty. At 0.35 `dead-space` catches the shots that read empty with a band of 0.35 or more (`look-cosmos` `distance` was one, at 0.394) and `kinds-pop` `hook`, and only `look-cosmos` has more than a third of its shots flagged (one of three). It does not catch `no-animation-code` (0.159), `look-pop` (0.227) or `frame-zero` (0.264): they read empty and sit below every band tried, and catching them would put more films over a third. That is the cost of the bound. The hero outcome is the same from 0.50 to 0.55; 0.50 clears the cluster of near misses at 51 to 54%.
 
 ## What fires with the final values
 
@@ -48,7 +48,7 @@ Band 0.35, hero 0.50, `desk` band 0.40, `ledger` band 0.40 and hero 0.45: 9 of t
 
 Fills well, none flagged by the final values: `look-poster` `idea` (band 0.113), `flow` (0.100), `shot` (0.090), `close` (0.146); `gate-ledger` `lede` (0.104), `growth` (0.105), `regions` (0.164), `gap` (0.177), `year` (0.101; hero 0.466), `reach` (0.166), `next` (0.101) and `close` (0.208).
 
-Reads empty, kept: `look-cosmos` `distance` (band 0.394, the lower 40% bare), `whats-new` `no-animation-code` (one quote card alone, 0.159), the six `look-*` cutout cards (a card and one word; hero 0.447 to 0.460), `look-pop` (a 9:16 clip with the right half bare, 0.227) and `frame-zero` (one tall card between wide margins, 0.264).
+Reads empty, kept: `look-cosmos` `distance` (band 0.394, the lower 40% bare; the number layout has since been recentred and it now measures 0.267, under 0.35), `whats-new` `no-animation-code` (one quote card alone, 0.159), the six `look-*` cutout cards (a card and one word; hero 0.447 to 0.460), `look-pop` (a 9:16 clip with the right half bare, 0.227) and `frame-zero` (one tall card between wide margins, 0.264).
 
 Removed from the "reads empty" set after viewing: `look-cosmos` `giants` (empty only while its bars grow, which a resting-frame rule cannot see), and `whats-new` `hook`, `locked`, `same-everywhere` and `keepwarm` (statements and lists set flush left, which read as composed).
 

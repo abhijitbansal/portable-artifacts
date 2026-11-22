@@ -27,6 +27,8 @@ const FORMS = [/rule: '([a-z0-9-]+)'/g, /\bfinding\((?:ctx, )?(?:MECHANICAL|CREA
 // Rules registered before the file that emits them exists: Task 3 creates engine/review/outline.mjs and empties this.
 const EXPECTED_LATER = ['cut-variety', 'sameness'];
 
+// Limit of the comment strip: a string holding whitespace then `//`, or holding `/*`, would hide the code after it from the
+// scan. No scanned file has one today.
 /** `source` without its block and line comments (a JSDoc `@returns {{ rule: 'x' }}` is not an emission). */
 const withoutComments = (source) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
 
