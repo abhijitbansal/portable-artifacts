@@ -28,6 +28,12 @@ export function shotStats(cuts, duration) {
   return { count: inside.length, median: round3(middle(lengths)), shortest: lengths[0], longest: lengths.at(-1) };
 }
 
+/**
+ * The report as JSON text. JSON has no infinity, so digital silence (ebur128's -inf) is the string "-inf", and a file with
+ * no sound stays null: a reader can tell the two apart.
+ */
+export const reportJson = (report) => JSON.stringify(report, (_key, value) => (value === Infinity || value === -Infinity ? (value < 0 ? '-inf' : 'inf') : value));
+
 const measured = (value) => ({ value, basis: 'measured' });
 const guessed = (value) => ({ value, basis: 'guessed' });
 

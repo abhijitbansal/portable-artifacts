@@ -3,14 +3,16 @@
 // without it, unless PA_REQUIRE_BROWSER=1.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { FAST_SHOT_SECONDS, SCENE_THRESHOLD, measureReport, parseScdet, shotStats } from '../../scripts/lib/measure.mjs';
+import { FAST_SHOT_SECONDS, SCENE_THRESHOLD, measureReport, parseScdet, reportJson, shotStats } from '../../scripts/lib/measure.mjs';
+import { fail, run as runTool } from '../../scripts/measure.mjs';
+import { CLIP_DECODERS, CLIP_DEMUXERS } from '../../scripts/v2/clips.mjs';
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -23,7 +25,7 @@ const LOCAL_ONLY = /local files only: give the path of a video file on this mach
 // through the filter's own name; the lines of a different build may name the filter's instance differently.
 const SCDET = '[Parsed_scdet_0 @ 0x77dd062c40] lavfi.scd.score: 15.625, lavfi.scd.time: 1\n[Parsed_scdet_0 @ 0x77dd062c40] lavfi.scd.score: 15.625, lavfi.scd.time: 2\n';
 
-let dir, fixture, playlist, playlistAsMp4, concatScript, folder, linkToFixture, hits, server, serverUrl;
+let dir, fixture, playlist, playlistAsMp4, concatScript, folder, linkToScript, fifo, plainFile, hits, server, serverUrl;
 const server404 = (req, res) => { hits.push(req.url); res.statusCode = 404; res.end(); };
 
 before(async () => {
@@ -47,8 +49,12 @@ before(async () => {
   writeFileSync(concatScript, `ffconcat version 1.0\nfile '${serverUrl}'\n`);
   folder = path.join(dir, 'folder');
   mkdirSync(folder);
-  linkToFixture = path.join(dir, 'link.mp4');
-  symlinkSync(concatScript, linkToFixture); // a link, to a file that exists
+  linkToScript = path.join(dir, 'link.mp4');
+  symlinkSync(concatScript, linkToScript); // a link, to a file that exists
+  plainFile = path.join(dir, 'plain.mp4'); // a regular file that the fake tools below answer for
+  writeFileSync(plainFile, 'x');
+  fifo = path.join(dir, 'pipe.mp4');
+  if (process.platform === 'win32' || spawnSync('mkfifo', [fifo]).status !== 0) fifo = null;
 });
 after(async () => {
   await new Promise((resolve) => server.close(resolve));
@@ -57,6 +63,38 @@ after(async () => {
 
 const measure = (args, env = {}) => execFileAsync(process.execPath, [MEASURE, ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
   .then((r) => ({ status: 0, ...r }), (e) => ({ status: e.code, stdout: e.stdout, stderr: e.stderr }));
+
+const realBinary = (name) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [name], { encoding: 'utf8' }).stdout.split('\n')[0].trim();
+let toolCount = 0;
+// A node script that stands in for ffmpeg or ffprobe: `body` is its source (CommonJS), run with the argv as `args`.
+function fakeTool(name, body) {
+  const file = path.join(dir, `${name}-${toolCount++}`);
+  writeFileSync(file, `#!${process.execPath}\nconst args = process.argv.slice(2);\n${body}\n`);
+  chmodSync(file, 0o755);
+  return file;
+}
+// ffmpeg and ffprobe stand-ins that log every call's argv to one file, then run the real binary.
+function recorders() {
+  const log = path.join(dir, `calls-${toolCount++}.jsonl`);
+  const wrap = (tool) => fakeTool(tool, `require('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify({ tool: ${JSON.stringify(tool)}, argv: args }) + '\\n');\n`
+    + `process.exit(require('node:child_process').spawnSync(${JSON.stringify(realBinary(tool))}, args, { stdio: 'inherit' }).status ?? 1);`);
+  const env = { FFMPEG_PATH: wrap('ffmpeg'), FFPROBE_PATH: wrap('ffprobe') };
+  const calls = () => (existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+  return { env, calls };
+}
+// Every call opens its one input behind all three clip whitelists: the file protocol only, the clip demuxers, the accepted decoders.
+function assertWhitelisted(calls, file) {
+  assert.ok(calls.length > 0, 'the tools were run');
+  for (const { tool, argv } of calls) {
+    const at = argv.indexOf('-i');
+    assert.ok(at >= 6, `${tool} has an input: ${argv.join(' ')}`);
+    assert.equal(argv.lastIndexOf('-i'), at, `${tool} has one input`);
+    assert.deepEqual(argv.slice(at - 6, at), ['-protocol_whitelist', 'file', '-format_whitelist', CLIP_DEMUXERS.join(','), '-codec_whitelist', CLIP_DECODERS.join(',')], `${tool}: ${argv.join(' ')}`);
+    assert.equal(argv[at + 1], file, `${tool} opens the file by its absolute path`);
+  }
+}
+// A probe answer that clipProblem accepts, with `width` for the frame.
+const probeAnswer = (width) => JSON.stringify({ streams: [{ index: 0, codec_type: 'video', codec_name: 'h264', width, height: 180 }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '3.0' } });
 
 test('parseScdet reads the cut times in order', () => assert.deepEqual(parseScdet(SCDET), [1, 2]));
 
@@ -94,16 +132,32 @@ test('a file with no sound has null loudness, still measured; a wide slow film i
   assert.deepEqual(r.pace, { value: 'calm', basis: 'guessed' });
 });
 
-test('a URL, a folder and a link each exit 2 with the local-files message, and no ffmpeg is started for them', async () => {
+test('in --json, digital silence is the string "-inf" and a file with no sound is null, so the two differ', () => {
+  const silent = measureReport({ probe: { duration: 3, width: 320, height: 180, fps: 30 }, cuts: [], loudness: { lufs: -Infinity, truePeak: -Infinity } });
+  const none = measureReport({ probe: { duration: 3, width: 320, height: 180, fps: 30 }, cuts: [], loudness: null });
+  assert.deepEqual(JSON.parse(reportJson(silent)).truePeakDb, { value: '-inf', basis: 'measured' });
+  assert.deepEqual(JSON.parse(reportJson(silent)).lufs, { value: '-inf', basis: 'measured' });
+  assert.deepEqual(JSON.parse(reportJson(none)).truePeakDb, { value: null, basis: 'measured' });
+  assert.equal(JSON.parse(reportJson(none)).duration.value, 3, 'numbers stay numbers');
+});
+
+test('a run that passes its time limit says so, with the limit, instead of "exited null"', async () => {
+  const result = await runTool(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], 200);
+  assert.equal(result.timedOut, true);
+  assert.equal(result.code, null);
+  assert.match(fail('ffmpeg could not measure the file', result, 300_000).message, /did not finish within 300 s/);
+  assert.match(fail('ffprobe could not read the frame rate', { code: 1, timedOut: false, kept: ['boom'] }, 10_000).message, /: boom$/);
+});
+
+test('a URL, a folder, a link and a named pipe each exit 2 with the local-files message, and no ffmpeg is started for them', async () => {
   const marker = path.join(dir, 'ffmpeg-started');
-  const fake = path.join(dir, 'fake-ffmpeg.sh');
-  writeFileSync(fake, `#!/bin/sh\necho started >> '${marker}'\nexit 1\n`);
-  chmodSync(fake, 0o755);
-  for (const arg of ['https://example.com/a.mp4', 'HTTP://example.com/a.mp4', 'rtsp://127.0.0.1/a', folder, linkToFixture, path.join(dir, 'missing.mp4')]) {
-    const run = await measure([arg], { FFMPEG_PATH: fake, FFPROBE_PATH: fake });
-    assert.equal(run.status, 2, arg);
-    assert.match(run.stderr, /local files only/, arg);
-    assert.match(run.stderr, LOCAL_ONLY, arg);
+  const fake = fakeTool('marker', `require('node:fs').appendFileSync(${JSON.stringify(marker)}, 'started\\n'); process.exit(1);`);
+  const args = ['https://example.com/a.mp4', 'HTTP://example.com/a.mp4', 'rtsp://127.0.0.1/a', folder, linkToScript, path.join(dir, 'missing.mp4')];
+  if (fifo !== null) args.push(fifo);
+  for (const arg of args) {
+    const result = await measure([arg], { FFMPEG_PATH: fake, FFPROBE_PATH: fake });
+    assert.equal(result.status, 2, arg);
+    assert.match(result.stderr, LOCAL_ONLY, arg);
   }
   assert.equal(existsSync(marker), false, 'neither ffmpeg nor ffprobe ran');
 });
@@ -113,13 +167,55 @@ test('no argument, or two, is exit 2 with the usage line', async () => {
   assert.equal((await measure([fixture, fixture])).status, 2);
 });
 
-test('a playlist, an HLS file named .mp4 and a concat script that name a URL are refused, and the URL is never opened', { skip: !hasFfmpeg }, async () => {
+test('a playlist, an HLS file named .mp4 and a concat script that name a URL are refused, the URL is never opened, and every call carries the whitelists', { skip: !hasFfmpeg }, async () => {
+  // This ffmpeg's own defaults refuse these files too, so the refusal alone would pass without the whitelists: the
+  // recording wrappers show that what was run carried them (the playlist is refused at the probe, so one call each).
   for (const arg of [playlist, playlistAsMp4, concatScript]) {
-    const run = await measure([arg]);
-    assert.equal(run.status, 2, arg);
-    assert.match(run.stderr, LOCAL_ONLY, arg);
+    const { env, calls } = recorders();
+    const result = await measure([arg], env);
+    assert.equal(result.status, 2, arg);
+    assert.match(result.stderr, LOCAL_ONLY, arg);
+    assert.deepEqual(calls().map((c) => c.tool), ['ffprobe'], arg);
+    assertWhitelisted(calls(), arg);
   }
   assert.deepEqual(hits, [], 'the local server saw no request');
+});
+
+test('a measured file is read by three calls, the probe, the frame rate and the pass, each behind the whitelists', { skip: !hasFfmpeg }, async () => {
+  const { env, calls } = recorders();
+  const result = await measure([fixture, '--json'], env);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(calls().map((c) => c.tool), ['ffprobe', 'ffprobe', 'ffmpeg']);
+  assertWhitelisted(calls(), fixture);
+});
+
+test('a frame rate ffprobe does not give prints "unknown", not the no-sound label', async () => {
+  const ffprobe = fakeTool('ffprobe', `if (args.includes('-select_streams')) console.log(JSON.stringify({ streams: [{ avg_frame_rate: '0/0', r_frame_rate: '0/0' }] }));\nelse console.log(${JSON.stringify(probeAnswer(320))});`);
+  const ffmpeg = fakeTool('ffmpeg', "console.error('[Parsed_scdet_0 @ 0x1] lavfi.scd.score: 15.6, lavfi.scd.time: 1');");
+  const result = await measure([plainFile], { FFMPEG_PATH: ffmpeg, FFPROBE_PATH: ffprobe });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /\bfps\s+unknown\n/);
+  assert.doesNotMatch(result.stdout.split('\n').find((l) => /\bfps\b/.test(l)), /no sound/);
+});
+
+test('an ffprobe that gives no JSON, or no frame rate JSON, is one error line and exit 1, not a stack', async () => {
+  const ffmpeg = fakeTool('ffmpeg', 'process.exit(1);');
+  const garbage = fakeTool('ffprobe', "console.log('not json');");
+  const garbageRate = fakeTool('ffprobe', `if (args.includes('-select_streams')) console.log('not json');\nelse console.log(${JSON.stringify(probeAnswer(320))});`);
+  for (const ffprobe of [garbage, garbageRate]) {
+    const result = await measure([plainFile], { FFMPEG_PATH: ffmpeg, FFPROBE_PATH: ffprobe });
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stderr.trim().split('\n').length, 1, result.stderr);
+    assert.doesNotMatch(result.stderr, /\n\s+at /);
+  }
+});
+
+test('a real local video the probe refuses for its size says why, not "local files only"', async () => {
+  const ffprobe = fakeTool('ffprobe', `console.log(${JSON.stringify(probeAnswer(8000))});`);
+  const result = await measure([plainFile], { FFMPEG_PATH: fakeTool('ffmpeg', 'process.exit(1);'), FFPROBE_PATH: ffprobe });
+  assert.equal(result.status, 2, result.stderr);
+  assert.doesNotMatch(result.stderr, /local files only/);
+  assert.match(result.stderr, /plain\.mp4 cannot be measured: is 8000x180; a clip's frame may be at most 4096 px a side/);
 });
 
 test('a fixture with two known cuts measures two cuts within a frame of 1 s and 2 s', { skip: !hasFfmpeg }, async () => {
