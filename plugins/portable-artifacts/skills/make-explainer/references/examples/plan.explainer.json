@@ -59,20 +59,13 @@
     },
     {
       "type": "steps",
-      "title": "The cheap model needs four tasks",
-      "label": "Model tasks",
+      "title": "Cheap model and plan mode: eight tasks",
+      "label": "Model and plan tasks",
       "items": [
         { "title": "Write the agent files", "text": "One pinned file each for Copilot and Codex; a test reads back the model key." },
         { "title": "Teach the installer", "text": "It writes the file to a user or project folder and never overwrites without --force." },
         { "title": "Add a doctor check", "text": "doctor.mjs reports a missing file and fixes it on request." },
-        { "title": "Add the hand-off line", "text": "SKILL.md names the agent; a test requires the same text in all five skills." }
-      ]
-    },
-    {
-      "type": "steps",
-      "title": "Plan mode needs four tasks",
-      "label": "Plan tasks",
-      "items": [
+        { "title": "Add the hand-off line", "text": "SKILL.md names the agent; a test requires the same text in all five skills." },
         { "title": "Add the answer sections", "text": "Decision, approval, question, review and verdict; validate rejects a bad id." },
         { "title": "Save answers in the page", "text": "Browser tests answer every item and reload the page." },
         { "title": "Check the file", "text": "answers.mjs refuses a stale hash or an unknown id; its tests cover each case." },

@@ -112,6 +112,27 @@ export function labelTitleWarnings(title, path) {
   return [{ path, message: `title ${q(title.trim())} is a label, not a claim; say what the section shows, such as "Search now ignores case"` }];
 }
 
+/** A run of this many consecutive sections of one type reads as one repeated block. */
+export const SAMENESS_RUN = 3;
+// Plan items come in runs by design (semantic.mjs PLAN_ITEM_TYPES): a run of them is not repetition.
+const RUN_EXEMPT = new Set(['decision', 'approval', 'question']);
+
+/** One warning per run of SAMENESS_RUN or more consecutive sections of one type, at the run's third section -> [{ path, message }]. */
+export function sectionSamenessWarnings(sections) {
+  const out = [];
+  let first = 0;
+  for (let i = 1; i <= sections.length; i++) {
+    if (i < sections.length && sections[i]?.type === sections[first]?.type) continue;
+    const n = i - first;
+    const type = sections[first]?.type;
+    if (n >= SAMENESS_RUN && !RUN_EXEMPT.has(type)) {
+      out.push({ path: `sections[${first + SAMENESS_RUN - 1}]`, message: `${n} ${type} sections in a row (sections ${first + 1} to ${i}); a page of one repeated block reads as a list: merge some, or put a different kind of section between them` });
+    }
+    first = i;
+  }
+  return out;
+}
+
 /**
  * Lint one prose string. `heading`: the string is a heading (title, summary).
  * `sectionTitle`: it is a section's title (also rejects "01 ..." numbering).

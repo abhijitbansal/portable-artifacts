@@ -71,9 +71,11 @@ test('planHash ignores a section\'s simple text: the toggle never affects answer
 });
 
 test('a page with no simple text hashes exactly as before: the plan example\'s hash is pinned', () => {
-  // 2b4ae5297680 is the hash of references/examples/plan.explainer.json taken before simple was left out of the hash.
+  // 2b4ae5297680 was the hash of references/examples/plan.explainer.json taken before simple was left out of the hash (the test then held it unchanged).
+  // The section-sameness lint made the example merge its last two workstream steps sections (three steps sections in a row warned),
+  // which changes the hash on purpose: 3dde46cf9047 is the hash of the merged example.
   const example = JSON.parse(readFileSync(new URL('../references/examples/plan.explainer.json', import.meta.url), 'utf8'));
-  assert.equal(planHash(example), '2b4ae5297680');
+  assert.equal(planHash(example), '3dde46cf9047');
 });
 
 test('planHash changes with an option label, a section title or the plan title', () => {

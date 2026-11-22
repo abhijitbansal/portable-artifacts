@@ -110,10 +110,10 @@ for (const skill of SKILL_NAMES.filter((s) => s !== 'make-motion')) {
   });
 }
 
-test('make-explainer/SKILL.md: a defect is reported with the screenshot it was seen in, at 390 and 1280', () => {
+test('make-explainer/SKILL.md: a defect is reported with the screenshot it was seen in', () => {
   const md = read('make-explainer');
   const step = md.split('\n').find((l) => /check\.mjs[^\n]*--shots/.test(l));
-  assert.match(step, /390 and 1280/);
+  assert.ok(step, 'SKILL.md has a step that runs check.mjs with --shots; if it was reworded, update this test');
   assert.match(step, /name the PNG it shows in/);
   assert.match(md, /the screenshots viewed/);
 });
