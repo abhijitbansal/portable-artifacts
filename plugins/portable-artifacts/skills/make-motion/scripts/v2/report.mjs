@@ -196,6 +196,16 @@ function verdict(report) {
 export const findingLine = (f) => `${f.kind}: ${f.path}: ${f.message}`;
 
 /**
+ * The text form of `--outline`: a line per shot, the note, then a line per finding with the creative ones last (the
+ * outline rules are creative), so the last line of the text starts `creative: ` whenever any outline rule fired,
+ * whatever else the report carries.
+ */
+export function outlineText(outline, note, findings) {
+  const creativeLast = [...findings].sort((a, b) => (a.kind === 'creative') - (b.kind === 'creative'));
+  return [...outlineLines(outline), ...(note ? [`note: ${note}`] : []), ...creativeLast.map(findingLine)].join('\n');
+}
+
+/**
  * The text form of a report: `valid`, `invalid`, `failed` or `interrupted` (verdict), a line per finding, then where
  * things went and the frame counts.
  */

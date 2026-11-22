@@ -9,6 +9,7 @@ import { registries } from '../../engine/registry.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
+import { outlineText } from '../../scripts/v2/report.mjs';
 import { RULES } from '../../engine/review/rules.mjs';
 import { COMPOSITION_RULES } from '../../engine/review/frame.mjs';
 import {
@@ -72,6 +73,14 @@ test('a longer run of one kind is one finding, not one per shot', () => {
   assert.equal(samenessOf(film([null, null, null, null], ['list', 'list', 'list', 'list', 'list'])).length, 1);
 });
 
+test('one different shot breaks a run of one kind: two and three, not five', () => {
+  assert.deepEqual(samenessOf(film([null, null, null, null], ['list', 'list', 'number', 'list', 'list'])), []);
+  const [f, ...rest] = samenessOf(film([null, null, null, null, null], ['list', 'list', 'number', 'list', 'list', 'list']));
+  assert.deepEqual(rest, []);
+  assert.equal(f.path, 'shots[5].show'); assert.equal(f.node, 'kind:list');
+  assert.match(f.message, /3 shots in a row \("s3" to "s5"\)/);
+});
+
 test('the same windowed cut three seams running is a finding at the third, with the cuts to use instead', () => {
   const [f, ...rest] = samenessOf(film(['slide', 'slide', 'slide'])); // shots 1 to 3 arrive by a slide
   assert.deepEqual(rest, []);
@@ -116,6 +125,20 @@ test('capCreative keeps the earliest two whatever order it is given, and caps ea
   assert.equal(kept.find((f) => f.shot === 's1').message, 'm');
 });
 
+test('capCreative caps each sameness form on its own, so kind runs cannot hide the cut run and its suggested cuts', () => {
+  const at = (node, t, extra = {}) => ({ kind: 'creative', rule: 'sameness', node, shot: `s${t}`, t, message: node, ...extra });
+  const cut = at('cut:slide', 9, { suggest: { cuts: ['wipe'] } });
+  const kept = capCreative([at('kind:a', 1), at('kind:b', 2), at('kind:c', 3), at('move:x', 4), cut]);
+  assert.deepEqual(kept.map((f) => f.node), ['kind:a', 'kind:b', 'move:x', 'cut:slide']);
+  assert.deepEqual(kept.at(-1), cut, 'the cut run keeps its message and its suggestion');
+  assert.equal(kept[1].message, 'kind:b (and 1 more: s3)');
+});
+
+test('the "and n more" count and the shots it lists agree, a shot named once for each finding left out', () => {
+  const found = [1, 2, 3, 4].map((t) => ({ kind: 'creative', rule: 'sameness', node: 'kind:a', shot: t < 3 ? `s${t}` : 's9', t, message: 'm' }));
+  assert.ok(capCreative(found)[1].message.endsWith(' (and 2 more: s9, s9)'));
+});
+
 test('capCreative leaves an uncapped rule, and the two composition rules, alone', () => {
   for (const rule of ['still', 'dead-space']) assert.equal(capCreative([1, 2, 3].map((t) => ({ kind: 'creative', rule, shot: 'a', t, message: 'm' }))).length, 3, rule);
 });
@@ -127,13 +150,24 @@ test('capCreative does not change its input', () => {
   assert.equal(JSON.stringify(input), before);
 });
 
+test('the text form of --outline ends on a creative line however many other findings the report holds', () => {
+  const lines = (outlineText([{ id: 'a', show: 'free', start: 0, end: 2, narration: '' }], 'a note', [
+    { kind: 'creative', path: 'shots[3].cut', message: 'first creative' },
+    { kind: 'mechanical', path: 'shots[0]', message: 'pre-existing' },
+    { kind: 'creative', path: 'shots[4].show', message: 'second creative' },
+  ])).split('\n');
+  assert.deepEqual(lines.slice(1), ['note: a note', 'mechanical: shots[0]: pre-existing', 'creative: shots[3].cut: first creative', 'creative: shots[4].show: second creative']);
+  assert.ok(lines.at(-1).startsWith('creative: '));
+});
+
 test('every capped rule is capped by exactly one function', () => {
   for (const { id } of RULES.filter((r) => r.capped)) assert.notEqual(COMPOSITION_RULES.includes(id), CAPPED_HERE.includes(id), id);
   for (const id of CAPPED_HERE) assert.equal(RULES.find((r) => r.id === id)?.capped, true, `${id} is registered as capped`);
 });
 
 // The outline findings of the shipped example films (29 films, the calibration table of references/calibration.md): "<rule> <node> <path>".
-// No film raises cut-variety, and none has a windowed cut three seams running. Every film not named here raises nothing.
+// No film raises cut-variety. Every film not named here raises nothing. Each sameness form is capped on its own, so no
+// film here is cut by the cap (the three forms of one film are three entries at most).
 const KNOWN = Object.freeze({
   // true finding: 4 and 3 statement shots in a row (a cut demo that names the cuts on plain statements)
   'cuts-pop.json': ['sameness kind:statement shots[2].show', 'sameness kind:statement shots[14].show'],
@@ -141,8 +175,8 @@ const KNOWN = Object.freeze({
   'showreel-pro.json': ['sameness kind:clipping shots[4].show', 'sameness move:highlight shots[4].on'],
   // true finding: 5 media shots with one move in a row; F1b rewrites the showreels
   'showreel-viral.json': ['sameness kind:media shots[4].show', 'sameness move:sweep shots[4].on'],
-  // true finding: 7 media shots in a row, then 3 clipping shots (the cap leaves these two of the film's findings)
-  'whats-new.json': ['sameness kind:media shots[12].show', 'sameness kind:clipping shots[22].show'],
+  // true finding: 7 media shots in a row, then 3 clipping shots that also arrive by one slide three times running
+  'whats-new.json': ['sameness kind:media shots[12].show', 'sameness kind:clipping shots[22].show', 'sameness cut:slide shots[22].cut'],
 });
 
 test('the shipped example films raise only the outline findings named in KNOWN, and the two showreels are among them', () => {
@@ -150,7 +184,7 @@ test('the shipped example films raise only the outline findings named in KNOWN, 
   assert.equal(files.length, 29, 'a film added to the examples is calibrated into references/calibration.md first');
   for (const name of files) {
     const { film: f, timeline } = loadFilm(path.join(EXAMPLES, name));
-    const found = capCreative(outlineFindings(f, timeline)).map((x) => `${x.rule} ${x.node} ${x.path}`);
+    const found = outlineFindings(f, timeline).map((x) => `${x.rule} ${x.node} ${x.path}`);
     assert.deepEqual(found, KNOWN[name] ?? [], name);
   }
   assert.ok(KNOWN['showreel-pro.json'] && KNOWN['showreel-viral.json']);

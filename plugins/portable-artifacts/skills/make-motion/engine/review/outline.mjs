@@ -10,7 +10,7 @@ export const MIN_SEAMS = 4;
 export const REPEATED_CUT_SHARE = 2 / 3;
 /** `sameness` fires on this many shots in a row, or more, that share a kind, a windowed cut or a move. */
 export const SAME_RUN = 3;
-/** Findings of one capped rule a film keeps; the rest are counted in the last one kept. */
+/** Findings of one capped rule a film keeps (of one form, for `sameness`); the rest are counted in the last one kept. */
 export const CREATIVE_CAP = 2;
 /** The rules `capCreative` caps. W2's composition rules (`COMPOSITION_RULES`, frame.mjs) are capped by `capComposition`, by measure. A later rule that is capped by time appends its id. */
 export const CAPPED_HERE = Object.freeze(['cut-variety', 'sameness']);
@@ -96,26 +96,31 @@ export function samenessFindings(film, timeline) {
 /** Both rules' findings, in time order. */
 export const outlineFindings = (film, timeline) => [...cutVarietyFindings(film, timeline), ...samenessFindings(film, timeline)].sort((a, b) => a.t - b.t);
 
+// What a cap counts together: a rule's findings, and for `sameness` each form (the `kind:`, `cut:` or `move:` of its node) on
+// its own, so a run of the same kind can never hide the run of one cut, the only one that carries `suggest.cuts`.
+const capGroup = (f) => (f.rule === 'sameness' ? `sameness ${String(f.node ?? '').split(':')[0]}` : f.rule);
+
 /**
- * At most `CREATIVE_CAP` findings of each rule in `CAPPED_HERE`: the earliest stay, in their place in the list, and the
- * last of them says how many were left out and in which shots. Every other finding passes through untouched; the input
- * is not changed.
+ * At most `CREATIVE_CAP` findings of each rule in `CAPPED_HERE` (of each form, for `sameness`): the earliest stay, in their
+ * place in the list, and the last of them says how many were left out and in which shots, one id for each. Every other
+ * finding passes through untouched; the input is not changed.
  */
 export function capCreative(findings) {
+  const groups = new Map();
+  for (const f of [...findings].sort((a, b) => a.t - b.t)) {
+    if (!CAPPED_HERE.includes(f.rule)) continue;
+    const key = capGroup(f);
+    groups.set(key, [...(groups.get(key) ?? []), f]);
+  }
   const dropped = new Set();
-  const lastKept = new Map(); // rule -> the finding that carries the count
-  const leftOut = new Map(); // rule -> findings past the cap, in time order
-  for (const rule of CAPPED_HERE) {
-    const ofRule = findings.filter((f) => f.rule === rule).sort((a, b) => a.t - b.t);
-    if (ofRule.length <= CREATIVE_CAP) continue;
-    ofRule.slice(CREATIVE_CAP).forEach((f) => dropped.add(f));
-    lastKept.set(ofRule[CREATIVE_CAP - 1], rule);
-    leftOut.set(rule, ofRule.slice(CREATIVE_CAP));
+  const lastKept = new Map(); // the finding that carries the count -> the findings left out
+  for (const group of groups.values()) {
+    if (group.length <= CREATIVE_CAP) continue;
+    group.slice(CREATIVE_CAP).forEach((f) => dropped.add(f));
+    lastKept.set(group[CREATIVE_CAP - 1], group.slice(CREATIVE_CAP));
   }
   return findings.filter((f) => !dropped.has(f)).map((f) => {
-    const rule = lastKept.get(f);
-    if (rule === undefined) return f;
-    const more = leftOut.get(rule);
-    return { ...f, message: `${f.message} (and ${more.length} more: ${[...new Set(more.map((m) => m.shot))].join(', ')})` };
+    const more = lastKept.get(f);
+    return more === undefined ? f : { ...f, message: `${f.message} (and ${more.length} more: ${more.map((m) => m.shot).join(', ')})` };
   });
 }

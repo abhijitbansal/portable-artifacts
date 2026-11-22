@@ -496,7 +496,7 @@ async function execute(options, state, io) {
     const drawn = outlineTimeline(loaded, timeline);
     Object.assign(state, { outline: outlineOf(film, drawn.timeline), outlineNote: outlineNote(film, options, drawn.snapped) });
     // the two spec-only rules: creative, so `ok` and the exit code stay as they were
-    state.findings =[...state.findings, ...capCreative(outlineFindings(film, drawn.timeline)).map(reviewFinding)];
+    state.findings = [...state.findings, ...capCreative(outlineFindings(film, drawn.timeline)).map(reviewFinding)];
     return;
   }
   // A film's video clips are probed, and their frames taken from (or decoded into) the cache beside the video (clips.mjs).

@@ -1,6 +1,6 @@
 # How `dead-space`, `scale-contrast`, `cut-variety` and `sameness` were calibrated
 
-The two composition findings and the two outline findings are the only rules whose threshold comes from a table of ours (the `measured` rows in `rules.md`); the outline rules are at the end of this page. This page is that table, cut down to its final numbers. The composition constants are in `engine/looks/fill.mjs` (`DEFAULT_FILL`) and in the `fill` data of the `desk` and `ledger` looks (`engine/looks/desk.mjs`, `engine/looks/ledger.mjs`); the outline constants are in `engine/review/outline.mjs`. A test holds the numbers `rules.md` states equal to the composition constants; this page records where they came from, and is not read by the code.
+The two composition findings and the two outline findings are the only rules whose threshold comes from a table of ours (the `measured` rows in `rules.md`); the outline rules have their own section below. This page is that table, cut down to its final numbers. The composition constants are in `engine/looks/fill.mjs` (`DEFAULT_FILL`) and in the `fill` data of the `desk` and `ledger` looks (`engine/looks/desk.mjs`, `engine/looks/ledger.mjs`); the outline constants are in `engine/review/outline.mjs`. A test holds the numbers `rules.md` states equal to the constants in both files; this page records where they came from, and is not read by the code.
 
 ## Method
 
@@ -52,16 +52,9 @@ Reads empty, kept: `look-cosmos` `distance` (band 0.394, the lower 40% bare; the
 
 Removed from the "reads empty" set after viewing: `look-cosmos` `giants` (empty only while its bars grow, which a resting-frame rule cannot see), and `whats-new` `hook`, `locked`, `same-everywhere` and `keepwarm` (statements and lists set flush left, which read as composed).
 
-## Known limits
+## The outline rules, `cut-variety` and `sameness`
 
-- The threshold holds for the measure it was computed on. Changing what counts as an element (for example counting fixed overlays) moves the band by 0.05 or more in 17 of the 91 shots.
-- A resting-frame rule cannot see a frame that reads empty only while its elements arrive.
-- `desk`'s 16:9 statement and 16:9 timeline are let through by the 0.40 band although viewed as sparse; look at them on the sheets even when no finding is printed.
-- Two small far-apart elements in one group union into one large box; measured on 415 elements, it moved no threshold.
-
-# How `cut-variety` and `sameness` were calibrated
-
-Both rules read the spec alone, so the table is a run of `node scripts/make.mjs references/examples/v2/<film>.json --outline --json` on every example film (29 films), counting the findings of each rule after the cap of 2 a film. The constants are `MIN_SEAMS` 4 (a film with fewer cuts is never judged: three cuts make any one of them "more than two thirds"), `REPEATED_CUT_SHARE` 2/3 and `SAME_RUN` 3, in `engine/review/outline.mjs`. The plain `cut` has no window and never counts as the repeated cut.
+Both rules read the spec alone, so the table is a run of `node scripts/make.mjs references/examples/v2/<film>.json --outline --json` on every example film (29 films), counting the findings of each rule before any cap (`sameness` is capped at 2 a film for each of its three forms, kind, cut and move, which no example reaches). The constants are `MIN_SEAMS` 4 (a film with fewer cuts is never judged: three cuts make any one of them "more than two thirds"), `REPEATED_CUT_SHARE` 2/3 and `SAME_RUN` 3, in `engine/review/outline.mjs`. The plain `cut` has no window and never counts as the repeated cut.
 
 The bound is the one the composition rules use: if more than a third of the films were flagged, the rule would teach the agent to ignore it. Result: `cut-variety` flags 0 of 29 films, `sameness` flags 4 of 29 (14%), so both stay.
 
@@ -70,12 +63,16 @@ The bound is the one the composition rules use: if more than a third of the film
 | `cuts-pop` | 16 | no | 2 | 4 `statement` shots in a row, then 3 |
 | `showreel-pro` | 9 | no | 2 | 5 `clipping` shots in a row, and the same move (`highlight`) on all 5 |
 | `showreel-viral` | 8 | no | 2 | 5 `media` shots in a row, and the same move (`sweep`) on all 5 |
-| `whats-new` | 30 | no | 2 | 7 `media` shots in a row, then 3 `clipping` shots (a third finding, from the `redrawn-scene` run, is left out by the cap) |
+| `whats-new` | 30 | no | 3 | 7 `media` shots in a row, then 3 `clipping` shots, which also arrive by one slide (`redrawn-diagram` to `redrawn-scene`) three times running |
 | the other 25 films | 2 to 16 | no | 0 | |
 
-Each finding is a true one: a run of one kind (in the showreels, with one move too). The films are left as they are, and `test/v2/review-outline.test.mjs` lists the findings (`KNOWN`). No example has a windowed cut three seams running, so the cut form of `sameness`, and `cut-variety` itself, are held by their unit tests and not by an example.
+Each finding is a true one: a run of one kind (in the showreels, with one move too). The films are left as they are, and `test/v2/review-outline.test.mjs` lists the findings (`KNOWN`). `whats-new` is the only example with a run of one windowed cut, so `cut-variety` itself is held by its unit tests and not by an example.
 
 ## Known limits
 
+- The threshold holds for the measure it was computed on. Changing what counts as an element (for example counting fixed overlays) moves the band by 0.05 or more in 17 of the 91 shots.
+- A resting-frame rule cannot see a frame that reads empty only while its elements arrive.
+- `desk`'s 16:9 statement and 16:9 timeline are let through by the 0.40 band although viewed as sparse; look at them on the sheets even when no finding is printed.
+- Two small far-apart elements in one group union into one large box; measured on 415 elements, it moved no threshold.
 - `SAME_RUN` 3 was kept although both showreels run 5 shots of one kind: raising it to 6 would flag only `whats-new` (1 of 29), 8 would flag none. The showreels are a demonstration of one picture kind on five pictures, which is the case the rule exists to ask about.
 - `cut-variety` has never fired on a shipped film, so its 2/3 share is the plan's number, tested only on built films.

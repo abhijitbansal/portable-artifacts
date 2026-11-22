@@ -920,6 +920,24 @@ test('reviewFilm caps the composition findings of a film at three and says how m
   assert.match(composition.find((x) => /more composition/.test(x.message)).message, /\(5 more composition findings are left out; fix the worst first\)/);
 });
 
+// The full review runs the two outline rules and caps them: 11 free shots, a slide into each of the last 10, a circle on
+// shots 0 to 2, 4 to 6 and 8 to 10. That is one cut-variety, and five sameness runs: the kind, the slide, and three of the
+// circle, of which the cap keeps two.
+test('reviewFilm runs the outline rules over the film and caps each sameness form at two, the last saying how many more', async () => {
+  const circle = [{ at: 0.5, do: 'circle' }];
+  const f = film(Array.from({ length: 11 }, (_, i) => ({ id: `s${i}`, hold: 2, show: 'free', ...(i > 0 ? { cut: 'slide' } : {}), ...(i % 4 !== 3 ? { on: circle } : {}) })));
+  const found = await reviewFilm({ session: stubSession(f, [bar('block', [96, 96, 1728, 800])]) });
+  const variety = found.filter((x) => x.rule === 'cut-variety');
+  assert.equal(variety.length, 1);
+  assert.deepEqual(variety[0].suggest.cuts, registries.looks.get('desk').cuts.filter((cut) => cut !== 'slide'));
+  const same = found.filter((x) => x.rule === 'sameness');
+  assert.equal(same.length, 4, same.map((x) => x.message).join('\n'));
+  assert.deepEqual(same.map((x) => x.path).sort(), ['shots[2].on', 'shots[2].show', 'shots[3].cut', 'shots[6].on']);
+  assert.match(same.find((x) => x.path === 'shots[6].on').message, / \(and 1 more: s10\)$/);
+  assert.deepEqual(same.find((x) => x.path === 'shots[3].cut').suggest.cuts, variety[0].suggest.cuts, 'the cut run keeps its suggestion');
+  assert.deepEqual(found.map((x) => x.t), [...found.map((x) => x.t)].sort((a, b) => a - b), 'still in time order');
+});
+
 test('reviewFilm gives a film whose every frame holds a full block no composition finding (a smoke test; resting-frame-only is pinned by the frameContext and review-composition tests)', async () => {
   const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 2, show: 'free' }]);
   const found = await reviewFilm({ session: stubSession(f, [bar('block', [96, 96, 1728, 800])]) });

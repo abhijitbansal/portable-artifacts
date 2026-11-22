@@ -8,7 +8,7 @@ import { runMake } from './run.mjs';
 import { readingLines } from './voice/reading.mjs';
 import { runBatch } from './batch.mjs';
 import { runPreview } from './viewer-run.mjs';
-import { describeError, errorReport, findingLine, formatText, outlineLines } from './report.mjs';
+import { describeError, errorReport, formatText, outlineText } from './report.mjs';
 
 const EXIT_MACHINE = 2;
 const EXIT_INTERRUPTED = 130;
@@ -27,7 +27,7 @@ function printResult(options, { report, sheetsDir, outline, outlineNote, reading
   if (reading) return say(options.json ? JSON.stringify({ ...report, reading }) : readingLines(reading).join('\n'));
   const note = outlineNote ? { outlineNote } : {};
   if (options.json) return say(JSON.stringify(outline ? { ...report, outline, ...note } : report));
-  if (outline) return say([...outlineLines(outline), ...(outlineNote ? [`note: ${outlineNote}`] : []), ...report.findings.map(findingLine)].join('\n'));
+  if (outline) return say(outlineText(outline, outlineNote, report.findings));
   if (report.error) log(`make: ${report.error.message}${report.error.hint ? `; ${report.error.hint}` : ''}`);
   if (report.error && report.timed === null) return undefined; // stopped before there was anything to report in text
   return say(formatText(report, { sheetsDir }));
