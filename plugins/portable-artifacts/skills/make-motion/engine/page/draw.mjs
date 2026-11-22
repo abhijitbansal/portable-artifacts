@@ -84,7 +84,7 @@ function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   // glyphs still arriving: each glyph's halo is stroked with the glyph (its opacity, offset and scale), under the letters;
   // a word drawn whole, or with every glyph at rest, has its halo stroked whole. A word the glyph path cannot draw
   // faithfully is drawn whole with the mean of its glyph values, so it arrives with its letters (glyph-draw.mjs glyphRollup).
-  const run = glyphRunOf(ctx, word, tracks, () => ({ spacing: trackingPx(drawnFont(type.font, tracks)), resting: type.font }));
+  const run = glyphRunOf(ctx, word, tracks, () => ({ spacing: trackingPx(drawnFont(type.font, tracks)), base: type.font, reserved: reservedFont(type.font, type.reserve) }));
   if (run?.rolled) {
     const { opacity: rolledOpacity, dx, dy, scale } = run.rolled;
     if (unit01(rolledOpacity) <= 0) return ctx.restore();

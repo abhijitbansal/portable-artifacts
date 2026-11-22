@@ -19,6 +19,7 @@ const widthOf = (text) => {
 
 // The shapes a fillText leaves, as [shape, x]: a word drawn whole is one shape per glyph at the whole word's own places,
 // except a ligature, which is one shape.
+let failWeight = null; // when set, a whole word checked in this font weight differs from its letters apart (see the scratch canvas)
 let failPhase = null; // when set, a whole word drawn at this quarter pixel leaves one more shape than its letters apart
 function shapesOf(text, x) {
   if (text === 'fi') return [['LIG', x]];
@@ -68,7 +69,11 @@ class FakeOffscreenCanvas {
     ctx.drawn = []; // every fillText of the check, kept after clearRect: the whole-word draw comes first
     const fill = ctx.fillText;
     ctx.fillText = (text, x, y) => { ctx.drawn.push({ text, x }); fill(text, x, y); };
-    ctx.getImageData = () => ({ data: new Uint8ClampedArray(Buffer.from(JSON.stringify(clear.filter((c) => c.op === 'fillText').flatMap((c) => shapesOf(c.text, c.x))))) });
+    // failWeight: a whole word drawn in this weight leaves one more shape than its letters apart (a face whose heavy instance
+    // shapes a word differently)
+    const heavy = () => failWeight !== null && ctx.font.startsWith(`${failWeight} `);
+    const shapes = (c) => [...(heavy() && graphemesOf(c.text).length > 1 ? [['HEAVY', c.x]] : []), ...shapesOf(c.text, c.x)];
+    ctx.getImageData = () => ({ data: new Uint8ClampedArray(Buffer.from(JSON.stringify(clear.filter((c) => c.op === 'fillText').flatMap(shapes)))) });
     ctx.clearRect = () => { clear.length = 0; };
     return ctx;
   }
@@ -80,12 +85,12 @@ const GLOW = { color: '#ffd24a', alpha: 0.8, radius: 12 };
 const ID = { opacity: 1, x: 0, y: 0, scale: 1 };
 
 // One word on one line at (0, 0), centred on the origin (its left is -width / 2), drawn through drawFrame.
-function drawWord(text, wordTracks, { glow, shift = 0, font = FONT } = {}) {
+function drawWord(text, wordTracks, { glow, shift = 0, font = FONT, reserve } = {}) {
   const ctx = fakeContext();
   const width = widthOf(text);
   const node = {
     type: 'text', id: 't', x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, reveal: 1, blur: 0, children: [],
-    props: { font, layout: { lines: [{ x: 0, y: 0, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }] }, ...(glow ? { glow } : {}) },
+    props: { font, layout: { lines: [{ x: 0, y: 0, words: [{ text, x: -width / 2 + shift, width, index: 0 }] }], ...(reserve ? { reserve } : {}) }, ...(glow ? { glow } : {}) },
     words: [wordTracks],
   };
   drawFrame(ctx, [node], { canvas: { w: 1000, h: 400 } });
@@ -264,7 +269,21 @@ test('a word that differs at one quarter pixel only is drawn whole at every offs
   }
 });
 
-test('the verdict is made on the resting font: a weight sweep keeps one check', () => {
+test('a word passes only if it passes at its emphasis weight too: a reserve weight that fails draws it whole', () => {
+  const glyphs = [{ ...ID, opacity: 0.5 }, ID, ID];
+  const reserve = { weight: 900 };
+  failWeight = 900;
+  try {
+    // the base font (700) alone would pass; the reserved font (900), the heaviest weight an emphasis sweep reaches, does not
+    assert.deepEqual(drawWord('DEF', word({ glyphs }), { reserve }).fills.map((f) => f.text), ['DEF']);
+    assert.deepEqual(drawWord('DEF', word({ glyphs })).fills.map((f) => f.text), ['D', 'E', 'F'], 'with no reserve only the base font counts');
+    assert.deepEqual(drawWord('GHI', word({ glyphs }), { reserve: { weight: 800 } }).fills.map((f) => f.text), ['G', 'H', 'I'], 'a reserve weight that passes keeps the glyph path');
+  } finally {
+    failWeight = null;
+  }
+});
+
+test('the verdict is made on the base font: a weight sweep keeps one check', () => {
   const before = checks();
   const sweep = [400, 500, 600, 700].map((weight) => drawWord('XYZ', word({ weight, glyphs: [{ ...ID, opacity: 0.5 }, ID, ID] })).fills.map((f) => f.text).join(''));
   assert.deepEqual(sweep, Array(4).fill('XYZ'));

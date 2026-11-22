@@ -12,9 +12,10 @@
 //    form, a kern or a mark that moves a glyph). That is judged by drawing the word both ways on a scratch canvas and
 //    comparing the pictures, not guessed from advances: a ligature's advance can equal the sum of its letters'.
 // The verdict is one per word for the whole film (faithfulOf): the word must pass at all four quarter-pixel phases of its
-// origin, on the text's RESTING font (not the font a weight sweep has reached), so it cannot change while the word moves,
-// sweeps or settles. It is cached on that font, the shaping settings and the text. It reads how this browser rasterises, so
-// which words are drawn letter by letter can differ between systems.
+// origin, on the text's base font AND on its reserved font (the heaviest weight an emphasis sweep reaches, which an
+// emphasised word settles in), never on the font a sweep happens to be at, so it cannot change while the word moves, sweeps
+// or settles. It is cached on that font, the shaping settings and the text. It reads how this browser rasterises, so which
+// words are drawn letter by letter can differ between systems.
 import { applyFont, trackingPx, WORD_IDENTITY } from './text-style.mjs';
 
 const HALF = 2;
@@ -183,10 +184,11 @@ const verdicts = new Map();
 
 /**
  * Whether `text` can be drawn glyph by glyph faithfully: not right-to-left, and the same picture as the whole word at all four
- * quarter-pixel phases of its origin. One verdict per word and resting font, cached on that font, its tracking, the shaping
- * settings and the text; it does not depend on where the word is, how it moves, or what weight a sweep has reached.
+ * quarter-pixel phases of its origin. One verdict per word and font, cached on that font, its tracking, the shaping
+ * settings and the text; it does not depend on where the word is, how it moves, or what weight a sweep has reached. glyphRunOf
+ * asks it of the text's base font and of its reserved font, and a word is faithful only if both pass.
  * @param {CanvasRenderingContext2D} ctx read for the shaping settings only
- * @param {object} resting the text's font at rest ({ family, size, weight?, width?, tracking? })
+ * @param {object} resting one fixed font of the text, not a swept one ({ family, size, weight?, width?, tracking? })
  * @param {string} text
  */
 export function faithfulOf(ctx, resting, text) {
@@ -229,14 +231,15 @@ export function placementOf(ctx, text, spacing = ctx.letterSpacing) {
  * @param {CanvasRenderingContext2D} ctx the context with the word's font set
  * @param {{ text: string }} word
  * @param {{ glyphs?: object[] }} tracks the word's sampled tracks; `glyphs[k]` is grapheme k's { opacity, x, y, scale }
- * @param {() => { spacing: string, resting: object }} styleOf the letter spacing the word is drawn with (CSS px) and the text's
- *   font at rest; called only when the word has glyph values
+ * @param {() => { spacing: string, base: object, reserved?: object }} styleOf the letter spacing the word is drawn with (CSS px),
+ *   the text's base font and its reserved font (the heaviest weight an emphasis sweep reaches; the base font when none);
+ *   called only when the word has glyph values
  */
 export function glyphRunOf(ctx, word, tracks, styleOf) {
   if (!glyphPath.force && !tracks.glyphs) return null;
-  const { spacing, resting } = styleOf();
+  const { spacing, base, reserved = base } = styleOf();
   const placement = placementOf(ctx, word.text, spacing);
-  const faithful = faithfulOf(ctx, resting, word.text);
+  const faithful = faithfulOf(ctx, base, word.text) && (reserved === base || faithfulOf(ctx, reserved, word.text));
   const glyphs = placement.chars.map((_, k) => (glyphPath.force ? glyphPath.values : normalise(tracks.glyphs[k])));
   const settled = glyphs.every(isIdentityGlyph);
   if (glyphPath.force) glyphPath.stats[faithful ? 'glyph' : 'rejected'].add(word.text);
