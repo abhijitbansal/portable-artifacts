@@ -12,6 +12,7 @@ import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { openSession, launchRunBrowser } from '../../scripts/v2/session.mjs';
 import { guardNetwork } from '../../scripts/lib/browser.mjs';
 import { runPreview, openUrl } from '../../scripts/v2/viewer-run.mjs';
+import { startViewer } from '../../scripts/v2/viewer.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const BAR = (fill) => ({ type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill } });
@@ -135,6 +136,94 @@ test('an edit reloads the page; an invalid edit shows the validator\'s line; a v
   await page.waitForFunction(READY);
   assert.equal(await page.evaluate(() => document.body.classList.contains('invalid')), false);
   assert.equal(await page.textContent('#provenance'), '', 'provenance: false leaves the footer empty');
+});
+
+// ---- the playhead through a reload (engine/page/playhead.mjs) ----
+
+// The same film with every shot held for `hold` seconds.
+const heldFilm = (ground, hold, extra = {}) => { const f = filmOf(ground, extra); return { ...f, shots: f.shots.map((s) => ({ ...s, hold })) }; };
+const seekTo = async (n) => {
+  await page.$eval('#scrub', (el, i) => { el.value = String(i); el.dispatchEvent(new Event('input')); }, n);
+  await frameShown(n);
+};
+// The pixels frame n of the film on disk has on the render page.
+const hashOnRenderPage = async (n) => {
+  const session = await openSession(loadFilm(filmFile()), { browser });
+  try {
+    await session.page.evaluate((i) => window.__seek(i), n);
+    return await sourceHash(session.page);
+  } finally {
+    await session.close();
+  }
+};
+// An edit is picked up on the next poll (one second): wait for the reload, then for the page to be ready.
+const afterEdit = async (write) => {
+  const reload = page.waitForEvent('load');
+  write();
+  await reload;
+  await page.waitForFunction(READY);
+};
+
+test('an edit reloads the page on the frame it was showing', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await seekTo(40);
+  await afterEdit(() => writeFilm(filmOf('#dfe6ee'))); // the same length, a new ground
+  await page.waitForFunction(() => window.__viewer?.p.frame === 40 && document.body.dataset.ready === 'true' && location.hash === '#f=40&p=0');
+  assert.equal(await sourceHash(page), await hashOnRenderPage(40), "the new film's frame 40");
+});
+
+test('a film that got shorter clamps to its last frame', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await seekTo(40);
+  await afterEdit(() => writeFilm({ ...filmOf('#dfe6ee'), shots: filmOf('#dfe6ee').shots.slice(0, 1) })); // one shot of a second: 30 frames (a hold is at least 1)
+  assert.equal(await page.evaluate(() => document.body.dataset.ready), 'true');
+  assert.equal(await page.evaluate(() => window.__viewer.p.frame), 29);
+  assert.equal(await page.evaluate(() => document.body.classList.contains('invalid')), false);
+});
+
+test('an edit that does not validate keeps the frame for the edit that fixes it', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await afterEdit(() => writeFilm(filmOf('#f3eee3'))); // back to 60 frames after the shorter film
+  await seekTo(20);
+  await afterEdit(() => writeFileSync(filmFile(), JSON.stringify({ ...filmOf('#c43d2f'), shots: [{ id: 'a', show: 'free', hold: -1, nodes: [] }] })));
+  assert.equal(await page.evaluate(() => document.body.classList.contains('invalid')), true);
+  await afterEdit(() => writeFilm(filmOf('#dfe6ee')));
+  assert.equal(await page.evaluate(() => document.body.classList.contains('invalid')), false);
+  await page.waitForFunction(() => window.__viewer?.p.frame === 20 && !window.__viewer.p.busy);
+});
+
+test('a playing silent film is playing again after the reload', async (t) => {
+  if (!browser) return t.skip('no browser');
+  await afterEdit(() => writeFilm(heldFilm('#f3eee3', 3))); // 180 frames: it cannot finish between the poll and the check
+  await seekTo(0);
+  await page.click('#play');
+  await afterEdit(() => writeFilm(heldFilm('#dfe6ee', 3)));
+  assert.equal(await page.evaluate(() => window.__viewer.p.playing), true);
+  assert.equal(await page.textContent('#play'), 'Pause');
+  await page.click('#play'); // leave it paused for the next test
+  assert.equal(await page.evaluate(() => window.__viewer.p.playing), false);
+});
+
+test('when the browser refuses to play the sound, the player is paused, not stuck', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const audioDir = mkdtempSync(path.join(tmpdir(), 'mm-viewer-audio-'));
+  writeFileSync(path.join(audioDir, 'film.json'), JSON.stringify(filmOf('#f3eee3')));
+  writeFileSync(path.join(audioDir, 'sound.m4a'), Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251)));
+  const viewer = await startViewer({ loaded: loadFilm(path.join(audioDir, 'film.json')), audio: path.join(audioDir, 'sound.m4a') });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  try {
+    await context.addInitScript(() => { HTMLMediaElement.prototype.play = () => Promise.reject(new Error('NotAllowedError')); });
+    const audioPage = await context.newPage();
+    await audioPage.goto(`${viewer.url}#f=10&p=1`);
+    await audioPage.waitForFunction(READY);
+    await audioPage.waitForFunction(() => window.__viewer.p.playing === false && !window.__viewer.p.busy);
+    assert.equal(await audioPage.textContent('#play'), 'Play');
+    assert.equal(await audioPage.evaluate(() => window.__viewer.p.frame), 10);
+  } finally {
+    await context.close();
+    await viewer.close();
+    rmSync(audioDir, { recursive: true, force: true });
+  }
 });
 
 test('no request left the preview\'s origin', (t) => {

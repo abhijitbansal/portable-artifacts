@@ -2,9 +2,11 @@
 // __seek, __snapshot), which draws every frame exactly as a render does. A scrubber over frames, play and pause, shot
 // markers, Space and the arrow keys (one frame), M to mute, click-to-copy (hit.mjs), the provenance footer, and the
 // validator's lines in place of the film when an edit does not validate. It polls /preview/state and reloads on a new
-// version. Playback follows the audio clock when the film has sound, else a frame timer; both are approximate.
+// version, keeping its frame and play state through the reload (playhead.mjs). Playback follows the audio clock when
+// the film has sound, else a frame timer; both are approximate.
 // Every URL here is same-origin.
 import { hitTest, copyLine } from './hit.mjs';
+import { encodePlayhead, decodePlayhead } from './playhead.mjs';
 
 const POLL_MS = 1000;
 const TOAST_MS = 2000;
@@ -23,11 +25,15 @@ function showErrors(lines) {
 }
 
 // Reload when the server says a new version is up (a new film, or an edit that failed: its lines are then shown).
+// A page with a player writes its frame and play state into the fragment first, which the reload keeps; the error
+// page has no player and leaves the fragment as it is, so the edit that fixes the film comes back to the same frame.
 function poll(version) {
   setInterval(async () => {
     try {
       const state = await getJson('/preview/state');
-      if (state.version !== version) location.reload();
+      if (state.version === version) return;
+      if (window.__viewer) history.replaceState(null, '', encodePlayhead({ frame: window.__viewer.p.frame, playing: window.__viewer.p.playing }));
+      location.reload();
     } catch {
       // the preview was stopped; nothing to reload from
     }
@@ -87,7 +93,7 @@ function player({ frameCount, fps, audio }) {
     p.playing = true;
     if (audio) {
       audio.currentTime = p.frame / fps; // the sound starts where the scrubber is
-      audio.play().catch(() => {});
+      audio.play().catch(() => pause()); // refused (no gesture after a reload): stop, never say Pause over a silent standstill
     }
     $('play').textContent = 'Pause';
     p.timer = setInterval(tick, MS_PER_SECOND / fps);
@@ -149,7 +155,9 @@ async function main() {
   markers(film, timeline);
   wire({ film, timeline, frameCount: info.frameCount, controls, audio });
   window.__viewer = controls; // for tests: the frame on screen
-  await controls.draw(0);
+  const saved = decodePlayhead(location.hash, info.frameCount); // the frame the page was showing before an edit reloaded it
+  await controls.draw(saved?.frame ?? 0);
+  if (saved?.playing) controls.toggle();
   document.body.dataset.ready = 'true';
 }
 
