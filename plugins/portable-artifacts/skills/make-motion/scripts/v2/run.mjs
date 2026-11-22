@@ -31,7 +31,7 @@ import { snapFilm } from './sound/snap.mjs';
 import { posterPath, writePoster } from './poster.mjs';
 import { filmFrame, filmSeconds } from './film-time.mjs';
 import { inspectDir, writeInspect } from './inspect.mjs';
-import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf } from './slice.mjs';
+import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf, slicePath } from './slice.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
@@ -118,9 +118,6 @@ function outputPaths(options) {
 }
 
 const SLICE_SILENT_LINE = 'make: the slice is silent: the sound is mastered for the whole film';
-
-// Where a slice's video goes: the film's output path with `.<label>` before the extension (out/film.rows.mp4).
-const slicePath = (out, label) => path.join(path.dirname(out), `${path.basename(out, path.extname(out))}.${label}${path.extname(out)}`);
 
 // The report's `slice`: the frames and shots a --shot or --range run covers, whether the film's sound is left out of it (a
 // slice is always silent: the sound is mastered for the whole film), and the review rules a slice does not run.

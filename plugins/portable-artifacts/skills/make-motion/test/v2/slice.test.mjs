@@ -18,7 +18,7 @@ import { runMake } from '../../scripts/v2/run.mjs';
 import { rangeParts } from '../../scripts/v2/range-form.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { formatText, reportOf } from '../../scripts/v2/report.mjs';
-import { SLICE_SKIPPED, sliceAuditPlan, sliceOf, sliceSheets } from '../../scripts/v2/slice.mjs';
+import { SLICE_SKIPPED, sliceAuditPlan, slicePath, sliceOf, sliceSheets } from '../../scripts/v2/slice.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FPS = 30;
@@ -31,7 +31,31 @@ const film = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [
 ] };
 const timeline = buildTimeline(film, { fps: FPS });
 
-test('--shot is the frames of that shot', () => assert.deepEqual(sliceOf({ shot: 'b' }, film, timeline), { from: 60, to: 119, label: 'b', shots: ['b'] }));
+test('--shot is the frames of that shot', () => assert.deepEqual(sliceOf({ shot: 'b' }, film, timeline), { from: 60, to: 119, label: 'shot-b', shots: ['b'] }));
+
+test('the two forms name their slice apart: a shot called range-30-75 is not --range 30..75', () => {
+  const odd = { version: 2, mode: 'pro', look: 'desk', fps: FPS, shots: [{ id: 'a', show: 'free', hold: 1 }, { id: 'range-30-75', show: 'free', hold: 2 }] };
+  const oddTimeline = buildTimeline(odd, { fps: FPS });
+  const byShot = sliceOf({ shot: 'range-30-75' }, odd, oddTimeline);
+  const byRange = sliceOf({ range: '1..2.5' }, odd, oddTimeline);
+  assert.equal(byRange.label, 'range-30-75');
+  assert.notEqual(byShot.label, byRange.label);
+  assert.notEqual(slicePath('out/film.mp4', byShot.label), slicePath('out/film.mp4', byRange.label));
+});
+
+test('a slice\'s video path is <out stem>.<shot-id|range-a-b>.mp4 beside the film\'s own, which no film file called <stem>.<id> can reach', () => {
+  assert.equal(slicePath(path.join('out', 'film.mp4'), 'shot-rows'), path.join('out', 'film.shot-rows.mp4'));
+  assert.equal(slicePath(path.join('out', 'film.mp4'), 'range-30-75'), path.join('out', 'film.range-30-75.mp4'));
+  // the full render of film.rows.json is out/film.rows.mp4: the old slice name of film.json --shot rows
+  assert.notEqual(slicePath(path.join('out', 'film.mp4'), 'shot-rows'), path.join('out', 'film.rows.mp4'));
+});
+
+test('an --out that does not end in .mp4 still gives a slice file that does', () => {
+  assert.equal(slicePath(path.join('out', 'film'), 'shot-rows'), path.join('out', 'film.shot-rows.mp4'));
+  assert.equal(slicePath(path.join('out', 'film.mov'), 'shot-rows'), path.join('out', 'film.shot-rows.mp4'));
+  assert.equal(slicePath(path.join('out', 'my.film.mp4'), 'range-1-2'), path.join('out', 'my.film.range-1-2.mp4'));
+  assert.equal(slicePath('film.MP4', 'shot-rows'), 'film.shot-rows.mp4');
+});
 
 test('--range takes two film times, inclusive', () => assert.deepEqual(sliceOf({ range: 'a@1..b@0.5' }, film, timeline), { from: 30, to: 75, label: 'range-30-75', shots: ['a', 'b'] }));
 
@@ -224,7 +248,8 @@ test('a backwards range is refused before the voice when its references are in d
       assert.match(report.error.message, /--range takes <from>\.\.<to>/, backwards);
     }
     // a plain seconds anchor is not clamped to its shot: `hook@3` may lie in a later shot, so `rows..hook@3` is a valid range
-    for (const waits of ['hook@1..hook@0.5', 'rows@end+3..hook', 'rows..rows@0.5', '0..99', 'rows..hook@3', 'rows..hook@99']) {
+    // `3.` and `.5` are seconds to the anchors' own grammar too, however they are written
+    for (const waits of ['hook@1..hook@0.5', 'rows@end+3..hook', 'rows..rows@0.5', '0..99', 'rows..hook@3', 'rows..hook@99', 'rows..hook@3.', 'rows..hook@.5']) {
       assert.deepEqual((await run(waits)).calls, ['voice'], `${waits}: the order or the length needs the measured timeline`);
     }
   } finally {
@@ -283,6 +308,36 @@ test('the report has a slice key only for a slice run, and its text form says wh
   const text = formatText(report, { sheetsDir: 'out/film.sheets' });
   assert.match(text, /^slice: frames 60 to 119 \(60 frames; shot b\); loop, cut-variety and sameness are not run$/m);
   assert.match(text, /^frames: 180 in the film, 60 in the slice$/m, 'the film\'s frame count is not mistaken for the slice\'s');
+});
+
+test('the text form says the slice is silent when it is, and not when the film has no sound', () => {
+  const silent = formatText(reportOf({ ...BLANK, slice: { ...SLICE_REPORT, silent: true } }), { sheetsDir: 'out/film.sheets' });
+  assert.match(silent, /^slice: .*are not run; silent: the film's sound is mastered for the whole film$/m);
+  const plain = formatText(reportOf({ ...BLANK, slice: SLICE_REPORT }), { sheetsDir: 'out/film.sheets' });
+  assert.doesNotMatch(plain, /silent/);
+});
+
+// ---- a slice that renders needs ffmpeg, as a film does; one that does not render never asks for it ----
+
+test('a slice that would render an MP4 is refused without ffmpeg, before a browser starts', async () => {
+  const dirFor = mkdtempSync(path.join(tmpdir(), 'mm-slice-noffmpeg-'));
+  const saved = { path: process.env.PATH, ffmpeg: process.env.FFMPEG_PATH };
+  try {
+    const specPath = path.join(dirFor, 'film.json');
+    writeFileSync(specPath, JSON.stringify(film));
+    process.env.PATH = '/nonexistent';
+    delete process.env.FFMPEG_PATH;
+    for (const slice of [{ shot: 'b' }, { range: 'a@1..b@0.5' }]) {
+      const { exitCode, report } = await runMake({ specPath, out: null, noRender: false, ...slice });
+      assert.equal(exitCode, 2, JSON.stringify(slice));
+      assert.match(report.error.message, /ffmpeg not found/, JSON.stringify(slice));
+      assert.equal(report.stages.some((s) => s.name === 'review' || s.name === 'render'), false, 'no page stage ran: the browser was never started');
+    }
+  } finally {
+    process.env.PATH = saved.path;
+    if (saved.ffmpeg !== undefined) process.env.FFMPEG_PATH = saved.ffmpeg;
+    rmSync(dirFor, { recursive: true, force: true });
+  }
 });
 
 // ---- the review of a slice, on a stub page (no browser) ----

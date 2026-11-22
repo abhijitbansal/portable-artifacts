@@ -195,7 +195,7 @@ function verdict(report) {
 }
 
 // The slice line of the text form: which frames and shots were reviewed, and which rules a slice does not run.
-const sliceLine = ({ from, to, frames, shots, skipped }) => `slice: frames ${from} to ${to} (${plural(frames, 'frame')}; ${shots.length === 1 ? 'shot' : 'shots'} ${shots.join(', ')}); ${skipped.join(', ').replace(/, ([^,]*)$/, ' and $1')} are not run`;
+const sliceLine = ({ from, to, frames, shots, silent, skipped }) => `slice: frames ${from} to ${to} (${plural(frames, 'frame')}; ${shots.length === 1 ? 'shot' : 'shots'} ${shots.join(', ')}); ${skipped.join(', ').replace(/, ([^,]*)$/, ' and $1')} are not run${silent ? '; silent: the film\'s sound is mastered for the whole film' : ''}`;
 
 /** One finding as a line of the text form: `<kind>: <path>: <message>`. */
 export const findingLine = (f) => `${f.kind}: ${f.path}: ${f.message}`;

@@ -65,6 +65,25 @@ test('--range names its frames in the report, writes the sheets of the shots it 
   return undefined;
 });
 
+test('with --no-render a slice still writes its sheets on a machine with no ffmpeg (an MP4 slice is refused there: slice.test.mjs)', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const saved = { path: process.env.PATH, ffmpeg: process.env.FFMPEG_PATH };
+  process.env.PATH = '/nonexistent'; // a browser is launched by its own path, ffmpeg is looked up on PATH
+  delete process.env.FFMPEG_PATH;
+  try {
+    writeFileSync(path.join(SHEETS(), 'b.png'), 'stale');
+    const part = await run({ shot: 'b' });
+    assert.equal(part.exitCode, 0, JSON.stringify(part.report));
+    assert.deepEqual(part.report.sheets.map((f) => path.basename(f)), ['b.png', 'cut-a-b.png']);
+    assert.notEqual(bytes('b.png').toString(), 'stale', 'b.png was rewritten');
+    assert.equal(part.report.output, null);
+  } finally {
+    process.env.PATH = saved.path;
+    if (saved.ffmpeg !== undefined) process.env.FFMPEG_PATH = saved.ffmpeg;
+  }
+  return undefined;
+});
+
 test('a full run empties the folder of its PNGs, the partial sheets of older slices included', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
   assert.ok(sheetNames().some((n) => n.includes('.partial-')), 'the fixture: the slice left partial sheets');

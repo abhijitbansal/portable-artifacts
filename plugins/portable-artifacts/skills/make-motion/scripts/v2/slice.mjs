@@ -1,8 +1,9 @@
 // A slice of a film: the frames of one shot (--shot <id>) or of a range of film time (--range <from>..<to>), inclusive. The
 // sheets and the review run over the slice alone; its frames are the film's own, named by their absolute index (the page
 // seeks by frame, so a frame of a slice is the frame the whole film has at that index). Pure: no clock, no browser.
+import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
-import { echoValue } from '../../engine/script/anchors.mjs';
+import { SECONDS_RE, echoValue } from '../../engine/script/anchors.mjs';
 import { FilmTimeError, filmFrame, filmSeconds } from './film-time.mjs';
 import { auditMoments } from './plan.mjs';
 import { RANGE_FORM, rangeParts } from './range-form.mjs';
@@ -12,6 +13,16 @@ export const SLICE_SKIPPED = Object.freeze(['loop', 'cut-variety', 'sameness']);
 const RANGE_FLAG = '--range';
 const PNG = '.png';
 const FRAME_EPSILON = 1e-6; // a time a microsecond short of a frame is that frame
+
+const VIDEO_EXTENSION = '.mp4';
+
+/**
+ * Where a slice's video goes: the film's output path with `.<label>` before the extension, which is always `.mp4`
+ * (out/film.shot-rows.mp4, out/film.range-30-75.mp4; an `--out` of out/film gives out/film.shot-rows.mp4 too). The label
+ * is `shot-<id>` or `range-<from>-<to>`, so a shot called `range-30-75` and `--range 30..75` write different files, and
+ * the full render of a film file called `film.rows.json` (out/film.rows.mp4) is not the slice `film.json --shot rows`.
+ */
+export const slicePath = (out, label) => path.join(path.dirname(out), `${path.basename(out, path.extname(out))}.${label}${VIDEO_EXTENSION}`);
 
 /** Does the run ask for a slice (--shot or --range)? */
 export const isSlice = (options) => typeof options?.shot === 'string' || typeof options?.range === 'string';
@@ -30,7 +41,7 @@ function shotSlice(id, film, timeline) {
     const ids = (film?.shots ?? timeline.shots).map((s) => s.id);
     throw new FilmTimeError(`no shot ${JSON.stringify(echoValue(id))} in the film; the shots are: ${ids.join(', ')}`, ids);
   }
-  return { from: firstFrameOf(timeline, shot), to: lastFrameOf(timeline, shot), label: id, shots: [id] };
+  return { from: firstFrameOf(timeline, shot), to: lastFrameOf(timeline, shot), label: `shot-${id}`, shots: [id] };
 }
 
 // A range whose first time comes after its second: the form, then which one is after which.
@@ -45,7 +56,8 @@ function rangeSlice(text, film, timeline) {
 
 /**
  * The slice `--shot` or `--range` names, or null for neither: { from, to, label, shots } with `from` and `to` frame
- * indices (inclusive), `label` the shot id or `range-<from>-<to>`, `shots` the ids of the shots it touches. An id the film
+ * indices (inclusive), `label` `shot-<id>` or `range-<from>-<to>` (the name of its files, apart from each other and from
+ * any shot's own), `shots` the ids of the shots it touches. An id the film
  * lacks, or a reference that names nothing, is a FilmTimeError (its `hint` lists the shots); a range with no "..", or
  * one that runs backwards, is a UsageError naming the form.
  */
@@ -67,7 +79,7 @@ function shotIndexOf(ref, timeline) {
   const at = ref.indexOf(SHOT_SEPARATOR);
   const anchor = at < 0 ? '' : ref.slice(at + 1);
   const index = timeline.shots.findIndex((s) => s.id === (at < 0 ? ref : ref.slice(0, at)));
-  const staysInShot = at < 0 || !(ANCHOR_OFFSET_RE.test(anchor) || PLAIN_SECONDS_RE.test(anchor));
+  const staysInShot = at < 0 || !(ANCHOR_OFFSET_RE.test(anchor) || SECONDS_RE.test(anchor)); // `3`, `3.` and `.5` are all seconds
   return index >= 0 && staysInShot ? index : -1;
 }
 
@@ -120,7 +132,9 @@ export function sliceSheets(sheets, slice) {
  * the shot before each shot whose cut window opens inside it (a `match` is compared with that shot's last picture). `judged`
  * marks the audit frames inside the slice; the others are snapshotted so that what is read across a shot (the rest scales,
  * the first picture of a matched shot drawn alone, whether a text ever settles, the first frame a finding shows on) is read
- * from the frames the full run reads. reviewFilm audits them all and reports a finding only for a time inside the slice.
+ * from the frames the full run reads. reviewFilm audits them all and reports a finding only for a time inside the slice, by
+ * time (inSlice), so it reads `frame` alone. `judged` is kept on purpose: the plan tests (test/v2/slice.test.mjs) use it
+ * to pin which frames are drawn for their state only, outside the slice.
  * @returns {{ frame: number, judged: boolean }[]}
  */
 export function sliceAuditPlan(film, timeline, slice) {

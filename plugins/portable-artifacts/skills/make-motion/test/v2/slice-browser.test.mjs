@@ -1,6 +1,6 @@
 // The MP4 of a slice (--shot, --range): renderFilm's `frames` renders only that range, each frame sought by its absolute
 // index, so a frame of the slice is byte-for-byte the frame the full render sends to ffmpeg; no voice or sound is mastered
-// or muxed. [browser, ffmpeg] One at a time: run with --test-concurrency=1; skips without a browser or ffmpeg.
+// or muxed. A slice's own file is <out stem>.shot-<id>.mp4 or <out stem>.range-<from>-<to>.mp4. [browser, ffmpeg] One at a time: run with --test-concurrency=1; skips without a browser or ffmpeg.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -90,7 +90,31 @@ test('the first frame of a slice is captured though the page calls it held', asy
   assert.equal(part.get(from), full.get(from), 'and it is the full render\'s frame');
 });
 
-const SIDECAR_MODEL = { id: 'fake-model', commit: 'c0ffee', file: 'model.onnx', sha256: 'abc' };
+// The ends the first test does not reach: a slice from frame 0 (no frame before it to compare), one that starts inside a
+// cut's window (frame 95 is the slide's sixth frame; its chunk edges differ from the full render's) and one that ends on
+// the film's last frame.
+test('a slice from frame 0, one from mid-cut and one to the last frame send ffmpeg the full render\'s frames', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const session = await sessionOrNull(FILM);
+  try {
+    const total = session.timeline.frameCount;
+    const full = new Map();
+    await renderFilm({ out: path.join(dir, 'out', 'edges-full.mp4'), exact: true, session, onFrame: (i, bytes) => full.set(i, sha256(bytes)) });
+    assert.equal(full.size, total, 'the full render wrote every frame');
+    const spans = { 'from frame 0': [0, 20], 'from mid-cut': [A_FRAMES + 5, A_FRAMES + 30], 'to the last frame': [total - 15, total - 1] };
+    for (const [name, [from, to]] of Object.entries(spans)) {
+      const part = new Map();
+      const result = await renderFilm({ out: path.join(dir, 'out', `edges-${from}.mp4`), exact: true, session, frames: { from, to }, onFrame: (i, bytes) => part.set(i, sha256(bytes)) });
+      assert.deepEqual([...part.keys()], range(from, to), `${name}: only the slice's frames, in order`);
+      for (const i of part.keys()) assert.equal(part.get(i), full.get(i), `${name}: frame ${i}`);
+      assert.equal(result.frames, to - from + 1, name);
+    }
+  } finally {
+    await session?.close();
+  }
+});
+
+const SIDECAR_MODEL ={ id: 'fake-model', commit: 'c0ffee', file: 'model.onnx', sha256: 'abc' };
 function fakeSidecar(film) {
   const shots = film.shots.map((shot, index) => {
     if (shot.say === undefined) return { id: shot.id, wav: null, seconds: 0, sentences: [] };
@@ -101,7 +125,7 @@ function fakeSidecar(film) {
   return { version: 1, model: SIDECAR_MODEL, voice: 'af_heart', sampleRate: 24000, shots };
 }
 
-test('a slice of a voiced film is silent and says so, and writes <name>.<label>.mp4, never the film\'s own path', async (t) => {
+test('a slice of a voiced film is silent and says so, and writes <name>.shot-<id>.mp4, never the film\'s own path', async (t) => {
   if (!await needs(t, { ffmpeg: true })) return;
   writeFileSync(path.join(dir, 'voiced.json'), JSON.stringify({ version: 2, mode: 'pro', fps: FPS, voice: { name: 'af_heart' }, shots: [
     { id: 'hook', show: 'statement', say: 'Every row has a source.' },
@@ -111,7 +135,7 @@ test('a slice of a voiced film is silent and says so, and writes <name>.<label>.
   const synthesise = async (film, options) => ({ dir: path.join(options.outDir, '.voice', 'fake'), sidecar: fakeSidecar(film), cached: false });
   const { report, exitCode } = await runMake({ specPath: path.join(dir, 'voiced.json'), out: path.join(dir, 'out-voiced', 'voiced.mp4'), exact: false, noRender: false, outline: false, shot: 'rows' }, { synthesise, log: (line) => lines.push(line) });
   assert.equal(exitCode, 0, JSON.stringify(report));
-  const slice = path.join(dir, 'out-voiced', 'voiced.rows.mp4');
+  const slice = path.join(dir, 'out-voiced', 'voiced.shot-rows.mp4');
   assert.equal(report.output, slice);
   assert.ok(existsSync(slice));
   assert.equal(existsSync(path.join(dir, 'out-voiced', 'voiced.mp4')), false, 'the film\'s own MP4 is not written');
