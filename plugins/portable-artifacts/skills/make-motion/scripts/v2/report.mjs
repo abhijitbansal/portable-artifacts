@@ -146,6 +146,23 @@ export function reportOf(state) {
   };
 }
 
+const absolute = (file, cwd) => (typeof file === 'string' ? path.resolve(cwd, file) : file);
+
+/**
+ * The report with every file path absolute, resolved against `cwd` (the folder make.mjs ran in): `output`, `sheets`, `board`,
+ * `poster.file`, `inspect.png` and `.json`, `subtitles.file`. The --json form uses it, because the second reviewer has only
+ * Read, which needs absolute paths, and is handed a report saved from a run it did not see. Inside a run, and in the text
+ * form, paths stay as the user gave them. A new report is returned; keys the report lacks stay absent.
+ */
+export function absolutePaths(report, cwd = process.cwd()) {
+  const out = { ...report, output: absolute(report.output, cwd), sheets: report.sheets.map((f) => absolute(f, cwd)) };
+  if (report.board) out.board = report.board.map((f) => absolute(f, cwd));
+  if (report.poster) out.poster = { ...report.poster, file: absolute(report.poster.file, cwd) };
+  if (report.inspect) out.inspect = { ...report.inspect, png: absolute(report.inspect.png, cwd), json: absolute(report.inspect.json, cwd) };
+  if (report.subtitles) out.subtitles = { ...report.subtitles, file: absolute(report.subtitles.file, cwd) };
+  return out;
+}
+
 /** The report of a run that never began (a usage error): empty, with the error. */
 export const errorReport = (error) => reportOf({
   validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,

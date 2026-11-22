@@ -4,7 +4,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -544,20 +544,33 @@ test('sheets go to a folder named for the video: films in one folder do not shar
   assert.deepEqual(readdirSync(`${two.slice(0, -4)}.sheets`), ['held.png']);
 });
 
-test('paths in the report are as the user gave them: relative stay relative to the current directory', async (t) => {
+// M4: the --json report names the sheets by an absolute path, so a second reviewer that can only Read opens them from any folder.
+test('the --json report names its paths in full: a relative --out resolves against the current directory', async (t) => {
   if (!await needs(t)) return;
   const run = spawnSync(process.execPath, [MAKE, 'held.json', '--json', '--no-render', '--out', 'rel/held.mp4'], { encoding: 'utf8', cwd: dir });
   assert.equal(run.status, 0, run.stderr);
-  assert.deepEqual(parse(run).sheets, [path.join('rel', 'held.sheets', 'held.png')]);
+  const sheet = path.join(realpathSync(dir), 'rel', 'held.sheets', 'held.png');
+  assert.deepEqual(parse(run).sheets.map((f) => path.join(realpathSync(path.dirname(f)), path.basename(f))), [sheet]);
+  assert.ok(path.isAbsolute(parse(run).sheets[0]));
+  assert.ok(existsSync(parse(run).sheets[0]), 'the named sheet is there');
   const absolute = parse(make([filmPath('held'), '--json', '--no-render', '--out', outPath('abs')]));
   assert.ok(path.isAbsolute(absolute.sheets[0]));
 });
 
-test('the default output is out/<film name>.mp4 beside the film, and its sheets out/<film name>.sheets', async (t) => {
+test('the default output is out/<film name>.mp4 beside the film, and its sheets out/<film name>.sheets, named in full in the report', async (t) => {
   if (!await needs(t)) return;
   const run = spawnSync(process.execPath, [MAKE, 'held.json', '--json', '--no-render'], { encoding: 'utf8', cwd: dir });
   assert.equal(run.status, 0, run.stderr);
-  assert.deepEqual(parse(run).sheets, [path.join('out', 'held.sheets', 'held.png')]);
+  const [sheet] = parse(run).sheets;
+  assert.ok(path.isAbsolute(sheet), sheet);
+  assert.deepEqual(path.relative(realpathSync(dir), realpathSync(sheet)), path.join('out', 'held.sheets', 'held.png'));
+});
+
+test('the text form keeps the sheets folder as the user gave it', async (t) => {
+  if (!await needs(t)) return;
+  const run = spawnSync(process.execPath, [MAKE, 'held.json', '--no-render', '--out', 'rel2/held.mp4'], { encoding: 'utf8', cwd: dir });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, new RegExp(`^sheets: ${path.join('rel2', 'held.sheets').replace(/[.\\]/g, '\\$&')} \\(1 file\\)$`, 'm'));
 });
 
 test('a partial video left by a killed run is swept when older than an hour, and a fresh one is not', () => {

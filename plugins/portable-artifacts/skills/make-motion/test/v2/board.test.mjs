@@ -8,7 +8,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { BOARD_PER_STRIP, BOARD_COLUMNS, BOARD_JPEG_QUALITY, BOARD_STRIP_WIDTH, planBoard, planSheets } from '../../scripts/v2/plan.mjs';
 import { layoutSheet, MAX_SHEET_WIDTH } from '../../scripts/v2/layout.mjs';
-import { formatText, reportOf } from '../../scripts/v2/report.mjs';
+import { absolutePaths, formatText, reportOf } from '../../scripts/v2/report.mjs';
 import { clearStaleBoard, writeBoard } from '../../scripts/v2/sheets.mjs';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -98,6 +98,36 @@ test('the text form says where the board is and how many strips it has', () => {
   assert.match(one, /^board: \/x\/out\/film\.sheets\/board \(1 strip\)$/m);
   assert.match(formatText(reportOf({ ...TEXT_BLANK, board: [] }), { sheetsDir: '/x/out/film.sheets' }), /^board: none written$/m);
   assert.doesNotMatch(formatText(reportOf(TEXT_BLANK), { sheetsDir: '/x/out/film.sheets' }), /board/);
+});
+
+// M4: the second reviewer has only Read, which needs absolute paths, and the director gave it a report whose paths were
+// relative to the folder make.mjs ran in. The JSON form names every file the reviewer may open by an absolute path.
+test('absolutePaths resolves every file path of the report against the run folder, and leaves the rest as it is', () => {
+  const cwd = path.resolve('/run/here');
+  const report = reportOf({
+    ...TEXT_BLANK, sheets: ['out/film.sheets/a.png', '/abs/film.sheets/b.png'], output: 'out/film.mp4', board: ['out/film.sheets/board/board-1.jpg'],
+    poster: { file: 'p.png', frame: 3, seconds: 0.1 }, inspect: { png: 'i/f.png', json: 'i/f.json', frame: 3, seconds: 0.1, shot: 'a' },
+    subtitles: { file: 'out/film.srt', format: 'srt', timed: 'estimated' },
+  });
+  const abs = absolutePaths(report, cwd);
+  assert.deepEqual(abs.sheets, [path.join(cwd, 'out/film.sheets/a.png'), '/abs/film.sheets/b.png']);
+  assert.equal(abs.output, path.join(cwd, 'out/film.mp4'));
+  assert.deepEqual(abs.board, [path.join(cwd, 'out/film.sheets/board/board-1.jpg')]);
+  assert.equal(abs.poster.file, path.join(cwd, 'p.png'));
+  assert.deepEqual([abs.inspect.png, abs.inspect.json], [path.join(cwd, 'i/f.png'), path.join(cwd, 'i/f.json')]);
+  assert.equal(abs.subtitles.file, path.join(cwd, 'out/film.srt'));
+  // everything that is not a path is untouched, and the input is not mutated
+  assert.equal(abs.poster.frame, 3);
+  assert.equal(abs.subtitles.format, 'srt');
+  assert.equal(abs.timed, report.timed);
+  assert.equal(report.sheets[0], 'out/film.sheets/a.png');
+});
+
+test('absolutePaths keeps null for a run that made no video, and omits what the report omits', () => {
+  const abs = absolutePaths(reportOf({ ...TEXT_BLANK, sheets: [] }), '/run/here');
+  assert.equal(abs.output, null);
+  assert.deepEqual(abs.sheets, []);
+  for (const key of ['board', 'poster', 'inspect', 'subtitles']) assert.equal(key in abs, false, key);
 });
 
 // ---- writeBoard on a stub page: the folder it is given may hold anything ----

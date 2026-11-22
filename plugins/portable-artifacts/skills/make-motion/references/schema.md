@@ -137,7 +137,7 @@ Two `creative` findings judge how a shot fills its frame. Each is judged once pe
 
 ## The report
 
-`make.mjs --json` prints one object on stdout. Every path gives the same keys.
+`make.mjs --json` prints one object on stdout. Every path gives the same keys. Every file path in it (`output`, `sheets`, `board`, `poster.file`, `inspect.png` and `.json`, `subtitles.file`) is absolute, resolved against the folder `make.mjs` ran in, so a reviewer that can only Read opens a sheet from any folder; the text form prints the paths as you gave them.
 
 | Key | Meaning |
 |---|---|
