@@ -9,7 +9,8 @@
 //      prints [x, y, w, h] (with --json: {"region": [...]}); with --out it also writes <dir>/box.png, the picture with
 //      the box drawn. Name every strip and cell the target touches: the region then holds the target, each edge within
 //      1.25 cells of it.
-// A PNG that scripts/v2/png.mjs cannot read, and any other picture format, is decoded by ffmpeg. Exit 0 done; exit 2: a
+// A PNG that scripts/v2/png.mjs cannot read, and a JPEG, WebP, GIF, BMP or TIFF, is decoded by ffmpeg behind the file
+// protocol, picture demuxer and picture decoder whitelists (a file of any other kind is refused). Exit 0 done; exit 2: a
 // usage or IO problem (an unreadable picture, a strip outside 1 to 9, a cell outside 1 to 36, a URL), one line on stderr.
 import { lstatSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

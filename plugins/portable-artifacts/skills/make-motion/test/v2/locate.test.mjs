@@ -3,12 +3,12 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readPng } from '../../scripts/v2/png.mjs';
-import { MAX_OVERLAY_SIDE, STRIPS, GRID, PAD_CELLS, REGION_DECIMALS, stripsBox, cellsBox, toRegion } from '../../scripts/lib/locate.mjs';
+import { MAX_OVERLAY_SIDE, PICTURE_DECODERS, PICTURE_DEMUXERS, STRIPS, GRID, PAD_CELLS, REGION_DECIMALS, stripsBox, cellsBox, toRegion } from '../../scripts/lib/locate.mjs';
 import { encodePng } from '../../scripts/lib/png-write.mjs';
 import { DIGITS, PLATE_PAD, drawNumber } from '../../scripts/lib/digits.mjs';
 import { pngOf } from './helpers/png.mjs';
@@ -266,7 +266,81 @@ test('a JPEG without ffmpeg exits 2 and says what to do', () => {
   assert.match(r.stderr, /locate needs ffmpeg to read a jpg picture; run the doctor, or give a PNG/);
 });
 
+// A picture png.mjs cannot read goes to ffmpeg behind all three whitelists, by its real absolute path. The recording stand-in
+// logs every call's argv to a file and fails: the argv is what these tests read, so they need no ffmpeg.
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]);
+function recordingFfmpeg(dir) {
+  const log = path.join(dir, 'ffmpeg-calls.jsonl');
+  const tool = path.join(dir, 'ffmpeg-recorder');
+  writeFileSync(tool, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n');\nprocess.exit(1);\n`);
+  chmodSync(tool, 0o755);
+  const calls = () => (existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+  return { env: { FFMPEG_PATH: tool }, calls };
+}
+// The one -i of every recorded call, behind the protocol, demuxer and decoder whitelists, naming `file`.
+function assertWhitelistedPicture(calls, file) {
+  assert.equal(calls.length, 1, 'one ffmpeg call');
+  const [argv] = calls;
+  const at = argv.indexOf('-i');
+  assert.ok(at >= 6, `an input after the whitelists: ${argv.join(' ')}`);
+  assert.equal(argv.lastIndexOf('-i'), at, 'one input');
+  assert.deepEqual(argv.slice(at - 6, at - 4), ['-protocol_whitelist', 'file'], 'the file protocol only: no pipe, no http');
+  assert.equal(argv[at - 4], '-format_whitelist');
+  assert.deepEqual(argv[at - 3].split(',').sort(), [...PICTURE_DEMUXERS].sort(), 'the picture demuxers only');
+  assert.equal(argv[at - 2], '-codec_whitelist');
+  assert.deepEqual(argv[at - 1].split(',').sort(), [...PICTURE_DECODERS].sort(), 'the picture decoders only');
+  for (const refused of ['hls', 'concat', 'lavfi', 'mov', 'matroska', 'sdp', 'rtsp']) assert.ok(!argv[at - 3].split(',').includes(refused), `${refused} is no picture demuxer`);
+  assert.equal(argv[at + 1], file, 'the file by its real absolute path');
+  assert.ok(path.isAbsolute(argv[at + 1]));
+}
+
+test('a picture ffmpeg decodes is opened behind the protocol, demuxer and decoder whitelists', () => {
+  const dir = scratch();
+  const picture = path.join(dir, 'p.jpg');
+  writeFileSync(picture, JPEG_BYTES);
+  const { env, calls } = recordingFfmpeg(dir);
+  run([picture, '--out', path.join(dir, 'o')], env);
+  assertWhitelistedPicture(calls(), realpathSync(picture));
+});
+
+test('a link to a picture is resolved before ffmpeg sees it', () => {
+  const dir = scratch();
+  const real = path.join(dir, 'real.jpg');
+  const link = path.join(dir, 'link.jpg');
+  writeFileSync(real, JPEG_BYTES);
+  symlinkSync(real, link);
+  const { env, calls } = recordingFfmpeg(dir);
+  run([link, '--out', path.join(dir, 'o')], env);
+  assertWhitelistedPicture(calls(), realpathSync(real));
+});
+
+test('a relative path that looks like a protocol reaches ffmpeg as an absolute path', () => {
+  const dir = scratch();
+  writeFileSync(path.join(dir, 'pipe:0'), JPEG_BYTES);
+  const { env, calls } = recordingFfmpeg(dir);
+  spawnSync(process.execPath, [LOCATE, 'pipe:0', '--out', 'o'], { cwd: dir, encoding: 'utf8', env: { ...process.env, ...env } });
+  assertWhitelistedPicture(calls(), realpathSync(path.join(dir, 'pipe:0')));
+});
+
 const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
+test('a playlist named .png is not decoded, and a GIF and a BMP still are', { skip: !hasFfmpeg && 'no ffmpeg' }, () => {
+  const dir = scratch();
+  const playlist = path.join(dir, 'list.png');
+  writeFileSync(playlist, '#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\n/etc/hosts\n#EXT-X-ENDLIST\n');
+  const refused = run([playlist, '--out', path.join(dir, 'o1')]);
+  assert.equal(refused.status, 2, refused.stderr);
+  assert.match(refused.stderr, /ffmpeg could not read list\.png as a picture/);
+  assert.ok(!existsSync(path.join(dir, 'o1', 'strips-cols.png')));
+  writeFileSync(path.join(dir, 'p.png'), pngOf(64, 48, (x, y) => [x * 3, y * 4, 90]));
+  for (const ext of ['gif', 'bmp']) {
+    const made = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', path.join(dir, 'p.png'), path.join(dir, `p.${ext}`)]);
+    assert.equal(made.status, 0, String(made.stderr));
+    const r = run([path.join(dir, `p.${ext}`), '--out', path.join(dir, `o-${ext}`)]);
+    assert.equal(r.status, 0, `${ext}: ${r.stderr}`);
+    assert.ok(existsSync(path.join(dir, `o-${ext}`, 'strips-cols.png')), ext);
+  }
+});
+
 test('a JPEG is decoded by ffmpeg when it is there', { skip: !hasFfmpeg && 'no ffmpeg' }, () => {
   const dir = scratch();
   writeFileSync(path.join(dir, 'p.png'), pngOf(120, 80, (x, y) => [x * 2, y * 3, 100]));

@@ -112,6 +112,7 @@ test('clipInput opens a clip through the file protocol only, the plain clip cont
 // until it is added with the reason it is safe. The list may only shrink.
 const INPUT_SITES = Object.freeze({
   'scripts/lib/ffmpeg.mjs': 1, // fileInput, the whitelisting builder (version 1's frame pipe, preflight source and measureLoudness went at cut-over)
+  'scripts/lib/locate.mjs': 1, // pictureInput, the whitelisting builder for a picture png.mjs cannot read
   'scripts/v2/clips.mjs': 1, // clipInput, the whitelisting builder
   'scripts/v2/render.mjs': 1, // the frame pipe (-i -)
   'scripts/v2/voice/master.mjs': 3, // recordingInput, ownWavInput, ownMp4Input: the whitelisting builders

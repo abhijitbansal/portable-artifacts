@@ -3,12 +3,12 @@
 // way; pass two cuts the chosen block into a 6 by 6 grid; the cells picked, grown by a quarter cell, are the region.
 // No network, no model: the agent looks at the PNGs and names the numbers.
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
 import { readPng } from '../v2/png.mjs';
 import { drawNumber, plateSize } from './digits.mjs';
-import { findFfmpeg, fileInput } from './ffmpeg.mjs';
+import { findFfmpeg } from './ffmpeg.mjs';
 
 export const STRIPS = 9;
 export const GRID = 6;
@@ -27,7 +27,15 @@ const TINT = 0.28; // how far the odd strips are pulled toward the strip colour
 const MAX_FFMPEG_BYTES = 512 * 1024 * 1024;
 const COLOURS = Object.freeze({ line: [255, 0, 255], strip: [255, 190, 0], ink: [255, 255, 0], plate: [0, 0, 0] });
 
-const outsideRange = (flag, what, max, got) => new UsageError(`${flag}: ${what} run from 1 to ${max}, got ${got}`);
+// What ffmpeg may open a picture with (its own names). `png.mjs` reads PNGs itself; these are the formats it falls back to.
+// ffmpeg sniffs content, so a playlist or a script renamed to .png must not reach a demuxer or a decoder outside these lists.
+export const PICTURE_DEMUXERS = Object.freeze(['image2', 'png_pipe', 'jpeg_pipe', 'webp_pipe', 'gif', 'bmp_pipe', 'tiff_pipe']);
+export const PICTURE_DECODERS = Object.freeze(['png', 'mjpeg', 'webp', 'gif', 'bmp', 'tiff']);
+
+/** A picture as an ffmpeg input: the file protocol only, the picture demuxers only, and the picture decoders only. */
+export const pictureInput = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', PICTURE_DEMUXERS.join(','), '-codec_whitelist', PICTURE_DECODERS.join(','), '-i', file];
+
+const outsideRange =(flag, what, max, got) => new UsageError(`${flag}: ${what} run from 1 to ${max}, got ${got}`);
 
 // [first, last] of whole numbers in 1..max with first <= last, or a UsageError that names the accepted values.
 function checkPair(flag, what, max, pair) {
@@ -85,16 +93,18 @@ function toRgb({ width, height, channels, data }) {
   return { width, height, channels: 3, data: out };
 }
 
-// ffmpeg decodes one frame of any picture format to an 8-bit RGB PNG on a pipe, through the file and pipe protocols only.
+// ffmpeg decodes one frame of a picture to an 8-bit RGB PNG on a pipe (the output side), reading `file` by its real absolute
+// path through the file protocol, the picture demuxers and the picture decoders only (pictureInput).
 async function decodeWithFfmpeg(file) {
   const ext = path.extname(file).slice(1).toLowerCase() || 'non-PNG';
+  const real = realpathSync(file); // links followed here, and a relative name such as `pipe:0` never read as a protocol
   let ffmpeg;
   try {
     ffmpeg = await findFfmpeg();
   } catch {
     throw new UsageError(`locate needs ffmpeg to read a ${ext} picture; run the doctor, or give a PNG`);
   }
-  const run = spawnSync(ffmpeg, ['-v', 'error', '-nostdin', ...fileInput(file), '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png', '-pix_fmt', 'rgb24', 'pipe:1'],
+  const run = spawnSync(ffmpeg, ['-v', 'error', '-nostdin', ...pictureInput(real), '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png', '-pix_fmt', 'rgb24', 'pipe:1'],
     { maxBuffer: MAX_FFMPEG_BYTES });
   if (run.status !== 0 || !run.stdout?.length) {
     const why = run.error ? (run.error.code ?? run.error.message) : String(run.stderr ?? '').trim().split('\n').at(-1) || 'no picture came out';
