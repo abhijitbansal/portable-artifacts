@@ -105,7 +105,8 @@ try {
       printResult({ ok: false, errors: live.errors }, { label: 'build' });
       process.exitCode = 1;
     } else {
-      process.stdout.write(`watching ${values.watch}\n${live.url}\ntoken: ${live.token}\n`);
+      // The rebuild token is not printed: stdout is read by the agent, and the served page already carries it.
+      process.stdout.write(`watching ${values.watch}\n${live.url}\n`);
       if (open) openUrl(live.url);
     }
   } else {
