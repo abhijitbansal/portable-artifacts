@@ -6,6 +6,48 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-11-23
+
+A security pass over all five skills, against prompt injection and what the skills.sh scanners (Gen Agent Trust Hub,
+Socket, Snyk) flag. No spec changes; pages build the same.
+
+### Behaviour changes to know about
+
+- **Text the skills read is data, never instructions.** Every SKILL.md now says so for the content that skill reads
+  (rows and column names, commit messages and file names, CSV cells, report findings, text in pictures), and the
+  artifact-builder agent file says the same about report messages. The CLIs that print such text to the agent escape
+  invisible characters (bidi controls, zero-width and Tag characters, separators) as `\u{XXXX}` and cap long values:
+  make-dashboard `inspect` and `query` text output (200 characters a cell; `--json` unchanged), make-scene row errors
+  (80), make-explainer `gather` output and warnings (page data stays exact).
+- **make-explainer `gather` no longer runs commands from a repository's own git config.** It passes
+  `core.fsmonitor=false`, `--no-textconv`, an empty command for every filter driver the repo defines, and drops
+  `GIT_CONFIG_PARAMETERS`/`COUNT`/`KEY_n`/`VALUE_n`. Before, a hostile `.git/config` (an unpacked archive, a shared
+  checkout) could run a command through `git status`. Your global and system git config still apply.
+- **Publishing and consent.** The skills publish a page to a link only when you ask, and confirm first when it holds
+  private data. Installs, publishing and `--allow-outside` stay behind your consent even mid-run.
+- **make-dashboard `serve`** no longer prints the rebuild token.
+- **`PA_MAKE_TEST_SCRIPTS`** is honoured only under `NODE_ENV=test`.
+
+### Disclosures and docs
+
+- make-dashboard no longer says "offline" for postgres and mysql sources: file sources need no network, database
+  sources connect read-only during inspect, query and build, and the built page makes no requests. `setup.mjs`'s
+  DuckDB extension download is named, and `references/refresh.md` keeps the connection string in a `chmod 600` env
+  file instead of crontab or a plist.
+- make-explainer names the `--image-api` request; make-motion names both model downloads (voice and cutout), their
+  cache folder, and `--ignore-scripts` on the optional installs. Every write outside the project is named.
+- Large reference files gain a contents list.
+
+### Code hygiene a scanner reads
+
+- Literal invisible and bidi characters in shipped code are now escapes, and `bin/test/invisible-chars.test.mjs`
+  fails on any new one.
+- make-explainer's chip tone comes from a closed set.
+- Two tests that patched `fs` (one through a URL-encoded `node --import` preload) now provoke a real fault or use
+  `t.mock.method`.
+- make-scene's minified runtime is rebuilt in a test and compared byte for byte.
+- The sibling-skill install command lives in one shared constant.
+
 ## [2.3.1] - 2026-11-23
 
 - The vertical showreel now plays one whoosh per cut, where it played several.
