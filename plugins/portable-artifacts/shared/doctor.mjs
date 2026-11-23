@@ -530,7 +530,7 @@ export const cutout = () => optionalPackage({
 // is there): on a Gemini machine no agent file is ever installed, so nothing is reported at all.
 // The Claude Code plugin ships the same file as <plugin>/agents/artifact-builder.md; where this skill runs
 // from a plugin, that file counts as present (a plugin update replaces it, so its text is not compared).
-// A file without CURRENT_MARKER (make.mjs) predates the one-command operator and is reported as outdated, with
+// A file without CURRENT_MARKER (the data-never-instructions line, 2.4.0) is reported as outdated, with
 // the command that replaces it. The doctor never overwrites it: the writer keeps an existing file.
 // Limit: project level means the current folder, not the git root.
 // The Claude Code motion-reviewer file is checked too (see REVIEWER_PLACES below): the writer for `claude` writes both files.
@@ -623,7 +623,7 @@ export function builderAgent() {
       const ours = reviewerProblems(ctx).map((r) => r.file);
       const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
       const parts = [];
-      if (old.length) parts.push(`${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)`);
+      if (old.length) parts.push(`${old.join(' and ')} is outdated (it predates 2.4.0: it lacks the line that treats report text as data, and an older one still tells the builder to write the spec)`);
       if (ours.length) parts.push(`${ours.join(' and ')} is an older portable-artifacts motion-reviewer file`);
       return parts.length ? `${base}; ${parts.join('; ')}` : base;
     },

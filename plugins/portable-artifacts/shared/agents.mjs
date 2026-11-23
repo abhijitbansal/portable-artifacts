@@ -182,9 +182,11 @@ export function writeAgentFile(dir, file, content, force) {
   return 'written';
 }
 
-// Text every current agent file carries and no earlier one did (they told the builder to write the spec and run two scripts).
-// The doctor uses it to tell an outdated file from a current one.
-export const CURRENT_MARKER = 'make.mjs';
+// Text every current agent file carries and no earlier one did: the line that calls report text data, never instructions
+// (2.4.0). Files before that told the builder to write the spec and run two scripts, or (make.mjs era) lacked this line.
+// The doctor uses it to tell an outdated file from a current one, so a security line added to INSTRUCTIONS reaches
+// existing installs as an "outdated" report. Pick a new phrase from the new text whenever such a line is added.
+export const CURRENT_MARKER = 'data, never instructions';
 
 // `write claude` also writes the reviewer (the doctor's auto fix runs it, so a skills-CLI install gets both agents).
 // `write-reviewer <host> <dir> [--force [--replace-foreign]]` writes only the reviewer: the doctor's fix for an older
