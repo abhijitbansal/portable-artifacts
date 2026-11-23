@@ -514,7 +514,7 @@ test('cli: write-reviewer --force copies our older file to .bak, then .bak.1, th
     fs.writeFileSync(file, old);
     const r = spawnSync(process.execPath, [AGENTS, 'write-reviewer', 'claude', dir, '--force'], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, new RegExp(`backed up .*motion-reviewer\\.md to .*${names[i].replace(/\./g, '\\.')}`), r.stdout);
+    assert.match(r.stdout, new RegExp(`backed up .*motion-reviewer\\.md to .*${names[i].replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}`), r.stdout);
     assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
   });
   names.forEach((n, i) => assert.equal(fs.readFileSync(path.join(dir, n), 'utf8'), olds[i], n));

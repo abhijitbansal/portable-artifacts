@@ -637,7 +637,7 @@ test('install --force replaces our own older reviewer, after copying it to .bak 
     assert.equal(r.status, 0, r.stderr);
     assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
     assert.equal(fs.readFileSync(path.join(path.dirname(file), name), 'utf8'), old, name);
-    assert.match(r.stdout, new RegExp(`backed up .*motion-reviewer\\.md to .*${name.replace(/\./g, '\\.')}`), r.stdout);
+    assert.match(r.stdout, new RegExp(`backed up .*motion-reviewer\\.md to .*${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}`), r.stdout);
   }
 });
 

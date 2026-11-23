@@ -1101,7 +1101,7 @@ test("builderAgent: a newer reviewer file (format 4 against 3) is left alone: no
     assert.equal(r.ok, true);
     assert.deepEqual(r.missing, []);
     assert.equal(r.info.length, 1);
-    assert.match(r.info[0].note, new RegExp(where.replace(/\//g, "\\/").replace(/\./g, "\\.")));
+    assert.match(r.info[0].note, new RegExp(where.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')));
     assert.match(r.info[0].note, /newer/);
     assert.match(r.info[0].note, /this skill's copy is older/);
     assert.doesNotMatch(r.info[0].note, /is not installed/, "a newer reviewer is installed");
