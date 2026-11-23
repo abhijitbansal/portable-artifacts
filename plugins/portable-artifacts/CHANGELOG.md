@@ -82,8 +82,8 @@ hostile repository safe, and a sandbox is still the right place for a repository
 - The PATH rule covers git only. make-motion's `ffmpeg` and the doctor look programs up on your PATH as it is, so do not
   keep `.`, a relative entry or a folder of the repository on PATH.
 - The PATH rule looks at the nearest `.git` above the folder git starts in. An absolute PATH entry is kept when it lies in
-  an outer repository, in the main checkout of a linked worktree, in a superproject, or in a folder above that has no valid
-  `.git`; when it is a link that leads out of the repository; or when it is spelled through a file-system alias (macOS
+  an outer repository, in the main checkout of a linked worktree, in a superproject, or above the folder when no `.git` is
+  found; when a `.git` entry that is not a valid repository lies between (the rule stops there); when it is a link that leads out of the repository; or when it is spelled through a file-system alias (macOS
   `/System/Volumes/Data`). Keep folders of a repository you do not trust off PATH: do not start the tools through its
   `npm run` or its direnv. `gather --repo` given such an alias path is refused.
 - An absolute `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH` that names a folder
