@@ -68,7 +68,7 @@ test('a diff driver with a textconv command never runs during gather', () => {
 // gather does not enumerate and blank such drivers: when the repository's own config names any filter it skips the
 // uncommitted-changes check (`dirty: null`, plus a warning). The config goes in after the commits, so the plant does not
 // run while the fixture is built.
-const SKIP_WARNING = /own git config defines a filter driver; skipped the uncommitted-changes check/;
+const SKIP_WARNING = /own git config defines a filter driver or a git-lfs extension.*skipped the uncommitted-changes check/;
 
 function addDriver(repo, name, lines) {
   appendConfig(repo, `[filter "${name}"]\n${lines}`);
@@ -176,7 +176,12 @@ test('a submodule whose own config defines a filter is not entered by the dirty 
   }
 });
 
-test('a partial clone never lets the repository\'s remote.origin.uploadpack run through a lazy fetch', () => {
+// A partial clone whose remote.origin.uploadpack is a planted script, and the control that plain git runs it through a
+// lazy fetch. fn gets { clone, marker }. GIT_NO_LAZY_FETCH only works on git 2.44 and later, so the refusal that does not
+// depend on it is proved with `_test.omitLazyFetchEnv` (the environment of an older git).
+// form: "clone" (what git writes: remote.<name>.promisor and partialclonefilter), "promisor" (the promisor key alone) or
+// "extension" (the older extensions.partialclone key alone).
+function withPartialClone(fn, { form = "clone" } = {}) {
   const { marker, cleanup } = plant();
   const source = makeRepo();
   let clone;
@@ -193,15 +198,154 @@ test('a partial clone never lets the repository\'s remote.origin.uploadpack run 
     fs.writeFileSync(fail, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
     fs.chmodSync(fail, 0o755);
     appendConfig(clone, `[remote "origin"]\n\tuploadpack = ${fail}\n`);
+    if (form !== 'clone') git(clone.dir, 'config', '--unset', 'remote.origin.partialclonefilter');
+    if (form === 'extension') {
+      git(clone.dir, 'config', '--unset', 'remote.origin.promisor');
+      git(clone.dir, 'config', 'extensions.partialclone', 'origin');
+    }
     try { git(clone.dir, 'diff', '--numstat', 'origin/main', 'HEAD'); } catch { /* the marker is the control */ }
     assert.equal(fs.existsSync(marker), true, 'control: plain git diff lazy-fetches through the planted uploadpack');
     fs.rmSync(marker);
-    assert.throws(() => gatherGit({ repo: clone.dir }), /cannot read the changed files/);
-    assert.equal(fs.existsSync(marker), false, 'gather ran remote.origin.uploadpack through a lazy fetch');
+    fn({ clone, marker });
   } finally {
     cleanup();
     source.cleanup();
     clone?.cleanup();
+  }
+}
+
+const PARTIAL_REFUSAL = /this is a partial clone .*full clone/;
+
+test('a partial clone is refused before any object is read, and the lazy fetch never runs (GIT_NO_LAZY_FETCH set)', () => {
+  withPartialClone(({ clone, marker }) => {
+    assert.throws(() => gatherGit({ repo: clone.dir }), PARTIAL_REFUSAL);
+    assert.equal(fs.existsSync(marker), false, 'gather ran remote.origin.uploadpack through a lazy fetch');
+  });
+});
+
+test('a partial clone is refused by its config alone, for a git that ignores GIT_NO_LAZY_FETCH (before 2.44)', () => {
+  withPartialClone(({ clone, marker }) => {
+    assert.throws(() => gatherGit({ repo: clone.dir, _test: { omitLazyFetchEnv: true } }), PARTIAL_REFUSAL);
+    assert.equal(fs.existsSync(marker), false, 'the refusal came after a diff had already run the uploadpack');
+  });
+});
+
+for (const form of ['promisor', 'extension']) {
+  test(`a clone with only the ${form} key set is refused too`, () => {
+    withPartialClone(({ clone, marker }) => {
+      assert.throws(() => gatherGit({ repo: clone.dir, _test: { omitLazyFetchEnv: true } }), PARTIAL_REFUSAL);
+      assert.equal(fs.existsSync(marker), false);
+    }, { form });
+  });
+}
+
+test('a repository with no partial-clone keys is not refused', () => {
+  const repo = featureRepo();
+  try {
+    assert.equal(gatherGit({ repo: repo.dir, _test: { omitLazyFetchEnv: true } }).branch, 'feat/login');
+  } finally {
+    repo.cleanup();
+  }
+});
+
+// git-lfs runs the repository's own lfs.extension.<name>.clean command from inside a global filter driver, so a global
+// filter does not make that safe. git-lfs is not needed here: the check only reads the repository's config. A stub global
+// filter keeps the case honest (it would measure dirty if the check did not skip).
+function lfsRepo(plantRepo) {
+  const repo = makeRepo();
+  repo.write('.gitattributes', 'notes.txt filter=up\n');
+  repo.write('notes.txt', 'two\n');
+  repo.commit('chore: base');
+  git(repo.dir, 'checkout', '-q', '-b', 'feat/x');
+  repo.write('other.txt', 'x\n');
+  repo.commit('feat: other');
+  plantRepo(repo);
+  repo.write('notes.txt', 'six\n');
+  return repo;
+}
+
+function withGlobalCat(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-lfsish-'));
+  const globalConfig = path.join(dir, 'gitconfig');
+  fs.writeFileSync(globalConfig, '[filter "up"]\n\tclean = cat\n');
+  const before = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = globalConfig;
+  try {
+    fn();
+  } finally {
+    if (before === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = before;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('a repository-local lfs.extension.<name> key skips the dirty check even under a global filter', () => {
+  const repo = lfsRepo((r) => appendConfig(r, '[lfs "extension.x"]\n\tclean = /bin/true %f\n\tpriority = 0\n'));
+  try {
+    withGlobalCat(() => {
+      const facts = gatherGit({ repo: repo.dir });
+      assert.equal(facts.dirty, null);
+      assert.ok(facts.warnings.some((w) => SKIP_WARNING.test(w)), facts.warnings.join('\n'));
+    });
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('control for the lfs case: the same repository without the extension key measures dirty through the global filter', () => {
+  const repo = lfsRepo(() => {});
+  try {
+    withGlobalCat(() => assert.equal(gatherGit({ repo: repo.dir }).dirty, true));
+  } finally {
+    repo.cleanup();
+  }
+});
+
+// git-lfs also reads .lfsconfig from the root of the work tree (or HEAD). Its documentation limits the keys read from
+// there to a safe subset, but extensions are not named in it and this is from memory, so the file's presence alone skips the check.
+test('a .lfsconfig in the work tree, or only in HEAD, skips the dirty check', () => {
+  const inTree = lfsRepo((r) => r.write('.lfsconfig', '[lfs]\n\turl = https://example.invalid/lfs\n'));
+  const inHead = makeRepo();
+  try {
+    withGlobalCat(() => {
+      const facts = gatherGit({ repo: inTree.dir });
+      assert.equal(facts.dirty, null);
+      assert.ok(facts.warnings.some((w) => SKIP_WARNING.test(w)));
+    });
+    inHead.write('.lfsconfig', '[lfs]\n\turl = https://example.invalid/lfs\n');
+    inHead.write('a.txt', 'a\n');
+    inHead.commit('chore: base');
+    git(inHead.dir, 'checkout', '-q', '-b', 'feat/x');
+    inHead.write('b.txt', 'b\n');
+    inHead.commit('feat: b');
+    inHead.remove('.lfsconfig');
+    assert.equal(gatherGit({ repo: inHead.dir }).dirty, null, 'removed from the work tree but still in HEAD');
+  } finally {
+    inTree.cleanup();
+    inHead.cleanup();
+  }
+});
+
+// A named pipe where git reads a file blocks git for good: gather stops it after a time limit and says so.
+const mkfifo = (file) => spawnSync('mkfifo', [file]).status === 0;
+
+test('a named pipe at .gitattributes stops gather with a one-line error instead of hanging', (t) => {
+  const repo = featureRepo();
+  try {
+    if (!mkfifo(path.join(repo.dir, '.gitattributes'))) return t.skip('mkfifo is not available here');
+    assert.throws(() => gatherGit({ repo: repo.dir, _test: { timeoutMs: 1500 } }), /git did not finish within 1\.5 seconds/);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('a named pipe at .mailmap does not stop gather (git log reads no mailmap)', (t) => {
+  const repo = featureRepo();
+  try {
+    if (!mkfifo(path.join(repo.dir, '.mailmap'))) return t.skip('mkfifo is not available here');
+    assert.equal(gatherGit({ repo: repo.dir, _test: { timeoutMs: 5000 } }).branch, 'feat/login');
+  } finally {
+    repo.cleanup();
   }
 });
 

@@ -19,14 +19,24 @@ Socket, Snyk) flag. No spec changes; pages build the same.
   invisible characters (bidi controls, zero-width and Tag characters, separators) as `\u{XXXX}` and cap long values:
   make-dashboard `inspect` and `query` text output (200 characters a cell; `--json` unchanged), make-scene row errors
   (80), make-explainer `gather` output, warnings and error messages (the facts file and the page data stay exact; only what `gather` prints to the terminal is cut at 200 characters a subject).
-- **make-explainer `gather` no longer runs commands from a repository's own git config.** It passes
-  `core.fsmonitor=false`, `--no-textconv` and `--no-ext-diff`, sets `GIT_NO_LAZY_FETCH=1` (a partial clone cannot run the
-  repo's `uploadpack`, `sshCommand` or credential helper; git 2.44 or later), does not enter submodules, and drops
-  `GIT_CONFIG`, `GIT_CONFIG_PARAMETERS`/`COUNT`/`KEY_n`/`VALUE_n`. When the repository's own config (its `.git/config`,
-  `config.worktree` or a file they include) defines any filter driver, gather skips the uncommitted-changes check:
-  `dirty` is `null` and a warning says why, because git runs a filter's command to compare files. Before, a hostile
-  `.git/config` (an unpacked archive, a shared checkout) could run a command through `git status`. Your global and
-  system git config still apply, so a git-lfs repository is unaffected. Uncommitted edits inside a submodule are not counted.
+- **make-explainer `gather` and make-scene `rows.mjs git` no longer run commands from a repository's own git config.**
+  They pass `core.fsmonitor=false`, `--no-textconv`, `--no-ext-diff` and `log.mailmap=false`, do not enter submodules, and drop
+  `GIT_CONFIG`, `GIT_CONFIG_PARAMETERS`/`COUNT`/`KEY_n`/`VALUE_n`. Before, a hostile `.git/config` (an unpacked archive, a
+  shared checkout) could run a command through `git status`.
+  - **Partial clones are refused.** A clone made with `--filter` fetches missing objects on demand, which runs the
+    repository's own `remote.<name>.uploadpack`, `core.sshCommand` or credential helper. Both tools read the config first
+    (`remote.<name>.promisor`, `partialclonefilter` or `extensions.partialclone` in the repository's own config, on any
+    git version) and stop with a usage error that says to run on a full clone. `GIT_NO_LAZY_FETCH=1` stays as a second layer
+    on git 2.44 or later. Needs git 2.26 or later to read the config; an older git is refused too.
+  - **The uncommitted-changes check is skipped when the repository's own config defines a filter.** When its
+    `.git/config`, `config.worktree` or a file they include defines a filter driver or a git-lfs extension
+    (`lfs.extension.<name>`), or the work tree (or HEAD) has a `.lfsconfig`, `dirty` is `null` and a warning says
+    why, because git runs a filter's command to compare files. Your global and system git config still apply, so a
+    git-lfs repository set up with the default global `git lfs install` is unaffected; one set up with
+    `git lfs install --local` (or git-crypt or git-annex, which write local drivers) skips the check. Uncommitted edits
+    inside a submodule are not counted.
+  - **A git call that takes over 60 seconds is stopped** with a one-line error (a named pipe where git reads
+    `.gitattributes` or an ignore file used to block the run for good).
 - **Publishing and consent.** The skills publish a page to a link only when you ask, and confirm first when it holds
   private data. Installs, publishing and `--allow-outside` stay behind your consent even mid-run.
 - **Existing artifact-builder agent files are reported outdated.** The doctor now looks for the new line that treats

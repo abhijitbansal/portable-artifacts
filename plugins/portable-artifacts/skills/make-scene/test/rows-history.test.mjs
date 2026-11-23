@@ -438,3 +438,53 @@ test('the git environment drops the legacy GIT_CONFIG and the config injectors, 
   assert.equal(env.GIT_CONFIG_GLOBAL, os.devNull);
   assert.equal(env.PATH, '/usr/bin');
 });
+
+// A partial clone fetches missing objects through the repository's own remote.<name>.uploadpack. GIT_NO_LAZY_FETCH stops it
+// on git 2.44 and later; the config check refuses on any git, proved here with the environment of an older git.
+test('a partial clone is refused before git log runs, even for a git that ignores GIT_NO_LAZY_FETCH', (t) => {
+  const source = fixtureRepo();
+  const dir = tmp('scene-rows-clone-');
+  const plantDir = tmp('scene-rows-plant-');
+  const marker = path.join(plantDir, 'ran');
+  const script = path.join(plantDir, 'upload.sh');
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull };
+  const plain = (...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8', env });
+  try {
+    source.commit('2026-10-07T10:00:00Z', 'src/a.js');
+    source.commit('2026-10-14T10:00:00Z', 'src/a.js');
+    spawnSync('git', ['config', 'uploadpack.allowFilter', 'true'], { cwd: source.dir, env });
+    spawnSync('git', ['config', 'uploadpack.allowAnySHA1InWant', 'true'], { cwd: source.dir, env });
+    const cloned = spawnSync('git', ['clone', '-q', '--filter=blob:none', `file://${source.dir}`, dir], { encoding: 'utf8', env });
+    if (cloned.status !== 0) return t.skip(`cannot build a partial clone here: ${cloned.stderr}`);
+    fs.writeFileSync(script, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
+    fs.chmodSync(script, 0o755);
+    fs.appendFileSync(path.join(dir, '.git', 'config'), `[remote "origin"]\n\tuploadpack = ${script}\n`);
+    plain('log', '--numstat', '-3');
+    assert.equal(fs.existsSync(marker), true, 'control: plain git log lazy-fetches through the planted uploadpack');
+    fs.rmSync(marker);
+    assert.throws(() => historyRows({ repo: dir, weeks: 3, depth: 1, now: NOW, _test: { omitLazyFetchEnv: true } }), /this is a partial clone .*full clone/);
+    assert.equal(fs.existsSync(marker), false, 'git log ran the uploadpack before the refusal');
+  } finally {
+    for (const d of [dir, plantDir]) fs.rmSync(d, { recursive: true, force: true });
+    source.cleanup();
+  }
+});
+
+test('a named pipe at .mailmap does not hang git log: it is not read', (t) => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'src/a.js');
+    if (spawnSync('mkfifo', [path.join(repo.dir, '.mailmap')]).status !== 0) return t.skip('mkfifo is not available here');
+    const rows = historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW, _test: { timeoutMs: 5000 } });
+    assert.equal(valueOf(rows, 'src', '2026-W42'), 1);
+  } finally { repo.cleanup(); }
+});
+
+test('a git call that does not finish in the time limit stops with a one-line error', (t) => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'src/a.js');
+    if (spawnSync('mkfifo', [path.join(repo.dir, '.gitattributes')]).status !== 0) return t.skip('mkfifo is not available here');
+    assert.throws(() => historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW, _test: { timeoutMs: 1500 } }), /git did not finish within 1\.5 seconds/);
+  } finally { repo.cleanup(); }
+});
