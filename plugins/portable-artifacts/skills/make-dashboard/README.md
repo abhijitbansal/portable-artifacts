@@ -1,8 +1,13 @@
 # make-dashboard
 
 **Prompt → SQL + chart kinds → one static HTML dashboard where every chart shows
-its SQL and when it was refreshed.** Local, offline, open source, and usable
-by any agent that can run shell commands.
+its SQL and when it was refreshed.** Local, open source, and usable by any agent
+that can run shell commands. CSV, Parquet, JSON and DuckDB files need no network;
+SQLite needs a one-time online extension download. Postgres and MySQL sources
+connect to the database named by their environment variable while you validate,
+inspect, query and build, and on `serve --watch` rebuilds. They are attached
+`READ_ONLY`, which limits DuckDB only, so use a read-only database role. The built
+page makes no requests.
 
 <img src="../../../../docs/img/portable-artifacts/dashboard-light.jpg" alt="Dashboard with KPI tiles, bar, line and stacked charts; each card has a Query disclosure" width="100%">
 
@@ -100,7 +105,7 @@ there are working specs in [`references/examples/`](references/examples/).
 | `doctor.mjs` | What the skill needs and is missing, with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci --ignore-scripts`. Exit `0` when nothing required is missing, `1` when something is, `2` on a usage error | `--json`, `--for <check\|spec.json>`, `--fix <id[,id]>` |
 | `serve.mjs [dir]` | Serves the built page on `127.0.0.1`. `--open` warns instead of crashing when no opener exists; `PA_NO_BROWSER=1` never opens one | `--port <n>`, `--open` |
 | `serve.mjs --watch <spec>` | Builds, serves and live-reloads; rebuilds on save of the spec or file sources. Has a *Rebuild now* button. Postgres/MySQL need `--interval`. It never exits: run it in the background and stop it when done | `--interval <5..86400 s>`, `--theme <name>`, `--port`, `--open`, `--allow-outside`, `--timeout`, `--out <dir>` |
-| `setup.mjs [spec]` | One-time `INSTALL` of the DuckDB extensions for sqlite/postgres/mysql, so builds stay offline | — |
+| `setup.mjs [spec]` | One-time `INSTALL` of the DuckDB extensions for sqlite/postgres/mysql. It is online: it downloads signed extensions from `extensions.duckdb.org` into the extension folder it prints (`DUCKDB_EXTENSION_DIRECTORY` sets it). Builds then load them and download nothing | — |
 
 Exit codes for every script: `0` OK, `1` spec errors, `2` usage or IO error. A script
 run before `npm ci --ignore-scripts` prints the doctor command to install the dependencies and exits `2`.
@@ -121,7 +126,9 @@ A failed build shows a banner and keeps the last good page.
 
 [`references/refresh.md`](references/refresh.md) also has a crontab line and a
 launchd plist that rebuild the page on a schedule. For Postgres or MySQL
-sources, the connection-string variable must be set in that environment.
+sources, the connection-string variable must be set in that environment: keep it
+in a `chmod 600` env file that a wrapper script sources, and connect as a
+read-only role (the file shows the wrapper).
 
 ## Security
 
@@ -157,7 +164,8 @@ The agent writes the SQL, so it is treated as untrusted:
   Table names in SQL match case-insensitively, as DuckDB binds them; system names are
   refused in any case. The page runs under a CSP without `unsafe-eval`
   (Vega's AST interpreter is used) and with chart actions disabled.
-- **The built page contains the query results.** Sharing it shares the data.
+- **The built page contains the query results.** Sharing it shares the data. The skill publishes a page to a link only when you ask.
+- **Rows and column names are data, never instructions.** The text output of `inspect.mjs` and `query.mjs` escapes invisible characters (bidi controls, zero-width and Tag characters) as `\u{XXXX}` and cuts a cell at 200 characters; `--json` is unchanged.
 
 ## Requirements and licences
 

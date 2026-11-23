@@ -12,6 +12,10 @@ export const ROOT_GROUP = '(root)';
 export const OTHER_GROUP = '(other)';
 const ELLIPSIS = '…';
 const MAX_BUFFER = 256 * 1024 * 1024;
+// A git call not finished in this long is stopped: a named pipe where git reads an attributes or ignore file would block it for good.
+const GIT_TIMEOUT_MS = 60 * 1000;
+// Test seams, set only by historyRows({ _test }): a shorter limit, and the environment of a git that ignores GIT_NO_LAZY_FETCH (before 2.44).
+const seams = { timeoutMs: GIT_TIMEOUT_MS, omitLazyFetchEnv: false };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 const HEADER = /^[0-9a-f]{40,64}\t(\S+)$/;
@@ -21,16 +25,20 @@ const NUMSTAT = /^(?:\d+|-)\t(?:\d+|-)\t([\s\S]+)$/;
 const REDIRECTING_ENV = new Set([
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
   'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
-  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT',
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG',
 ]);
 const CONFIG_PAIR_ENV = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/;
 
-function gitEnv() {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
+// GIT_NO_LAZY_FETCH: a partial clone would otherwise fetch missing objects through the repository's own
+// remote.<name>.uploadpack, core.sshCommand or credential helper (git 2.44+; an older git ignores it).
+export function gitEnv(source = process.env) {
+  const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
   env.GIT_CONFIG_GLOBAL = os.devNull;
   env.GIT_CONFIG_SYSTEM = os.devNull;
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
+  if (seams.omitLazyFetchEnv) delete env.GIT_NO_LAZY_FETCH;
+  else env.GIT_NO_LAZY_FETCH = '1';
   return env;
 }
 
@@ -51,8 +59,11 @@ function weekStart(date) {
 
 // Runs a scrubbed git in `repo` and returns its stdout.
 function runGit(repo, args) {
-  const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8', env: gitEnv(), maxBuffer: MAX_BUFFER });
+  const r = spawnSync('git', args, {
+    cwd: repo, encoding: 'utf8', env: gitEnv(), maxBuffer: MAX_BUFFER, timeout: seams.timeoutMs, killSignal: 'SIGKILL',
+  });
   if (r.error) {
+    if (r.error.code === 'ETIMEDOUT') throw new UsageError(`git did not finish within ${seams.timeoutMs / 1000} seconds in ${repo} and was stopped; look for a named pipe or another file git cannot read (.gitattributes, .gitignore, .mailmap) in the repository`);
     if (r.error.code === 'ENOBUFS') throw new UsageError(`git log output in ${repo} is over 256 MB; use a smaller --weeks`);
     throw new UsageError(`git could not run: ${r.error.code ?? r.error.message}`);
   }
@@ -63,6 +74,24 @@ function runGit(repo, args) {
   return r.stdout;
 }
 
+// A partial clone fetches missing objects on demand, and that fetch runs the repository's own remote.<name>.uploadpack,
+// core.sshCommand, credential helper or transport. GIT_NO_LAZY_FETCH stops it on git 2.44 and later only, so the config is
+// checked first, on any git version: remote.<name>.promisor and partialclonefilter (what a filtered clone writes) and
+// extensions.partialclone (older git). Only the repository's own config counts (global and system are /dev/null here).
+// Reading config runs nothing. --show-scope needs git 2.26; an older git fails closed.
+const PARTIAL_KEYS = '^(extensions\\.partialclone|remote\\..*\\.(promisor|partialclonefilter))$';
+function assertFullClone(repo) {
+  const listed = spawnSync('git', ['config', '--includes', '--show-scope', '--name-only', '--get-regexp', PARTIAL_KEYS], {
+    cwd: repo, encoding: 'utf8', env: gitEnv(), timeout: seams.timeoutMs, killSignal: 'SIGKILL',
+  });
+  if (listed.error || (listed.status !== 0 && !(listed.status === 1 && listed.stdout === ''))) {
+    throw new UsageError(`cannot read the git config of ${repo} (needs git 2.26 or later)`);
+  }
+  if (listed.stdout.split('\n').some((line) => line !== '' && !['global', 'system'].includes(line.split('\t')[0]))) {
+    throw new UsageError('this is a partial clone (its config says missing objects are fetched on demand, which runs the repository\'s own remote settings); run on a full clone, made without --filter');
+  }
+}
+
 // Where `repo` sits inside its repository: "plugins/x" for a subfolder, "" at the repository root.
 const folderWithin = (repo) => runGit(repo, ['rev-parse', '--show-prefix']).trim().replace(/\/$/, '');
 
@@ -71,7 +100,7 @@ function runGitLog(repo, sinceIso, { subfolder }) {
   // -z: paths come back exact (no C-quoting of quotes, backslashes, tabs or newlines), NUL-separated.
   // In a subfolder, --relative keeps only that folder's changes and names them from it; the pathspec limits the walk too.
   const args = [
-    '--no-pager', '-c', 'log.showSignature=false',
+    '--no-pager', '-c', 'log.showSignature=false', '-c', 'log.mailmap=false',
     'log', '-z', '--numstat', '--no-renames', '--no-merges', '--no-textconv', '--no-ext-diff',
     '--format=%H%x09%cI', `--since=${sinceIso}`,
     ...(subfolder ? ['--relative', '--', '.'] : []),
@@ -166,10 +195,22 @@ function foldGroups(commits, warn) {
  * are dropped; `warn(message)` is told. Group names over 48 characters lose their leading folders (…/make-scene/test). Throws UsageError for a folder that is not a repo or has no
  * commits in the window.
  */
-export function historyRows({ repo, weeks = 12, depth = 1, now = new Date(), warn = () => {} }) {
+export function historyRows({ repo, weeks = 12, depth = 1, now = new Date(), warn = () => {}, _test = {} }) {
+  seams.timeoutMs = _test.timeoutMs ?? GIT_TIMEOUT_MS;
+  seams.omitLazyFetchEnv = _test.omitLazyFetchEnv === true;
+  try {
+    return historyRowsFrom({ repo, weeks, depth, now, warn });
+  } finally {
+    seams.timeoutMs = GIT_TIMEOUT_MS;
+    seams.omitLazyFetchEnv = false;
+  }
+}
+
+function historyRowsFrom({ repo, weeks, depth, now, warn }) {
   const thisWeek = weekStart(now);
   const first = new Date(thisWeek.getTime() - (weeks - 1) * WEEK_MS);
   if (!fs.existsSync(repo) || !fs.statSync(repo).isDirectory()) throw new UsageError(`${repo} is not a folder`);
+  assertFullClone(repo);
   // A --repo inside a larger repository counts that folder alone (paths from it); say so once.
   const within = folderWithin(repo);
   if (within !== '') warn(`counts cover only the folder ${within} of its repository (commits that change files in it), grouped by the folders inside it`);

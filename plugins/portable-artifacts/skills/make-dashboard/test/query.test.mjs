@@ -43,6 +43,27 @@ test('prints the chart query rows, so a title can state what they show', () => {
   assert.ok(rows[0].revenue >= rows[1].revenue, 'query order is kept');
 });
 
+test('printed cells show hidden characters as code points and cap a long cell; --json stays exact', () => {
+  const file = project(SPEC);
+  const hidden = String.fromCodePoint(0xE0069, 0xE0067); // two Unicode tag characters
+  fs.writeFileSync(path.join(path.dirname(file), 'data/notes.csv'), `note,n\nhi\u{202E}evil${hidden},1\n${'w'.repeat(500)},2\n`);
+  fs.writeFileSync(file, JSON.stringify({
+    title: 'T',
+    sources: { notes: { type: 'csv', path: 'data/notes.csv' } },
+    queries: { rows: 'SELECT * FROM notes ORDER BY n' },
+    charts: [{ id: 'all', title: 'All notes', query: 'rows', kind: 'histogram', value: 'n' }],
+  }));
+  const r = run([file, '--chart', 'all']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout, /[\u{202E}\u{E0000}-\u{E007F}]/u, 'no raw bidi or tag character reaches the agent');
+  assert.match(r.stdout, /^ {2}\{"note":"hi\\u\{202e\}evil\\u\{e0069\}\\u\{e0067\}","n":1\}$/m);
+  const long = r.stdout.split('\n').find((l) => l.includes('wwww'));
+  assert.match(long, /…\[\d+ more characters\],"n":2\}$/);
+  assert.ok(long.length < 260, `a 500-character cell is capped, got ${long.length}`);
+  const j = JSON.parse(run([file, '--chart', 'all', '--json']).stdout);
+  assert.equal(j.rows[0].note, `hi\u{202E}evil${hidden}`, '--json keeps the data exact');
+});
+
 test('--limit caps the printed rows and says how many were left out', () => {
   const r = run([project(SPEC), '--chart', 'all', '--limit', '3']);
   assert.equal(r.status, 0, r.stdout + r.stderr);

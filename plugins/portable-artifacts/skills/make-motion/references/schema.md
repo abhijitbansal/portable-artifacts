@@ -16,6 +16,23 @@ This page lists the root fields, the fields every shot takes, the markup in `say
 }
 ```
 
+**Contents**
+
+- [Root fields](#root-fields)
+- [Fields every shot takes](#fields-every-shot-takes)
+- [Narration markup](#narration-markup)
+- [Anchors](#anchors)
+- [Sound](#sound)
+- [Overlays](#overlays)
+- [Variables](#variables)
+- [Cuts](#cuts)
+- [Composition findings](#composition-findings)
+- [The `--list` names](#the---list-names)
+- [The report](#the-report)
+- [Exit codes](#exit-codes)
+- [Reproducibility](#reproducibility)
+- [Limits](#limits)
+
 ## Root fields
 
 An unknown root field is an error. Only `shots` and `version` are required.

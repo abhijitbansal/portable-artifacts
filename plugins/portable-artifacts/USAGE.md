@@ -65,7 +65,7 @@ is missing it sends you one message with each item, why it is needed, its size
 and the command, and asks once. On yes it runs `--fix <ids>`. Anything that
 needs `sudo`, has no automatic fix or fails (for example a sandbox without
 network) comes back to you as the exact command to run yourself; in Claude Code
-prefix it with `!`. On no the agent does what it can without the item, for
+type it after an exclamation mark, its shell prefix. On no the agent does what it can without the item, for
 example make-motion still writes `film.json`, runs `make.mjs --outline` and hands you the
 build command. `--for` takes a spec `.json` in every skill (make-explainer and
 make-scene add sister skills from it), `check` (make-dashboard, make-diagram, make-explainer and make-scene), and `voiceover` or `cutout` (make-motion). Unknown or
@@ -230,8 +230,9 @@ recipe from `make-dashboard/references/refresh.md`.
 ```
 
 - Run `node <skill-dir>/scripts/setup.mjs dashboard.json` once, online. It
-  installs the DuckDB extensions those sources need, and later builds stay
-  offline.
+  downloads the signed DuckDB extensions those sources need from
+  `extensions.duckdb.org`, and later builds load them and download nothing. A
+  postgres or mysql build still connects, read-only, to your database.
 - Query attached tables as `shop.orders` or `wh.public.orders`.
 - Put the connection string in the environment (`export
   WAREHOUSE_URL=postgres://readonly@host/db`). The variable's name must end
@@ -329,7 +330,12 @@ your project folder):
 1. For a branch, `gather.mjs git --out facts.json` reads the committed
    work: commits, files changed with line counts and renames, test files and
    the date. `--repo <folder>` reads another checkout; `--base` defaults to
-   `main`, then `master`, preferring origin's copy when it is ahead.
+   `main`, then `master`, preferring origin's copy when it is ahead. It does
+   not run commands from the repository's own git config, so it refuses a
+   partial clone (made with `--filter`; use a full clone) and needs git 2.26
+   or later. When that config defines a filter driver or a git-lfs extension,
+   or the work tree has a `.lfsconfig`, it skips the uncommitted-changes check
+   (`dirty` is `null`, with a warning). Each git call is stopped after 60 seconds.
 2. `scaffold.mjs recap --facts facts.json --out explainer.json` writes a starter
    file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
    The numbers, file list, timeline and checklist groups are filled in; every
@@ -341,7 +347,7 @@ your project folder):
 4. `validate.mjs explainer.json` checks the schema and limits, file references,
    the embedded diagrams and charts, and the prose rules. It fails on leftover
    `TODO:` text, filler phrases ("leverage", "seamless", "delve"), titles
-   numbered like `01` or ending in `!`, and (for slides) a slide with more
+   numbered like `01` or ending in an exclamation mark, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
    path, the problem and the fix; `--strict` turns the length caps into errors; without it text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words (1,800 on a plan page), `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Three or more sections of one type in a row also warn, once per run at its third section (`sections[2]: 5 motion sections in a row (sections 1 to 5); a page of one repeated block reads as a list: merge some, or put a different kind of section between them`); `--strict` does not make it an error, and a run of `decision`, `approval` or `question` sections, which a plan puts in runs, is left alone. Each warning names the section; resolve them before building where you can.
 5. `build.mjs explainer.json` writes one HTML file and prints its path, then the page's `file://` URL
@@ -549,7 +555,7 @@ make-motion 2 reads version 2 films only: a script of shots in one JSON file, `f
 - `measure.mjs reference.mp4 [--json]` reads one video file on this machine and prints what it measured (duration, size, frame rate, how many cuts, the median, shortest and longest shot, loudness and true peak) and what it only guessed (`mode`, `pace`), to pace a film like it. Local files only; it writes nothing and copies nothing from the video.
 - `--workers 4` (or `auto`) captures frames in parallel. `--exact` captures every frame as a PNG. `--sheets-only` writes the review sheets and encodes nothing. In a single-film `--json` report every file path is absolute.
 - **One video per row.** Declare `vars` in the film, `{ "name": { "type": "string", "default": "Ada" } }`, write `{{name}}` where a value goes, put the values in a JSON array of objects, and run `make.mjs film.json --batch rows.json --out "renders/{name}.mp4"`. The `--out` needs `{index}` or a `{var}`.
-- **Footage and pictures.** A `media` shot places a picture or a clip from the project folder (`src`, and for a clip `in`, `out` and `muted`). A `clipping` shot shows a screenshot with highlighted regions. A `cutout` device places a picture with transparency; `cutout.mjs photo.png` makes one locally after a one-time install the agent asks about.
+- **Footage and pictures.** A `media` shot places a picture or a clip from the project folder (`src`, and for a clip `in`, `out` and `muted`). A `clipping` shot shows a screenshot with highlighted regions. A `cutout` device places a picture with transparency; `cutout.mjs photo.png` makes one locally after a one-time install the agent asks about (the package, installed with `--ignore-scripts`, and a one-time 25 MB MODNet model download, pinned and SHA-256 checked, so a film has two model downloads in all: this one and the voice model).
 - `--model`, `--effort` and `--agent` set the provenance stamp; `--no-provenance` (or `"provenance": false` in the film) leaves the authoring tags out of the MP4.
 - Finished films to copy are in `skills/make-motion/references/examples/v2/` (30 of them; `how-it-works.json` is an 88 s voiced film about how a film is made). The fields every film and shot take, the report and the exit codes are in `references/schema.md`; how to write for the picture is in `references/story.md`; what gives each look away is in `references/tells.md`; how each type of film is built is in `references/types/` (`explainer.md`, `data.md`, `vertical.md`); and the other references (`rules.md`, `calibration.md`, `reviewing.md`, `tools.md`, `broll.md`, `music.md`) are listed in `skills/make-motion/README.md`.
 - **Look data.** A look gives a statement an entrance of its own: `cosmos` brings a word in letter by letter (`letters`) and `desk` brings each line in as one block (`lines`), neither in `viral`. They are part of the look, not film fields.
@@ -568,7 +574,8 @@ make-motion 2 reads version 2 films only: a script of shots in one JSON file, `f
 1. Gets the data. Rows it already has go in `data.rows`; a CSV goes in `data.csv`
    with `columns`; for git history, `rows.mjs git --weeks 12` writes
    `scene-rows.json` (commits per top-level folder per ISO week), which the spec
-   reads as `data.file`.
+   reads as `data.file`. Like `gather.mjs`, it refuses a partial clone and an
+   older git than 2.26, and stops a git call after 60 seconds.
 2. Writes `scene.json`: a title, `data` (rows of `group`, `t`, `value`) or a
    `lift`, an optional `world` and a `tour` of up to 12 camera stops. It copies
    the closest file in `references/examples/`.
@@ -664,9 +671,10 @@ refresh time. Set `SOURCE_DATE_EPOCH` to pin the footer date for a reproducible 
 
 ### Sharing a built page (Claude Code only)
 
-Other hosts have no Artifact tool, so this applies to Claude Code. When the reader is on another
-device or needs a link, hand the built HTML to the Artifact tool unchanged (a title, an icon and a
-one-sentence description are enough); do not rewrite it as new HTML by hand.
+Other hosts have no Artifact tool, so this applies to Claude Code. The skills publish a page to a link
+only when you ask, and confirm first when it holds private data. When you do ask, because the reader is
+on another device or needs a link, the agent hands the built HTML to the Artifact tool unchanged (a
+title, an icon and a one-sentence description are enough); it does not rewrite it as new HTML by hand.
 
 - **One file or a folder.** A page with no `<name>.assets/` folder (a diagram, a scene, an explainer
   with no video or interactive chart, a dashboard's `index.html`) is already one file. A page with
@@ -744,6 +752,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `… is installed but its dependencies are missing` | Run `npm ci --ignore-scripts --omit=dev` inside the named sibling skill's folder |
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
+| `gather.mjs` or `rows.mjs git` prints `this is a partial clone …` or `cannot read the git config of … (needs git 2.26 or later)` | Run it on a full clone (made without `--filter`) and update git to 2.26 or later. A git call over 60 seconds stops with its own one-line error |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
 | `check: skipped (no browser: …)` from any skill's `check.mjs` (make-scene also skips when the browser has no WebGL) | Expected without Playwright or Chromium; the page is still built. A skipped check is not a pass: `--json` carries `"skipped": true`. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci --ignore-scripts` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |

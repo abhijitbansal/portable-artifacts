@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -95,32 +95,41 @@ test('a broken EVAL_LOG path never changes the outcome', () => {
 
 // ---- a bug inside the tool is one line, not a stack trace -------------------
 
-// `node --import <data: URL>` makes every read of make-diagram's default theme (blueprint) throw, a stand-in
-// for a bug inside the build that is not a spec or usage error. It is built here from a string so no
-// standalone file that patches Node's fs ships inside the skill folder.
-const CRASH_SOURCE = `import fs from 'node:fs';
-const read = fs.readFileSync;
-fs.readFileSync = function patched(file, ...rest) {
-  if (String(file).endsWith('blueprint.json')) throw new Error('boom\\n  at somewhere');
-  return read.call(this, file, ...rest);
-};`;
-const PRELOAD = `data:text/javascript,${encodeURIComponent(CRASH_SOURCE)}`;
-const BUILD = fileURLToPath(new URL('../scripts/build.mjs', import.meta.url));
+// A real fault, with nothing patched: a copy of the skill whose default theme (blueprint) is a folder instead of a
+// file, as a damaged install would leave it. Reading it fails with EISDIR, which is neither a spec nor a usage error.
+// The copy holds the scripts, shared/ (with the damage), icons, template and a link to this skill's node_modules.
+const SKILL = fileURLToPath(new URL('..', import.meta.url));
+const made = [];
+after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
-for (const [name, script] of [['validate', VALIDATE], ['build', BUILD]]) {
-  const crash = (args) => spawnSync(process.execPath, ['--import', PRELOAD, script, fixture('flow'), ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: os.tmpdir() } });
+function damagedCopy() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'diagram-damaged-'));
+  made.push(root);
+  const copy = path.join(root, 'make-diagram');
+  fs.mkdirSync(copy);
+  for (const part of ['scripts', 'shared', 'icons', 'template']) fs.cpSync(path.join(SKILL, part), path.join(copy, part), { recursive: true });
+  fs.copyFileSync(path.join(SKILL, 'package.json'), path.join(copy, 'package.json'));
+  fs.symlinkSync(path.join(SKILL, 'node_modules'), path.join(copy, 'node_modules'), 'dir');
+  const theme = path.join(copy, 'shared', 'themes', 'blueprint.json');
+  fs.rmSync(theme);
+  fs.mkdirSync(theme);
+  return copy;
+}
 
-  test(`${name}: an internal error prints one line and exits 1`, () => {
+for (const script of ['validate', 'build']) {
+  const crash = (args) => spawnSync(process.execPath, [path.join(damagedCopy(), 'scripts', `${script}.mjs`), fixture('flow'), ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: os.tmpdir() } });
+
+  test(`${script}: an internal error prints one line and exits 1`, () => {
     const r = crash([]);
     assert.equal(r.status, 1);
-    assert.equal(r.stderr, 'internal error: boom; please report it\n');
+    assert.equal(r.stderr, 'internal error: EISDIR: illegal operation on a directory, read; please report it\n');
     assert.equal(r.stdout, '');
   });
 
-  test(`${name} --json: an internal error is one { ok: false } line`, () => {
+  test(`${script} --json: an internal error is one { ok: false } line`, () => {
     const r = crash(['--json']);
     assert.equal(r.status, 1);
     assert.equal(r.stderr, '');
-    assert.deepEqual(JSON.parse(r.stdout), { ok: false, errors: [{ path: '', message: 'internal error: boom; please report it' }] });
+    assert.deepEqual(JSON.parse(r.stdout), { ok: false, errors: [{ path: '', message: 'internal error: EISDIR: illegal operation on a directory, read; please report it' }] });
   });
 }

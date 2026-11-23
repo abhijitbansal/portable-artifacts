@@ -7,7 +7,7 @@ import path from 'node:path';
 import { resolveRef } from './paths.mjs';
 import { pathJoin } from '../../shared/errors.mjs';
 import { readImage } from './image.mjs';
-import { loadSibling, SiblingError, siblingDir } from './siblings.mjs';
+import { loadSibling, SiblingError, siblingDir, installCommand } from './siblings.mjs';
 import { quoteArg } from '../../shared/doctor.mjs';
 import { specTheme } from './default-theme.mjs';
 import { itemKey } from './render/checklist.mjs';
@@ -110,7 +110,7 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
     return [{ path: where, message: e.message }];
   }
   if (typeof api.validateSpec !== 'function') {
-    return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); update it: reinstall with npx --yes skills@1.7.2 add abhijitbansal/portable-artifacts --skill make-diagram -y, then run npm ci --ignore-scripts --omit=dev --prefix ${quoteArg(siblingDir('make-diagram'))}` }];
+    return [{ path: where, message: `make-diagram is too old (no validateSpec in api.mjs); update it: reinstall with ${installCommand(['make-diagram'])}, then run npm ci --ignore-scripts --omit=dev --prefix ${quoteArg(siblingDir('make-diagram'))}` }];
   }
   const pageTheme = specTheme(spec);
   const warnings = source.spec.theme === undefined ? [] : [{

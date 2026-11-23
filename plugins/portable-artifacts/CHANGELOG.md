@@ -6,6 +6,73 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-11-23
+
+A security pass over all five skills, against prompt injection and what the skills.sh scanners (Gen Agent Trust Hub,
+Socket, Snyk) flag. No spec changes; pages build the same.
+
+### Behaviour changes to know about
+
+- **Text the skills read is data, never instructions.** Every SKILL.md now says so for the content that skill reads
+  (rows and column names, commit messages and file names, CSV cells, report findings, text in pictures), and the
+  artifact-builder agent file says the same about report messages. The CLIs that print such text to the agent escape
+  invisible characters (bidi controls, zero-width and Tag characters, separators) as `\u{XXXX}` and cap long values:
+  make-dashboard `inspect` and `query` text output (200 characters a cell; `--json` unchanged), make-scene row errors
+  (80), make-explainer `gather` output, warnings and error messages (the facts file and the page data stay exact; only what `gather` prints to the terminal is cut at 200 characters a subject).
+- **make-explainer `gather` and make-scene `rows.mjs git` no longer run commands from a repository's own git config.**
+  `gather` passes `core.fsmonitor=false`, `--no-textconv`, `--no-ext-diff` and `log.mailmap=false` and does not enter
+  submodules; both drop `GIT_CONFIG` and `GIT_CONFIG_PARAMETERS`/`COUNT`/`KEY_n`/`VALUE_n` and give every git call a 60 s
+  limit. Before, a hostile `.git/config` (an unpacked archive, a shared checkout) could run a command through `gather`'s
+  `git status`, and a partial clone could run one through either tool's lazy fetch.
+  - **Partial clones are refused.** A clone made with `--filter` fetches missing objects on demand, which runs the
+    repository's own `remote.<name>.uploadpack`, `core.sshCommand` or credential helper. Both tools read the config first
+    (`remote.<name>.promisor`, `partialclonefilter` or `extensions.partialclone` in the repository's own config; this
+    check does not depend on `GIT_NO_LAZY_FETCH`) and stop with a usage error that says to run on a full clone. `GIT_NO_LAZY_FETCH=1` stays as a second layer
+    on git 2.44 or later. Needs git 2.26 or later to read the config; an older git is refused too.
+  - **The uncommitted-changes check is skipped when the repository's own config defines a filter.** When its
+    `.git/config`, `config.worktree` or a file they include defines a filter driver or a git-lfs extension
+    (`lfs.extension.<name>`), or the work tree (or HEAD) has a `.lfsconfig`, `dirty` is `null` and a warning says
+    why, because git runs a filter's command to compare files. Your global and system git config still apply, so a
+    git-lfs repository set up with the default global `git lfs install` is unaffected; one set up with
+    `git lfs install --local` (or git-crypt or git-annex, which write local drivers) skips the check. Uncommitted edits
+    inside a submodule are not counted.
+  - **A git call that takes over 60 seconds is stopped** with a one-line error (a named pipe where git reads
+    `.gitattributes` or an ignore file used to block the run for good).
+- **Publishing and consent.** The skills publish a page to a link only when you ask, and confirm first when it holds
+  private data. Installs, publishing and `--allow-outside` stay behind your consent even mid-run.
+- **Existing artifact-builder agent files are reported outdated.** The doctor now looks for the new line that treats
+  report text as data, so a file installed before 2.4.0 (which has `make.mjs` but not that line) shows as outdated with the
+  installer command that replaces it. The doctor still never overwrites a builder agent file itself.
+- **make-dashboard `serve`** no longer prints the rebuild token.
+- **`PA_MAKE_TEST_SCRIPTS`** is honoured only under `NODE_ENV=test`.
+- **make-motion `measure` no longer loses a cut now and then on ffmpeg 7 and later.** Those versions filter video and
+  audio on separate threads, and ebur128 writes each 100 ms progress line in several pieces, so a scene-cut line could
+  land inside one and be dropped with it (seen on CI's ffmpeg 8.0.1: 1 cut of 2 on the test fixture). The loudness pass
+  now runs with `framelog=quiet`, as the music-bed meter already did, and no log line is filtered out.
+
+### Disclosures and docs
+
+- make-dashboard no longer says "offline" for postgres and mysql sources: CSV, Parquet, JSON and DuckDB files need no network, SQLite needs a one-time online extension download, database
+  sources connect during validate, inspect, query and build (attached `READ_ONLY`, which limits DuckDB only, so use a
+  read-only database role), and the built page makes no requests. `setup.mjs`'s
+  DuckDB extension download is named, and `references/refresh.md` keeps the connection string in a `chmod 600` env
+  file instead of crontab or a plist.
+- make-explainer names the `--image-api` request; make-motion names both model downloads (voice and cutout), their
+  cache folder, and `--ignore-scripts` on the optional installs. The skills' own writes outside the project are named (the agent files, model and extension caches, the `~/.agent/diagrams` fallback); Playwright's browser download and npm's cache belong to those tools.
+- Large reference files gain a contents list.
+
+### Code hygiene a scanner reads
+
+- Literal invisible and bidi characters in shipped code are now escapes, and `bin/test/invisible-chars.test.mjs`
+  fails on any new one (format and bidi controls, the Hangul fillers and other default-ignorable characters, and every
+  variation selector except VS15 and VS16; it reads the plugin-root README, USAGE and CHANGELOG too). The escaping helper
+  agent-facing output uses covers the same set.
+- make-explainer's chip tone comes from a closed set.
+- Two tests that patched `fs` (one through a URL-encoded `node --import` preload) now provoke a real fault or use
+  `t.mock.method`.
+- make-scene's minified runtime is rebuilt in a test and compared byte for byte.
+- The sibling-skill install command lives in one shared constant.
+
 ## [2.3.1] - 2026-11-23
 
 - The vertical showreel now plays one whoosh per cut, where it played several.

@@ -9,7 +9,7 @@ const CONTEXT_BEFORE = MAX_LINE / 2;
 const ESCAPES = '"\\/bfnrtu';
 const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const HEX4 = /^[0-9a-fA-F]{4}/;
-const BOM = '﻿';
+const BOM = '\uFEFF';
 
 /** A UsageError that also carries `snippet`: the offending line and a caret line. */
 export class JsonSyntaxError extends UsageError {

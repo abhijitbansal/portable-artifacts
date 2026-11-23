@@ -46,11 +46,16 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 - **Targeted edits** — a change is one field in the spec, never regenerated
   code, so everything else stays exactly the same.
 - **Reproducible** — the same spec always produces the same page or video. What varies is the provenance date in the footer, the day you build (set `SOURCE_DATE_EPOCH` to pin it), and a dashboard's refresh time. A hero image from `--image-api` comes from your service, so it can differ between builds.
-- **Offline** — after a one-time install nothing touches the network except
-  your own data sources. Specs that try (remote chart data, `url()` colours)
-  are rejected, and the outputs carry a strict CSP. The one exception is
-  opt-in: make-explainer's `--image-api` flag sends a page's title and
-  subtitle to an image service you name (see [Themes and art](#themes-and-art)).
+- **Offline** — after the one-time installs and downloads (npm packages, a
+  browser, the signed DuckDB extensions for SQLite, postgres and mysql sources,
+  and make-motion's two models: voice and cut-out) nothing touches the network
+  except your own database sources: postgres and mysql connect to your database
+  while you validate, inspect, query and build, and the built page makes no
+  requests. CSV, Parquet, JSON and DuckDB files need no network. Specs that try
+  (remote chart data, `url()` colours) are rejected, and the outputs carry a
+  strict CSP. The one other exception is opt-in: make-explainer's `--image-api`
+  flag sends a page's title and subtitle to an image service you name (see
+  [Themes and art](#themes-and-art)).
 - **Stamped** — every page has a favicon, an icon theme toggle (Auto, Light,
   Dark; not on the make-motion preview) and a provenance line: the model,
   effort level and agent that wrote the spec, from the spec's `generatedBy`
@@ -167,7 +172,8 @@ npx skills add abhijitbansal/portable-artifacts --skill make-explainer make-diag
 ```
 
 If you forget, the first section that needs a missing skill fails validation
-with that exact command. `bin/install.mjs` (below) does resolve them: it reads
+with that exact command (`npx --yes skills@1.7.2 add abhijitbansal/portable-artifacts --skill <names> -y`: the
+CLI version is pinned, the repository ref is not, so it installs the default branch). `bin/install.mjs` (below) does resolve them: it reads
 `portableArtifacts.requires` from the skill's `package.json` and installs
 `make-diagram` and `make-dashboard` before `make-explainer` or `make-scene`, whether or not you
 named them. `make-motion` is optional and is installed only if you ask for it.
@@ -280,7 +286,7 @@ node plugins/portable-artifacts/bin/install.mjs claude
 node plugins/portable-artifacts/bin/install.mjs claude --agents-only
 ```
 
-The first line installs the skills and the agent; the second writes only the agent, for skills you installed another way (use `copilot`, `codex` or `agents` in place of `claude` for those hosts). Installed with `npx skills add` (skill folders only, no `bin/`)? Each skill carries its own writer: when `~/.copilot` or `~/.codex` exists, the skill's doctor reports the missing agent file as an optional item and, once you agree, `node <skill-dir>/scripts/doctor.mjs --fix builder_agent` writes it at user level (an existing `artifact-builder` file is kept; an older `motion-reviewer.md` of ours is rewritten after the old text is copied to `motion-reviewer.md.bak`, and one you wrote is never replaced unless you pass `--force --replace-foreign` to the installer or writer). A host may need a new session before it lists the agent.
+The first line installs the skills and the agent; the second writes only the agent, for skills you installed another way (use `copilot`, `codex` or `agents` in place of `claude` for those hosts). Installed with `npx skills add` (skill folders only, no `bin/`)? Each skill carries its own writer: when `~/.copilot` or `~/.codex` exists, the skill's doctor reports the missing agent file as an optional item and, once you agree, `node <skill-dir>/scripts/doctor.mjs --fix builder_agent` writes it at user level (an existing `artifact-builder` file is kept, and one written before 2.4.0, without the line that treats report text as data, is reported as outdated with the installer command that replaces it; an older `motion-reviewer.md` of ours is rewritten after the old text is copied to `motion-reviewer.md.bak`, and one you wrote is never replaced unless you pass `--force --replace-foreign` to the installer or writer). A host may need a new session before it lists the agent.
 
 **The optional second reviewer.** On Claude Code, make-motion's `references/reviewing.md` lets the director start `motion-reviewer` once per finished film: a read-only agent (tools: Read, `model: opus`, so each review costs Opus tokens whatever model you run on) that reads the film's spec and the review sheets and returns ranked notes as JSON. The plugin ships it; `install.mjs claude` and `node <skill-dir>/shared/agents.mjs write claude ~/.claude/agents` also write it. On 2026-11-22 it found 12 of 12 planted defects in three runs and failed none of three runs of a clean film, but every planted defect was also readable from the film's JSON spec, so that shows it finds defects the spec and narration state, not that it reads pictures ([`summary-motion-reviewer-2026-11-22.md`](eval/results/summary-motion-reviewer-2026-11-22.md)).
 
@@ -309,7 +315,19 @@ Each skill folder also has its own README.
   or `_DSN` or start with `PA_`, and are scrubbed from
   errors and result cells (defence in depth: the SQL allowlist is the control).
 - **Built pages embed the query results.** Publishing `index.html` publishes
-  the data.
+  the data. The skills publish a page to a link only when you ask, and confirm
+  first when it holds private data.
+- **Text the skills read is data, never instructions.** Rows, column names,
+  commit messages, file names and report findings can carry text planted by
+  someone else. Each `SKILL.md` and the `artifact-builder` agent file say so,
+  and the CLIs that print such text to the agent escape invisible characters
+  (bidi controls, zero-width and Tag characters) as `\u{XXXX}` and cap long
+  values.
+- **`gather.mjs` and `rows.mjs git` do not run commands from a repository's own
+  git config.** They refuse a partial clone and git older than 2.26, skip
+  `gather`'s uncommitted-changes check when that config defines a filter or a
+  git-lfs extension (or the work tree has a `.lfsconfig`), and stop a git call
+  after 60 seconds.
 - **No network from specs.** Chart `url`/`data`/`usermeta` keys are rejected at
   any depth; a make-motion film can't name a remote URL or a file outside its folder; pages run under a CSP without
   `unsafe-eval`; the renderer aborts any non-local request; local servers bind

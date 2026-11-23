@@ -10,10 +10,9 @@ import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 import { CURRENT_MARKER, reviewerFileState } from './agents.mjs';
 import { missingPackages } from './missing-packages.mjs';
+import { SKILLS_CLI, SIBLING_REPO as REPO, siblingInstallCommand } from './sibling-install.mjs';
 
-const REPO = 'abhijitbansal/portable-artifacts';
 const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
-const SKILLS_CLI = 'skills@1.7.2';
 
 // What `npm ci --omit=dev` puts in a skill's node_modules, as the consent prompt shows it. Measured 2026-11 on macOS in
 // a dev checkout: `npm ls --omit=dev --all --parseable` per skill, then the on-disk size (du blocks) of every
@@ -323,7 +322,7 @@ export function sisterSkill(name, { size } = {}) {
       const add = ['npx', '--yes', SKILLS_CLI, 'add', REPO, '--skill', name, '-y', ...(plan?.global ? ['-g'] : [])];
       const install = installStep(ctx);
       if (plan === null) {
-        const hint = `reinstall with your host's installer (for example run \`npx ${SKILLS_CLI} add ${REPO} --skill ${name} -y\` from your project root, or reinstall the plugin), then ${render([install], ctx.platform)}`;
+        const hint = `reinstall with your host's installer (for example run \`${siblingInstallCommand([name])}\` from your project root, or reinstall the plugin), then ${render([install], ctx.platform)}`;
         return { auto: null, manual: manualAll(hint) };
       }
       const auto = [
@@ -531,7 +530,7 @@ export const cutout = () => optionalPackage({
 // is there): on a Gemini machine no agent file is ever installed, so nothing is reported at all.
 // The Claude Code plugin ships the same file as <plugin>/agents/artifact-builder.md; where this skill runs
 // from a plugin, that file counts as present (a plugin update replaces it, so its text is not compared).
-// A file without CURRENT_MARKER (make.mjs) predates the one-command operator and is reported as outdated, with
+// A file without CURRENT_MARKER (the data-never-instructions line, 2.4.0) is reported as outdated, with
 // the command that replaces it. The doctor never overwrites it: the writer keeps an existing file.
 // Limit: project level means the current folder, not the git root.
 // The Claude Code motion-reviewer file is checked too (see REVIEWER_PLACES below): the writer for `claude` writes both files.
@@ -624,7 +623,7 @@ export function builderAgent() {
       const ours = reviewerProblems(ctx).map((r) => r.file);
       const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
       const parts = [];
-      if (old.length) parts.push(`${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)`);
+      if (old.length) parts.push(`${old.join(' and ')} is outdated (it predates 2.4.0: it lacks the line that treats report text as data, and an older one still tells the builder to write the spec)`);
       if (ours.length) parts.push(`${ours.join(' and ')} is an older portable-artifacts motion-reviewer file`);
       return parts.length ? `${base}; ${parts.join('; ')}` : base;
     },

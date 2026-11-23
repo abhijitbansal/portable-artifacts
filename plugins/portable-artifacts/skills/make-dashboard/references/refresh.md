@@ -17,8 +17,10 @@ For scheduled rebuilds of the file on disk, use the sections below.
 
 # Scheduled rebuilds
 
-A refresh is `build.mjs` again: it re-runs every query and rewrites `dist/index.html`. No LLM, no network
-(sqlite, postgres and mysql sources need their extension installed once with `setup.mjs`; see `schema.md`).
+A refresh is `build.mjs` again: it re-runs every query and rewrites `dist/index.html`. No LLM. No network for
+CSV, Parquet, JSON and DuckDB files; postgres and mysql sources connect to their database on each run, attached
+`READ_ONLY` (that limits DuckDB only, so use a read-only database role). (sqlite, postgres and mysql sources need
+their extension installed once with `setup.mjs`, which is online; see `schema.md`.)
 Use absolute paths in schedules, since cron and launchd start in a bare environment. Replace `<skill-dir>`
 with the folder containing `SKILL.md` and `/abs/dashboard.json` with your spec.
 
@@ -35,9 +37,31 @@ Find your node path first: `command -v node`.
 5 * * * * /usr/local/bin/node <skill-dir>/scripts/build.mjs /abs/dashboard.json >> $HOME/dashboard-build.log 2>&1
 ```
 
-Postgres and MySQL sources read their connection string from an environment variable. Cron does not load your shell
-profile, so set it on the line (`PG_URL='postgres://…' /usr/local/bin/node …`) or in a file only you can read.
-Do not put it in `dashboard.json`.
+## Postgres and MySQL credentials
+
+Postgres and MySQL sources read their connection string from an environment variable. Cron and launchd do not load
+your shell profile. Do not put the string in `dashboard.json`, on the crontab line or in a plist: the password
+would sit in plain files and show in `ps`. Instead:
+
+1. Connect as a read-only database role. `READ_ONLY` on the attach only limits DuckDB; the role is the real guard.
+2. Keep the string in an env file only you can read (`chmod 600 /abs/dashboard.env`):
+
+   ```
+   PG_URL='postgres://readonly:<password>@db.example.com:5432/app'
+   ```
+
+3. Write a wrapper script (`chmod 700 /abs/dashboard-build.sh`) that sources the env file, then schedule the wrapper
+   in place of `node`:
+
+   ```
+   #!/bin/sh
+   set -a
+   . /abs/dashboard.env
+   set +a
+   exec /usr/local/bin/node <skill-dir>/scripts/build.mjs /abs/dashboard.json
+   ```
+
+   For cron: `5 * * * * /abs/dashboard-build.sh >> $HOME/dashboard-build.log 2>&1`.
 
 ## launchd (macOS)
 
@@ -51,24 +75,18 @@ Save as `~/Library/LaunchAgents/com.example.dashboard-build.plist` (rename `com.
   <key>Label</key><string>com.example.dashboard-build</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/node</string>
-    <string><skill-dir>/scripts/build.mjs</string>
-    <string>/abs/dashboard.json</string>
+    <!-- the wrapper script from "Postgres and MySQL credentials"; for file sources only, call /usr/local/bin/node with build.mjs and the spec instead -->
+    <string>/abs/dashboard-build.sh</string>
   </array>
   <key>StartInterval</key><integer>3600</integer>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>/Users/you/Library/Logs/dashboard-build.log</string>
   <key>StandardErrorPath</key><string>/Users/you/Library/Logs/dashboard-build.log</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <!-- only for postgres/mysql sources; the plist is readable by your user, so keep it chmod 600 -->
-    <key>PG_URL</key><string>postgres://user:pass@host:5432/db</string>
-  </dict>
 </dict>
 </plist>
 ```
 
-Replace `<skill-dir>` in the plist with the real absolute path (plists do not expand `~` or `$HOME`).
+Use real absolute paths in the plist, and in the wrapper's `<skill-dir>` (plists do not expand `~` or `$HOME`).
 
 ```
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.dashboard-build.plist

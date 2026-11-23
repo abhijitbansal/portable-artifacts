@@ -2,6 +2,19 @@
 
 Every section type and its fields: [sections.md](sections.md). Banned phrases: [style.md](style.md). Working files, one per preset: `examples/`. All objects are closed: an unknown field is an error, and a misspelt `type`, `tone`, `theme` or `preset` gets a did-you-mean hint.
 
+**Contents**
+
+- [Top level](#top-level)
+- [Limits](#limits)
+- [Text](#text)
+- [Simple English](#simple-english)
+- [File references](#file-references)
+- [Output](#output)
+- [Exit codes](#exit-codes)
+- [Plan answers](#plan-answers)
+- [Scripts](#scripts)
+- [Hero image from an image API](#hero-image-from-an-image-api)
+
 ## Top level
 
 | Field | Type | Rule |
@@ -51,7 +64,7 @@ Slides mode adds a budget to each section (errors): at most 6 points (tldr point
 
 Markdown-lite in every prose field: paragraphs split by a blank line, `**bold**`, `*italic*`, `` `code` ``, `[text](https://…)` (http and https only), and `- ` lists. Everything else, including `<tags>`, is shown as text. Emoji are allowed; validate warns if they get dense (see style.md). A string must contain a non-space character.
 
-Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in `!`, and on section titles numbered like `01` (a leading zero digit; "3 files changed" is fine).
+Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in an exclamation mark, and on section titles numbered like `01` (a leading zero digit; "3 files changed" is fine).
 
 ## Simple English
 
@@ -106,7 +119,7 @@ The plan page's Save as HTML button downloads `<key>-answered.html`: the page wi
 
 | Script | Use |
 |---|---|
-| `gather.mjs git [--base <branch>] [--repo <folder>] [--out <file>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Prints (or writes to `--out`) facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only; a warning on stderr (and `warnings` in the facts) says when the branch has no commits beyond the base, and `dirty` says the work tree has uncommitted changes. |
+| `gather.mjs git [--base <branch>] [--repo <folder>] [--out <file>] [--json]` | Without `--base`: `main`, then `master`, preferring origin's copy when it is ahead. Prints (or writes to `--out`) facts about the checked-out branch as JSON: branch, base, commits, changed files with line counts and renames, test files, date. Committed work only; a warning on stderr (and `warnings` in the facts) says when the branch has no commits beyond the base, and `dirty` says the work tree has uncommitted changes (`null`, with a warning, when the repository's own git config defines a filter driver or a git-lfs extension, or the work tree has a `.lfsconfig`: the check is skipped because git would run that command; this includes a repo-local `git lfs install --local`, while a global install does not skip it; edits inside a submodule are not counted). A partial clone (`remote.<name>.promisor`, `partialclonefilter` or `extensions.partialclone` in the repository's own config) is refused with a usage error before any object is read, because fetching its missing objects would run the repository's remote settings: run gather on a full clone. A git call that does not finish in 60 seconds (a named pipe where git reads `.gitattributes` or an ignore file) is stopped with a one-line error. |
 | `scaffold.mjs <recap\|checklist\|concept\|slides\|plan> [--facts facts.json] [--title <text>] [--out <file>] [--force]` | A starter `explainer.json`, printed or written to `--out`. Facts fill numbers, files, commits and folders; every sentence is a `TODO:` string. A `plan` starter also gets a `key` from the title (`plan-draft` without one), and every starter carries a `generatedBy` skeleton of three `TODO:` fields. `--out` refuses a file that already exists (it may be filled in); `--force` replaces it. |
 | `answers.mjs <plan.json> <plan-answers.json \| saved-page.html> [--json]` | Checks a reviewer's exported answers against the plan and prints a summary; see "Plan answers" above. |
 | `validate.mjs <explainer.json> [--strict] [--json]` | Schema, limits, prose lint, slide budget, file references and the embedded diagram, scene, chart and motion checks. `--strict` turns the section-length and page-length caps into errors (without it they are warnings). A spec with no `generatedBy` gets one warning. |

@@ -51,9 +51,9 @@ export function glyph(name) {
 
 const own = (table, key) => (Object.hasOwn(table, key) ? table[key] : null);
 
-/** A status chip: glyph + word. `entry` is [label, glyph, toneClass]. A tone that is not lowercase letters falls back to neutral, so it can never break out of the class attribute. */
+/** A status chip: glyph + word. `entry` is [label, glyph, toneClass]. A tone outside the closed set TONES falls back to neutral, so it can never break out of the class attribute. */
 export function chip([label, glyphName, tone]) {
-  const safeTone = typeof tone === 'string' && /^[a-z]+$/.test(tone) ? tone : 'neutral';
+  const safeTone = TONES.has(tone) ? tone : 'neutral';
   return `<span class="chip tone-${safeTone}">${glyph(glyphName)}<span>${esc(label)}</span></span>`;
 }
 
@@ -90,3 +90,7 @@ export const CALLOUT = {
   bad: ['Problem', 'bad', 'bad'],
 };
 export const lookup = (table, key, fallback) => own(table, key) ?? table[fallback];
+
+// The tones the stylesheet defines (template/base.css `.tone-*`), read off the tables above so the two cannot drift:
+// every entry is [label, glyph, tone]. 'neutral' is also the fallback chip() uses, so it is always in the set.
+const TONES = new Set([SEVERITY, CHANGE, STATUS, CALLOUT, TONE_CHIPS].flatMap((table) => Object.values(table).map((entry) => entry[2])).concat('neutral'));

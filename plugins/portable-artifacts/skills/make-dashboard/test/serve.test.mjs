@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serve, stopChild, until } from './helpers/live-harness.mjs';
+import { serve, spawnReady, stopChild, until } from './helpers/live-harness.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVE = path.join(ROOT, 'scripts/serve.mjs');
@@ -113,6 +113,18 @@ test('--watch honours --out and a malformed URL gets 400 from the live server', 
   assert.ok(fs.existsSync(path.join(out, 'index.html')), 'the page is written under --out');
   assert.ok(!fs.existsSync(path.join(dir, 'dist')), 'not under the default dist');
   assert.equal(await raw(port, '//'), 400);
+  assert.equal(await raw(port, '/'), 200);
+});
+
+// The rebuild token only guards POST /rebuild on loopback and the served page already carries it; stdout is read by the
+// agent, so it stays out of the transcript.
+test('--watch does not print the rebuild token on stdout', async (t) => {
+  const dir = watchProject();
+  const { out, port } = await spawnReady(t, [SERVE, '--watch', path.join(dir, 'dashboard.json')], {
+    ready: (text) => { const m = text.match(/http:\/\/127\.0\.0\.1:(\d+)\//); return m ? { out: text, port: Number(m[1]) } : null; },
+  });
+  assert.doesNotMatch(out, /token/i, out);
+  assert.match(out, /^watching /);
   assert.equal(await raw(port, '/'), 200);
 });
 
