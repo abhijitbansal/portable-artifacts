@@ -7,20 +7,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { UsageError } from '../../shared/cli.mjs';
+import { capText } from '../../shared/agent-text.mjs';
 
 const MAX_BUFFER = 256 * 1024 * 1024;
+// A commit subject is repository text the agent reads, so a long one is cut (capText). Invisible characters are not
+// changed here: the data stays exact for the page, and gather.mjs writes them as JSON escapes where the agent reads them.
+const SUBJECT_MAX = 200;
 const BASE_NAMES = ['main', 'master'];
 const SHOWN_BRANCHES = 10;
 const SHORT_SHA = 7;
 // A copy (C) is a new file that remembers its source; scaffold notes it like a rename.
 const CHANGES = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added', T: 'modified' };
 // These GIT_* variables point git at a different repository, object store, index or discovery root than
-// --repo names, so the child gets none of them. Everything else (GIT_CONFIG_*, GIT_EXEC_PATH, identity,
-// GIT_EXTERNAL_DIFF, ...) passes through: --no-ext-diff and --no-pager keep the output free of helpers.
+// --repo names, so the child gets none of them; nor the config injectors (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and
+// the GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n pairs), which can set core.fsmonitor or a diff driver from outside the repo.
+// Everything else (GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM, which are the user's own files and hold safe.directory,
+// GIT_EXEC_PATH, identity, GIT_EXTERNAL_DIFF, ...) passes through: --no-ext-diff and --no-pager keep the output free of helpers.
 const REDIRECTING_ENV = new Set([
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
   'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT',
 ]);
+const CONFIG_PAIR_ENV = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/;
 
 // A test file is code that lives in a test folder or has a test-shaped name. Fixtures, goldens,
 // helpers and snapshots inside a test folder support the tests; data and docs are not tests.
@@ -33,15 +41,18 @@ const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** The environment git runs in: `source` without the repo-redirecting variables, and no prompts or optional locks. */
 export function gitEnv(source) {
-  const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k)));
+  const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
   return env;
 }
 
+// git only, an argv array, no shell. `-c core.fsmonitor=false`: `git status` would otherwise run the command a
+// repository's own config names there.
 function run(cwd, args) {
   const env = gitEnv(process.env);
-  const r = spawnSync('git', ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', ...args], {
+  const base = ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'core.fsmonitor=false'];
+  const r = spawnSync('git', [...base, ...args], {
     cwd, encoding: 'utf8', env, maxBuffer: MAX_BUFFER,
   });
   if (r.error) {
@@ -122,7 +133,7 @@ function readCommits(repo, range) {
   if (!log.ok) throw new UsageError(`cannot read the commit list: ${log.err}`);
   return nulFields(log.out).map((record) => {
     const [sha, date, ...subject] = record.split('\x1f');
-    return { sha, date, subject: subject.join('\x1f') };
+    return { sha, date, subject: capText(subject.join('\x1f'), { max: SUBJECT_MAX }) };
   });
 }
 
@@ -162,7 +173,7 @@ function readCounts(text) {
 }
 
 function readFiles(repo, from) {
-  const flags = ['diff', '-z', '-M', '--no-ext-diff', '--no-color'];
+  const flags = ['diff', '-z', '-M', '--no-ext-diff', '--no-textconv', '--no-color'];
   const status = run(repo, [...flags, '--name-status', from, 'HEAD', '--']);
   const numstat = run(repo, [...flags, '--numstat', from, 'HEAD', '--']);
   if (!status.ok || !numstat.ok) throw new UsageError(`cannot read the changed files: ${status.err || numstat.err}`);
