@@ -36,7 +36,7 @@ test("make-scene: the page-size cap is a mechanical finding carrying build's own
     validate: stub(dir, 'validate'),
     build: stub(dir, 'build', { status: 1, body: { ok: false, errors: [{ path: '', message }] } }),
   };
-  const r = await runNode(MAKE, [spec, '--json'], { env: { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts) } });
+  const r = await runNode(MAKE, [spec, '--json'], { env: { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts), NODE_ENV: 'test' } });
   const report = oneObject(r.stdout);
   assert.equal(r.status, 1);
   assert.deepEqual(report.findings, [{ kind: 'mechanical', path: '', message }]);

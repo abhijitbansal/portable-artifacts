@@ -5,8 +5,13 @@ import path from 'node:path';
 import { didYouMean } from '../../shared/errors.mjs';
 import { parseCsvLines } from './csv.mjs';
 import { COLUMN_FIELDS } from './schema.mjs';
+import { agentText, agentJson } from '../../shared/agent-text.mjs';
 
-const q = (v) => JSON.stringify(v);
+// Messages echo the user's own text (cells, headers, paths), and the agent reads them: hidden characters print as
+// \u{xxxx} and a long echo is cut.
+const ECHO_MAX = 80;
+const q = (v) => agentJson(v, { max: ECHO_MAX });
+const listed = (names) => names.map((n) => agentText(n, { max: ECHO_MAX })).join(', ');
 const URL_LIKE = /^([a-z][a-z0-9+.-]*:\/\/|(data|file|javascript):)/i;
 const OPTIONAL_FIELDS = ['t', 'label', 'parent'];
 const FILE_KEYS = ['rows', 'links'];
@@ -84,7 +89,7 @@ function headerErrors(header, wanted) {
     if (header.includes(column)) return [];
     if (!required && column === undefined) return [];
     const hint = didYouMean(column, header);
-    const message = `csv has no column ${q(column)}; ${hint ? `did you mean ${q(hint)}?` : `available: ${header.slice(0, MAX_LISTED).join(', ')}`}`;
+    const message = `csv has no column ${q(column)}; ${hint ? `did you mean ${q(hint)}?` : `available: ${listed(header.slice(0, MAX_LISTED))}`}`;
     return [{ path: `data.columns.${field}`, message }];
   });
 }

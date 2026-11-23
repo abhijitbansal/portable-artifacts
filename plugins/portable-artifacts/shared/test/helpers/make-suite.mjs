@@ -89,7 +89,7 @@ export function defineMakeSuite(cfg) {
       check: stub(dir, 'check', { body: { ok: true, views: 4, problems: [], errors: [] }, ...stubs.check }),
     };
     const record = path.join(dir, 'record.jsonl');
-    const r = await json([spec, ...args], { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts), STUB_RECORD: record, ...env });
+    const r = await json([spec, ...args], { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts), NODE_ENV: 'test', STUB_RECORD: record, ...env });
     return { ...r, dir, page, calls: recorded(record), argvOf: (stage) => recorded(record).find((c) => c.stage === stage)?.argv };
   };
 
@@ -179,7 +179,7 @@ export function defineMakeSuite(cfg) {
       doctor: stub(dir, 'doctor', { body: { ok: true, missing: [] } }),
       validate: stub(dir, 'validate', { status: 1, body: { ok: false, errors: [{ path: 'charts[0].type', message: 'must be one of bar, line' }], warnings: [{ path: 'title', message: 'a long title' }] } }),
     };
-    const r = await all([spec], { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts) });
+    const r = await all([spec], { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts), NODE_ENV: 'test' });
     assert.equal(r.status, 1);
     const lines = r.stdout.trim().split('\n');
     assert.equal(lines[0], 'invalid');
@@ -311,7 +311,7 @@ export function defineMakeSuite(cfg) {
       validate: stub(dir, 'validate'),
       build: stub(dir, 'build', { marker, sleep: true }),
     };
-    const child = spawn(process.execPath, [make, spec, '--json'], { env: { ...process.env, PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts) }, cwd: cfg.skillDir, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [make, spec, '--json'], { env: { ...process.env, PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts), NODE_ENV: 'test' }, cwd: cfg.skillDir, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     child.stdout.on('data', (d) => { stdout += d; });
     const closed = new Promise((resolve) => child.on('close', (code) => resolve(code)));

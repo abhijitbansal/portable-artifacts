@@ -79,17 +79,21 @@ export function spawnReady(t, args, { ready, startupMs = STARTUP_MS, onSpawn } =
   });
 }
 
-// serve.mjs prints its URL (and, with --watch, a token) on stdout once listening.
-export function serve(t, scriptPath, args, opts = {}) {
-  const needToken = args.includes('--watch');
-  return spawnReady(t, [scriptPath, ...args], {
+// serve.mjs prints its URL on stdout once listening. With --watch the rebuild token is not printed (stdout is read by
+// the agent); the served page carries it as `var TOKEN = "<hex>"`, so a test reads it from there.
+export async function serve(t, scriptPath, args, opts = {}) {
+  const started = await spawnReady(t, [scriptPath, ...args], {
     ...opts,
     ready: (out) => {
       const m = out.match(/http:\/\/127\.0\.0\.1:(\d+)\//);
-      const tok = out.match(/token: (\w+)/);
-      return m && (!needToken || tok) ? { port: Number(m[1]), token: tok?.[1] } : null;
+      return m ? { port: Number(m[1]) } : null;
     },
   });
+  if (!args.includes('--watch')) return started;
+  const page = await request(started.port);
+  const token = page.body.match(/var TOKEN = "(\w+)"/)?.[1];
+  if (token === undefined) throw new Error('the served page carries no rebuild token');
+  return { ...started, token };
 }
 
 // One request on its own socket; rejects at the deadline rather than waiting on a stalled server.

@@ -171,7 +171,10 @@ async function pipeline(ctx) {
   if (checked.error) state.error = checked.error;
 }
 
+// Child processes run only this skill's own first-party scripts: process.execPath, an argv array, no shell.
+// PA_MAKE_TEST_SCRIPTS swaps those script paths, so it is honoured only under NODE_ENV=test.
 function stubScripts() {
+  if (process.env.NODE_ENV !== 'test') return {};
   try {
     return JSON.parse(process.env.PA_MAKE_TEST_SCRIPTS ?? '{}');
   } catch {

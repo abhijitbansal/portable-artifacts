@@ -9,6 +9,7 @@ import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { SCHEMA, ROWS_SCHEMA, LINKS_SCHEMA, LIMITS } from './schema.mjs';
 import { q, suggestion, checkLength } from './checks.mjs';
+import { agentText, agentJson } from '../../shared/agent-text.mjs';
 import { checkRows, checkLinks, checkWorld } from './row-checks.mjs';
 import { readSource, resolveLocal, focusKeys, DataError } from './rows.mjs';
 import { sceneWarnings } from './warnings.mjs';
@@ -37,6 +38,7 @@ export function loadSpec(file) {
 
 // ---- lift hooks ---------------------------------------------------------
 
+const ECHO_MAX = 80; // the longest user text an error message echoes (see agent-text.mjs)
 const LIFT_KINDS = ['diagram', 'dashboard'];
 const liftChecks = new Map();
 
@@ -127,14 +129,15 @@ function loadSource(errors, spec, dir, allowOutside) {
 function checkTour(errors, spec, keys, noun = 'group or label') {
   const tour = spec.tour ?? [];
   if (tour.length > LIMITS.beats) errors.push({ path: 'tour', message: `${tour.length} beats; the limit is ${LIMITS.beats}; merge or drop beats` });
-  const candidates = keys ? [...keys] : [];
+  // Group names and labels come from the user's data (a git repository's folder names too): print them escaped and capped.
+  const candidates = keys ? [...keys].map((k) => agentText(k, { max: ECHO_MAX })) : [];
   tour.forEach((beat, i) => {
     const p = `tour[${i}]`;
     checkLength(errors, beat, 'title', p, LIMITS.beatTitle);
     checkLength(errors, beat, 'caption', p, LIMITS.caption);
     if (!keys) return; // a lift's focus names diagram nodes, checked by the sibling; a failed load has nothing to resolve against
     beat.focus.forEach((f, j) => {
-      if (!keys.has(f.toLowerCase())) errors.push({ path: `${p}.focus[${j}]`, message: `${q(f)} is not a ${noun}; ${suggestion(f.toLowerCase(), candidates)}` });
+      if (!keys.has(f.toLowerCase())) errors.push({ path: `${p}.focus[${j}]`, message: `${agentJson(f, { max: ECHO_MAX })} is not a ${noun}; ${suggestion(f.toLowerCase(), candidates)}` });
     });
   });
 }

@@ -7,6 +7,7 @@
 // exit 0 ok, 2 usage / not a repository / no such base
 import { gatherGit } from './lib/git.mjs';
 import { emit } from './lib/write-out.mjs';
+import { agentText, escapeJsonInvisible } from '../shared/agent-text.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
 const USAGE = 'node scripts/gather.mjs git [--base <branch>] [--repo <folder>] [--out <file>] [--json]';
@@ -22,8 +23,10 @@ try {
   if (!SOURCES.includes(source)) throw new UsageError(`unknown source "${source}"; the only source is ${SOURCES.join(', ')}; usage: ${USAGE}`);
   if (extra.length > 0) throw new UsageError(`unexpected argument "${extra[0]}"; usage: ${USAGE}`);
   const facts = gatherGit({ repo: values.repo, base: values.base });
-  for (const w of facts.warnings) process.stderr.write(`warning: ${w}\n`);
-  emit(`${JSON.stringify(facts, null, values.json ? 0 : 2)}\n`, values.out);
+  // Commit subjects, file names and branch names are repository text the agent reads. Every invisible character in them is
+  // written as a JSON escape (and as a code point on stderr), so the agent sees it; JSON.parse, and so scaffold.mjs, gets the exact text.
+  for (const w of facts.warnings) process.stderr.write(`warning: ${agentText(w, { max: Infinity })}\n`);
+  emit(`${escapeJsonInvisible(JSON.stringify(facts, null, values.json ? 0 : 2))}\n`, values.out);
 } catch (e) {
   if (!(e instanceof UsageError)) throw e;
   exitUsage(e, { json });
