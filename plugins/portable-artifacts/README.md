@@ -325,9 +325,13 @@ Each skill folder also has its own README.
   values.
 - **`gather.mjs` and `rows.mjs git` do not run commands from a repository's own
   git config.** They refuse a partial clone and git older than 2.26, skip
-  `gather`'s uncommitted-changes check when that config defines a filter or a
-  git-lfs extension (or the work tree has a `.lfsconfig`), and stop a git call
-  after 60 seconds.
+  `gather`'s uncommitted-changes check when that config defines a filter, a
+  git-lfs extension or a hook, or holds a value with a line break (or the work
+  tree has a `.lfsconfig`), and stop a git call after 60 seconds. They read that
+  config as raw bytes, so a name that is not valid text cannot hide a setting,
+  and a config they cannot read is refused or skipped, never taken as clean.
+  Every git call also runs with `LC_ALL=C`, the repository's hooks off and
+  bare-repository discovery off.
 - **No network from specs.** Chart `url`/`data`/`usermeta` keys are rejected at
   any depth; a make-motion film can't name a remote URL or a file outside its folder; pages run under a CSP without
   `unsafe-eval`; the renderer aborts any non-local request; local servers bind

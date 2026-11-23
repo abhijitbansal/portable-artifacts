@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { UsageError } from '../../shared/cli.mjs';
+import { CONFIG_LIST_ARGS, repoOwnedConfig, isPartialClone } from '../../shared/git-config.mjs';
 import { LIMITS } from './schema.mjs';
 
 export const ROOT_GROUP = '(root)';
@@ -14,7 +15,7 @@ const ELLIPSIS = '…';
 const MAX_BUFFER = 256 * 1024 * 1024;
 // A git call not finished in this long is stopped: a named pipe where git reads an attributes or ignore file would block it for good.
 const GIT_TIMEOUT_MS = 60 * 1000;
-// Test seams, set only by historyRows({ _test }): a shorter limit, and the environment of a git that ignores GIT_NO_LAZY_FETCH (before 2.44).
+// Test seams, set only by historyRows({ _test }): a shorter limit, and the environment of a git that ignores GIT_NO_LAZY_FETCH (before 2.45.0, or 2.44.0).
 const seams = { timeoutMs: GIT_TIMEOUT_MS, omitLazyFetchEnv: false };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
@@ -30,9 +31,13 @@ const REDIRECTING_ENV = new Set([
 const CONFIG_PAIR_ENV = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/;
 
 // GIT_NO_LAZY_FETCH: a partial clone would otherwise fetch missing objects through the repository's own
-// remote.<name>.uploadpack, core.sshCommand or credential helper (git 2.44+; an older git ignores it).
+// remote.<name>.uploadpack, core.sshCommand or credential helper (git 2.45.0 honours it, as do the backports 2.39.4,
+// 2.43.4 and 2.44.1 among others; 2.44.0 and older releases without the backport ignore it).
+// LC_ALL=C: git's own text and key matching must not depend on the user's locale; the config check below does not use
+// git's matcher either.
 export function gitEnv(source = process.env) {
   const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
+  env.LC_ALL = 'C';
   env.GIT_CONFIG_GLOBAL = os.devNull;
   env.GIT_CONFIG_SYSTEM = os.devNull;
   env.GIT_OPTIONAL_LOCKS = '0';
@@ -57,9 +62,14 @@ function weekStart(date) {
   return new Date(day.getTime() - (((day.getUTCDay() + 6) % 7) * DAY_MS));
 }
 
+// Every git call starts with these: `core.hooksPath=<null device>` (no hook of the repository can run) and
+// `safe.bareRepository=explicit` (git does not discover a bare repository planted inside the folder it starts in; a linked
+// worktree or a submodule checkout is not bare and is unaffected).
+const GIT_BASE = ['-c', `core.hooksPath=${os.devNull}`, '-c', 'safe.bareRepository=explicit'];
+
 // Runs a scrubbed git in `repo` and returns its stdout.
 function runGit(repo, args) {
-  const r = spawnSync('git', args, {
+  const r = spawnSync('git', [...GIT_BASE, ...args], {
     cwd: repo, encoding: 'utf8', env: gitEnv(), maxBuffer: MAX_BUFFER, timeout: seams.timeoutMs, killSignal: 'SIGKILL',
   });
   if (r.error) {
@@ -75,19 +85,25 @@ function runGit(repo, args) {
 }
 
 // A partial clone fetches missing objects on demand, and that fetch runs the repository's own remote.<name>.uploadpack,
-// core.sshCommand, credential helper or transport. GIT_NO_LAZY_FETCH stops it on git 2.44 and later only, so the config is
-// checked first, on any git version: remote.<name>.promisor and partialclonefilter (what a filtered clone writes) and
-// extensions.partialclone (older git). Only the repository's own config counts (global and system are /dev/null here).
-// Reading config runs nothing. --show-scope needs git 2.26; an older git fails closed.
-const PARTIAL_KEYS = '^(extensions\\.partialclone|remote\\..*\\.(promisor|partialclonefilter))$';
+// core.sshCommand, credential helper or transport. GIT_NO_LAZY_FETCH stops it only from git 2.45.0 (and the backports
+// 2.39.4, 2.43.4, 2.44.1 among others), so the config is checked first, on any git version: remote.<name>.promisor and
+// partialclonefilter (what a filtered clone writes) and extensions.partialclone (older git). Only the repository's own
+// config counts (global and system are /dev/null here, and shared/git-config.mjs drops them anyway). The whole listing is
+// read as bytes and decided in JavaScript, never matched by git: `config --get-regexp` fails with no output on a key that
+// is not valid UTF-8, which looked like "no match". Reading config runs nothing. --show-scope needs git 2.26; an older git,
+// any failure, a malformed listing or a listing with no repository of its own in it fails closed.
 function assertFullClone(repo) {
-  const listed = spawnSync('git', ['config', '--includes', '--show-scope', '--name-only', '--get-regexp', PARTIAL_KEYS], {
-    cwd: repo, encoding: 'utf8', env: gitEnv(), timeout: seams.timeoutMs, killSignal: 'SIGKILL',
+  const listed = spawnSync('git', [...GIT_BASE, ...CONFIG_LIST_ARGS], {
+    cwd: repo, encoding: 'buffer', env: gitEnv(), timeout: seams.timeoutMs, killSignal: 'SIGKILL',
   });
-  if (listed.error || (listed.status !== 0 && !(listed.status === 1 && listed.stdout === ''))) {
+  const config = repoOwnedConfig(listed.error || listed.status !== 0 ? null : listed.stdout);
+  if (config === null) {
+    // Outside a repository the listing succeeds but holds no repository of its own, so that is null too: this throws
+    // the usual "not a git repository" error then. Inside one, the config really cannot be read.
+    runGit(repo, ['rev-parse', '--git-dir']);
     throw new UsageError(`cannot read the git config of ${repo} (needs git 2.26 or later)`);
   }
-  if (listed.stdout.split('\n').some((line) => line !== '' && !['global', 'system'].includes(line.split('\t')[0]))) {
+  if (isPartialClone(config)) {
     throw new UsageError('this is a partial clone (its config says missing objects are fetched on demand, which runs the repository\'s own remote settings); run on a full clone, made without --filter');
   }
 }

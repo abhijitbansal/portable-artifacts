@@ -333,9 +333,12 @@ your project folder):
    `main`, then `master`, preferring origin's copy when it is ahead. It does
    not run commands from the repository's own git config, so it refuses a
    partial clone (made with `--filter`; use a full clone) and needs git 2.26
-   or later. When that config defines a filter driver or a git-lfs extension,
-   or the work tree has a `.lfsconfig`, it skips the uncommitted-changes check
-   (`dirty` is `null`, with a warning). Each git call is stopped after 60 seconds.
+   or later. When that config defines a filter driver, a git-lfs extension or a
+   hook, holds a value with a line break, or cannot be read, or the work tree
+   has a `.lfsconfig`, it skips the uncommitted-changes check (`dirty` is
+   `null`, with a warning). It reads that config as raw bytes, so a name that
+   is not valid text cannot hide a setting. Each git call runs with the
+   repository's hooks off and is stopped after 60 seconds.
 2. `scaffold.mjs recap --facts facts.json --out explainer.json` writes a starter
    file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
    The numbers, file list, timeline and checklist groups are filled in; every

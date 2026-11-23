@@ -6,6 +6,42 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-11-23
+
+A security patch for make-explainer `gather` and make-scene `rows.mjs git`. If you run either one on a repository you did
+not make yourself (a download, an unpacked archive, a shared checkout, a pull-request branch), upgrade to 2.4.1. Until you
+do, do not run them on a repository you do not trust. Nothing else changes; pages build the same.
+
+### Behaviour changes to know about
+
+- **`gather` and `rows.mjs git` now read the repository's git config as raw bytes, and a config they cannot read counts
+  as untrusted.** Before, they asked git to search the config for risky settings, and in a UTF-8 locale (the usual one) git
+  fails that search without any output when a setting's name contains bytes that are not valid text. The 2.4.0 check
+  read that silence as "nothing found", so a repository could hide a filter driver from it and `gather`'s `git status`
+  ran the repository's command; the same silence let a partial clone past both tools, where a lazy fetch runs the
+  repository's own remote settings (that route needs a git that ignores `GIT_NO_LAZY_FETCH`, see the correction below).
+  Anyone who ran `gather` or `rows.mjs git` on an untrusted repository with 2.4.0 was
+  exposed (versions before 2.4.0 had no check at all). Now:
+  - the whole config is listed and checked in Node, never matched by git, and a listing that fails, is malformed or does
+    not contain the repository's own settings makes `gather` and `rows.mjs git` refuse ("cannot read the git config"),
+    and makes the dirty check skip (`dirty` is `null`, with a warning) where it would otherwise have run;
+  - the uncommitted-changes check is also skipped when the repository's own config defines a hook (`hook.<name>`) or holds
+    any value with a line break (git-lfs reads `git config -l` line by line, so such a value can forge an
+    `lfs.extension` line), and the match on filter and `lfs.extension` names no longer depends on letter case;
+  - your global and system config still do not count, so a git-lfs repository set up with the default global
+    `git lfs install` is unaffected; linked worktrees, submodule checkouts, `extensions.worktreeConfig` and sha256
+    repositories still work.
+- **Every git call now runs with `LC_ALL=C`, the repository's hooks off (`core.hooksPath` at the null device) and
+  `safe.bareRepository=explicit`** (a git too old to have that setting ignores it), so a bare repository planted inside
+  the folder is not picked up. File names and commit subjects still come back exact.
+
+### Correction to the 2.4.0 notes
+
+- The 2.4.0 entry below says git honours `GIT_NO_LAZY_FETCH` from 2.44. It is honoured from git 2.45.0, and by the
+  backports 2.39.4, 2.43.4 and 2.44.1, among others; git 2.44.0 and other releases without the backport ignore it. The
+  partial-clone refusal never depended on it, so nothing changes in what is refused. The comments, tests and docs now say
+  2.45.0.
+
 ## [2.4.0] - 2026-11-23
 
 A security pass over all five skills, against prompt injection and what the skills.sh scanners (Gen Agent Trust Hub,
