@@ -10,6 +10,18 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 
 `tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`, `callout`, `details` and `table` also take an optional `simple` object: the same prose fields in plainer words, shown by the page's Simple English toggle (see "Simple English" in schema.md). The toggle itself never touches `code`, `files`, `kpis`, diagrams, charts, images, scenes, motion or any plan section. Inside the ten types, the author keeps numbers, names and commands exact in `simple` (a table's `simple.rows` can replace any cell). Validate warns when a field and its simple twin both hold digits and the twin has a number the normal text does not (`410 ms` against `400 ms`); names and commands are not checked.
 
+**Contents**
+
+- [Text and numbers](#text-and-numbers)
+- [Changes, plans and risks](#changes-plans-and-risks)
+- [Checklist](#checklist)
+- [Plan mode](#plan-mode)
+- [Diagram](#diagram)
+- [Scene](#scene)
+- [Chart](#chart)
+- [Motion](#motion)
+- [Which section for what](#which-section-for-what)
+
 ## Text and numbers
 
 | Type | Fields | Notes |

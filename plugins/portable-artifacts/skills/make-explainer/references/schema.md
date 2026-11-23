@@ -2,6 +2,19 @@
 
 Every section type and its fields: [sections.md](sections.md). Banned phrases: [style.md](style.md). Working files, one per preset: `examples/`. All objects are closed: an unknown field is an error, and a misspelt `type`, `tone`, `theme` or `preset` gets a did-you-mean hint.
 
+**Contents**
+
+- [Top level](#top-level)
+- [Limits](#limits)
+- [Text](#text)
+- [Simple English](#simple-english)
+- [File references](#file-references)
+- [Output](#output)
+- [Exit codes](#exit-codes)
+- [Plan answers](#plan-answers)
+- [Scripts](#scripts)
+- [Hero image from an image API](#hero-image-from-an-image-api)
+
 ## Top level
 
 | Field | Type | Rule |
@@ -51,7 +64,7 @@ Slides mode adds a budget to each section (errors): at most 6 points (tldr point
 
 Markdown-lite in every prose field: paragraphs split by a blank line, `**bold**`, `*italic*`, `` `code` ``, `[text](https://…)` (http and https only), and `- ` lists. Everything else, including `<tags>`, is shown as text. Emoji are allowed; validate warns if they get dense (see style.md). A string must contain a non-space character.
 
-Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in `!`, and on section titles numbered like `01` (a leading zero digit; "3 files changed" is fine).
+Validate also fails on a `TODO:` or lorem ipsum anywhere, on headings ending in an exclamation mark, and on section titles numbered like `01` (a leading zero digit; "3 files changed" is fine).
 
 ## Simple English
 

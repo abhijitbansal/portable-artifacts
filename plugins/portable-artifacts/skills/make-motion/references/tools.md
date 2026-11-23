@@ -2,6 +2,16 @@
 
 Small commands that draw or measure one part of a film without a whole-film render. This page grows as they arrive: film time first (the one way every command names a moment), then the commands that read it: `--inspect`, `--shot` and `--range` today, and the locate helper for a box on a picture.
 
+**Contents**
+
+- [Film time](#film-time)
+- [One frame](#one-frame)
+- [One shot or a range](#one-shot-or-a-range)
+- [Locating a region](#locating-a-region)
+- [A board before any voice](#a-board-before-any-voice)
+- [Comparing looks](#comparing-looks)
+- [Measuring a reference video](#measuring-a-reference-video)
+
 ## Film time
 
 One grammar names a moment of the film. `--poster`, `--inspect`, `--shot` and `--range` read it today; the commands that follow on this page read the same text. It is read after the film's timeline exists, so a word anchor means the word as this film is timed.
