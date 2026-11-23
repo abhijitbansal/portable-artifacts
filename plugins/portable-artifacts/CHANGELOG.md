@@ -45,6 +45,10 @@ Socket, Snyk) flag. No spec changes; pages build the same.
   installer command that replaces it. The doctor still never overwrites a builder agent file itself.
 - **make-dashboard `serve`** no longer prints the rebuild token.
 - **`PA_MAKE_TEST_SCRIPTS`** is honoured only under `NODE_ENV=test`.
+- **make-motion `measure` no longer loses a cut now and then on ffmpeg 7 and later.** Those versions filter video and
+  audio on separate threads, and ebur128 writes each 100 ms progress line in several pieces, so a scene-cut line could
+  land inside one and be dropped with it (seen on CI's ffmpeg 8.0.1: 1 cut of 2 on the test fixture). The loudness pass
+  now runs with `framelog=quiet`, as the music-bed meter already did, and no log line is filtered out.
 
 ### Disclosures and docs
 

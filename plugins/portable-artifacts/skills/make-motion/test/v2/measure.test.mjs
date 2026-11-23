@@ -240,6 +240,30 @@ test('a frame rate ffprobe does not give prints "unknown", not the no-sound labe
   assert.doesNotMatch(result.stdout.split('\n').find((l) => /\bfps\b/.test(l)), /no sound/);
 });
 
+// ffmpeg 7+ filters video and audio on separate threads, and ebur128 builds each per-frame line from several av_log
+// calls (f_ebur128.c), so scdet's line can land inside one; av_log then prints it with no prefix of its own. CI's
+// ffmpeg 8.0.1 did this and the cut was dropped with the progress line (1 cut of 2 on the fixture, now and then).
+const withSound = JSON.stringify({ streams: [{ index: 0, codec_type: 'video', codec_name: 'h264', width: 320, height: 180 }, { index: 1, codec_type: 'audio', codec_name: 'aac' }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '3.0' } });
+const SUMMARY = '[Parsed_ebur128_0 @ 0x2] Summary:\\n\\n  Integrated loudness:\\n    I:         -21.8 LUFS\\n    Threshold: -31.8 LUFS\\n\\n  True peak:\\n    Peak:      -17.7 dBFS';
+const soundProbe = () => fakeTool('ffprobe', `if (args.includes('-select_streams')) console.log(JSON.stringify({ streams: [{ avg_frame_rate: '30/1', r_frame_rate: '30/1' }] }));\nelse console.log(${JSON.stringify(withSound)});`);
+
+test('a scdet line printed inside an ebur128 progress line still counts as a cut', async () => {
+  const merged = '[Parsed_ebur128_0 @ 0x2] t: 1.299977   TARGET:-23 LUFS    M: -21.7 S:-120.7     I: -21.8 LUFS       LRA:   0.0 LU  FTPK: -17.8 dBFSlavfi.scd.score: 15.625, lavfi.scd.time: 1';
+  const ffmpeg = fakeTool('ffmpeg', `console.error(${JSON.stringify(merged)});\nconsole.error('  TPK: -17.7 dBFS');\nconsole.error('[Parsed_scdet_0 @ 0x1] lavfi.scd.score: 15.625, lavfi.scd.time: 2');\nconsole.error('${SUMMARY}');`);
+  const result = await measure([plainFile, '--json'], { FFMPEG_PATH: ffmpeg, FFPROBE_PATH: soundProbe() });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).cuts.value, 2, result.stdout);
+});
+
+test('the pass turns off ebur128\'s per-frame log, so no progress line can swallow a scdet line', async () => {
+  const log = path.join(dir, `calls-${toolCount++}.jsonl`);
+  const ffmpeg = fakeTool('ffmpeg', `require('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');\nconsole.error('${SUMMARY}');`);
+  const result = await measure([plainFile, '--json'], { FFMPEG_PATH: ffmpeg, FFPROBE_PATH: soundProbe() });
+  assert.equal(result.status, 0, result.stderr);
+  const argv = JSON.parse(readFileSync(log, 'utf8').trim());
+  assert.equal(argv[argv.indexOf('-af') + 1], 'ebur128=peak=true:framelog=quiet');
+});
+
 test('an ffprobe that gives no JSON, or no frame rate JSON, is one error line and exit 1, not a stack', async () => {
   const ffmpeg = fakeTool('ffmpeg', 'process.exit(1);');
   const garbage = fakeTool('ffprobe', "console.log('not json');");

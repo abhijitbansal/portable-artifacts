@@ -23,7 +23,9 @@ const LOCAL_ONLY = 'local files only: give the path of a video file on this mach
 const RUN_TIMEOUT_MS = 300_000;
 const PROBE_TIMEOUT_MS = 10_000;
 const KEPT_LINES = 40; // of ffmpeg's log, for an error message
-const PROGRESS_LINE = /\] t:\s/; // ebur128's line every 100 ms: dropped as it arrives, so a long file holds none of them
+// ebur128 with its per-frame log off (a line every 100 ms otherwise): ffmpeg 7+ filters video and audio on separate
+// threads and builds each of those lines from several log calls, so a scdet line could land inside one. Every line is kept.
+const LOUDNESS = 'ebur128=peak=true:framelog=quiet';
 
 /** An error that exits 2 with its message (and, when set, a second line saying why a file was refused). */
 class Refused extends UsageError {
@@ -45,7 +47,7 @@ function localFile(argv) {
   return { file: path.resolve(arg), json: values.json === true };
 }
 
-// Runs `binary args` and resolves { code, stdout, kept } where `kept` is stderr without ebur128's per-100-ms lines.
+// Runs `binary args` and resolves { code, stdout, kept } where `kept` is stderr, one entry a line.
 // `timedOut` is true when `timeout` ms passed and the process was killed.
 export function run(binary, args, timeout) {
   return new Promise((resolve, reject) => {
@@ -54,7 +56,7 @@ export function run(binary, args, timeout) {
     let stdout = '';
     let pending = '';
     let timedOut = false;
-    const keep = (line) => { if (!PROGRESS_LINE.test(line)) kept.push(line); };
+    const keep = (line) => { kept.push(line); };
     child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
     child.stderr.setEncoding('utf8').on('data', (chunk) => {
       const lines = (pending + chunk).split('\n');
@@ -113,7 +115,7 @@ async function measureFile(file) {
   const problem = clipProblem(probe);
   if (problem !== null) throw refusal(file, probe, problem);
   const fps = await frameRate(ffprobe, file);
-  const sound = probe.audio ? ['-map', '0:a:0', '-af', 'ebur128=peak=true'] : [];
+  const sound = probe.audio ? ['-map', '0:a:0', '-af', LOUDNESS] : [];
   const args = ['-nostdin', '-hide_banner', '-nostats', '-v', 'info', ...clipInput(file), '-map', `0:${probe.videoIndex}`, '-vf', `scdet=threshold=${SCENE_THRESHOLD}`, ...sound, '-sn', '-dn', '-f', 'null', '-'];
   const result = await run(ffmpeg, args, RUN_TIMEOUT_MS);
   if (result.code !== 0) throw fail('ffmpeg could not measure the file', { ...result, kept: result.kept.slice(-KEPT_LINES) }, RUN_TIMEOUT_MS);
