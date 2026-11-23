@@ -457,3 +457,27 @@ entrance distance away from the ink; at rest the two agree, and landing already 
 - **A (default, shipped):** keep word-level boxes; only frames at rest are judged for placement.
 - **B:** offset each box by its line's and the mean of its letters' x and y while arriving, so `--inspect` mid-entrance
   shows where the ink is.
+
+## Skills security pass: items left out of the scanner fix (fix/skills-security-scan, 2026-11-23)
+
+The 2026-11-23 audit (prompt injection plus what the skills.sh scanners Gen Agent Trust Hub, Socket and Snyk may flag)
+shipped the real risks and the cheap scanner fixes. These were held back:
+
+- **Page CSP `base-uri 'none'; form-action 'none'`.** The four page templates (make-explainer `page.mjs`, make-diagram
+  `viewer.html`, make-dashboard and make-scene `page.html`) lack both; make-motion's preview server has them.
+  - **A (default, shipped):** leave as is. The CSP string is pinned in unit tests and in every gallery page, so the
+    change means rebuilding the gallery with browser checks, for an info-level hardening.
+  - **B:** add both directives in a gallery-rebuild release.
+- **Pushier skill descriptions.** Anthropic's skill-creator says Claude under-triggers skills and suggests slightly
+  pushy descriptions ("use this even if they don't say dashboard").
+  - **A (default, shipped):** keep the current "Use when … Not for …" descriptions. Changing them without a trigger eval
+    risks stealing near-miss prompts from sibling skills.
+  - **B:** write a 20-query trigger set per skill (half near-misses between the five siblings) and run skill-creator's
+    description loop (`claude -p`, billed usage) before changing any description.
+- **`new Function(src)` in make-diagram unit tests** (route, story-unit, transport-unit, camera-hold, camera-ease-unit,
+  runtime, api) to load the page runtime. Scanners may score it as dynamic execution.
+  - **A (default, shipped):** keep; it runs first-party template code in tests only.
+  - **B:** load the runtime through `node:vm` or an ES module export.
+- **onnxruntime-node versions.** make-motion `optional/voice` pins 1.21.0, `optional/cutout` 1.31.1.
+  - **A (default, shipped):** keep both; each stack is tested at its pin.
+  - **B:** unify on one version after regression checks of voice and cutout.
