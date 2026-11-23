@@ -26,9 +26,10 @@ export { glyphRollup, graphemesOf };
 const HALF = 2;
 const CACHE_MAX = 4096; // distinct (font, word) pairs a film can hold; far above any film, a bound against a runaway
 const SCRATCH_PAD = 4; // px of margin on every side of the scratch picture, over the whole word's ink
+// RTL-script detection range, written with \u escapes only: no literal bidi control character in the source. It covers
 // Hebrew, Arabic, Syriac, Thaana, N'Ko, Samaritan, Mandaic and the presentation forms; the right-to-left marks and
-// embeddings; Phoenician and the other right-to-left scripts of the supplementary planes.
-const RTL = /[֐-ࣿ‏‫‮⁧יִ-﷿ﹰ-﻿]|[\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+// embeddings (U+200F, U+202B, U+202E, U+2067); Phoenician and the other right-to-left scripts of the supplementary planes.
+const RTL = /[\u0590-\u08FF\u200F\u202B\u202E\u2067\uFB1D-\uFDFF\uFE70-\uFEFF]|[\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
 // Tests only (window.__setGlyphPath, engine/page/stage.mjs): with `force`, every word is drawn through the glyph path with
 // `values` for every glyph (the identity unless given). A film is JSON and reaches no page global, so this cannot be set
 // from a spec. `stats` collects, while forced, the DISTINCT words that took the glyph path and those the check rejected
