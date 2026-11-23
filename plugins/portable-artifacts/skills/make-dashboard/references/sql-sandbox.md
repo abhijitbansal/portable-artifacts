@@ -5,7 +5,7 @@ declared sources; `scripts/lib/sql.mjs` then runs the query in a DuckDB locked t
 known way out of DuckDB and where a test pins it. Rejected-query cases live in the `REJECTED` table of `test/guard.test.mjs`
 unless another file is named. A new vector gets a row here and a case in that table.
 
-The validator is **not** the offline guarantee. The locked DuckDB connection (no external access, configuration locked) and
+The validator is **not** the offline guarantee for file sources (postgres and mysql sources connect to their database). The locked DuckDB connection (no external access, configuration locked) and
 the page's `default-src 'none'` CSP are. In make-motion the equivalents are its CSP and the renderer's request abort.
 
 ## Nested SQL and indirect table access

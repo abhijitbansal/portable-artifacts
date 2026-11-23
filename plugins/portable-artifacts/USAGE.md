@@ -65,7 +65,7 @@ is missing it sends you one message with each item, why it is needed, its size
 and the command, and asks once. On yes it runs `--fix <ids>`. Anything that
 needs `sudo`, has no automatic fix or fails (for example a sandbox without
 network) comes back to you as the exact command to run yourself; in Claude Code
-prefix it with `!`. On no the agent does what it can without the item, for
+type it after an exclamation mark, its shell prefix. On no the agent does what it can without the item, for
 example make-motion still writes `film.json`, runs `make.mjs --outline` and hands you the
 build command. `--for` takes a spec `.json` in every skill (make-explainer and
 make-scene add sister skills from it), `check` (make-dashboard, make-diagram, make-explainer and make-scene), and `voiceover` or `cutout` (make-motion). Unknown or
@@ -230,8 +230,9 @@ recipe from `make-dashboard/references/refresh.md`.
 ```
 
 - Run `node <skill-dir>/scripts/setup.mjs dashboard.json` once, online. It
-  installs the DuckDB extensions those sources need, and later builds stay
-  offline.
+  downloads the signed DuckDB extensions those sources need from
+  `extensions.duckdb.org`, and later builds load them and download nothing. A
+  postgres or mysql build still connects, read-only, to your database.
 - Query attached tables as `shop.orders` or `wh.public.orders`.
 - Put the connection string in the environment (`export
   WAREHOUSE_URL=postgres://readonly@host/db`). The variable's name must end
@@ -341,7 +342,7 @@ your project folder):
 4. `validate.mjs explainer.json` checks the schema and limits, file references,
    the embedded diagrams and charts, and the prose rules. It fails on leftover
    `TODO:` text, filler phrases ("leverage", "seamless", "delve"), titles
-   numbered like `01` or ending in `!`, and (for slides) a slide with more
+   numbered like `01` or ending in an exclamation mark, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
    path, the problem and the fix; `--strict` turns the length caps into errors; without it text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words (1,800 on a plan page), `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Three or more sections of one type in a row also warn, once per run at its third section (`sections[2]: 5 motion sections in a row (sections 1 to 5); a page of one repeated block reads as a list: merge some, or put a different kind of section between them`); `--strict` does not make it an error, and a run of `decision`, `approval` or `question` sections, which a plan puts in runs, is left alone. Each warning names the section; resolve them before building where you can.
 5. `build.mjs explainer.json` writes one HTML file and prints its path, then the page's `file://` URL

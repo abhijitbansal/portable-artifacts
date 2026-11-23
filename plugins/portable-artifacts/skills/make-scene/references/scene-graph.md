@@ -1,3 +1,8 @@
+**Contents**
+
+- [Shared contract: scene graph v1](#shared-contract-scene-graph-v1)
+- [Conventions the worlds follow](#conventions-the-worlds-follow)
+
 ## Shared contract: scene graph v1
 
 Every world/lift module returns this object; the browser runtime consumes exactly this. Colour values are a **ColourRef**: a theme token name (`cat1`…`cat8`, `page`, `surface`, `text`, `text2`, `line`, `grid`, `accent`, `good`, `warn`, `bad`, `glow`), a `#rrggbb` hex, or `{ "base": "#rrggbb", "tint": <token>, "share": 0..1 }` (mixed at runtime, so it follows the theme toggle). In the mix, `share` is the fraction of the theme `tint` mixed INTO the fixed `base`: `0` is exactly `base`, `1` is exactly the tint, per 8-bit channel. A world keeps its identity this way: the forest meadow is a green `base` with 30% of the page surface, and group steps are the category colour at 60% over white (lighter) or black (darker).

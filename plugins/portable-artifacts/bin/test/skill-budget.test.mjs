@@ -22,12 +22,16 @@ const read = (skill, ...rest) => fs.readFileSync(path.join(SKILLS, skill, ...(re
 // and the one render-time download is the voice model): it measured 20,888 bytes (`wc -c`); before the fixes it was 20,696.
 // Raised to 21,150 for the 2.2.1 docs review (the cutout model is a second download; `marker` serves `pro` only; `--no-render`
 // is the twin of `--sheets-only`): it measured 21,106 bytes (`wc -c`); before those fixes it was 20,898.
+// Raised for the skills security scan fixes: each SKILL.md gained the data-never-instructions rule, the publish-only-when-asked
+// line, the consent exception and a list of the files written outside the project (make-explainer also names --image-api,
+// make-dashboard the extension download and the network scope, make-motion the model cache). Measured with `wc -c`: 16,304,
+// 16,520, 23,463, 21,868 and 13,026 bytes (dashboard, diagram, explainer, motion, scene); each budget is that plus about 3 percent.
 const BUDGETS = {
-  'make-dashboard': { bytes: 15100, lines: 145 },
-  'make-diagram': { bytes: 15950, lines: 145 },
-  'make-explainer': { bytes: 22700, lines: 150 },
-  'make-motion': { bytes: 21150, lines: 129 },
-  'make-scene': { bytes: 12450, lines: 110 },
+  'make-dashboard': { bytes: 16750, lines: 145 },
+  'make-diagram': { bytes: 17000, lines: 145 },
+  'make-explainer': { bytes: 24150, lines: 150 },
+  'make-motion': { bytes: 22400, lines: 129 },
+  'make-scene': { bytes: 13400, lines: 110 },
 };
 const SKILL_NAMES = fs.readdirSync(SKILLS).filter((d) => fs.existsSync(path.join(SKILLS, d, 'SKILL.md'))).sort();
 
