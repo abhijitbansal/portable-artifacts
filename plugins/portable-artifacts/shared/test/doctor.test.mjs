@@ -1195,6 +1195,15 @@ test("builderAgent: the writer for a missing claude file is still `write claude 
   assert.match(withClaude.notes, /\/h\/\.claude\/agents\/motion-reviewer\.md/);
 });
 
+// A dangling link at motion-reviewer.md: nothing "exists" there, but the writer keeps the link, so the note must not
+// list the reviewer among the files it writes (the builder still is).
+test("builderAgent: the fix note does not list a dangling-link motion-reviewer.md among the files it writes", () => {
+  const c = { ...agentCtx([], ["/h/.claude"]), isLink: (p) => p === "/h/.claude/agents/motion-reviewer.md" };
+  const fix = builderAgent().fix(c);
+  assert.match(fix.notes, /writes \/h\/\.claude\/agents\/artifact-builder\.md /);
+  assert.doesNotMatch(fix.notes, /motion-reviewer\.md/);
+});
+
 // End to end with a fake HOME and a fake plugin folder: the real writer, the real files.
 const AGENTS_SRC = fileURLToPath(new URL("../agents.mjs", import.meta.url));
 const BUILDER_HAND_EDITED = "---\n---\nmake.mjs hand edited builder\n";

@@ -700,10 +700,12 @@ export function builderAgent() {
       // With nothing to repair (a plain `--fix builder_agent`) the writer still runs: it keeps every file that exists.
       const hosts = needBuilder || older.length === 0 ?BUILDER_AGENT_USER_HOSTS.filter(({ host, dotDir }) => ctx.exists(P.join(home, dotDir)) && !(host === 'claude' && pluginServes(ctx))) : [];
       const builderAuto = hosts.map(({ host, dotDir }) => [node, writer, 'write', host, P.join(home, dotDir, 'agents')]);
-      // `write claude` also writes motion-reviewer.md beside the builder, unless one is already there (it keeps it).
+      // `write claude` also writes motion-reviewer.md beside the builder, unless one is already there (it keeps it,
+      // and a dangling link counts as one: the writer keeps the link).
       const files = hosts.flatMap(({ host, dotDir }) => {
         const dir = P.join(home, dotDir, 'agents');
-        return [P.join(dir, BUILDER_AGENT_FILE_FOR[host]), ...(host === 'claude' && !ctx.exists(P.join(dir, 'motion-reviewer.md')) ? [P.join(dir, 'motion-reviewer.md')] : [])];
+        const reviewerFile = P.join(dir, 'motion-reviewer.md');
+        return [P.join(dir, BUILDER_AGENT_FILE_FOR[host]), ...(host === 'claude' && !ctx.exists(reviewerFile) && ctx.isLink?.(reviewerFile) !== true ? [reviewerFile] : [])];
       });
       const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
       // Only user-level files of ours are rewritten (one file each, in its own folder); a project-level one gets a manual line.
