@@ -10,10 +10,9 @@ import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 import { CURRENT_MARKER, reviewerFileState } from './agents.mjs';
 import { missingPackages } from './missing-packages.mjs';
+import { SKILLS_CLI, SIBLING_REPO as REPO, siblingInstallCommand } from './sibling-install.mjs';
 
-const REPO = 'abhijitbansal/portable-artifacts';
 const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
-const SKILLS_CLI = 'skills@1.7.2';
 
 // What `npm ci --omit=dev` puts in a skill's node_modules, as the consent prompt shows it. Measured 2026-11 on macOS in
 // a dev checkout: `npm ls --omit=dev --all --parseable` per skill, then the on-disk size (du blocks) of every
@@ -323,7 +322,7 @@ export function sisterSkill(name, { size } = {}) {
       const add = ['npx', '--yes', SKILLS_CLI, 'add', REPO, '--skill', name, '-y', ...(plan?.global ? ['-g'] : [])];
       const install = installStep(ctx);
       if (plan === null) {
-        const hint = `reinstall with your host's installer (for example run \`npx ${SKILLS_CLI} add ${REPO} --skill ${name} -y\` from your project root, or reinstall the plugin), then ${render([install], ctx.platform)}`;
+        const hint = `reinstall with your host's installer (for example run \`${siblingInstallCommand([name])}\` from your project root, or reinstall the plugin), then ${render([install], ctx.platform)}`;
         return { auto: null, manual: manualAll(hint) };
       }
       const auto = [
