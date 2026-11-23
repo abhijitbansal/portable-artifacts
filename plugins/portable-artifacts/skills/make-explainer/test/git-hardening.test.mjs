@@ -1,5 +1,5 @@
 // gather runs git inside a repository that may not be the user's own. A repository's own config must not be able to
-// run a command through a read-only gather: core.fsmonitor (run by `git status`) and a diff driver's textconv.
+// run a command through a read-only gather: core.fsmonitor (run by `git status`), a diff driver's textconv and a filter driver's clean, smudge or process command.
 // Each test first proves with plain git that the planted config really runs the script, so a pass means gather
 // switched it off and not that the plant was wrong. Built-ins only; no browser.
 import { test } from 'node:test';
@@ -58,6 +58,77 @@ test('a diff driver with a textconv command never runs during gather', () => {
     assert.equal(fs.existsSync(marker), false, 'gather ran the repository\'s textconv command');
   } finally {
     cleanup();
+    repo.cleanup();
+  }
+});
+
+// A tracked file with a same-length edit is stat-dirty at the same size, so `git status` must read its content, and
+// reading content runs the clean filter the repository's config names (an unpacked archive leaves every file like this).
+// The config goes in after the commits, so the plant does not run while the fixture is built.
+function filterRepo(driverName, driverLines) {
+  const repo = makeRepo();
+  repo.write('.gitattributes', `* filter=${driverName}\n`);
+  repo.write('notes.txt', 'two\n');
+  repo.commit('chore: base');
+  git(repo.dir, 'checkout', '-q', '-b', 'feat/x');
+  repo.write('other.txt', 'x\n');
+  repo.commit('feat: other');
+  appendConfig(repo, `[filter "${driverName}"]\n${driverLines}`);
+  repo.write('notes.txt', 'six\n');
+  return repo;
+}
+
+function assertFilterNeverRuns(driverName, marker, repo) {
+  // A process driver that does not speak git's filter protocol makes status fail, but it has run by then.
+  try { git(repo.dir, 'status', '--porcelain'); } catch { /* the marker is the control */ }
+  assert.equal(fs.existsSync(marker), true, 'control: plain git status runs the planted filter');
+  fs.rmSync(marker);
+  const facts = gatherGit({ repo: repo.dir });
+  assert.equal(facts.dirty, true, 'the same-length edit must still be reported as uncommitted');
+  assert.equal(fs.existsSync(marker), false, `gather ran the repository's filter.${driverName} command`);
+}
+
+test('a filter driver with a clean command never runs during gather, and a same-length edit is still dirty', () => {
+  const { script, marker, cleanup } = plant();
+  const lines = `\tclean = ${script}\n`;
+  const repo = filterRepo('evil', lines);
+  try {
+    assertFilterNeverRuns('evil', marker, repo);
+  } finally {
+    cleanup();
+    repo.cleanup();
+  }
+});
+
+test('a filter driver with a long-running process command never runs during gather', () => {
+  const { script, marker, cleanup } = plant();
+  const lines = `\tprocess = ${script}\n\tsmudge = ${script}\n\trequired = true\n`;
+  const repo = filterRepo('evil', lines);
+  try {
+    assertFilterNeverRuns('evil', marker, repo);
+  } finally {
+    cleanup();
+    repo.cleanup();
+  }
+});
+
+test('a filter driver whose name contains dots is switched off too', () => {
+  const { script, marker, cleanup } = plant();
+  const lines = `\tclean = ${script}\n`;
+  const repo = filterRepo('my.evil.clean', lines);
+  try {
+    assertFilterNeverRuns('my.evil.clean', marker, repo);
+  } finally {
+    cleanup();
+    repo.cleanup();
+  }
+});
+
+test('a clean repository with no filter drivers still reports not dirty', () => {
+  const repo = featureRepo();
+  try {
+    assert.equal(gatherGit({ repo: repo.dir }).dirty, false);
+  } finally {
     repo.cleanup();
   }
 });

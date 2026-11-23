@@ -47,18 +47,44 @@ export function gitEnv(source) {
   return env;
 }
 
-// git only, an argv array, no shell. `-c core.fsmonitor=false`: `git status` would otherwise run the command a
-// repository's own config names there.
-function run(cwd, args) {
-  const env = gitEnv(process.env);
-  const base = ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'core.fsmonitor=false'];
-  const r = spawnSync('git', [...base, ...args], {
-    cwd, encoding: 'utf8', env, maxBuffer: MAX_BUFFER,
-  });
+// A filter driver (`filter.<name>.clean`, `.smudge` or `.process`) is a command from the repository's own config that
+// git runs whenever it reads a tracked file whose stat data no longer matches the index (`git status` does). Every
+// driver the config names is overridden with an empty command, which git treats as no filter. A driver name may hold
+// dots, so the name is everything between "filter." and the last ".clean", ".smudge" or ".process".
+const FILTER_KEY = /^filter\.(.+)\.(?:clean|smudge|process)$/;
+const BASE_ARGS = ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'core.fsmonitor=false'];
+const filterOverrides = new Map();
+
+function spawnGit(cwd, args) {
+  const r = spawnSync('git', [...BASE_ARGS, ...args], { cwd, encoding: 'utf8', env: gitEnv(process.env), maxBuffer: MAX_BUFFER });
   if (r.error) {
     if (r.error.code === 'ENOENT') throw new UsageError('git is not installed or not on PATH; install it, then retry');
     throw new UsageError(`cannot run git: ${r.error.code ?? r.error.message}`);
   }
+  return r;
+}
+
+// Reading config never runs a command. Cached per folder; gatherGit drops its folder's entry so each gather re-reads.
+function filterArgs(cwd) {
+  if (!filterOverrides.has(cwd)) {
+    const listed = spawnGit(cwd, ['config', '-z', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|smudge|process)$']);
+    const names = new Set();
+    if (listed.status === 0) {
+      for (const key of listed.stdout.split('\0')) {
+        const m = FILTER_KEY.exec(key);
+        if (m) names.add(m[1]);
+      }
+    }
+    const off = (n) => ['clean=', 'smudge=', 'process=', 'required=false'].flatMap((kv) => ['-c', `filter.${n}.${kv}`]);
+    filterOverrides.set(cwd, [...names].flatMap(off));
+  }
+  return filterOverrides.get(cwd);
+}
+
+// git only, an argv array, no shell. `-c core.fsmonitor=false`: `git status` would otherwise run the command a
+// repository's own config names there; filterArgs does the same for filter drivers.
+function run(cwd, args) {
+  const r = spawnGit(cwd, [...filterArgs(cwd), ...args]);
   return { ok: r.status === 0, out: r.stdout, err: r.stderr.trim() };
 }
 
@@ -202,6 +228,7 @@ export function isTestPath(p) {
  */
 export function gatherGit({ repo: dir = '.', base } = {}) {
   const root = repoRoot(path.resolve(dir));
+  filterOverrides.delete(root);
   if (!commitExists(root, 'HEAD')) throw new UsageError(`${root} has no commits yet; commit something, then retry`);
   const baseRef = resolveBase(root, base);
   const merge = run(root, ['merge-base', baseRef, 'HEAD']);
