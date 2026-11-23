@@ -1,0 +1,156 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "desk",
+  "format": "16:9",
+  "seed": 7,
+  "voice": { "name": "af_heart" },
+  "music": { "bed": "drift", "bpm": 90 },
+  "sound": "on",
+  "captions": true,
+  "generatedBy": { "model": "claude-sonnet-5-5", "effort": "high", "agent": "Claude Code" },
+  "shots": [
+    {
+      "id": "hook",
+      "show": "statement",
+      "say": "A *cheap* model makes a film from a spec."
+    },
+    {
+      "id": "director",
+      "show": "list",
+      "cut": "crossfade",
+      "style": "steps",
+      "title": "A handoff, and back",
+      "items": ["The director writes a small spec", "A cheaper operator, Haiku, runs one command", "The report goes back to the director"],
+      "say": "The director writes a small spec. A cheaper operator, Haiku, runs one command. The report goes back to the director."
+    },
+    {
+      "id": "spec",
+      "show": "code",
+      "cut": { "type": "slide", "direction": "up" },
+      "mode": "type",
+      "lang": "json",
+      "title": "look-cosmos.json, an excerpt",
+      "highlight": [5],
+      "code": "{\n  \"id\": \"distance\",\n  \"show\": \"number\",\n  \"say\": \"Earth is one hundred forty …\",\n  \"value\": 149.6,\n  \"decimals\": 1,\n  \"suffix\": \"million\",\n  \"label\": \"kilometres from the Sun to Earth\"\n}",
+      "say": "One shot is a few lines of JSON. A figure, and its label."
+    },
+    {
+      "id": "frame",
+      "show": "clipping",
+      "cut": { "type": "wipe", "direction": "right" },
+      "hero": "card",
+      "src": "how-it-works-assets/cosmos-distance.png",
+      "say": "And this is the *frame* it draws."
+    },
+    {
+      "id": "sheet",
+      "show": "clipping",
+      "cut": "crossfade",
+      "hero": "card",
+      "src": "how-it-works-assets/cosmos-distance-sheet.png",
+      "caption": "That shot's review sheet",
+      "regions": { "tile": [0.338, 0.013, 0.324, 0.385] },
+      "on": [{ "at": "word:contrast", "do": "highlight", "target": "region:tile" }],
+      "say": "The review then measures size, safe area and *contrast*, a frame every quarter second."
+    },
+    {
+      "id": "finding",
+      "show": "code",
+      "cut": { "type": "slide", "direction": "left" },
+      "mode": "run",
+      "lang": "text",
+      "title": "A real finding",
+      "command": "node make.mjs film.json --outline",
+      "output": "invalid\nmechanical: shots[0].colour: unknown\n  property; allowed: id, show, say,\n  hold, cut, narration, on, text,\n  kicker, hero",
+      "say": "A mechanical finding names its path. The cheap model fixes only that. The director opens every sheet."
+    },
+    {
+      "id": "speed",
+      "show": "list",
+      "cut": "cut",
+      "style": "points",
+      "items": ["One command", "Held frames are reused", "--shot or --range: a part alone", "--inspect: one frame"],
+      "say": "One command. Held frames are captured once. Redraw one shot, or a range. Or inspect one frame."
+    },
+    {
+      "id": "pipeline",
+      "show": "diagram",
+      "cut": { "type": "wipe", "direction": "up" },
+      "layout": "row",
+      "title": "What the command does",
+      "nodes": [
+        { "id": "spec", "label": "Spec" },
+        { "id": "validate", "label": "Validate" },
+        { "id": "browser", "label": "Browser" },
+        { "id": "sheets", "label": "Sheets" },
+        { "id": "ffmpeg", "label": "ffmpeg" }
+      ],
+      "edges": [
+        { "from": "spec", "to": "validate" },
+        { "from": "validate", "to": "browser" },
+        { "from": "browser", "to": "sheets" },
+        { "from": "sheets", "to": "ffmpeg" }
+      ],
+      "say": "The spec is validated. A local browser draws and reviews it, and writes the sheets. Then ffmpeg encodes the video."
+    },
+    {
+      "id": "features",
+      "show": "code",
+      "cut": { "type": "slide", "direction": "up" },
+      "mode": "type",
+      "lang": "json",
+      "title": "how-it-works.json, its first lines",
+      "highlight": [1],
+      "code": "\"voice\": { \"name\": \"af_heart\" },\n\"music\": { \"bed\": \"drift\", \"bpm\": 90 },\n\"sound\": \"on\",\n\"captions\": true,",
+      "say": "The voice is made here, with Kokoro. Add a bed, cues and captions."
+    },
+    {
+      "id": "looks",
+      "show": "clipping",
+      "cut": "page-curl",
+      "hero": "card",
+      "src": "how-it-works-assets/looks-six.png",
+      "caption": "One shot, six looks",
+      "say": "The same shot, in six looks."
+    },
+    {
+      "id": "vertical",
+      "show": "screen",
+      "cut": "crossfade",
+      "frame": "phone",
+      "src": "how-it-works-assets/poster-tall-hook.png",
+      "say": "And vertical shorts, for Reels, TikTok and Shorts."
+    },
+    {
+      "id": "private",
+      "show": "statement",
+      "cut": "cut",
+      "say": "It runs on *your machine*. At render time, only the voice model is downloaded, once. It is MIT, so what it makes is yours."
+    },
+    {
+      "id": "engines",
+      "show": "compare",
+      "cut": { "type": "slide", "direction": "left" },
+      "mode": "versus",
+      "left": { "title": "Open code", "points": ["HyperFrames: HTML files", "Remotion: React code"] },
+      "right": { "title": "make-motion", "points": ["A closed JSON spec", "A fixed schema"] },
+      "say": "HyperFrames takes HTML, Remotion takes React: open code an agent can break. make-motion takes a closed JSON spec."
+    },
+    {
+      "id": "licence",
+      "show": "statement",
+      "cut": "cut",
+      "say": "MIT, with no seat or revenue limit, unlike Remotion's company licence."
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "cut": "fade",
+      "title": "A cheap model. Your machine.",
+      "say": "A cheap model, a small spec, your machine. Install it in Claude Code.",
+      "ask": "Install it in Claude Code",
+      "mark": "portable-artifacts"
+    }
+  ]
+}

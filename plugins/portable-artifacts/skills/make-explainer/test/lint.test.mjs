@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, lintPlaceholders, loadBannedPhrases, rawMarkdownWarnings, labelTitleWarnings, LABEL_TITLES } from '../scripts/lib/lint.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { lintText, lintPlaceholders, loadBannedPhrases, rawMarkdownWarnings, labelTitleWarnings, LABEL_TITLES, sectionSamenessWarnings, SAMENESS_RUN } from '../scripts/lib/lint.mjs';
 import { validateSpec } from '../scripts/lib/spec.mjs';
+
+const EXAMPLES = fileURLToPath(new URL('../references/examples', import.meta.url));
 
 const P = 'sections[0].text';
 const errorsOf = (text, opts) => lintText(text, P, opts).errors;
@@ -155,4 +160,30 @@ test('validate reports them as warnings only, at the string path, and never for 
   ] });
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.deepEqual(r.warnings.filter((w) => /label, not a claim|heading/.test(w.message)).map((w) => w.path), ['sections[0].title', 'sections[0].text']);
+});
+
+const s = (type) => ({ type, title: 'T', text: 'x' });
+test('three or more sections of one type in a row warn once, at the third, naming the run', () => {
+  assert.deepEqual(sectionSamenessWarnings([s('text'), s('text'), s('text'), s('text'), s('cards')]),
+    [{ path: 'sections[2]', message: '4 text sections in a row (sections 1 to 4); a page of one repeated block reads as a list: merge some, or put a different kind of section between them' }]);
+  assert.deepEqual(sectionSamenessWarnings([s('text'), s('text'), s('cards'), s('text'), s('text')]), []);
+  for (const type of ['decision', 'approval', 'question']) {
+    assert.deepEqual(sectionSamenessWarnings([s(type), s(type), s(type), s(type)]), [], `${type} runs are left alone`);
+  }
+  assert.deepEqual(sectionSamenessWarnings([s('text'), s('text'), s('text'), s('table'), s('motion'), s('motion'), s('motion')]).map((w) => w.path), ['sections[2]', 'sections[6]']);
+  assert.deepEqual(sectionSamenessWarnings([]), []);
+  assert.equal(SAMENESS_RUN, 3);
+});
+
+test('validate reports it as a warning only, even under strict, and no bundled example reads as one repeated block', async () => {
+  const run = { title: 'T', sections: [{ type: 'text', title: 'One claim', text: 'a' }, { type: 'text', title: 'Two claims', text: 'b' }, { type: 'text', title: 'Three claims', text: 'c' }] };
+  for (const strict of [false, true]) {
+    const r = await validateSpec(run, { strict });
+    assert.equal(r.ok, true, `strict ${strict}: ${JSON.stringify(r.errors)}`);
+    assert.deepEqual(r.warnings.filter((w) => /sections in a row/.test(w.message)).map((w) => w.path), ['sections[2]'], `strict ${strict}`);
+  }
+  for (const name of fs.readdirSync(EXAMPLES).filter((f) => f.endsWith('.explainer.json'))) {
+    const spec = JSON.parse(fs.readFileSync(path.join(EXAMPLES, name), 'utf8'));
+    assert.deepEqual(sectionSamenessWarnings(spec.sections), [], name);
+  }
 });

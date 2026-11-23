@@ -14,6 +14,10 @@ import '../devices/index.mjs';
 import '../captions/index.mjs';
 // ...and give values (or null) for every named move, so the moves are registered before any look is.
 import '../moves/index.mjs';
+// ...and an entry (an object or null) for every film-level overlay, so the overlays are registered before any look is.
+import '../overlays/index.mjs';
+import { FILL_KEYS, isFillShare } from './fill.mjs';
+import { entranceErrors } from './entrance.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
 import { cosmos } from './cosmos.mjs';
@@ -61,7 +65,9 @@ import { marker } from './marker.mjs';
  *   system is a new entry there
  * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move } & Record<string, Move | null>} moves  the
  *   five the first kinds use, and an entry for every move in registries.moves (engine/moves: rise, wipe, slam, pop, draw,
- *   count, settle), a Move or null where the look does not use it (checked by validateLook as the look registers)
+ *   count, settle, letters, lines), a Move or null where the look does not use it (checked by validateLook as the look
+ *   registers). `letters` and `lines` are entrances that end at rest (engine/looks/entrance.mjs); a statement picks one
+ *   with kinds.statement.entrance
  * @property {Record<string, { experimental?: boolean, experimentalTypes?: string[] }>} [kinds]  see below; a kind entry
  *   with `experimental: true` parks the kind in this look (isParkedKind), `chart.experimentalTypes` parks chart types
  * @property {number} wordStagger  seconds between words that have no spoken time; 0 means words follow their spoken times
@@ -69,6 +75,8 @@ import { marker } from './marker.mjs';
  * @property {string[]} cuts  the cuts a film in this look may name: registered cut names (every shipped look lists all)
  * @property {string[]} cutPalette  the look's preferred cuts, in order: a non-empty subset of `cuts` holding "cut" (what
  *   --list cuts names per look and the director reaches for; a cut outside it is not a finding)
+ * @property {{ colors: string[] }} [cutFlood]  the palette keys the flood cut may paint, in order of preference: the first
+ *   that differs from both the outgoing and the incoming shot's ground wins (default: the accent alone)
  * @property {Record<string, { direction?: string, duration?: number, smear?: boolean, smearAxes?: string[] }>} [cutStyle]
  *   the look's defaults per cut, each checked against that cut's options (engine/cuts/resolve.mjs resolveCut reads them
  *   after the shot's and the film's root cut); `smear: true` makes a smearable cut draw its motion smear, and
@@ -77,6 +85,9 @@ import { marker } from './marker.mjs';
  * @property {{ line?: { color: string, width: number, alpha: number }, shadow?: { color: string, width: number,
  *   alpha: number, steps: number } }} [coverEdge]  the leading edge of a cover cut's sheet (engine/cuts/cover.mjs):
  *   palette colour names, widths in pixels
+ * @property {{ band?: number, hero?: number }} [fill]  where the review's composition rules fire for this look, each a number
+ *   above 0 and at most 1 (checked by validateLook): `band`, the share of a side left empty (dead-space), `hero`, the share of
+ *   the frame a hero must reach (scale-contrast); a key left out takes DEFAULT_FILL (looks/fill.mjs)
  * @property {number} keyline  width of a cut-out's keyline
  * @property {{ dx: number, dy: number, blur: number, alpha: number, color: string }} shadow  offset and blur in units, color #rrggbb
  * @property {Record<string, object>} devices  styling per device name; colours are palette keys or #rrggbb
@@ -87,6 +98,11 @@ import { marker } from './marker.mjs';
  * @property {{ cut: Record<string, string | null>, device: Record<string, string | null>, emphasis: string | null,
  *   land: string | null }} sounds  the cue each event makes, or null for none: one entry per registered cut and device
  *   (checked by validateLook as the look registers); which names a synth knows is scripts/v2/sound's to check
+ * @property {{ logo: { corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right', height: number, margin: number,
+ *   opacity: number } | null, progress: { edge: 'top' | 'bottom', height: number, inset: number, bar: string, track: string } | null }} overlays
+ *   the film-level overlays (engine/overlays): an entry for every registered one, an object (units; `bar` and `track`
+ *   palette keys; `corner` is the default a film's logo takes) or null where the look does not draw it (checked by
+ *   validateLook as the look registers; a film asking for an overlay the look refuses is invalid)
  * @property {string} captions  the caption style, a name in registries.captions (engine/captions): how the spoken words
  *   of a narrated shot that does not show its own words are drawn (checked by validateLook as the look registers)
  * @property {'plain'} [captionVariant]  a variant of the caption style the look selects (lower: 'plain', ledger's strip)
@@ -180,23 +196,40 @@ function captionsError(name, style, captions) {
 
 const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+// The errors of one kind's field named `...Ease` (kinds.chart.growEase): an ease that parses, as a move's ease must.
+function easeFieldErrors(name, kind, data) {
+  return Object.entries(data).filter(([key]) => key.endsWith('Ease')).flatMap(([key, value]) => {
+    const at = `look "${name}": kinds.${kind}.${key}`;
+    if (typeof value !== 'string') return [`${at} must be an ease name, got ${JSON.stringify(value) ?? 'undefined'}`];
+    const problem = easeProblem(value);
+    return problem === null ? [] : [`${at}: ${problem}`];
+  });
+}
+
 // The errors of a look's `kinds` (absent, or an object of kind names to objects of composition data).
 function kindsErrors(name, kinds) {
   if (kinds === undefined) return [];
   if (!isPlainObject(kinds)) return [`look "${name}": kinds must be an object of kind names to their data, got ${String(kinds)}`];
-  return Object.entries(kinds).filter(([, data]) => !isPlainObject(data))
+  const shape = Object.entries(kinds).filter(([, data]) => !isPlainObject(data))
     .map(([kind, data]) => `look "${name}": kinds.${kind} must be an object, got ${String(data)}`);
+  const eases = Object.entries(kinds).filter(([, data]) => isPlainObject(data)).flatMap(([kind, data]) => easeFieldErrors(name, kind, data));
+  return [...shape, ...eases];
 }
 
 // A look's entry for a named move: a Move ({ ease, dur >= 0, ... }) or null (the look does not use it).
 const isMoveOrNull = (move) => move === null
   || (isPlainObject(move) && typeof move.ease === 'string' && move.ease !== '' && Number.isFinite(move.dur) && move.dur >= 0);
 
-// The errors of a look's moves: an entry, a Move or null, for each registered move in `names`.
+// The errors of a look's moves: an entry, a Move or null, for each registered move in `names`; and the ease of every
+// entry that has one (a registered move or a legacy key such as enter) must parse.
 function movesErrors(name, moves, names) {
   if (!isPlainObject(moves)) return [`look "${name}": moves must be an object of move names to { ease, dur }, got ${String(moves)}`];
-  return names.filter((key) => !isMoveOrNull(moves[key]))
+  const shape = names.filter((key) => !isMoveOrNull(moves[key]))
     .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
+  const eases = Object.entries(moves).filter(([, move]) => isPlainObject(move) && typeof move.ease === 'string')
+    .map(([key, move]) => [key, easeProblem(move.ease)]).filter(([, problem]) => problem !== null)
+    .map(([key, problem]) => `look "${name}": moves.${key}.ease: ${problem}`);
+  return [...shape, ...eases];
 }
 
 const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes', 'ease']);
@@ -263,7 +296,7 @@ function coverEdgeErrors(name, look) {
 const isFraction = (v) => typeof v === 'number' && v >= 0 && v <= 1;
 const CUT_MOTION = Object.freeze({
   punchZoom: [(v) => typeof v === 'number' && v > 1 && v <= 2, 'must be a number above 1 and at most 2'],
-  punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back)'],
+  punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back; spring(<stiffness>,<damping>); cubic-bezier(<x1>,<y1>,<x2>,<y2>); steps(<n>) or steps(<n>,start|end))'],
   smearShutter: [(v) => typeof v === 'number' && v > 0 && v <= 1, 'must be a number above 0 and at most 1'],
   irisAt: [(v) => Array.isArray(v) && v.length === 2 && v.every(isFraction), 'must be two numbers from 0 to 1 (x and y as fractions of the canvas)'],
 });
@@ -278,6 +311,71 @@ function easeProblem(name) {
   }
 }
 
+// look.fill (absent, or { band?, hero? }): the share of a side the review lets stay empty before it says so (dead-space), and
+// the share of the frame a hero must reach (scale-contrast), in place of the defaults (looks/fill.mjs, which the review
+// reads through fillOf: one definition of the fields and of a valid value).
+
+function fillErrors(name, look) {
+  const fill = look.fill;
+  if (fill === undefined) return [];
+  if (!isPlainObject(fill)) return [`look "${name}": fill must be an object of ${FILL_KEYS.join(', ')}, got ${String(fill)}`];
+  return Object.entries(fill).flatMap(([key, value]) => {
+    if (!FILL_KEYS.includes(key)) return [`look "${name}": fill.${key} is not a field; it takes ${FILL_KEYS.join(', ')}`];
+    return isFillShare(value) ? [] : [`look "${name}": fill.${key} must be a number above 0 and at most 1, got ${typeof value === 'number' ? String(value) : JSON.stringify(value)}`];
+  });
+}
+
+// look.kinds.statement.fillShort (absent, or { words, height, toWide?, linesWide?, max? }, read by engine/kinds/statement.mjs
+// shortFill): what a statement of at most `words` words may take instead of the look's usual share. `words` and `height`
+// are required; every field is checked, and a key that is not a field is refused (Object.hasOwn: no inherited names).
+const FILL_SHORT_RULES = Object.freeze({
+  words: { ok: (v) => Number.isInteger(v) && v >= 1, need: 'a whole number of at least 1' },
+  height: { ok: isFillShare, need: 'a number above 0 and at most 1' },
+  toWide: { ok: (v, columns) => Number.isInteger(v) && v >= 1 && v <= columns, need: (columns) => `a whole number from 1 to ${columns}` },
+  linesWide: { ok: (v) => Number.isInteger(v) && v >= 1, need: 'a whole number of at least 1' },
+  max: { ok: (v) => Number.isFinite(v) && v > 0, need: 'a number above 0' },
+});
+const FILL_SHORT_KEYS = Object.keys(FILL_SHORT_RULES);
+const FILL_SHORT_REQUIRED = ['words', 'height'];
+const shown = (v) => (typeof v === 'string' ? JSON.stringify(v) : String(v));
+
+function fillShortErrors(name, look) {
+  const statement = look.kinds?.statement;
+  if (!isPlainObject(statement) || !Object.hasOwn(statement, 'fillShort') || statement.fillShort === undefined) return [];
+  const at = `look "${name}": kinds.statement.fillShort`;
+  const data = statement.fillShort;
+  if (!isPlainObject(data)) return [`${at}: needs an object of ${FILL_SHORT_KEYS.join(', ')}, got ${shown(data)}`];
+  const columns = look.grid?.columns;
+  const fields = FILL_SHORT_KEYS.flatMap((key) => {
+    if (!Object.hasOwn(data, key)) return FILL_SHORT_REQUIRED.includes(key) ? [[key, undefined]] : [];
+    return [[key, data[key]]];
+  });
+  const bad = fields.filter(([key, value]) => !FILL_SHORT_RULES[key].ok(value, columns))
+    .map(([key, value]) => {
+      const { need } = FILL_SHORT_RULES[key];
+      return `${at}.${key}: needs ${typeof need === 'function' ? need(columns) : need}, got ${shown(value)}`;
+    });
+  const unknown = Object.keys(data).filter((key) => !FILL_SHORT_KEYS.includes(key))
+    .map((key) => `${at}.${key}: is not a field; it takes ${FILL_SHORT_KEYS.join(', ')}`);
+  return [...bad, ...unknown];
+}
+
+// look.overlays: an entry, an object or null, for each registered overlay (`overlays`), the object's fields checked by the
+// overlay itself (engine/overlays problems); a key that is no registered overlay is refused.
+function overlayErrors(name, look, overlays) {
+  const data = look.overlays;
+  const names = overlays.names();
+  if (!isPlainObject(data)) return [`look "${name}": overlays must be an object with an entry (an object or null) for each of ${names.join(', ')}, got ${String(data)}`];
+  const unknown = Object.keys(data).filter((key) => !names.includes(key)).map((key) => `look "${name}": overlays.${key} is not an overlay; they are ${names.join(', ')}`);
+  const entries = names.flatMap((key) => {
+    const entry = data[key];
+    if (entry === null) return [];
+    if (!isPlainObject(entry)) return [`look "${name}": overlays.${key} must be an object or null, got ${JSON.stringify(entry) ?? 'undefined'}`];
+    return overlays.get(key).problems(entry, look.palette).map((problem) => `look "${name}": overlays.${key}.${problem}`);
+  });
+  return [...entries, ...unknown];
+}
+
 function cutMotionErrors(name, look) {
   const motion = look.cutMotion;
   if (motion === undefined) return [];
@@ -287,6 +385,23 @@ function cutMotionErrors(name, look) {
     const [ok, message] = CUT_MOTION[key];
     return ok(value) ? [] : [`look "${name}": cutMotion.${key} ${message}, got ${JSON.stringify(value)}`];
   });
+}
+
+// look.cutFlood (absent, or { colors: [palette keys] }): the colours the flood cut may paint, tried in order, the first one
+// that differs from both grounds it covers winning (engine/cuts/layers.mjs floodColor); absent: the accent alone.
+const CUT_FLOOD_KEYS = Object.freeze(['colors']);
+
+function cutFloodErrors(name, look) {
+  const flood = look.cutFlood;
+  if (flood === undefined) return [];
+  const at = `look "${name}": cutFlood`;
+  if (!isPlainObject(flood)) return [`${at} must be an object of ${CUT_FLOOD_KEYS.join(', ')}, got ${String(flood)}`];
+  const unknown = Object.keys(flood).filter((key) => !CUT_FLOOD_KEYS.includes(key)).map((key) => `${at}.${key} is not a field; it takes ${CUT_FLOOD_KEYS.join(', ')}`);
+  const palette = isPlainObject(look.palette) ? look.palette : {};
+  const names = Object.keys(palette).join(', ');
+  if (!Array.isArray(flood.colors) || flood.colors.length === 0) return [...unknown, `${at}.colors must be a non-empty list of palette colours (${names}), got ${JSON.stringify(flood.colors) ?? 'undefined'}`];
+  const outside = flood.colors.map((key, i) => (typeof key === 'string' && Object.hasOwn(palette, key) ? null : `${at}.colors.${i} ${JSON.stringify(key)} is not a palette colour (${names})`)).filter(Boolean);
+  return [...unknown, ...outside];
 }
 
 /** Does `look` carry composition data for `kind` (look.kinds[kind])? */
@@ -343,17 +458,20 @@ export function kindData(look, kind, looks = registries.looks) {
  * Throws a RangeError naming the look and the field when its `sounds` is missing, or does not name a cue (or null) for
  * every cut in `cuts` and every device in `devices` (registries; default the shared ones), and for emphasis and land; or
  * when its `captions` does not name a style in `captions` (default the shared caption styles registry); or when its
- * `kinds`, given, is not an object of objects. Returns the look, so it can be used inline.
+ * `kinds`, given, is not an object of objects; or when its `overlays` lacks an entry (an object or null) for a registered
+ * overlay, or holds a field that is wrong. Returns the look, so it can be used inline.
  */
-export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions, moves = registries.moves } = {}) {
+export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions, moves = registries.moves, overlays = registries.overlays } = {}) {
   const caption = captionsError(look.name, look.captions, captions);
   if (caption !== null) throw new RangeError(caption);
   const kinds = kindsErrors(look.name, look.kinds);
   if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
-  const moveErrors = movesErrors(look.name, look.moves, moves.names());
+  const moveErrors = [...movesErrors(look.name, look.moves, moves.names()), ...(isPlainObject(look.moves) ? entranceErrors(look.name, look) : [])];
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
-  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look)];
+  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look), ...cutFloodErrors(look.name, look)];
   if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));
+  const fill = [...fillErrors(look.name, look), ...fillShortErrors(look.name, look)];
+  if (fill.length > 0) throw new RangeError(fill.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {
     throw new RangeError(`look "${name}": sounds must be { cut, device, emphasis, land }, got ${String(sounds)}`);
@@ -365,6 +483,8 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
       .map((key) => `look "${name}": sounds.${key} must be a cue name or null, got ${String(sounds[key])}`),
   ];
   if (errors.length > 0) throw new RangeError(errors.join('\n'));
+  const overlay = overlayErrors(name, look, overlays);
+  if (overlay.length > 0) throw new RangeError(overlay.join('\n'));
   return look;
 }
 

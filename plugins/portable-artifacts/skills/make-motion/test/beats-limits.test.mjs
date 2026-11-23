@@ -114,12 +114,13 @@ test('narration-like syllables can pass the default gate, and --min-confidence 0
   assert.ok(Math.max(...confidences) < 0.6, `the fix works: highest ${Math.max(...confidences).toFixed(3)}`);
 });
 
-test('SKILL.md names every known limit with the flag that fixes it', () => {
+test('references/music.md names every known limit with the flag that fixes it', () => {
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
-  for (const [name, text] of [['SKILL.md', skill]]) {
-    for (const words of ['bossa', 'polka', '2/3', 'from about 115', '6/8', 'below 60', 'swing', 'ritardando', 'narration', 'heavy noise', '0.8 to 1.25 times', '--min-confidence 0.6', '--bpm', '--min-bpm', '--max-bpm']) {
-      assert.ok(text.includes(words), `${name} names: ${words}`);
-    }
+  const music = readFileSync(path.join(root, 'references/music.md'), 'utf8');
+  for (const words of ['bossa', 'polka', '2/3', 'from about 115', '6/8', 'below 60', 'swing', 'ritardando', 'narration', 'heavy noise', '0.8 to 1.25 times', '--min-confidence 0.6', '--bpm', '--min-bpm', '--max-bpm']) {
+    assert.ok(music.includes(words), `references/music.md names: ${words}`);
+  }
+  for (const [name, text] of [['SKILL.md', skill], ['references/music.md', music]]) {
     assert.ok(!text.includes('from about 140'), `${name} no longer says the kick-on-1-and-3 limit starts at 140`);
   }
 });

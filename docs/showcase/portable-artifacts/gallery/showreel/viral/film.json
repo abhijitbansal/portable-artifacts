@@ -6,6 +6,8 @@
   "seed": 7,
   "voice": { "name": "af_heart" },
   "music": { "bed": "pulse", "bpm": 124 },
+  "captions": true,
+  "overlays": { "progress": true },
   "generatedBy": { "model": "claude-sonnet-5-5", "effort": "high", "agent": "Claude Code" },
   "shots": [
     {
@@ -50,24 +52,23 @@
     },
     {
       "id": "explainer",
-      "show": "media",
+      "show": "screen",
       "cut": "cut",
+      "frame": "phone",
       "src": "showreel-assets/viral-explainer-page.png",
-      "fit": "cutout",
-      "treatment": "none",
-      "caption": "Explainer",
-      "say": "Explainers, with diagrams inside.",
-      "on": [{ "at": "word:inside", "do": "sweep", "target": "picture" }]
+      "regions": { "verdict": [0.03, 0.6, 0.94, 0.4] },
+      "zoom": "verdict",
+      "say": "Explainers, with diagrams inside."
     },
     {
       "id": "scene",
       "show": "media",
-      "cut": { "type": "slide", "direction": "up" },
+      "cut": { "type": "zoom", "at": "region:verdict" },
       "src": "showreel-assets/viral-scene.png",
       "fit": "cutout",
       "treatment": "none",
       "caption": "Scene",
-      "say": "A 3D scene you can explore.",
+      "say": "Want *3D*? A scene you can explore.",
       "on": [{ "at": "word:explore", "do": "sweep", "target": "picture" }]
     },
     {
@@ -84,7 +85,7 @@
     {
       "id": "close",
       "show": "end",
-      "cut": "punch",
+      "cut": { "type": "flood", "at": "picture" },
       "title": "Open source. | Install it in | Claude Code.",
       "ask": "portable-artifacts",
       "say": "Open source. Install it in Claude Code. (1.2)"

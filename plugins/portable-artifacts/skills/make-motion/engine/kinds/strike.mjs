@@ -5,7 +5,7 @@
 // stays to the end, so the frame at the end is never the frame at 0) or [on, off], two shares (the bar lands on the
 // first word and lifts on the second: a kind whose own motion leaves two holds). The words are chosen by their place in
 // the narration, so the strike holds on estimated and voiced timing alike. Pure and DOM-free.
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { runInk } from './shared.mjs';
 import { beatPair, stepped } from './stack.mjs';
 
@@ -43,7 +43,7 @@ export function struck(text, ctx, beatAt) {
     const box = [text.props.x + ink.left, baseline - ink.up, ink.right - ink.left, ink.up + ink.down];
     return beatPair(`${text.id}.strike${k === 0 ? '' : k}`, beat, [box], text, { baseline, ink, font }, ctx);
   });
-  const hidden = node('text', text.id, text.props, { tracks: { ...text.tracks, opacity: stepped(1, 0, beat) }, wordTracks: text.wordTracks, depth: text.depth, step: text.step });
+  const hidden = node('text', text.id, text.props, { tracks: { ...text.tracks, opacity: stepped(1, 0, beat) }, ...textTracksOf(text), depth: text.depth, step: text.step });
   // every line's bar, then one copy of the whole text over them (the first pair's)
   return [hidden, ...pairs.map(([bar]) => bar), pairs[0][1]];
 }

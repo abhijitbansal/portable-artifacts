@@ -149,8 +149,30 @@ test('text is written, never faded: no text or path node of a hand shot has an o
     for (const tr of [n.tracks.opacity, ...n.wordTracks.map((w) => w.opacity)].filter(Boolean)) {
       assert.ok(tr.points.every((p) => p.v === 0 || p.v === 1), `${n.id}: opacity keys ${tr.points.map((p) => p.v).join(', ')}`);
     }
+    // a letter or a line is never faded in either: no glyph or line track of hand text has an opacity track (W6 Task 4, R-b)
+    const glyphFades = (n.glyphTracks ?? []).flatMap((glyphs) => (glyphs ?? []).map((g) => g?.opacity)).filter(Boolean);
+    const lineFades = (n.lineTracks ?? []).map((line) => line?.opacity).filter(Boolean);
+    assert.deepEqual([glyphFades.length, lineFades.length], [0, 0], `${n.id}: no glyph or line opacity track on hand text`);
   }
   assert.ok(all(nodes).some((n) => n.id.startsWith('name') && n.tracks.reveal), 'the label is revealed by its clip');
+});
+
+test('a written text keeps its glyph tracks and its own line tracks, line by line', async () => {
+  const { node } = await import('../../engine/graph/node.mjs');
+  const { track } = await import('../../engine/time/track.mjs');
+  const out = expanded();
+  const name = all(out.nodes).find((n) => n.id === 'name');
+  const lineFades = name.props.layout.lines.map((_, k) => track([{ t: 0, v: 0 }, { t: 1 + k, v: 1 }]));
+  const glyphFade = track([{ t: 0, v: 0 }, { t: 1, v: 1 }]);
+  const marked = node('text', 'name', name.props, {
+    tracks: name.tracks, wordTracks: name.wordTracks, depth: name.depth, glyphTracks: [[{ opacity: glyphFade }]], lineTracks: lineFades.map((y) => ({ y })),
+  });
+  const nodes = handLayer(out.nodes.map((n) => (n.id === 'name' ? marked : n)), out.timing, out.ctx);
+  const parts = all(nodes).filter((n) => n.type === 'text' && n.id.startsWith('name'));
+  assert.equal(parts.length, lineFades.length);
+  parts.forEach((part) => assert.strictEqual(part.glyphTracks?.[0][0].opacity, glyphFade, `${part.id}: glyph tracks kept`));
+  const kept = parts.map((part) => part.lineTracks?.[0]?.y);
+  assert.ok(lineFades.length > 0 && kept.every((y, k) => y === lineFades[k]), 'each line node carries its own line track as index 0');
 });
 
 test('frame 0 of a board holds at least one fully drawn element and the hand resting at its end', () => {
@@ -195,11 +217,11 @@ test('the two hand findings fire on a planted pose: over a finished text for mor
   const planted = [{ id: 'under', box: [rest[0] + 20, rest[1] + 10, 120, 40], done: 0 }];
   // judged past the shot's end, where the hand has gone to rest over it
   const late = { ...opts, duration: opts.duration + 2 };
-  assert.deepEqual(handFindings(plan, look, planted, late).filter((f) => f.rule === 'covered').map((f) => [f.kind, f.node]), [['mechanical', 'under']]);
+  assert.deepEqual(handFindings(plan, look, planted, late).filter((f) => f.rule === 'hand-covered').map((f) => [f.kind, f.node]), [['mechanical', 'under']]);
   // the board's own texts, each finished when its line is written: never covered for long
   const writes = plan.filter((s) => s.kind === 'write');
   const own = inkBoxes(out.nodes).map((box, i) => ({ id: `t${i}`, box, done: writes[i].end }));
-  assert.deepEqual(handFindings(plan, look, own, opts).filter((f) => f.rule === 'covered'), []);
+  assert.deepEqual(handFindings(plan, look, own, opts).filter((f) => f.rule === 'hand-covered'), []);
   // a planted pose: a hand turned up (angle -90) resting on the top edge crosses it once it goes to rest
   const top = handLook('hand-test-top', { angle: -90, restAt: { wide: [0.5, 0.005], tall: [0.5, 0.005] } });
   const leftFindings = handFindings(plan, registries.looks.get(top), [], late);

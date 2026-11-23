@@ -13,9 +13,10 @@ import { fileURLToPath } from 'node:url';
 
 const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-// The scripts/lib files that stay (File Structure of the cut-over plan). Anything else under scripts/lib is version 1.
-const KEEP_LIB = Object.freeze(['beats', 'browser', 'cutout', 'cutout-cli', 'doctor-hint', 'ffmpeg', 'help', 'model-cache', 'optional', 'pinned-file', 'requirements', 'video-probe']);
-const ENTRY_SCRIPTS = Object.freeze(['scripts/make.mjs', 'scripts/doctor.mjs', 'scripts/cutout.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'optional/voice/index.mjs']);
+// The scripts/lib files that stay (File Structure of the cut-over plan, plus the locate helper's three, which are new
+// and not version 1: digits, locate and png-write, and measure, the reference measure's pure half). Anything else under scripts/lib is version 1.
+const KEEP_LIB = Object.freeze(['beats', 'browser', 'cutout', 'cutout-cli', 'digits', 'doctor-hint', 'ffmpeg', 'help', 'locate', 'measure', 'model-cache', 'optional', 'pinned-file', 'png-write', 'requirements', 'video-probe']);
+const ENTRY_SCRIPTS = Object.freeze(['scripts/make.mjs', 'scripts/doctor.mjs', 'scripts/cutout.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/locate.mjs', 'scripts/measure.mjs', 'optional/voice/index.mjs']);
 const WALKED_FOLDERS = Object.freeze(['engine', 'scripts/v2', 'test/v2']);
 // What the render page's absolute specifiers mean on the server: the folder each prefix is served from.
 const PAGE_ROUTES = Object.freeze([['/engine/', 'engine/'], ['/shared/', 'shared/'], ['/v1/', 'template/']]);

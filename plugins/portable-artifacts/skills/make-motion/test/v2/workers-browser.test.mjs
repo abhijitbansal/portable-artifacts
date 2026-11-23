@@ -81,6 +81,36 @@ test('a worker page closed mid-run fails the render, and no partial file is left
   return undefined;
 });
 
+// onFrame(index, bytes) is the test seam of the slice's frame equality: through the workers path it must still be called once
+// a frame, in frame order, with the bytes sent to ffmpeg. A slice never takes this path (the workers split a whole film's
+// frames, not a range): given workers and openPage it renders on the one page, and says workers 1.
+test('onFrame through --workers: every frame once, in order, the bytes one page sends; a slice with workers stays on one page', async (t) => {
+  if (!await browserAvailable() || !await ffmpegOrNull()) return t.skip('no browser or ffmpeg');
+  const film = path.join(dir, 'onframe.json');
+  writeFileSync(film, JSON.stringify(FILM));
+  const loaded = loadFilm(film);
+  const session = await openSession(loaded);
+  const hashed = (list) => (index, bytes) => list.push([index, createHash('sha256').update(bytes).digest('hex')]);
+  try {
+    const openPage = async () => openSession(loaded, { browser: session.page.context().browser() });
+    const single = [];
+    await renderFilm({ out: path.join(dir, 'of-one.mp4'), session, onFrame: hashed(single) });
+    const pooled = [];
+    const result = await renderFilm({ out: path.join(dir, 'of-three.mp4'), session, workers: 3, openPage, onFrame: hashed(pooled) });
+    assert.equal(result.workers, 3);
+    assert.deepEqual(pooled.map(([index]) => index), single.map(([index]) => index), 'every frame once, in frame order');
+    assert.deepEqual(pooled.map(([index]) => index), Array.from({ length: session.timeline.frameCount }, (_, k) => k));
+    assert.deepEqual(pooled, single, 'the same bytes as a single page sends');
+    const part = [];
+    const sliced = await renderFilm({ out: path.join(dir, 'of-slice.mp4'), session, workers: 3, openPage, frames: { from: 4, to: 14 }, onFrame: hashed(part) });
+    assert.equal(sliced.workers, 1, 'a slice is captured by one page');
+    assert.deepEqual(part, single.slice(4, 15), 'and sends the full render\'s frames');
+  } finally {
+    await session.close();
+  }
+  return undefined;
+});
+
 test('captureParallel: each range takes its own first frame even when it is held, and writes in frame order', async () => {
   const { captureParallel } = await import('../../scripts/v2/workers.mjs');
   const frames = 10;
@@ -92,7 +122,7 @@ test('captureParallel: each range takes its own first frame even when it is held
   };
   const pages = [fakePage(), fakePage(), fakePage(), fakePage()];
   const written = [];
-  const captured = await captureParallel({ pages, frames, capture: async (page) => Buffer.from(String(page.state.frame)), write: async (b) => { written.push(b === null ? null : b.toString()); } });
+  const captured = await captureParallel({ pages, frames, shoot: async (page, i) => { await page.evaluate((k) => window.__seek(k), i); return Buffer.from(String(page.state.frame)); }, write: async (b) => { written.push(b === null ? null : b.toString()); } });
   assert.deepEqual(written, ['0', '0', '0', '3', '3', '3', '6', '6', '8', '8']);
   assert.equal(captured, 4, 'one picture per range');
 });

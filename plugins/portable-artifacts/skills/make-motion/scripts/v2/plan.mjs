@@ -9,6 +9,10 @@ import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { shotAtFrame } from '../../engine/review/pacing.mjs';
+import { registries } from '../../engine/registry.mjs';
+import { lookOfShot } from '../../engine/graph/film.mjs';
+import { lettersLanding } from '../../engine/kinds/statement.mjs';
+import { DEFAULT_MODE } from './spec.mjs';
 
 export const PHONE_TILE_WIDTH = 360;
 const START_OFFSET = 0.1;
@@ -56,11 +60,32 @@ function shotMoments(film, timeline, index) {
   }).sort((a, b) => a.frame - b.frame);
 }
 
+// Seconds into the shot at which the last letter of its text is at rest (the statement kind's own lettersLanding, on the context the
+// kind would get: the look the shot draws with, the film's mode and the timeline's entry of the shot); 0 where no letters play, and
+// without a film to read the look from.
+function lastLanding(film, shot, index) {
+  if (film === undefined) return 0;
+  const ctx = { look: lookOfShot(film, index), mode: registries.modes.get(film.mode ?? DEFAULT_MODE), timing: shot };
+  return lettersLanding(film.shots[index], ctx);
+}
+
+/**
+ * The late frame of shot `index`: the phone tile's frame, the board tile's and the compare sheet's. It is the 85% frame of the
+ * shot, or, when the shot's last letter has not landed by then (a long statement in a look with a letters entrance, given
+ * `film`), the frame it lands on, the last one of the shot at most: the picture never shows a word half arrived.
+ */
+export function lateFrameOf(timeline, index, film) {
+  const shot = timeline.shots[index];
+  const late = frameIn(timeline, shot, shot.start + shot.duration * LATE);
+  const landed = Math.ceil((shot.start + lastLanding(film, shot, index)) * timeline.fps - FRAME_EPSILON);
+  return Math.max(late, Math.min(lastFrameOf(timeline, shot), landed));
+}
+
 function shotSheet(film, timeline, index) {
   const shot = timeline.shots[index];
   const moments = shotMoments(film, timeline, index);
   const tiles = moments.map(({ role, frame }) => tile(timeline, role, frame, shot.id));
-  const late = frameIn(timeline, shot, shot.start + shot.duration * LATE);
+  const late = lateFrameOf(timeline, index, film);
   return { name: `${shot.id}.png`, kind: 'shot', shot: shot.id, tiles: [...tiles, tile(timeline, 'phone', late, shot.id, { width: PHONE_TILE_WIDTH })] };
 }
 
@@ -114,7 +139,7 @@ function cutSheet(film, timeline, index) {
     const progress = progressLabel(timeline, span, frame);
     return progress === null ? plain : { ...plain, label: `${plain.label} ${MIDDLE_DOT} ${progress}` };
   });
-  return { name: `cut-${from.id}-${to.id}.png`, kind: 'cut', shot: to.id, tiles };
+  return { name: `cut-${from.id}-${to.id}.png`, kind: 'cut', shot: to.id, windowFrom: span.first, tiles };
 }
 
 // A name used before gets -2, -3 ... until it is free, so a shot called "cut-a-b" cannot overwrite the strip of the cut
@@ -134,13 +159,36 @@ function uniqueNames(sheets) {
 }
 
 /**
- * @returns {{ name: string, kind: 'shot' | 'cut', shot: string, tiles: { role: 'frame' | 'landing' | 'phone', frame: number, t: number, label: string, width?: number }[] }[]}
- *   shot sheets in film order, then the cut strips
+ * @returns {{ name: string, kind: 'shot' | 'cut', shot: string, windowFrom?: number, tiles: { role: 'frame' | 'landing' | 'phone', frame: number, t: number, label: string, width?: number }[] }[]}
+ *   shot sheets in film order, then the cut strips; `windowFrom` (a strip only) is the first frame of the cut's window, the
+ *   frame a slice (slice.mjs) reads to say whether the strip belongs to it
  */
 export function planSheets(film, timeline) {
   const shots = timeline.shots.map((_, index) => shotSheet(film, timeline, index));
   const cuts = timeline.shots.slice(1).map((_, i) => cutSheet(film, timeline, i + 1));
   return uniqueNames([...shots, ...cuts]);
+}
+
+/** The board (--estimated): shots to a strip, tiles across a strip, the JPEG quality and the strip's width in px. */
+export const BOARD_PER_STRIP = 6;
+export const BOARD_COLUMNS = 3;
+export const BOARD_JPEG_QUALITY = 80;
+export const BOARD_STRIP_WIDTH = 1920;
+
+/**
+ * The board strips of a film: one tile per shot, at the frame its phone tile uses (85% of the shot), BOARD_PER_STRIP to a
+ * strip, in film order, named `board-1.jpg`, `board-2.jpg` and on. Each tile is labelled as a sheet tile is.
+ * @returns {{ name: string, tiles: { frame: number, t: number, label: string }[] }[]}
+ */
+export function planBoard(film, timeline) {
+  const tiles = timeline.shots.map((shot, index) => {
+    const { frame, t, label } = tile(timeline, 'phone', lateFrameOf(timeline, index, film), shot.id);
+    return { frame, t, label };
+  });
+  return Array.from({ length: Math.ceil(tiles.length / BOARD_PER_STRIP) }, (_, k) => ({
+    name: `board-${k + 1}.jpg`,
+    tiles: tiles.slice(k * BOARD_PER_STRIP, (k + 1) * BOARD_PER_STRIP),
+  }));
 }
 
 /** The frames the audit looks at: every sheet frame (this includes every `on` event's landing + 0.05 s, wherever it

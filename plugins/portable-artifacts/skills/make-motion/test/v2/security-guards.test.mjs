@@ -112,6 +112,7 @@ test('clipInput opens a clip through the file protocol only, the plain clip cont
 // until it is added with the reason it is safe. The list may only shrink.
 const INPUT_SITES = Object.freeze({
   'scripts/lib/ffmpeg.mjs': 1, // fileInput, the whitelisting builder (version 1's frame pipe, preflight source and measureLoudness went at cut-over)
+  'scripts/lib/locate.mjs': 1, // pictureInput, the whitelisting builder for a picture png.mjs cannot read
   'scripts/v2/clips.mjs': 1, // clipInput, the whitelisting builder
   'scripts/v2/render.mjs': 1, // the frame pipe (-i -)
   'scripts/v2/voice/master.mjs': 3, // recordingInput, ownWavInput, ownMp4Input: the whitelisting builders
@@ -128,7 +129,7 @@ function sourcesUnder(folder) {
 
 test('a literal -i appears in an ffmpeg argument list only at the sites reviewed for a whitelist', () => {
   const found = {};
-  for (const rel of [...sourcesUnder('scripts/v2'), ...sourcesUnder('scripts/lib'), 'scripts/make.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/cutout.mjs']) {
+  for (const rel of [...sourcesUnder('scripts/v2'), ...sourcesUnder('scripts/lib'), 'scripts/make.mjs', 'scripts/beats.mjs', 'scripts/storyboard.mjs', 'scripts/cutout.mjs', 'scripts/measure.mjs']) { // measure.mjs spawns ffmpeg and ffprobe: its inputs come from clipInput, and a literal '-i' there fails this pin (scripts/lib/measure.mjs is pure and is scanned with scripts/lib)
     const count = readFileSync(path.join(SKILL_DIR, rel), 'utf8').split('\n').filter((line) => /'-i'/.test(line) && !/^\s*\/\//.test(line)).length;
     if (count > 0) found[rel] = count;
   }

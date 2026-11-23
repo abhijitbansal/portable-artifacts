@@ -27,13 +27,15 @@ import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes, widerKeyword } from './stack.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
-import { unmarked, opensSet } from './shared.mjs';
+import { unmarked, opensSet, letterTracks, letterStagger, lineEntrance } from './shared.mjs';
+import { graphemesOf } from '../graph/rollup.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
 // desk: fitted between scale step 3 and 300 units, its block at most 64% of the height, ink centred at 50%; columns 2
 // to 9 (2 to 11 on vertical formats), and with a slug no narrower than columns 2 to 5, trading size for a better break
-// no lower than 3 times its kicker
+// no lower than 3 times its kicker. For a short statement, look data kinds.statement.fillShort overrides the 300 cap
+// (max), the 64% (height), the last column (toWide) and the look's linesWide (shortFill below).
 const DESK = Object.freeze({ centre: 0.5, height: 0.64, fromStep: 3, max: 300, toWide: 9, toTall: 11, minTo: 5 });
 const POP = Object.freeze({ fromStep: 3, toStep: 5 }); // so a long word can shrink the block
 const FIRST_COLUMN = 2;
@@ -71,6 +73,14 @@ function highlightTogether(text, ctx) {
   return emphasised.map((on, i) => on && emphasised[i + 1] === true);
 }
 
+// The look's short-statement fill (kinds.statement.fillShort: { words, height, toWide?, linesWide?, max? }, desk, cosmos,
+// keynote) when the text has `words` words or fewer; null otherwise. A short claim may take more of the band, more
+// columns and lines on a wide frame, and go past the 300-unit cap.
+function shortFill(look, text) {
+  const fill = look.kinds?.statement?.fillShort;
+  return fill !== undefined && wordsOf(text).length <= fill.words ? fill : null;
+}
+
 // The text fitted to columns FIRST_COLUMN..`to` and centred on DESK.centre of the height: { layout, font, x, y, span }.
 // `tradeFloor`: the fit gives up size for a better break (fitText) only down to this size; `clear` (slugClearance, or
 // null): the fit prefers a layout whose block, so placed, stays off it.
@@ -88,7 +98,8 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const bounds = editorialBounds(ctx);
   // on a tall frame with a sun the block keeps out of its bright light: never higher than belowSun
   const top = !wide && sunny ? Math.max(bounds.top, belowSun(look, ctx)) : -Infinity;
-  const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
+  const fill = shortFill(look, text);
+  const min = sizeAt(look, DESK.fromStep, unit), max = (fill?.max ?? DESK.max) * unit;
   // a look may set a tall frame's lines further apart (data.tallLineHeight, marker: a board written down the page)
   const font = !wide && data.tallLineHeight ? { ...fontFor(look, 'display', max, unit), lineHeight: data.tallLineHeight } : fontFor(look, 'display', max, unit);
   // a claim that hangs under its tag on a wide frame (kinds.statement.hang, ledger) is fitted where it will stand: its
@@ -113,11 +124,12 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   // hanging claim may take all the room under its tag
   const maxLines = !wide && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
   const maxHeight = hangTop !== null ? bounds.bottom - hangTop
-    : Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : DESK.height), bounds.bottom - Math.max(bounds.top, top));
+    : Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : fill?.height ?? DESK.height), bounds.bottom - Math.max(bounds.top, top));
   // a phrase kept whole may cost size: the fit looks down to the kind's floor for a layout that keeps it
   const floor = data.together && wide ? Math.max(tradeFloor, min) : tradeFloor;
   const fit = (lines) => fitDisplay(opts, { min, max, maxHeight, maxLines: lines, tradeFloor: floor }, look, unit);
-  const fewer = wide && data.linesWide ? fit(data.linesWide) : null;
+  const linesWide = fill?.linesWide ?? data.linesWide;
+  const fewer = wide && linesWide ? fit(linesWide) : null;
   const fitted = fewer && !fewer.layout.overflow && whole(fewer.layout) ? fewer : fit(maxLines);
   return place(fitted.layout, fitted.font);
 }
@@ -157,7 +169,7 @@ function dropBelow(placed, clear, ctx) {
 // frame review reports text left over a card: card-overlap).
 function composeEditorial(text, shot, ctx) {
   const { look, canvas, unit, measure } = ctx;
-  const last = isWide(canvas) ? look.kinds?.statement?.toWide ?? DESK.toWide : DESK.toTall;
+  const last = isWide(canvas) ? shortFill(look, text)?.toWide ?? look.kinds?.statement?.toWide ?? DESK.toWide : DESK.toTall;
   const slug = slugBox(shot, ctx);
   const clear = slug ? slugClearance(slug, ctx) : null;
   // a statement stays three times the slug's kicker (the hero ratio the review asks of a frame's own texts; the slug is
@@ -247,9 +259,55 @@ function hookTracks(look, at, to, peak) {
   return peak === undefined ? ghost : { ...ghost, scale: pulseScale(look, { pulse: at, peak }) };
 }
 
-// Word tracks: the entrance on each word's time (none for a matched hero), and in a recolour look the emphasis (a pulse
-// as well for recolor-scale). In a mode that reads from frame 0 there is no entrance at all (see ghostWords).
-function wordTracksFor(words, times, ctx, matched) {
+// The entrance the look picks for this statement (look.kinds.statement.entrance: 'letters' or 'lines'), or null when the
+// words keep the per-word entrance of today. It applies on the plain path only: never in a mode that reads from frame 0
+// (mode.hookFromFrameZero, viral: every word is on screen from the first frame, whatever the emphasis), never to a hero
+// that arrives matched, never in a look that opens composed.
+function entranceOf(ctx, matched) {
+  const name = ctx.look.kinds?.statement?.entrance;
+  if (name === undefined || matched || ctx.mode.hookFromFrameZero === true || opensSet(ctx.look)) return null;
+  return name;
+}
+
+/**
+ * Seconds into the shot at which the last letter of the statement's text is at rest, or 0 where no letters entrance plays
+ * (entranceOf: a matched hero, a mode that reads from frame 0, a look that opens composed, stacks or takes another entrance).
+ * Read from the words, word times and letter counts expandStatement hands letterTracks, with no layout, so the review's late
+ * frame (scripts/v2/plan.mjs) waits for what the kind draws. `ctx` is the kind's own: { look, mode, timing }, the look the shot
+ * draws with and the timeline's entry of the shot. A statement the validator refuses (no words) lands at 0.
+ */
+export function lettersLanding(shot, ctx) {
+  if (shot.show !== 'statement' || ctx.look.composition === 'stack') return 0;
+  if (entranceOf(ctx, arrivesMatched(shot, ctx)) !== 'letters') return 0;
+  let text;
+  try {
+    text = sourceText(shot, ctx.look);
+  } catch (err) {
+    if (err instanceof SayError || err.message.startsWith('statement: shot')) return 0; // the validator reports it
+    throw err;
+  }
+  const texts = wordsOf(text);
+  const times = wordTimes(texts, ctx.timing, cutReveal(shot, ctx));
+  return Math.max(0, ...texts.map((word, i) => {
+    const letters = graphemesOf(word).length;
+    return times[i].at + (letters - 1) * letterStagger(ctx.look, letters);
+  }));
+}
+
+// The glyph or line tracks of an entrance (node options), none for null. Letters: a track map per grapheme of each word,
+// from the word's time; lines: one per line of the layout, at the time of its first word. Lines never become glyph tracks.
+function entranceTracks(entry, layout, words, times, { look, unit }) {
+  if (entry === 'letters') return { glyphTracks: words.map((w, i) => letterTracks(look, unit, times[i].at, graphemesOf(w.word.text).length)) };
+  if (entry === 'lines') return { lineTracks: layout.lines.map((line) => lineEntrance(look, unit, times[line.words[0].index].at)) };
+  return {};
+}
+
+// Word tracks: the entrance on each word's time (none for a matched hero, and none where the look's letters or lines
+// entrance, `entry`, brings the word in), and in a recolour look the emphasis (a pulse as well for recolor-scale). Where
+// ghostWords holds (a mode that reads from frame 0, with a recolour look) the words are on screen from the start and lit as
+// spoken, so there is no entrance; a viral film in a look that does not recolour has no ghosts, and its words take the
+// per-word entrance (or the look's letters or lines, entranceOf).
+function wordTracksFor(words, times, ctx, matched, entry) {
   const { look, unit, timing } = ctx;
   const style = emphasisOf(look);
   const peaks = pulsePeaks(words, look);
@@ -268,9 +326,10 @@ function wordTracksFor(words, times, ctx, matched) {
       return style.hookTracks(look, { ...word, tracks: lit }, at);
     }
     // a look that opens composed (shared.mjs opensSet, ledger) sets every word from frame 0, as a matched hero does; the
-    // emphasis still lands on its spoken word
-    const entered = matched || opensSet(look) ? {} : enterTracks(look, unit, at);
-    const lands = scales && !matched && look.moves.enter.scale !== undefined;
+    // emphasis still lands on its spoken word. A letters or lines entrance (`entry`, from entranceOf, which never applies to
+    // either of those nor on the hook path) takes the word's own entrance's place: its glyph or line tracks carry the arrival.
+    const entered = matched || opensSet(look) || entry !== null ? {} : enterTracks(look, unit, at);
+    const lands = scales && !matched && entry === null && look.moves.enter.scale !== undefined;
     const tracks = lands ? { ...entered, scale: landing(at, look.moves.enter, word.start, 1) } : entered;
     return style.wordTracks(look, { ...word, tracks }, at, ctx);
   });
@@ -367,11 +426,13 @@ function expandStatement(shot, ctx) {
   const matched = arrivesMatched(shot, ctx);
   const hero = heroId(shot, 'text');
   const span = emphasisOf(look).span?.(placed.layout, times, timing);
+  const entry = entranceOf(ctx, matched);
   const text = node('text', hero, {
     x: placed.x, y: placed.y, layout: placed.layout, font: placed.font, fill: look.palette.ink, role: 'hero', ...(span === undefined ? {} : { highlightLines: span }),
     ...glowStyle(look, placed.font, unit),
   }, {
-    wordTracks: wordTracksFor(words, times, ctx, matched),
+    wordTracks: wordTracksFor(words, times, ctx, matched, entry),
+    ...entranceTracks(entry, placed.layout, words, times, ctx),
   });
   const boxes = boxesFor(placed, words);
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));

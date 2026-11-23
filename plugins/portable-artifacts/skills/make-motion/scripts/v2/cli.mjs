@@ -3,9 +3,10 @@
 import { parseCli, UsageError } from '../../shared/cli.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { MAX_WORKERS, autoWorkers } from './workers.mjs';
+import { rangeParts } from './range-form.mjs';
 
 export const LIST_NAMES = Object.freeze(['kinds', 'looks', 'modes', 'devices', 'moves', 'cuts', 'fields', 'voices']);
-export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--batch', '--subtitles', '--workers', '--preview', '--open']);
+export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--inspect', '--shot', '--range', '--batch', '--subtitles', '--subtitle-words', '--no-music', '--workers', '--preview', '--open', '--estimated', '--compare-looks']);
 const USAGE = `node scripts/make.mjs <film.json>; accepted flags: ${FLAGS.join(', ')}; exit codes: 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted`;
 const OPTIONS = Object.freeze({
   out: { type: 'string' },
@@ -23,21 +24,40 @@ const OPTIONS = Object.freeze({
   phonemes: { type: 'boolean' },
   poster: { type: 'string' },
   'poster-out': { type: 'string' },
+  inspect: { type: 'string' },
+  shot: { type: 'string' },
+  range: { type: 'string' },
   batch: { type: 'string' },
   subtitles: { type: 'string' },
+  'subtitle-words': { type: 'boolean' },
+  'no-music': { type: 'boolean' },
   workers: { type: 'string' },
   preview: { type: 'boolean' },
   open: { type: 'boolean' },
+  estimated: { type: 'boolean' },
+  'compare-looks': { type: 'string' },
 });
 const SUBTITLE_FORMATS = Object.freeze(['srt', 'vtt']);
 const POSTER_EXTENSIONS = Object.freeze(['.jpg', '.jpeg', '.png']);
 // The flags each mode refuses beside it (a mode is a run that does one thing other than render).
+// (the first mode that clashes names itself: --inspect is first, so --inspect with --poster says so from --inspect's side)
 const MODE_CONFLICTS = Object.freeze({
+  inspect: ['out', 'batch', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'subtitles', 'workers', 'exact'],
   phonemes: ['outline', 'out', 'no-render', 'sheets-only', 'poster', 'batch', 'subtitles'],
-  poster: ['out', 'batch', 'no-render', 'sheets-only', 'outline', 'phonemes', 'subtitles'],
+  poster: ['out', 'batch', 'no-render', 'sheets-only', 'outline', 'phonemes', 'subtitles', 'inspect'],
+  shot: ['range', 'batch', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'subtitles', 'workers'],
+  range: ['shot', 'batch', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'subtitles', 'workers'],
   batch: ['poster', 'outline', 'phonemes', 'subtitles'],
   subtitles: ['outline', 'phonemes', 'poster', 'batch'],
-  preview: ['out', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'batch', 'subtitles', 'workers', 'exact'],
+  'no-music': ['outline', 'phonemes', 'poster', 'poster-out', 'inspect'],
+  // --estimated writes the sheets and the board of the whole film: not a slice, an outline or a batch, and no captions (they would be
+  // timed from the estimate and written where a real render's go). The modes that refuse --sheets-only say so from their own side:
+  // --estimated needs it, so --poster, --inspect, --phonemes and --preview never get here
+  estimated: ['shot', 'range', 'outline', 'batch', 'subtitles'],
+  // --compare-looks draws one frame of the film in each look: no video, sheets, voice, captions, slice or music of its own. --estimated
+  // is refused here, and not as "needs --sheets-only": the comparison is always on estimated timing, and the sheets it refuses are not its.
+  'compare-looks': ['out', 'batch', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'shot', 'range', 'subtitles', 'subtitle-words', 'workers', 'exact', 'no-music', 'estimated', 'list', 'preview'],
+  preview: ['out', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'inspect', 'shot', 'range', 'batch', 'subtitles', 'workers', 'exact', 'no-music', 'compare-looks'],
 });
 const BATCH_KEYS_RE = /\{(index|[a-zA-Z][a-zA-Z0-9]*)\}/;
 const PROVENANCE_FLAGS = Object.freeze(['model', 'effort', 'agent']);
@@ -98,16 +118,39 @@ function checkConflicts(values) {
   }
 }
 
-// --poster <seconds>: a plain non-negative number; --poster-out needs it and names a .jpg, .jpeg or .png file.
+// --poster <film time>: the text as written (seconds, a shot, shot@anchor or an anchor: film-time.mjs reads it once the
+// film's timeline exists); --poster-out needs it and names a .jpg, .jpeg or .png file.
 function posterFlags(values) {
-  if (values['poster-out'] !== undefined && values.poster === undefined) throw new UsageError('--poster-out needs --poster <seconds>');
+  if (values['poster-out'] !== undefined && values.poster === undefined) throw new UsageError('--poster-out needs --poster <film time>');
   if (values.poster === undefined) return { poster: null, posterOut: null };
-  if (!/^\d+(\.\d+)?$/.test(values.poster)) throw new UsageError(`--poster takes a time in seconds from the film's start, such as 2.5; got ${JSON.stringify(values.poster)}`);
+  if (values.poster === '') throw new UsageError('--poster takes a film time: seconds such as 2.5, a shot id, <shot-id>@<anchor> or an anchor such as end-1');
   const out = values['poster-out'];
   if (out !== undefined && !POSTER_EXTENSIONS.includes(out.slice(out.lastIndexOf('.')).toLowerCase())) {
     throw new UsageError(`--poster-out must name a ${POSTER_EXTENSIONS.join(', ')} file, got ${JSON.stringify(out)}`);
   }
-  return { poster: Number(values.poster), posterOut: out ?? null };
+  return { poster: values.poster, posterOut: out ?? null };
+}
+
+// --inspect <film time>: the text as written, read like --poster's once the film's timeline exists (film-time.mjs).
+function inspectFlag(values) {
+  if (values.inspect === undefined) return null;
+  if (values.inspect === '') throw new UsageError('--inspect takes a film time: seconds such as 2.5, a shot id, <shot-id>@<anchor> or an anchor such as end-1');
+  return values.inspect;
+}
+
+// --shot <id> and --range <from>..<to>: the text as written, read once the film's timeline exists (slice.mjs). A --range with no
+// ".." is refused here, before the film is read.
+function sliceFlags(values) {
+  if (values.shot === '') throw new UsageError('--shot takes a shot id: the id of one shot of the film');
+  if (values.range !== undefined) rangeParts(values.range);
+  return { shot: values.shot ?? null, range: values.range ?? null };
+}
+
+// --compare-looks <shot-id>: the anchor shot's id as written, checked against the film once its timeline exists (run.mjs).
+function compareFlag(values) {
+  if (values['compare-looks'] === undefined) return null;
+  if (values['compare-looks'] === '') throw new UsageError('--compare-looks takes a shot id: the id of the shot to draw in every look that can draw it');
+  return values['compare-looks'];
 }
 
 // --workers <1-8 | auto> (default 1): the pages that capture the frames, in the run's one browser (workers.mjs).
@@ -118,8 +161,9 @@ function workersFlag(text) {
   return Number(text);
 }
 
-// The mode flags: --phonemes, --poster (and --poster-out), --batch (with an --out template), --subtitles srt|vtt.
+// The mode flags: --phonemes, --estimated (with --sheets-only), --poster (and --poster-out), --inspect, --batch (with an --out template), --subtitles srt|vtt.
 function modeFlags(values) {
+  if (values.estimated === true && values['sheets-only'] !== true && values['compare-looks'] === undefined) throw new UsageError('--estimated needs --sheets-only: it writes the sheets on estimated timing, with no voice');
   checkConflicts(values);
   if (values.batch !== undefined && (values.out === undefined || !BATCH_KEYS_RE.test(values.out))) {
     throw new UsageError('--batch needs --out with a {index} or {<var>} in it, such as --out "renders/{name}.mp4"');
@@ -127,15 +171,16 @@ function modeFlags(values) {
   if (values.subtitles !== undefined && !SUBTITLE_FORMATS.includes(values.subtitles)) {
     throw new UsageError(`--subtitles takes one of: ${SUBTITLE_FORMATS.join(', ')}; got ${JSON.stringify(values.subtitles)}`);
   }
+  if (values['subtitle-words'] === true && values.subtitles === undefined) throw new UsageError('--subtitle-words needs --subtitles srt|vtt: it writes one cue per word instead of one per sentence');
   if (values.open === true && values.preview !== true) throw new UsageError('--open needs --preview: it opens the preview page in your browser');
-  return { phonemes: values.phonemes === true, preview: values.preview === true, open: values.open === true, ...posterFlags(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, workers: workersFlag(values.workers) };
+  return { phonemes: values.phonemes === true, estimated: values.estimated === true, preview: values.preview === true, open: values.open === true, ...posterFlags(values), inspect: inspectFlag(values), ...sliceFlags(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, subtitleWords: values['subtitle-words'] === true, noMusic: values['no-music'] === true, compareLooks: compareFlag(values), workers: workersFlag(values.workers) };
 }
 
 /**
  * @param {string[]} argv the arguments after the script name
  * @returns {{ specPath: string | null, out: string | null, json: boolean, noRender: boolean, outline: boolean, list: string | null, exact: boolean, all: boolean,
  *   provenance: { model?: string, effort?: string, agent?: string, noProvenance: boolean }, phonemes: boolean,
- *   poster: number | null, posterOut: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null }}
+ *   estimated: boolean, poster: string | null, posterOut: string | null, inspect: string | null, shot: string | null, range: string | null, batch: string | null, subtitles: 'srt' | 'vtt' | null, subtitleWords: boolean, noMusic: boolean, compareLooks: string | null }}
  * @throws {UsageError} for a removed version 1 flag (with `hint`: what to do instead), an unknown or misspelled flag, a
  *   bad --list value, a missing or extra film path, an --out that is not .mp4, or a stamp flag that is refused
  */

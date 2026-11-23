@@ -185,6 +185,61 @@ The motion prompts read two files from `fixtures/data/`, which every run copies 
 `music.wav` (a 10 s, 120 BPM click track) stays because make-motion's `beats` tests read it; no motion prompt names it. The
 version 1 fixtures `clip.mp4`, `captions.srt`, `captions.vtt`, `badge.lottie.json` and `portrait-cutout.png` were deleted at cut-over.
 
+## Reviewer proof
+
+`agents/motion-reviewer.md` (Claude Code only) is a second reviewer of a finished film. It is named in
+`skills/make-motion/references/reviewing.md` only after a proof has shown it finds planted defects, and a test holds
+that: `reviewing.md` does not say `motion-reviewer` until `results/summary-motion-reviewer-<date>.md` exists.
+
+The proof films are in `fixtures/review/`: `good.json` (four shots: `claim`, `figure`, `chart`, `ask`; silent, look
+`desk`) and four copies with one planted defect each, named in `planted.json`:
+
+| Film | Planted at | The defect |
+|---|---|---|
+| `number-mismatch` | `figure` | the narration says "forty two percent" and the number shows 24 |
+| `chart-wrong-mark` | `chart` | the narration says March was the peak and the highlighted column is May |
+| `picture-contradicts` | `look` (a fifth shot) | the narration says "the red button" and the highlight marks the blue square of `two-squares.png` |
+| `orphan-shot` | `aside` (a fifth shot) | a shot about an unrelated subject between `chart` and `ask` |
+
+The sheets do not show the narration, so three of the four defects (the number, the chart's mark, the red button) show
+only against the `say` lines in `film.json`. The brief names the film file as the film's JSON spec, and the reviewer's
+instructions (format 3) tell it to read it and check each shot's picture against its `say` line, after a first look at
+the pictures alone.
+
+A bad film is a proof only if the mechanical review does not already catch its defect. So the sheets are made first,
+one film at a time (they open a browser, so one at a time), and each printed report is saved beside them:
+
+```bash
+node ../skills/make-motion/scripts/make.mjs fixtures/review/good.json --sheets-only --json --out ../.scratch/review-proof/good.mp4
+# save the printed report as ../.scratch/review-proof/good.report.json; repeat for the other four films
+```
+
+Each report must read `ok: true` with no finding whose `shot` is the planted one; `review-proof.mjs` refuses to start
+when one does. Then:
+
+```bash
+node review-proof.mjs --runs 3 --budget 2 --sheets ../.scratch/review-proof --dry-run   # prints the session count and the worst-case spend, starts nothing
+node review-proof.mjs --runs 3 --budget 2 --sheets ../.scratch/review-proof             # billed
+```
+
+The second command is billed: 5 films times 3 runs is 15 `claude-director` sessions, each capped by `--budget` (it
+refuses to start without one; `runProof` itself throws without a positive budget). `--max-total <usd>` caps the whole
+proof (default: runs x films x budget, printed before it starts): no session starts that could take the spend, as the
+streams reported it, past the cap. Start with `--runs 1` (5 sessions) to see the reviewer delegate and reply in shape.
+Each finished session is appended to `results/<timestamp>/motion-reviewer/results.jsonl` at once, so an error mid-proof
+keeps what was billed. Each session runs in a workdir that holds the checklist, the reviewer's agent file, the
+film under the neutral name `film.json` and its sheets; the director only starts the agent and hands its reply back, and
+the reply is read from the agent's own tool result in the stream, so a director that reviews the film itself is not
+counted. `review-score.mjs` scores the replies: a defect is found in a run when the verdict is `fail` and a P0 or P1 note
+names the planted shot. The bar: every planted defect found in all 3 runs, and at most one `fail` verdict on the good film
+across its 3 runs (a reviewer that fails everything finds every defect, so the good film counts). A run that did not
+happen or could not be read is a problem, never a pass. Results go to `results/<timestamp>/motion-reviewer/`
+(`results.json` with the agent name and model that ran, read from the stream, and `summary.md`). Copy a passing summary to
+`results/summary-motion-reviewer-<date>.md` and add a row to `results/INDEX.md`.
+
+`test/review-score.test.mjs` and `test/review-fixtures.test.mjs` run no model and no browser; `test/review-proof.test.mjs`
+runs the harness against a fake `claude`.
+
 ## Other fixtures
 
 `fixtures/seeds/` holds the spec an edit prompt starts from (`dashboard.json`, `diagram.json`, `explainer.json`,

@@ -2,8 +2,10 @@
 // outline of a film, and the shape of a finding. Pure: it builds strings and objects.
 //
 // The report has the same keys on every path, so a reader never has to guess which exist:
-//   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings,
-//   provenance
+//   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, timing,
+//   findings, provenance
+// `timing` is { drawMs, captureMs, encodeMs, checkMs }, the milliseconds the render spent in each stage of a frame and in the
+// check of the finished file (summed across pages with --workers, so it can exceed `seconds`), null until a render ran.
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
 // ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, a voice that cannot be made, an interrupt).
 // `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
@@ -19,6 +21,7 @@
 // stays in it: the stages that ran, the findings already found. `provenance` is { comment, artist } as stamped into the
 // MP4 (stamp.mjs; both null when the stamp is off), null when no MP4 was written. A film's own fault (it does not
 // validate, the page raises an error about it) is a finding, not an error.
+import path from 'node:path';
 import { parseSay } from '../../engine/script/say.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
 import { isParkedKind, isParkedChartType } from '../../engine/looks/index.mjs';
@@ -31,6 +34,10 @@ const secondsText = (n) => n.toFixed(SECOND_DECIMALS);
 
 // A hint for a message that carries none of its own.
 const HINTS = Object.freeze([
+  [/^render stalled in the /, 'the browser or ffmpeg stopped answering at that stage; run again, and with --workers 1 if it keeps happening'], // first: its page messages may match a later pattern
+  [/^render check: the finished file's picture is blank/, 'the finished film is blank: check that the shots draw something (a film of one `free` shot with only a background draws nothing); if they do, run again with --workers 1, then with --exact, and report it if it stays'], // before the general check hint
+  [/^render check: the finished file holds /, 'the frame count of the finished file is not the timeline\'s: the encode lost or added frames; run again with --workers 1, then with --exact, and report it if it stays'],
+  [/^render check: /, 'the browser drew or captured nothing, or the encode lost frames; run again with --workers 1, then with --exact, and report it if it stays'],
   [/^cannot read /, 'give the path of an existing film .json file; a relative path is read from the current directory'],
   [/^.* is not a regular file/, 'give the path of a film .json file, not a folder or a device'],
   [/^ffmpeg failed/, 'ffmpeg refused the frames; the lines above are its own words. Retry with --exact, or check the disk space'],
@@ -38,7 +45,7 @@ const HINTS = Object.freeze([
   [/^Target crashed/, 'the browser page crashed while drawing the film (it may have run out of memory); run again, and close other heavy programs if it keeps happening'],
   [/has been closed/, 'the browser closed while drawing the film; run again'],
   [/^Timeout \d+ms exceeded/, 'the browser did not answer in time; run again, and check that the machine is not overloaded'],
-  [/^image ".*" could not be loaded/, 'the file is not a picture the browser can decode; replace it with a PNG, JPEG or WebP image'],
+  [/^image ".*" could not be loaded: HTTP \d+/, 'the page server could not read the picture; check that the file is still in the film folder, and run again'],
 ]);
 
 /** { message, hint } for an error's first line: whole with its hint when HINTS knows it (a path in it may hold ". "),
@@ -55,8 +62,8 @@ export function describeError(err) {
 /** A validation error { path, message } as a finding. Validation errors are always mechanical: the film cannot be built. */
 export const validationFinding = ({ path, message }) => ({ kind: 'mechanical', shot: null, path, message });
 
-/** A review finding as the report carries it: its rule, role and node are for deduplication and the path only. */
-export const reviewFinding = ({ kind, shot, path, message, t }) => ({ kind, shot, path, message, t });
+/** A review finding as the report carries it: its rule, and the value that fixes it when it has one (`suggest`); its role and node are for deduplication and the path only. */
+export const reviewFinding = ({ kind, shot, path, message, t, rule, suggest }) => ({ kind, shot, path, message, t, rule, ...(suggest ? { suggest } : {}) });
 
 /** A finding about the page or the post pass rather than about a shot. */
 export const pageFinding = (kind, message) => ({ kind, shot: null, path: '', message });
@@ -100,7 +107,10 @@ function postText({ post, cuts }) {
   return `${post}, shader cuts: ${cuts.ran.length}`;
 }
 
-/** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look,
+// The timing part of the frames line: where the render's time went, in ms; nothing when no render ran.
+const timingText = (timing) => (timing ? `, draw ${timing.drawMs} capture ${timing.captureMs} encode ${timing.encodeMs} check ${timing.checkMs} ms` : '');
+
+/** The report of a run in its state `state` (see run.mjs), with every key present (`inspect` only for --inspect, `slice` only for --shot or --range, `board` only for --estimated, `compare` only for --compare-looks, `look` only for an experimental look,
  *  `kinds` only for a film that uses a parked kind, `cuts` only for a film with shader cuts). */
 export function reportOf(state) {
   const mechanical = state.findings.some((f) => f.kind === 'mechanical');
@@ -120,11 +130,16 @@ export function reportOf(state) {
     msPerFrame: state.msPerFrame,
     bytes: state.bytes,
     mbps: state.mbps,
+    timing: state.timing ?? null,
     findings: state.findings,
     provenance: state.provenance ?? null,
     ...(state.poster ? { poster: state.poster } : {}), // --poster: { file, frame, seconds }
+    ...(state.inspect ? { inspect: state.inspect } : {}), // --inspect: { png, json, frame, seconds, shot }
+    ...(state.slice ? { slice: state.slice } : {}), // --shot, --range: { from, to, frames, shots, silent, skipped }
+    ...(state.board ? { board: state.board } : {}), // --estimated: the board strips' paths, in order
+    ...(state.compare ? { compare: state.compare } : {}), // --compare-looks: { file, shot, frame, frameLook, looks }
     ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
-    ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed }
+    ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed, level }
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
     ...(state.look ? { look: state.look } : {}),
     ...(state.kinds?.length > 0 ? { kinds: state.kinds } : {}),
@@ -132,10 +147,28 @@ export function reportOf(state) {
   };
 }
 
+const absolute = (file, cwd) => (typeof file === 'string' ? path.resolve(cwd, file) : file);
+
+/**
+ * The report with every file path absolute, resolved against `cwd` (the folder make.mjs ran in): `output`, `sheets`, `board`,
+ * `poster.file`, `inspect.png` and `.json`, `subtitles.file`, `compare.file`. The --json form uses it, because the second reviewer has only
+ * Read, which needs absolute paths, and is handed a report saved from a run it did not see. Inside a run, and in the text
+ * form, paths stay as the user gave them. A new report is returned; keys the report lacks stay absent.
+ */
+export function absolutePaths(report, cwd = process.cwd()) {
+  const out = { ...report, output: absolute(report.output, cwd), sheets: report.sheets.map((f) => absolute(f, cwd)) };
+  if (report.board) out.board = report.board.map((f) => absolute(f, cwd));
+  if (report.poster) out.poster = { ...report.poster, file: absolute(report.poster.file, cwd) };
+  if (report.inspect) out.inspect = { ...report.inspect, png: absolute(report.inspect.png, cwd), json: absolute(report.inspect.json, cwd) };
+  if (report.subtitles) out.subtitles = { ...report.subtitles, file: absolute(report.subtitles.file, cwd) };
+  if (report.compare) out.compare = { ...report.compare, file: absolute(report.compare.file, cwd) };
+  return out;
+}
+
 /** The report of a run that never began (a usage error): empty, with the error. */
 export const errorReport = (error) => reportOf({
   validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
-  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null,
+  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, timing: null,
 });
 
 const plainNarration = (shot) => (typeof shot.say === 'string' ? parseSay(shot.say).plain : '');
@@ -161,7 +194,7 @@ function musicText(music) {
   const tempo = music.bpm === null ? `${source} with no steady beat` : `${source} at ${music.bpm} bpm`;
   const landed = music.landed === null || music.cuts === 0 ? '' : `, ${music.landed} of ${plural(music.cuts, 'cut')} on a beat`; // no cuts, no count
   const moved = Array.isArray(music.moved) ? `, ${music.moved.length} moved onto a beat` : ''; // music.snap: how many cuts it moved
-  return `${tempo}${landed}${moved}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}`;
+  return `${tempo}${landed}${moved}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}${music.muted === true ? ' (muted)' : ''}`; // --no-music: planned, not in the file
 }
 
 /** The text form's line for sound: the cue count, the bed or file and its tempo, the cuts on a beat; null for none. */
@@ -182,18 +215,43 @@ function verdict(report) {
   return validated && report.stages.every((s) => s.ok) ? 'valid' : 'invalid';
 }
 
+// The slice line of the text form: which frames and shots were reviewed, and which rules a slice does not run.
+const sliceLine = ({ from, to, frames, shots, silent, skipped }) => `slice: frames ${from} to ${to} (${plural(frames, 'frame')}; ${shots.length === 1 ? 'shot' : 'shots'} ${shots.join(', ')}); ${skipped.join(', ').replace(/, ([^,]*)$/, ' and $1')} are not run${silent ? '; silent: the film\'s sound is mastered for the whole film' : ''}`;
+
+// The compare line of the text form: the sheet, the anchor shot, and the looks on it (a parked or refused look says so).
+const compareLine = ({ file, shot, looks }) => `compare: ${file} (shot ${shot}; ${looks.map((l) => (l.status === 'drawn' ? l.look : `${l.look} (${l.status})`)).join(', ')})`;
+
+/** One finding as a line of the text form: `<kind>: <path>: <message>`. */
+export const findingLine = (f) => `${f.kind}: ${f.path}: ${f.message}`;
+
+/**
+ * The text form of `--outline`: a line per shot, the note, then a line per finding with the creative ones last (the
+ * outline rules are creative), so the last line of the text starts `creative: ` whenever any outline rule fired,
+ * whatever else the report carries.
+ */
+export function outlineText(outline, note, findings) {
+  const creativeLast = [...findings].sort((a, b) => (a.kind === 'creative') - (b.kind === 'creative'));
+  return [...outlineLines(outline), ...(note ? [`note: ${note}`] : []), ...creativeLast.map(findingLine)].join('\n');
+}
+
 /**
  * The text form of a report: `valid`, `invalid`, `failed` or `interrupted` (verdict), a line per finding, then where
  * things went and the frame counts.
  */
 export function formatText(report, { sheetsDir }) {
   const lines = [verdict(report)];
-  for (const f of report.findings) lines.push(`${f.kind}: ${f.path}: ${f.message}`);
+  for (const f of report.findings) lines.push(findingLine(f));
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
+  // a comparison writes one picture (or none, when no look can draw the shot): never sheets or a video, so no such lines
+  if (report.stages.some((s) => s.name === 'compare')) return [...lines, ...(report.compare ? [compareLine(report.compare)] : [])].join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
+  if (report.board) lines.push(report.board.length === 0 ? 'board: none written' : `board: ${path.dirname(report.board[0])} (${plural(report.board.length, 'strip')})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
-  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
+  const frameCount = report.slice ? `${report.frames} in the film, ${report.slice.frames} in the slice` : `${report.frames}`;
+  const counts = report.output === null ? frameCount : `${frameCount}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame${timingText(report.timing)}); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);
+  if (report.inspect) lines.push(`inspect: ${report.inspect.png}, ${report.inspect.json}`);
+  if (report.slice) lines.push(sliceLine(report.slice));
   const sound = soundLine(report.audio);
   if (sound !== null) lines.push(sound);
   return lines.join('\n');

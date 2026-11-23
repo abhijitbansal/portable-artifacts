@@ -8,7 +8,7 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { stillStretches } from '../../engine/review/pacing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
-import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot } from '../../scripts/v2/review.mjs';
+import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot, captionsHoldRoom, frameContext, reviewFilm, COMPOSITION_CAP } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
@@ -513,7 +513,7 @@ test('describeError splits "what. how to fix" and gives a hint to the errors tha
 test('a report has the same keys whatever stopped the run, and ok needs a valid film, no error and no mechanical finding', () => {
   const base = { validated: true, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
   const keys = Object.keys(reportOf(base)).sort();
-  assert.deepEqual(keys, ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice', 'provenance'].sort());
+  assert.deepEqual(keys, ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'timing', 'voice', 'provenance'].sort());
   assert.equal(reportOf(base).ok, true);
   assert.equal(reportOf({ ...base, validated: false }).ok, false);
   assert.equal(reportOf({ ...base, findings: [{ kind: 'creative' }] }).ok, true);
@@ -787,4 +787,159 @@ test('a word that lands late is judged at the scale it lands at, not the scale i
   // a text never fully shown on a sampled frame falls back to its last frame
   const never = restingByShot(timeline, [0, 29].map((frame) => ({ frame, tree: [textNode({ id: 't', scale: 0.9, opacity: 0.5 })] }))).get('hero');
   assert.ok(Math.abs(never.restScales.get('t') - 0.9) < 1e-9, 'the last frame\'s scale');
+});
+
+// ---- composition wiring (W2 Task 3): the context's restsShot and peers, the caption zone, the cap ----
+
+const bar = (id, bbox) => ({ type: 'path', id, depth: 0, props: { fill: '#111111', d: 'M0 0H1V1H0Z' }, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, draw: 1, visible: true, children: [], bbox });
+
+test('frameContext marks the last whole frame of a shot as resting, and a shot of a peer kind as peers', () => {
+  const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 2, show: 'list', items: ['one', 'two'] }]);
+  const timeline = buildTimeline(f, { fps: 30 });
+  const at = (frame, whole = true) => frameContext(f, timeline, new Map(), { frame, whole });
+  assert.deepEqual([at(59).restsShot, at(58).restsShot, at(59, false).restsShot, at(119).restsShot], [true, false, false, true]);
+  assert.deepEqual([at(59).peers, at(119).peers], [false, true]);
+});
+
+test('restingByShot reads a shot\'s caption zone from the caption nodes its resting frame carries, none when it has no caption', () => {
+  const timeline = { fps: 30, frameCount: 60, duration: 2, shots: [{ id: 'a', index: 0, start: 0, end: 1, duration: 1 }, { id: 'b', index: 1, start: 1, end: 2, duration: 1 }] };
+  const caption = (id, zone) => ({ ...bar(id, [200, 900, 100, 40]), props: { fill: '#111111', d: 'M0 0H1V1H0Z', caption: { zone, end: 1, hero: null, emphasis: [], marks: [] } } });
+  const snapshots = [
+    { frame: 10, tree: [bar('body', [96, 96, 1000, 400]), caption('a.captions.0', [300, 820, 900, 150])] },
+    { frame: 29, tree: [bar('body', [96, 96, 1000, 400]), caption('a.captions.1', [200, 800, 1100, 170])] },
+    { frame: 59, tree: [bar('body2', [96, 96, 1000, 400])] },
+  ];
+  const resting = restingByShot(timeline, snapshots);
+  assert.deepEqual(resting.get('a').captionZone, [200, 800, 1100, 170]);
+  assert.equal('captionZone' in resting.get('b'), false);
+});
+
+// A caption stays in the graph, hidden by the opacity of its group, once its words have been said: only a caption that
+// shows on the resting frame reserves room there. Engine-built trees: nothing here is hand-made.
+const restingZoneOf = (trail) => {
+  const shots = [
+    { id: 'a', show: 'statement', say: 'One two three four five six.', ...(trail ? { narration: { trail } } : {}) },
+    { id: 'b', show: 'statement', say: 'Seven eight nine ten eleven twelve.' },
+    { id: 'c', show: 'statement', say: 'Thirteen fourteen fifteen sixteen.' },
+  ];
+  const film = filmOf(shots, 'desk', '16:9', { captions: true });
+  const timeline = buildTimeline(film, { fps: FPS });
+  const canvas = canvasOf('16:9');
+  const built = buildFilm({ film, timeline, measure, assets: IMAGES, canvas, viralInsets: viralOf(canvas) });
+  const entry = timeline.shots[1];
+  const last = Math.round(entry.end * FPS) - 1;
+  const tree = built.sampleShot(1, last / FPS - entry.start);
+  return restingByShot(timeline, [{ frame: last, tree }]).get('b').captionZone;
+};
+
+test('restingByShot: a caption a neighbour\'s trail draws early in a shot is hidden on its resting frame, so it takes no zone (the same film without the trail gives none)', () => {
+  assert.equal(restingZoneOf(0), undefined, 'control: no trail, no caption zone');
+  assert.equal(restingZoneOf(1), undefined, 'a trail on the shot before: its early caption is at opacity 0 on the resting frame');
+});
+
+// A shot whose captions are its own words (a diagram, a chart, a clipping: not a kind that shows its words) is captioned
+// throughout, and the captions of its last words fade before its last frame: the strip they reserve still counts there.
+test('restingByShot keeps the room of a shot that captions its own words even when the last caption has faded; captionsHoldRoom says which', () => {
+  const shots = [{ id: 'a', show: 'statement', say: 'One two three four five six.' }, { ...registries.kinds.get('diagram').example, id: 'd', say: 'Seven eight nine ten eleven twelve.' }];
+  const film = filmOf(shots, 'desk', '16:9', { captions: true });
+  const timeline = buildTimeline(film, { fps: FPS });
+  const canvas = canvasOf('16:9');
+  const built = buildFilm({ film, timeline, measure, assets: IMAGES, canvas, viralInsets: viralOf(canvas) });
+  const entry = timeline.shots[1];
+  const last = Math.round(entry.end * FPS) - 1;
+  const snapshots = [{ frame: last, tree: built.sampleShot(1, last / FPS - entry.start) }];
+  assert.deepEqual([captionsHoldRoom(film)('a'), captionsHoldRoom(film)('d')], [false, true]);
+  assert.equal(restingByShot(timeline, snapshots).get('d').captionZone, undefined, 'by default a hidden caption is no room');
+  // the room is the one its caption nodes reserve (hidden or not): their zones' union, from the tree itself
+  const zones = [];
+  const walk = (n) => { if (n.props?.caption && String(n.id).startsWith('d.captions')) zones.push(n.props.caption.zone); (n.children ?? []).forEach(walk); };
+  snapshots[0].tree.forEach(walk);
+  assert.ok(zones.length > 0, 'the diagram shot has caption nodes');
+  const [left, top] = [Math.min(...zones.map(([x]) => x)), Math.min(...zones.map(([, y]) => y))];
+  const [right, bottom] = [Math.max(...zones.map(([x, , w]) => x + w)), Math.max(...zones.map(([, y, , h]) => y + h))];
+  assert.deepEqual(restingByShot(timeline, snapshots, captionsHoldRoom(film)).get('d').captionZone, [left, top, right - left, bottom - top], 'a diagram shot keeps its captions room');
+});
+
+// A shot with no say of its own (a hold) has no words to caption: the captions its tree carries are a neighbour's, over
+// the cut, and they are hidden by its last frame. Only a shot with words of its own keeps the room.
+test('a chart or diagram held with no say keeps no caption room, as in the same film without the neighbour\'s trail', () => {
+  const zoneOf = (kind, trail) => {
+    const example = Object.fromEntries(Object.entries(registries.kinds.get(kind).example).filter(([key]) => key !== 'say'));
+    const shots = [
+      { id: 'a', show: 'statement', say: 'One two three four five six.', ...(trail ? { narration: { trail } } : {}) },
+      { ...example, id: 'b', hold: 3 },
+      { id: 'c', show: 'statement', say: 'Thirteen fourteen fifteen sixteen.' },
+    ];
+    const film = filmOf(shots, 'desk', '16:9', { captions: true });
+    const timeline = buildTimeline(film, { fps: FPS });
+    const canvas = canvasOf('16:9');
+    const built = buildFilm({ film, timeline, measure, assets: IMAGES, canvas, viralInsets: viralOf(canvas) });
+    const entry = timeline.shots[1];
+    const last = Math.round(entry.end * FPS) - 1;
+    const snapshots = [{ frame: last, tree: built.sampleShot(1, last / FPS - entry.start) }];
+    return [captionsHoldRoom(film)('b'), restingByShot(timeline, snapshots, captionsHoldRoom(film)).get('b').captionZone];
+  };
+  for (const kind of ['chart', 'diagram']) {
+    assert.deepEqual(zoneOf(kind, 0), [false, undefined], `${kind}: control, no trail`);
+    assert.deepEqual(zoneOf(kind, 1), [false, undefined], `${kind}: a trail on the shot before`);
+  }
+});
+
+test('restingByShot counts a caption by its inherited opacity: hidden by a group above it is not a zone, shown is', () => {
+  const timeline = { fps: 30, frameCount: 60, duration: 2, shots: [{ id: 'a', index: 0, start: 0, end: 1, duration: 1 }, { id: 'b', index: 1, start: 1, end: 2, duration: 1 }] };
+  const caption = (id, zone) => ({ ...bar(id, [200, 900, 100, 40]), props: { fill: '#111111', d: 'M0 0H1V1H0Z', caption: { zone, end: 1, hero: null, emphasis: [], marks: [] } } });
+  const group = (id, opacity, children) => ({ type: 'group', id, opacity, children, props: {} });
+  const zoneOf = (opacity) => restingByShot(timeline, [{ frame: 59, tree: [group('b.captions', opacity, [caption('b.captions.0.text', [300, 840, 900, 130])])] }]).get('b').captionZone;
+  assert.equal(zoneOf(0), undefined);
+  assert.deepEqual(zoneOf(1), [300, 840, 900, 130]);
+  assert.deepEqual(zoneOf(0.4), [300, 840, 900, 130]);
+});
+
+test('frameContext hands the shot\'s caption zone on to the frame review', () => {
+  const f = film([{ id: 'a', hold: 2, show: 'free' }]);
+  const timeline = buildTimeline(f, { fps: 30 });
+  const resting = new Map([['a', { captionZone: [200, 800, 1100, 170] }]]);
+  assert.deepEqual(frameContext(f, timeline, resting, { frame: 59, whole: true }).captionZone, [200, 800, 1100, 170]);
+});
+
+// A session whose page answers the two evaluate calls reviewFilm makes without a browser: a chunk of snapshot requests
+// ([shot, frame] pairs) gets the same tree for each, a held-frame range gets "not held" for each frame.
+const stubSession = (f, tree) => {
+  const timeline = buildTimeline(f, { fps: 30 });
+  const page = { evaluate: async (_fn, arg) => (Array.isArray(arg[0]) ? arg.map(() => tree) : Array.from({ length: arg[1] - arg[0] + 1 }, () => false)) };
+  return { film: f, timeline, page, info: {}, errors: [] };
+};
+
+test('reviewFilm caps the composition findings of a film at three and says how many it dropped', async () => {
+  const f = film(['a', 'b', 'c', 'd'].map((id) => ({ id, hold: 2, show: 'free' })));
+  const small = [bar('card', [864, 486, 192, 108])]; // a small card alone: dead-space and scale-contrast on every shot
+  const found = await reviewFilm({ session: stubSession(f, small) });
+  const composition = found.filter((x) => x.rule === 'dead-space' || x.rule === 'scale-contrast');
+  assert.equal(composition.length, COMPOSITION_CAP, `${composition.length} composition findings of 8`);
+  assert.equal(composition.filter((x) => /more composition findings? (is|are) left out/.test(x.message)).length, 1);
+  assert.match(composition.find((x) => /more composition/.test(x.message)).message, /\(5 more composition findings are left out; fix the worst first\)/);
+});
+
+// The full review runs the two outline rules and caps them: 11 free shots, a slide into each of the last 10, a circle on
+// shots 0 to 2, 4 to 6 and 8 to 10. That is one cut-variety, and five sameness runs: the kind, the slide, and three of the
+// circle, of which the cap keeps two.
+test('reviewFilm runs the outline rules over the film and caps each sameness form at two, the last saying how many more', async () => {
+  const circle = [{ at: 0.5, do: 'circle' }];
+  const f = film(Array.from({ length: 11 }, (_, i) => ({ id: `s${i}`, hold: 2, show: 'free', ...(i > 0 ? { cut: 'slide' } : {}), ...(i % 4 !== 3 ? { on: circle } : {}) })));
+  const found = await reviewFilm({ session: stubSession(f, [bar('block', [96, 96, 1728, 800])]) });
+  const variety = found.filter((x) => x.rule === 'cut-variety');
+  assert.equal(variety.length, 1);
+  assert.deepEqual(variety[0].suggest.cuts, registries.looks.get('desk').cuts.filter((cut) => cut !== 'slide'));
+  const same = found.filter((x) => x.rule === 'sameness');
+  assert.equal(same.length, 4, same.map((x) => x.message).join('\n'));
+  assert.deepEqual(same.map((x) => x.path).sort(), ['shots[2].on', 'shots[2].show', 'shots[3].cut', 'shots[6].on']);
+  assert.match(same.find((x) => x.path === 'shots[6].on').message, / \(and 1 more: s10\)$/);
+  assert.deepEqual(same.find((x) => x.path === 'shots[3].cut').suggest.cuts, variety[0].suggest.cuts, 'the cut run keeps its suggestion');
+  assert.deepEqual(found.map((x) => x.t), [...found.map((x) => x.t)].sort((a, b) => a - b), 'still in time order');
+});
+
+test('reviewFilm gives a film whose every frame holds a full block no composition finding (a smoke test; resting-frame-only is pinned by the frameContext and review-composition tests)', async () => {
+  const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 2, show: 'free' }]);
+  const found = await reviewFilm({ session: stubSession(f, [bar('block', [96, 96, 1728, 800])]) });
+  assert.deepEqual(found.filter((x) => x.rule === 'dead-space' || x.rule === 'scale-contrast'), []);
 });

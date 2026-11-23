@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { targetsFor, agentTargetsFor, HOSTS, expandRequires, npmCommand, swapIn, UsageError } from '../install.mjs';
-import { agentFile } from '../../shared/agents.mjs';
+import { agentFile, REVIEWER_CURRENT_MARKER, REVIEWER_FINGERPRINT, reviewerFile } from '../../shared/agents.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.resolve(here, '../install.mjs');
@@ -556,6 +556,108 @@ test('a claude install writes artifact-builder.md and a gemini install writes no
   assert.doesNotMatch(g.stdout, /agent:/);
   for (const dir of ['.claude/agents', '.github/agents', '.codex/agents']) assert.equal(fs.existsSync(path.join(gProj, dir)), false, dir);
   for (const dir of ['.claude/agents', '.copilot/agents', '.codex/agents']) assert.equal(fs.existsSync(path.join(gHome, dir)), false, dir);
+});
+
+const claudeReviewer = (proj) => path.join(proj, '.claude/agents/motion-reviewer.md');
+
+test('a claude install writes motion-reviewer.md beside artifact-builder.md; copilot and codex installs write none', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runInstall(['claude', '--project', proj], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(claudeReviewer(proj), 'utf8'), reviewerFile('claude').content);
+  assert.ok(r.stdout.split('\n').includes(`agent: ${claudeReviewer(proj)}`), r.stdout);
+  assert.ok(fs.existsSync(claudeAgent(proj)));
+
+  const only = tmp();
+  const o = runRaw(['claude', '--project', only, '--agents-only'], home);
+  assert.equal(o.status, 0, o.stderr);
+  assert.equal(fs.readFileSync(claudeReviewer(only), 'utf8'), reviewerFile('claude').content);
+
+  for (const host of ['copilot', 'codex', 'agents']) {
+    const p = tmp();
+    const h = runInstall([host, '--project', p], tmp());
+    assert.equal(h.status, 0, `${host}: ${h.stderr}`);
+    assert.doesNotMatch(h.stdout, /motion-reviewer/, host);
+    for (const dir of ['.github/agents', '.codex/agents', '.claude/agents']) {
+      const abs = path.join(p, dir);
+      if (fs.existsSync(abs)) assert.deepEqual(fs.readdirSync(abs).filter((f) => f.startsWith('motion-reviewer')), [], `${host} ${dir}`);
+    }
+  }
+});
+
+const OURS_OLD = () => reviewerFile('claude').content.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 1 -->`);
+const NEWER = () => reviewerFile('claude').content.replace(REVIEWER_CURRENT_MARKER, `${REVIEWER_FINGERPRINT} format 9 -->`);
+
+test('an existing motion-reviewer.md is kept without --force, and --force alone never replaces a file the user wrote', () => {
+  const home = tmp();
+  const file = path.join(home, '.claude/agents/motion-reviewer.md');
+  assert.equal(runRaw(['claude', '--agents-only'], home).status, 0);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+  fs.writeFileSync(file, 'hand edited');
+  const r2 = runRaw(['claude', '--agents-only'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.ok(r2.stdout.split('\n').includes(`agent: kept existing ${file}`), r2.stdout);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'hand edited');
+  // H1: --force is a refresh of skills, not leave to destroy the user's own reviewer.
+  const r3 = runRaw(['claude', '--agents-only', '--force'], home);
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'hand edited', 'a foreign file survives --force');
+  assert.ok(r3.stdout.split('\n').includes(`agent: kept existing ${file}`), r3.stdout);
+  assert.match(r3.stderr, /not a portable-artifacts file/);
+  assert.match(r3.stderr, /--replace-foreign/);
+  assert.ok(fs.existsSync(path.join(home, '.claude/agents/artifact-builder.md')), 'the builder is still written');
+  const r4 = runRaw(['claude', '--agents-only', '--force', '--replace-foreign'], home);
+  assert.equal(r4.status, 0, r4.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+  assert.equal(fs.readFileSync(`${file}.bak`, 'utf8'), 'hand edited', 'a copy is kept');
+});
+
+test('install --force never downgrades a newer reviewer file, and --force --replace-foreign does', () => {
+  const home = tmp();
+  const file = path.join(home, '.claude/agents/motion-reviewer.md');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, NEWER());
+  const r = runRaw(['claude', '--agents-only', '--force'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), NEWER(), 'byte for byte');
+  assert.match(r.stderr, /newer/);
+  runRaw(['claude', '--agents-only', '--force', '--replace-foreign'], home);
+  assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+});
+
+test('install --force replaces our own older reviewer, after copying it to .bak (then .bak.1)', () => {
+  const home = tmp();
+  const file = path.join(home, '.claude/agents/motion-reviewer.md');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  for (const [n, name] of [[1, 'motion-reviewer.md.bak'], [2, 'motion-reviewer.md.bak.1']]) {
+    const old = `${OURS_OLD()}\nedit ${n}\n`;
+    fs.writeFileSync(file, old);
+    const r = runRaw(['claude', '--agents-only', '--force'], home);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(fs.readFileSync(file, 'utf8'), reviewerFile('claude').content);
+    assert.equal(fs.readFileSync(path.join(path.dirname(file), name), 'utf8'), old, name);
+    assert.match(r.stdout, new RegExp(`backed up .*motion-reviewer\\.md to .*${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}`), r.stdout);
+  }
+});
+
+test('install --force refuses a symlink at motion-reviewer.md, even to a file of ours', { skip: process.platform === 'win32' && 'symbolic links need a privilege on Windows' }, () => {
+  const home = tmp();
+  const file = path.join(home, '.claude/agents/motion-reviewer.md');
+  const target = path.join(home, 'elsewhere.md');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(target, OURS_OLD());
+  fs.symlinkSync(target, file);
+  const r = runRaw(['claude', '--agents-only', '--force'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.lstatSync(file).isSymbolicLink());
+  assert.equal(fs.readFileSync(target, 'utf8'), OURS_OLD());
+});
+
+test('--replace-foreign needs --force', () => {
+  const r = runRaw(['claude', '--agents-only', '--replace-foreign'], tmp());
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /--replace-foreign needs --force/);
 });
 
 test('the agents host still writes only the copilot and codex files', () => {

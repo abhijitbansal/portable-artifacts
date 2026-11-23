@@ -4,7 +4,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,7 +12,7 @@ import { HERE, browserAvailable, ffmpegOrNull, headlessPids, headlessPidsUnder, 
 import { registries } from '../../engine/registry.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
-import { encoderArgs, ENCODER, sweepPartials } from '../../scripts/v2/render.mjs';
+import { encoderArgs, ENCODER, BT709_TAGS, sweepPartials } from '../../scripts/v2/render.mjs';
 import { formatText } from '../../scripts/v2/report.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
@@ -37,6 +37,7 @@ const FILMS = {
   stillLast: { version: 2, shots: [still('first', 1), still('last', 8)] },
   meshLong: { version: 2, shots: [meshShot('mesh', 7), meshShot('end', 1)] },
   meshShort: { version: 2, fps: FPS, shots: [meshShot('mesh', 2)] },
+  blank: { version: 2, fps: FPS, shots: [{ id: 'blank', show: 'free', hold: 1, background: '#000000', nodes: [] }] },
   invalid: { version: 2, shots: [{ id: 'a', show: 'nope', hold: 1 }] },
   v1: { version: 1, scenes: [] },
   long: { version: 2, mode: 'pro', shots: [
@@ -343,6 +344,21 @@ test('a full run renders an H.264 yuv420p MP4 of the film, one frame per film fr
   assert.ok(Math.abs(video.duration - report.frames / FPS) < 0.05, `duration ${video.duration}`);
   assert.deepEqual([video.width, video.height], [1920, 1080]);
   assert.deepEqual(readdirSync(path.dirname(report.output)).filter((f) => f !== 'film.sheets' && f !== 'film.mp4'), []);
+  assert.ok(report.timing.drawMs > 0 && report.timing.captureMs > 0 && report.timing.encodeMs >= 0, JSON.stringify(report.timing));
+  assert.ok(report.timing.drawMs + report.timing.captureMs <= report.seconds * 1000, 'one page: the stage times cannot exceed the render');
+  assert.ok(report.timing.checkMs > 0, 'the finished file was decoded and checked');
+});
+
+test('a film whose picture has no detail in any frame fails the render with "render check", and no file is kept', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const run = make([filmPath('blank'), '--json', '--out', outPath('blank')]);
+  assert.equal(run.status, 2, run.stdout + run.stderr);
+  const report = parse(run);
+  assert.equal(report.ok, false);
+  assert.match(report.error.message, /^render check: the finished file's picture is blank: none of its 30 frames has any detail; nothing was written$/);
+  assert.match(report.error.hint, /--workers 1, then with --exact/);
+  assert.equal(report.output, null);
+  assert.deepEqual(readdirSync(path.dirname(outPath('blank'))).filter((f) => !f.endsWith('.sheets')), [], 'no output and no partial file');
 });
 
 test('a held shot is not re-captured every frame: captured is one per grain pattern, and the MP4 still has every frame', async (t) => {
@@ -372,7 +388,7 @@ test('fast and exact renders of the same film are both H.264 yuv420p of the expe
   }
 });
 
-test('the encoder arguments: PNG or JPEG frames from a pipe into H.264 yuv420p at crf 23 with the film tune; JPEG is scaled to limited range', () => {
+test('the encoder arguments: PNG or JPEG frames from a pipe into H.264 yuv420p at crf 23 with the film tune, converted to BT.709 limited range by one scale filter and tagged by a final setparams', () => {
   const exact = encoderArgs({ fps: FPS, out: 'x.mp4', exact: true });
   const fast = encoderArgs({ fps: FPS, out: 'x.mp4', exact: false });
   const after = (args, flag) => args[args.indexOf(flag) + 1];
@@ -385,7 +401,11 @@ test('the encoder arguments: PNG or JPEG frames from a pipe into H.264 yuv420p a
     assert.equal(args.at(-1), 'x.mp4');
     assert.ok(args.includes('libx264') && args.includes('+faststart'));
   }
-  assert.ok(!exact.includes('-vf') && fast.includes('scale=in_range=pc:out_range=tv'));
+  const vf = (args) => args[args.indexOf('-vf') + 1];
+  assert.equal(BT709_TAGS, 'setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv');
+  assert.equal(vf(fast), `scale=in_color_matrix=bt601:in_range=pc:out_color_matrix=bt709:out_range=tv:flags=accurate_rnd+full_chroma_int,format=yuv420p,${BT709_TAGS}`);
+  assert.equal(vf(exact), `scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,${BT709_TAGS}`);
+  for (const args of [exact, fast]) assert.equal(args.filter((a) => a === '-vf').length, 1);
   assert.deepEqual(ENCODER, { preset: 'medium', crf: 23, tune: 'film' });
 });
 
@@ -435,7 +455,7 @@ test('SIGINT during a render leaves no temp files and no browser behind', async 
 
 // ---- the --json contract on every path ----
 
-const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice', 'provenance'];
+const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'timing', 'voice', 'provenance'];
 const shapeOf = (run) => {
   assert.equal(run.stdout.trim().split('\n').length, 1, `one line on stdout, got ${JSON.stringify(run.stdout)}`);
   const report = parse(run);
@@ -524,20 +544,33 @@ test('sheets go to a folder named for the video: films in one folder do not shar
   assert.deepEqual(readdirSync(`${two.slice(0, -4)}.sheets`), ['held.png']);
 });
 
-test('paths in the report are as the user gave them: relative stay relative to the current directory', async (t) => {
+// M4: the --json report names the sheets by an absolute path, so a second reviewer that can only Read opens them from any folder.
+test('the --json report names its paths in full: a relative --out resolves against the current directory', async (t) => {
   if (!await needs(t)) return;
   const run = spawnSync(process.execPath, [MAKE, 'held.json', '--json', '--no-render', '--out', 'rel/held.mp4'], { encoding: 'utf8', cwd: dir });
   assert.equal(run.status, 0, run.stderr);
-  assert.deepEqual(parse(run).sheets, [path.join('rel', 'held.sheets', 'held.png')]);
+  const sheet = path.join(realpathSync(dir), 'rel', 'held.sheets', 'held.png');
+  assert.deepEqual(parse(run).sheets.map((f) => path.join(realpathSync(path.dirname(f)), path.basename(f))), [sheet]);
+  assert.ok(path.isAbsolute(parse(run).sheets[0]));
+  assert.ok(existsSync(parse(run).sheets[0]), 'the named sheet is there');
   const absolute = parse(make([filmPath('held'), '--json', '--no-render', '--out', outPath('abs')]));
   assert.ok(path.isAbsolute(absolute.sheets[0]));
 });
 
-test('the default output is out/<film name>.mp4 beside the film, and its sheets out/<film name>.sheets', async (t) => {
+test('the default output is out/<film name>.mp4 beside the film, and its sheets out/<film name>.sheets, named in full in the report', async (t) => {
   if (!await needs(t)) return;
   const run = spawnSync(process.execPath, [MAKE, 'held.json', '--json', '--no-render'], { encoding: 'utf8', cwd: dir });
   assert.equal(run.status, 0, run.stderr);
-  assert.deepEqual(parse(run).sheets, [path.join('out', 'held.sheets', 'held.png')]);
+  const [sheet] = parse(run).sheets;
+  assert.ok(path.isAbsolute(sheet), sheet);
+  assert.deepEqual(path.relative(realpathSync(dir), realpathSync(sheet)), path.join('out', 'held.sheets', 'held.png'));
+});
+
+test('the text form keeps the sheets folder as the user gave it', async (t) => {
+  if (!await needs(t)) return;
+  const run = spawnSync(process.execPath, [MAKE, 'held.json', '--no-render', '--out', 'rel2/held.mp4'], { encoding: 'utf8', cwd: dir });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, new RegExp(`^sheets: ${path.join('rel2', 'held.sheets').replace(/[.\\]/g, '\\$&')} \\(1 file\\)$`, 'm'));
 });
 
 test('a partial video left by a killed run is swept when older than an hour, and a fresh one is not', () => {

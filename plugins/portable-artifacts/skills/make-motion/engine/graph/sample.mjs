@@ -2,7 +2,8 @@
 // a plain value. Children stay nested and keep local values (nothing is pre-multiplied). stateKey() makes a
 // stable string of a sampled tree so the renderer can skip a frame that equals the previous one.
 import { sample } from '../time/track.mjs';
-import { isNode, TRACK_NAMES } from './node.mjs';
+import { GLYPH_TRACK_NAMES, isNode, TRACK_NAMES } from './node.mjs';
+import { graphemesOf, paddedGlyphs, seenOf } from './rollup.mjs';
 import { STRETCH_KEYWORDS } from '../fonts/index.mjs';
 
 const DEFAULTS = Object.freeze({ x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, draw: 1, reveal: 1, blur: 0 });
@@ -40,6 +41,37 @@ function sampleWords(n, t) {
   return Object.freeze(n.wordTracks.map((entry) => Object.freeze(typeValues(resolve(names, entry, statics, WORD_DEFAULTS, t, n.step)))));
 }
 
+// A glyph's and a line's tracks (opacity, x, y, scale): sampled per word index (an array of glyph values) and per line index.
+// A hole stays a hole (no track for that word, glyph or line).
+const sampleEntry = (n, t) => (entry) => Object.freeze(resolve(GLYPH_TRACK_NAMES, entry ?? {}, {}, WORD_DEFAULTS, t, n.step));
+const sampleGlyphs = (n, t) => Object.freeze(n.glyphTracks.map((glyphs) => (glyphs === undefined ? undefined : Object.freeze(glyphs.map(sampleEntry(n, t))))));
+const sampleLines = (n, t) => Object.freeze(n.lineTracks.map((entry) => (entry === undefined ? undefined : sampleEntry(n, t)(entry))));
+
+// The roll-up of each word that has glyph tracks or sits in a line with tracks (graph/rollup.mjs seenOf): how far it has
+// arrived with its letters and its line counted, which the review reads in place of the word's own values (the draw puts
+// the first letter on screen at the word's full strength, so the word's own opacity says nothing about the rest). A word's
+// glyphs are padded to its grapheme count, as the draw pads them. The line of each word comes from props.layout; without
+// one only the glyph tracks count. A word with neither stays out (undefined): it is its own values.
+function sampleSeen(n, { words, glyphs, lines }) {
+  const seen = [];
+  const own = (index) => words?.[index] ?? WORD_DEFAULTS;
+  const put = (index, text, line) => {
+    const mine = glyphs?.[index];
+    if (!mine && !line) return;
+    const count = typeof text === 'string' ? graphemesOf(text).length : (mine?.length ?? 0);
+    seen[index] = seenOf(own(index), mine ? paddedGlyphs(mine, count) : null, line);
+  };
+  let wordCount = 0; // how many words the layout has: a word in a line with no tracks is its own values, but it is counted
+  (n.props.layout?.lines ?? []).forEach((row, k) => (row.words ?? []).forEach((w) => {
+    if (!Number.isInteger(w?.index)) return;
+    wordCount = Math.max(wordCount, w.index + 1);
+    put(w.index, w.text, lines?.[k]);
+  }));
+  glyphs?.forEach((mine, index) => { if (seen[index] === undefined) put(index, undefined, undefined); });
+  seen.length = Math.max(seen.length, wordCount);
+  return Object.freeze(Array.from(seen));
+}
+
 function sampleNode(n, t) {
   if (!isNode(n)) throw new Error('sampleGraph needs nodes built by node()');
   const values = resolve(TRACK_NAMES, n.tracks, n.props, DEFAULTS, t, n.step);
@@ -54,6 +86,9 @@ function sampleNode(n, t) {
     children: Object.freeze(n.children.map((child) => sampleNode(child, t))),
   };
   if (n.wordTracks.length > 0) sampled.words = sampleWords(n, t);
+  if (n.glyphTracks) sampled.glyphs = sampleGlyphs(n, t); // a node has them only when it was given some
+  if (n.lineTracks) sampled.lines = sampleLines(n, t);
+  if (sampled.glyphs || sampled.lines) sampled.seen = sampleSeen(n, sampled);
   return Object.freeze(sampled);
 }
 

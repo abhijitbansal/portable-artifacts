@@ -28,6 +28,44 @@ const isWhole = (n) => Number.isInteger(n) && n >= 1;
 export const heardStart = (w) => w.soundStart ?? w.start;
 export const heardEnd = (w) => w.soundEnd ?? w.end;
 
+const HEARD_EPSILON = 1e-9; // seconds: a word heard this close to a seam is heard after it (float noise in the sums)
+
+// Is the film second `t` on shot `shot` (start <= t < end), the first shot owning all before it and the last all after?
+function isOnScreen(t, shot, { first, last }) {
+  return (first || t >= shot.start - HEARD_EPSILON) && (last || t < shot.end - HEARD_EPSILON);
+}
+
+// A word of shot `from` as shot `at` shows it: its heard times in `at`'s seconds (start, end, soundStart, soundEnd all the
+// same), tagged with `from`, its shot's index, when it is another shot's.
+function heardWord(word, from, at) {
+  const start = from.start + word.soundStart - at.start, end = from.start + word.soundEnd - at.start;
+  return { ...word, start, end, soundStart: start, soundEnd: end, ...(from === at ? {} : { from: from.index }) };
+}
+
+/**
+ * The words heard while shot `index` is on screen, whichever shot speaks them (a J or L cut: `narration { lead, trail }`
+ * moves the picture's cut, not the sound). Every shot's words are scanned (a lead longer than the shot before it hears a
+ * word two shots back), each by the film second it is heard (shot.start + soundStart), in the order heard, in shot
+ * `index`'s own seconds. Captions follow what is heard, so every word has start and end equal to its heard times, also a
+ * word of the shot itself (the shown times, clamped into the shot, are the picture's); a word of another shot carries
+ * `from`, its shot's index. Every word is captioned by exactly one shot. A timeline with no shift gives the shot's own
+ * words unchanged.
+ * @param {{ shots: object[] }} timeline buildTimeline's @param {number} index
+ */
+export function captionWordsOf(timeline, index) {
+  const shots = timeline.shots, shot = shots[index];
+  if (!shots.some((s) => s.narrationAt !== undefined)) return shot.words;
+  const edge = { first: index === 0, last: index === shots.length - 1 };
+  const heard = [];
+  for (const from of shots) {
+    for (const w of from.words) {
+      const at = from.start + w.soundStart;
+      if (isOnScreen(at, shot, edge)) heard.push({ at, word: heardWord(w, from, shot) });
+    }
+  }
+  return heard.sort((p, q) => p.at - q.at).map((h) => h.word); // stable: words heard together keep their shot order
+}
+
 // The words as units that are never split: a merged run (consecutive words sharing one start and end, as a voice gives
 // "$5 million") is one unit. Each unit is { first, last } (word indexes, inclusive).
 function unitsOf(words) {

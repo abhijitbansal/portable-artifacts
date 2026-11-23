@@ -106,14 +106,19 @@ export const poster = {
     slam: { ease: 'spring(340,22)', dur: 0.14, scale: 1.5 },
     pop: ENTER,
     settle: { ease: 'outExpo', dur: 0.25 },
+    letters: null, // every shot opens composed and a stack sets its own words: no letter or line entrance here
+    lines: null,
   },
   wordStagger: 0,
   // a region close-up is a cut to a window of the source round the region (ledger's shares), so a ring on the region
   // stays inside the frame
   camera: { drift: 0, style: 'locked', closeUp: { width: 0.86, height: 0.7, pad: 0.2, minGain: 1.25 } },
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
-  cutPalette: ['cut', 'cover', 'iris', 'wipe', 'punch', 'slide'],
+  cutPalette: ['cut', 'cover', 'iris', 'flood', 'wipe', 'punch', 'slide'],
+  // the accent is also a ground (red), so a flood out of or into the red ground takes the ink, and the paper between the
+  // red and the ink ground: the first colour that is neither ground (engine/cuts/layers.mjs floodColor)
+  cutFlood: { colors: ['accent', 'ink', 'paper'] },
   // a cover is a hard sheet of the next ground (the bar that wipes is the cut paper): no smear
   // the lead's ruling on gate-poster-3 (ruling 7 revised: no word half sliced on a HELD frame; a sheet that moves every
   // frame holds none): `ease` 'inOutQuad', a steady curve, so the sheet moves every frame (the snap made both covers
@@ -150,6 +155,12 @@ export const poster = {
   },
   captions: 'stack',
   post: { grain: 0.015, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units, read on the
+  // film's base palette (not a shot's ground); the bar at the top of the band, clear of the captions under it
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'top', height: 6, inset: 0, bar: 'accent', track: 'dim' },
+  },
   // Composition data per kind (looks-four Task 7): pop's family (the `-pop` compositions, pop.mjs explains each field),
   // every colour a palette key read on the shot's ground. A plate under text is `ink` with `paper` text (always a
   // permitted pair), or `plate` with `ink` text; nothing is translucent (dims are the opaque `dim`).
@@ -244,7 +255,7 @@ export const poster = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: 'paper', zoom: null, blur: null, ripple: null, cube: null,
+    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: 'paper', flood: 'paper', zoom: null, blur: null, ripple: null, cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: 'click', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'paper',
       label: null, focus: null, route: null, numeral: 'sub', sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,

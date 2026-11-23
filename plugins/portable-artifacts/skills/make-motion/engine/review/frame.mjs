@@ -21,11 +21,11 @@
 //
 // Landed. A word at opacity 0 on a frame is not on screen on that frame (the number kind stacks every step of its
 // count as a word and shows one at a time; a word may also leave before its shot ends); every word shown on a frame is
-// judged on it. A text has landed on a frame when every word on screen is at opacity 1 and at its rest scale (not
-// mid-pulse), the text itself (with the groups it sits in) is at opacity 1 (a text still fading in is still arriving)
-// and it is settled: at the scale it rests at in its shot (not mid-spring, mid-pulse or mid-push). Size, safe-area and
-// overlap checks apply to a landed text, using only its words on screen. A text that lands on no sampled frame of its
-// shot is reported by the film review (scripts/v2/review.mjs settleFindings).
+// judged on it, read through wordSeen (seen.mjs: its letters and line counted). A text has landed on a frame when every
+// word on screen is at opacity 1 and at its rest scale (not mid-pulse), the text itself (with the groups it sits in) is at
+// opacity 1 (a text still fading in is still arriving) and it is settled: at the scale it rests at in its shot (not
+// mid-spring, mid-pulse or mid-push). Size, safe-area and overlap checks apply to a landed text, using only its words on
+// screen. A text that lands on no sampled frame of its shot is reported by the film review (scripts/v2/review.mjs settleFindings).
 //
 // Roles. A text node's props.role (set by the kinds: hero, affix, label, kicker, caption, tag, body; none means body)
 // says what the text is for. An `affix` (prefix, suffix, unit) and a `tag` are small by design: the scale-contrast rule
@@ -51,16 +51,21 @@
 import { unitOf } from '../units.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, unionBox as union } from '../kinds/shared.mjs';
 import { contrastFindings } from './contrast.mjs';
+import { minSizeSuggest } from './suggest.mjs';
 import { markBoxes, showsItself } from './marks.mjs';
+import { WORD_IDENTITY, hasVisibleWord, seenWords, wordSeen } from './seen.mjs';
 import { regionFindings } from './regions.mjs';
+import { droppedMessage } from './dropped.mjs';
 import { registries } from '../registry.mjs';
+import { GROUND_ID } from '../looks/grounds.mjs';
+import { DEFAULT_FILL, isFillShare } from '../looks/fill.mjs';
 import '../modes/index.mjs';
 
 export const MIN_TEXT_UNITS = 28;
 export const MAX_TEXT_SIZES = 3;
 export const MIN_HERO_RATIO = 3;
 export const OVERLAP_UNITS = 4;
-const WORD_OVERLAP_UNITS = 1; // neighbouring words of a line may not meet by more than this
+export const WORD_OVERLAP_UNITS = 1; // neighbouring words of a line may not meet by more than this
 // Two sizes within this ratio of each other (a camera drift scales every text a little) count as one size.
 const SAME_SIZE_RATIO = 1.1;
 // A text stands settled within 0.2% of its resting scale. A camera punch (8% in pop) takes a frame or two to come home,
@@ -68,12 +73,12 @@ const SAME_SIZE_RATIO = 1.1;
 const SETTLE_TOLERANCE = 0.002;
 // Text may reach this far past the safe area (units) before it is outside: a line set flush on the edge by its measured
 // ink stays within it through the last 0.2% of a punch.
-const SAFE_TOLERANCE_UNITS = 1;
+export const SAFE_TOLERANCE_UNITS = 1;
 // The safe-area rule also allows this share of the text's size (em) for the ink a canvas reports a little wide. Linux's
 // canvas gives a large word's ink as a pixel-rounded outset of the real glyph bounds, and macOS gives them tight. CI run
 // 44475322956 (Archivo 900 extra-condensed at 280 px) against macOS: the right edge of "TOTAL" 3.37 units wider, its left
 // edge 4.23, "l" 2.04, ascent 2.63; under 120 px the outsets were under 1 unit. 0.015 em is the largest measured, 4.23 of 280.
-const INK_OUTSET_EM = 0.015;
+export const INK_OUTSET_EM = 0.015;
 const EPSILON = 1e-6;
 const MECHANICAL = 'mechanical';
 const CREATIVE = 'creative';
@@ -85,15 +90,15 @@ const NO_WORDS = new Set();
 const DESCENDER_RE = /[gjpqyQ,;()[\]{}|@Ççурдцщ]/;
 // An accented capital or a combining mark: the glyph rises above the cap line.
 const ACCENT_RE = /[À-ÞĀ-ſ̀-ͯ]/;
-const WORD_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1 });
+export { hasVisibleWord, wordSeen }; // how the review reads a word's opacity and scale (review/seen.mjs)
 
 // The accumulated scale of a node: its own scale (the camera's zoom is folded into the top-level nodes) times its
 // non-uniform scale, which counts as the geometric mean of the two axes.
-const scaleOf = (n) => (n.scale ?? 1) * Math.sqrt((n.scaleX ?? 1) * (n.scaleY ?? 1));
+export const scaleOf = (n) => (n.scale ?? 1) * Math.sqrt((n.scaleX ?? 1) * (n.scaleY ?? 1));
 const roleOf = (n) => n.props?.role ?? 'body';
 const wordsOf = (layout) => layout.lines.flatMap((line) => line.words);
-const isBox = (box) => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite);
-const hasWords = (layout) => Array.isArray(layout?.lines) && layout.lines.some((line) => Array.isArray(line.words) && line.words.length > 0);
+export const isBox = (box) => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite);
+export const hasWords = (layout) => Array.isArray(layout?.lines) && layout.lines.some((line) => Array.isArray(line.words) && line.words.length > 0);
 
 // How far a line's glyphs reach above and below its baseline, in the text's own pixels: measured when the snapshot has it
 // for this line, else from the cap line and the line's descender and accent glyphs.
@@ -180,11 +185,9 @@ function wordInks(n) {
 // The words of a text at opacity 0 on this frame: not on screen, so neither in its ink nor waited for. A word shown on
 // any other frame is judged there. (A text with every word at 0 is not on screen at all: visibleTexts skips it.)
 function hiddenNow(n) {
-  const hidden = (Array.isArray(n.words) ? n.words : []).flatMap((w, i) => ((w?.opacity ?? 1) <= 0 ? [i] : []));
+  const hidden = seenWords(n).flatMap((w, i) => (w.opacity <= 0 ? [i] : []));
   return hidden.length === 0 ? NO_WORDS : new Set(hidden);
 }
-
-const hasVisibleWord = (n) => !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => w.opacity > 0);
 
 /** text node id -> { scale, opacity, node } in a sampled tree: its accumulated scale (its own, its groups' and the
  *  camera's), how big it stands, and its accumulated opacity, how much of it shows. */
@@ -203,23 +206,24 @@ export function textStatesIn(sampled) {
 export const textScalesIn = (sampled) => new Map([...textStatesIn(sampled)].map(([id, state]) => [id, state.scale]));
 
 // A word has arrived when it is at opacity 1, and is at rest when it is also at its resting scale (an emphasis pulse
-// scales a word up and back): `rest`, the scale it holds on most of its shot's frames (ctx.restWords), else 1.
-const isWordAtRest = (word, rest = 1) => (word?.opacity ?? 1) >= 1 && Math.abs((word?.scale ?? 1) / rest - 1) <= SETTLE_TOLERANCE;
+// scales a word up and back): `rest`, the scale it holds on most of its shot's frames (ctx.restWords), else 1. A word with
+// letters or a line (seen.rest) is at rest only when each of them is: their means hide one that is still moving.
+const isWordAtRest = (word, rest = 1) => (word?.opacity ?? 1) >= 1 && word?.rest !== false && Math.abs((word?.scale ?? 1) / rest - 1) <= SETTLE_TOLERANCE;
 
 // A text is settled when it stands within SETTLE_TOLERANCE of the scale it has on its shot's last frame: an entrance
 // spring, an emphasis pulse or a camera push passes through other scales on its way and is not judged on them.
 const isSettled = (id, scale, resting) => !resting?.has(id) || Math.abs(scale / resting.get(id) - 1) <= SETTLE_TOLERANCE;
 
 // One visible text as the rules see it, or null when its box cannot be measured.
-function measured(n, o, s, unit, ctx) {
+export function measured(n, o, s, unit, ctx) {
   const hidden = hiddenNow(n);
   const rests = ctx.restWords?.get(n.id);
-  const wordsIn = !Array.isArray(n.words) || wordsOf(n.layout).every((w) => hidden.has(w.index) || isWordAtRest(n.words[w.index], rests?.[w.index]));
+  const wordsIn = seenWords(n).length === 0 || wordsOf(n.layout).every((w) => hidden.has(w.index) || isWordAtRest(wordSeen(n, w.index), rests?.[w.index]));
   const landed = wordsIn && o >= 1 && isSettled(n.id, s, ctx.restScales);
   try {
     const size = (n.layout.size * s) / unit, ink = inkBox(n, hidden);
     // the smallest a word on screen stands: a word resting at its own smaller scale reads at that size (the size floor)
-    const smallest = size * Math.min(1, ...wordsOf(n.layout).filter((w) => !hidden.has(w.index)).map((w) => Math.abs(n.words?.[w.index]?.scale ?? 1)));
+    const smallest = size * Math.min(1, ...wordsOf(n.layout).filter((w) => !hidden.has(w.index)).map((w) => Math.abs(wordSeen(n, w.index).scale)));
     return Number.isFinite(size) && isBox(ink) && isBox(n.bbox) ? { node: n, size, smallest, role: roleOf(n), ink, landed, opacity: o } : null;
   } catch {
     return null;
@@ -253,11 +257,14 @@ export function textLandings(sampled, ctx) {
   return visibleTexts(sampled, unitOf(ctx.canvas), ctx).texts.map((t) => ({ id: t.node.id, landed: t.landed, role: t.role }));
 }
 
+/** Every landed text on screen as { id, ink, role }: what the overlay review sets against the logo's box (overlay.mjs). */
+export const landedTexts = (sampled, ctx) => visibleTexts(sampled, unitOf(ctx.canvas), ctx).texts.filter((t) => t.landed).map((t) => ({ id: t.node.id, ink: t.ink, role: t.role }));
+
 const pathOf = (ctx) => `shots[${ctx.shotIndex ?? ctx.shotId}]`;
-const finding = (ctx, kind, rule, node, message, role) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}) });
+const finding = (ctx, kind, rule, node, message, role, suggest) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}), ...(suggest ? { suggest } : {}) });
 const units = (n) => Number(n.toFixed(1));
 
-function outsideSafe([x, y, w, h], safe, slack) {
+export function outsideSafe([x, y, w, h], safe, slack) {
   return x < safe.left - slack || y < safe.top - slack || x + w > safe.right + slack || y + h > safe.bottom + slack;
 }
 
@@ -278,7 +285,7 @@ function textRules(texts, ctx) {
     const out = [];
     const id = node.id;
     if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, overflowMessage(node, size), role));
-    if (landed && smallest < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(smallest)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
+    if (landed && smallest < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(smallest)} units tall; the floor is ${MIN_TEXT_UNITS}`, role, minSizeSuggest(MIN_TEXT_UNITS, smallest)));
     if (landed && outsideSafe(ink, ctx.safe, (SAFE_TOLERANCE_UNITS + INK_OUTSET_EM * size) * unitOf(ctx.canvas))) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
     return out;
   });
@@ -303,7 +310,7 @@ function overlapRules(texts, ctx, unit) {
 // scaled about its own centre by its track (a pulse) and moved by it.
 function lineSpans(n) {
   return n.layout.lines.map((line) => line.words
-    .filter((word) => (n.words?.[word.index]?.opacity ?? 1) > 0)
+    .filter((word) => wordSeen(n, word.index).opacity > 0)
     .map((word) => {
       const t = { ...WORD_IDENTITY, ...n.words?.[word.index] };
       const half = (word.width * Math.abs(t.scale)) / HALF, centre = line.x + word.x + word.width / HALF + t.x;
@@ -368,13 +375,13 @@ function hierarchyRules(all, ctx) {
   }
   // a kind that left out a secondary line to keep its secondary text at the look's floor says so (kinds/secondary.mjs)
   for (const { node } of all.filter((t) => Array.isArray(t.node.props?.dropped) && t.node.props.dropped.length > 0)) {
-    out.push(finding(ctx, CREATIVE, 'dropped', node.id, `"${node.id}" left out its ${node.props.dropped.join(' and ')}: the frame cannot hold its hero at ${MIN_HERO_RATIO} times the look's minimum secondary size; shorten the copy to keep it`));
+    out.push(finding(ctx, CREATIVE, 'dropped', node.id, droppedMessage(node, MIN_HERO_RATIO, ctx.aimed)));
   }
   return out;
 }
 
 // The words of a line a viewer can see: a word at opacity 0 is not there.
-const shownWords = (node, words) => words.filter((word) => (node.words?.[word.index]?.opacity ?? 1) > 0);
+const shownWords = (node, words) => words.filter((word) => wordSeen(node, word.index).opacity > 0);
 
 // A highlight is a pointer: one run of emphasised words laid out over more than one line (props.highlightLines, set by
 // the statement kind in a highlight look) is a creative finding.
@@ -581,7 +588,8 @@ function showsContent(sampled) {
     if (o <= 0 || n.depth > 0) return false;
     return showsItself(n) || (n.children ?? []).some((child) => walk(child, o));
   };
-  return (Array.isArray(sampled) ? sampled : []).some((n) => walk(n, 1));
+  // the ground sheet of a grounded look (poster) is the background colour as a node, not content
+  return (Array.isArray(sampled) ? sampled : []).filter((n) => n.id !== GROUND_ID).some((n) => walk(n, 1));
 }
 
 /**
@@ -592,6 +600,161 @@ function showsContent(sampled) {
 export function openingFindings(sampled, ctx) {
   if (showsContent(sampled)) return [];
   return [finding(ctx, MECHANICAL, 'empty-first-frame', '', `shot "${ctx.shotId}" opens on an empty frame: only the field is on screen; bring its hero in on the first frame`)];
+}
+
+// ---- composition: where a shot's resting frame is empty, and what leads it ----
+//
+// One measure (compositionOf) and two creative rules over it. An element is a top-level node that shows something (not the
+// field behind the picture plane, not a caption, not a fixed overlay such as a slug or a mark: furniture the picture sits
+// among); its box is the union of the boxes of the nodes that show themselves. The band is the longest stretch of the safe
+// rectangle that no element's box enters. The hero is the largest element when it leads the second by HERO_LEAD or more.
+// Both rules are judged once per shot, on its resting frame (ctx.restsShot), and a frame with a ground (an element covering
+// GROUND_SHARE of the canvas) is judged by neither. scale-contrast is also skipped on a shot of peers (ctx.peers: the kind
+// lays out equals, kind.peers), where a slug or a divider is the "second" element and the ratio means nothing. A captioned
+// shot is measured inside the safe rectangle less the zone its caption layout reserves (ctx.captionZone), so the reserved
+// strip is not counted as empty and a hero that clears it is not counted as small.
+
+export const COMPOSITION_RULES = Object.freeze(['dead-space', 'scale-contrast']);
+// The thresholds and what a look's `fill` may hold are looks/fill.mjs's: one definition for the validator and the review.
+export { DEFAULT_FILL };
+export const HERO_LEAD = 1.5;
+const PERCENT = 100;
+const WHERE = Object.freeze({ left: 'the left', right: 'the right', top: 'the top', bottom: 'the bottom', middle: 'a band through the middle' });
+const SIDE = Object.freeze({ x: 'width', y: 'height' });
+const EPSILON_PERCENT = 1e-9; // so 29% (0.29 * 100 = 28.999...) is not floored to 28
+const percentOf = (share) => Math.floor(share * PERCENT + EPSILON_PERCENT); // rounded down: 54.6% never reads as 55% against a 55% bar
+
+/** The fill thresholds of a look: DEFAULT_FILL with the look's optional `fill` laid over it; a key that is not a field, or
+ *  not a number above 0 and at most 1, is ignored (looks/index.mjs validateLook refuses both when the look registers), so
+ *  it cannot switch a rule off. */
+export const fillOf = (look) => ({ ...DEFAULT_FILL, ...Object.fromEntries(Object.entries(look?.fill ?? {}).filter(([key, v]) => Object.hasOwn(DEFAULT_FILL, key) && isFillShare(v))) });
+
+// The safe rectangle less the room the caption layout reserves: a zone in the lower half takes the safe rectangle's bottom
+// up to its top, one in the upper half takes the top down to its bottom. A zone that is not a box, or that would leave no
+// room, changes nothing. Only a look that composes in the platform safe zone (pop on 9:16) reserves the zone in its layout
+// (captions/index.mjs kindContext captionRoom); for desk, cosmos and pop on 16:9 the layout is the same with captions on or
+// off, so there the cut only keeps the strip the caption is drawn over out of the measure, and a bare band above scores
+// higher against the shorter side.
+function safeLessCaptions(safe, zone) {
+  if (!isBox(zone)) return safe;
+  const [, y, , h] = zone, middle = (safe.top + safe.bottom) / 2;
+  const less = y + h / 2 >= middle ? { ...safe, bottom: Math.min(safe.bottom, y) } : { ...safe, top: Math.max(safe.top, y + h) };
+  return less.bottom > less.top ? less : safe;
+}
+
+// A box cut to the canvas, or null when none of it is on the canvas.
+function clipToCanvas([x, y, w, h], canvas) {
+  const left = Math.max(x, 0), top = Math.max(y, 0), right = Math.min(x + w, canvas.w), bottom = Math.min(y + h, canvas.h);
+  return right > left && bottom > top ? [left, top, right - left, bottom - top] : null;
+}
+
+// What a node shows in canvas pixels: a text with a layout by its ink, anything else by its bbox; null when it has no
+// usable box. A text whose layout the ink cannot be read from is skipped here: visibleTexts reports it once, as the
+// mechanical "could not be measured", so a bad layout never aborts the review.
+function ownBox(n) {
+  if (!isBox(n.bbox)) return null;
+  if (n.type !== 'text' || !hasWords(n.layout)) return n.bbox;
+  try {
+    const ink = inkBox(n, hiddenNow(n));
+    return isBox(ink) ? ink : n.bbox;
+  } catch {
+    return null;
+  }
+}
+
+// The boxes of the nodes in a subtree that show themselves at an accumulated opacity above 0.
+function shownBoxes(n, opacity) {
+  const o = opacity * (n.opacity ?? 1);
+  if (o <= 0) return [];
+  const own = showsItself(n) ? [ownBox(n)].filter(Boolean) : [];
+  return [...own, ...(n.children ?? []).flatMap((child) => shownBoxes(child, o))];
+}
+
+// The top-level nodes that show something, as { id, box, area }: not behind the picture plane, not the ground sheet of a
+// grounded look, not the shot's captions (the page's own boundary, page/stage.mjs captionFilter), and not a fixed overlay
+// (props.fixed: a slug, a mark, a rule across the frame) other than the shot's own caption card (`<shot>.caption`, the
+// clipping kind's), which is content placed in the free area on purpose.
+function elementsOf(sampled, ctx) {
+  const captions = `${ctx.shotId}.captions`;
+  const isCaption = (id) => id === captions || id.startsWith(`${captions}.`);
+  const card = `${ctx.shotId}.caption`;
+  const isCard = (id) => id === card || id.startsWith(`${card}.`);
+  const isFurniture = (n) => n.props?.fixed === true && !isCard(String(n.id ?? ''));
+  const tops = (Array.isArray(sampled) ? sampled : []).filter((n) => !(n.depth > 0) && n.id !== GROUND_ID && !isCaption(String(n.id ?? '')) && !isFurniture(n));
+  return tops.flatMap((n) => {
+    const boxes = shownBoxes(n, 1);
+    const box = boxes.length > 0 ? clipToCanvas(union(boxes), ctx.canvas) : null;
+    return box ? [{ id: n.id, box, area: box[2] * box[3] }] : [];
+  });
+}
+
+// The longest stretch of [lo, hi] that none of the spans enters, as { size, from, to }; the first of equal ones.
+function longestGap(spans, lo, hi) {
+  let best = { size: 0, from: lo, to: lo }, cursor = lo;
+  const within = spans.map(([a, b]) => [Math.max(a, lo), Math.min(b, hi)]).filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0]);
+  for (const [a, b] of within) {
+    if (a - cursor > best.size) best = { size: a - cursor, from: cursor, to: a };
+    cursor = Math.max(cursor, b);
+  }
+  return hi - cursor > best.size ? { size: hi - cursor, from: cursor, to: hi } : best;
+}
+
+function bandAlong(gap, lo, hi, axis, [before, after]) {
+  const touches = gap.from === lo ? before : gap.to === hi ? after : 'middle';
+  return { share: gap.size / (hi - lo), axis, where: gap.from === lo && gap.to === hi ? 'middle' : touches };
+}
+
+const entersSafe = ({ box: [x, y, w, h] }, safe) => x < safe.right && x + w > safe.left && y < safe.bottom && y + h > safe.top;
+
+// The larger of the empty band across the safe width and down its height, `x` on a tie. An element that does not enter
+// the safe rectangle (a slug in the margin) splits neither axis.
+function bandOf(all, safe) {
+  const elements = all.filter((e) => entersSafe(e, safe));
+  const across = bandAlong(longestGap(elements.map((e) => [e.box[0], e.box[0] + e.box[2]]), safe.left, safe.right), safe.left, safe.right, 'x', ['left', 'right']);
+  const down = bandAlong(longestGap(elements.map((e) => [e.box[1], e.box[1] + e.box[3]]), safe.top, safe.bottom), safe.top, safe.bottom, 'y', ['top', 'bottom']);
+  return down.share > across.share ? down : across;
+}
+
+/**
+ * The composition of one frame: { ground, elements: [{ id, box, area }], band: { share, axis, where }, hero: { id,
+ * extent } | null, next: { id, area } | null }. `ground`: an element covers GROUND_SHARE of the canvas. `hero`: the largest
+ * element when it stands alone or is HERO_LEAD times the next; `extent` is the larger of its width over the safe width and
+ * its height over the safe height; both are measured in the safe rectangle less ctx.captionZone, the room the caption layout
+ * reserves. @param {object[]} sampled @param {object} ctx as for auditFrame
+ */
+export function compositionOf(sampled, ctx) {
+  const elements = elementsOf(sampled, ctx);
+  const [top, second] = [...elements].sort((a, b) => b.area - a.area);
+  const safe = safeLessCaptions(ctx.safe, ctx.captionZone);
+  const leads = top !== undefined && (second === undefined || top.area >= HERO_LEAD * second.area);
+  return {
+    ground: elements.some((e) => canvasShare(e.box, ctx.canvas) >= GROUND_SHARE),
+    elements,
+    band: bandOf(elements, safe),
+    hero: leads ? { id: top.id, extent: Math.max(top.box[2] / (safe.right - safe.left), top.box[3] / (safe.bottom - safe.top)) } : null,
+    next: second === undefined ? null : { id: second.id, area: second.area },
+  };
+}
+
+/**
+ * The two composition findings of a frame, each { kind: 'creative', path, message, rule, node: '', measure }: dead-space
+ * (the empty band reaches fill.band of its side; measure: how far past) and scale-contrast (a hero that leads the next
+ * reaches less than fill.hero of the frame; measure: how far short). A frame with a ground has none.
+ */
+export function compositionFindings(sampled, ctx, fill = fillOf(ctx.look)) {
+  const c = compositionOf(sampled, ctx);
+  if (c.ground) return [];
+  const out = [];
+  if (c.band.share >= fill.band) {
+    const percent = percentOf(c.band.share), side = SIDE[c.band.axis];
+    const said = c.elements.length === 0 ? `the frame shows nothing: ${percent}% of its ${side} is empty` : `the frame leaves ${percent}% of its ${side} empty (${WHERE[c.band.where]})`;
+    out.push({ ...finding(ctx, CREATIVE, 'dead-space', '', `${said}; let the hero take more of the frame, add a second element, or use a look that fills with type`), measure: c.band.share - fill.band });
+  }
+  if (c.hero && ctx.peers !== true && c.hero.extent < fill.hero) {
+    const rest = c.next ? `, and the next largest thing, "${c.next.id}", is smaller still` : ' and stands alone';
+    out.push({ ...finding(ctx, CREATIVE, 'scale-contrast', '', `the hero, "${c.hero.id}", reaches ${percentOf(c.hero.extent)}% of the frame${rest}; set it larger, crop in on it, or give it a second mass (a picture, a chart, a card)`), measure: fill.hero - c.hero.extent });
+  }
+  return out;
 }
 
 /**
@@ -609,7 +772,11 @@ export function openingFindings(sampled, ctx) {
  *   is at rest within 0.2% of it (1 when absent). opensShot: the frame is the one its shot opens on (the opening rule,
  *   openingFindings). regionMarks: the ids of the marks the shot draws on its regions (regions.mjs regionMarkIds); a
  *   mark among them that runs past the frame is a finding (region-off-frame), as is a text the frame edge slices during
- *   a close-up (frame-edge).
+ *   a close-up (frame-edge). restsShot: the frame is the shot's resting frame (not mid-entrance, not inside a cut's window):
+ *   only then are the composition findings (compositionFindings) added. peers: the shot's kind lays out equals (kind.peers),
+ *   so scale-contrast is not judged. captionZone: [x, y, w, h], the zone the shot's caption layout reserves (the caption
+ *   nodes' props.caption.zone; scripts/v2/review.mjs restingByShot), which the composition measure leaves out of the safe rectangle.
+ *   aimed: the spec paths aimed at the shot's targets (dropped.mjs aimedAtOf), for the "dropped" finding.
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {
@@ -618,8 +785,9 @@ export function auditFrame(sampled, ctx) {
   const { texts, unmeasured } = visibleTexts(sampled, unit, ctx);
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
   const opening = ctx.opensShot === true ? openingFindings(sampled, ctx) : [];
-  const make = (kind, rule, node, message, role) => finding(ctx, kind, rule, node, message, role);
+  const make = (kind, rule, node, message, role, suggest) => finding(ctx, kind, rule, node, message, role, suggest);
   const contrast = contrastFindings(texts, sampled, ctx, make);
   const regions = regionFindings(sampled, texts, ctx, make);
-  return [...lost, ...opening, ...contrast, ...regions,...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit), ...captionRules(texts, sampled, ctx, unit)];
+  const composition = ctx.restsShot === true ? compositionFindings(sampled, ctx) : [];
+  return [...lost, ...opening, ...contrast, ...regions,...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit), ...captionRules(texts, sampled, ctx, unit), ...composition];
 }

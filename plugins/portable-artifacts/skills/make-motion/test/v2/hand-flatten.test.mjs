@@ -77,6 +77,16 @@ test('a shape that is not a rectangle keeps its outline only (no hatch can spill
   assert.deepEqual(flat([glow]), []);
 });
 
+test('a text lifted out of an offset group keeps its word, glyph and line tracks', () => {
+  const fade = track([{ t: 0, v: 0 }, { t: 1, v: 1, ease: 'linear' }]);
+  const text = node('text', 't', { text: 'hi' }, { wordTracks: [{ opacity: fade }], glyphTracks: [[{ opacity: fade }]], lineTracks: [{ y: fade }] });
+  const [lifted] = flat([node('group', 'g', { x: 40, y: 10 }, { children: [text] })]);
+  assert.equal(lifted.props.x, 40);
+  assert.deepEqual([lifted.wordTracks.length, lifted.glyphTracks.length, lifted.lineTracks.length], [1, 1, 1]);
+  assert.strictEqual(lifted.glyphTracks[0][0].opacity, fade);
+  assert.strictEqual(lifted.lineTracks[0].y, fade);
+});
+
 test('text and the field are not touched, the hand group is left alone, and nothing it builds has a part-way opacity', () => {
   const field = node('field', 'field', {});
   const text = node('text', 't', { x: 10, y: 20, text: 'hi' });

@@ -1,7 +1,7 @@
 // Canvas 2D drawing of a sampled (and camera-applied) scene graph. drawFrame(ctx, sampled, env) paints the nodes in
 // order, each child after its parent inside the parent's transform. Nothing here reads a clock or a random source:
 // the same sampled tree draws the same pixels.
-import { applyFont, createMeasure, WORD_IDENTITY } from './text-style.mjs';
+import { applyFont, createMeasure, trackingPx, WORD_IDENTITY } from './text-style.mjs';
 import { drawnFont, reservedFont, reservedInset } from '../text/layout.mjs';
 import { measurePath, path2D } from './geometry.mjs';
 import { roughShape } from './rough.mjs';
@@ -9,6 +9,7 @@ import { contentBox, localMatrix } from './bounds.mjs';
 import { registries } from '../registry.mjs';
 import { GLOW_EDGE } from '../devices/glow.mjs';
 import { createTreatCache } from './treat.mjs';
+import { drawGlyphs, glyphRunOf } from './glyph-draw.mjs';
 import { frameIndexOf } from '../kinds/media-clip.mjs';
 import '../fields/index.mjs';
 
@@ -80,9 +81,41 @@ function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   ctx.fillStyle = tracks.fill ?? baseFill;
   const left = -word.width / HALF + wordInset(ctx, word, tracks, type.font, type.reserve, word === line.words[0] || word === line.words.at(-1));
   const share = unit01(tracks.glow ?? 0);
-  if (glow && share > 0) drawGlow(ctx, word.text, left, glow, share);
-  ctx.fillText(word.text, left, 0);
+  // glyphs still arriving: each glyph's halo is stroked with the glyph (its opacity, offset and scale), under the letters;
+  // a word drawn whole, or with every glyph at rest, has its halo stroked whole. A word the glyph path cannot draw
+  // faithfully is drawn whole with the mean of its glyph values, so it arrives with its letters (glyph-draw.mjs glyphRollup).
+  const run = glyphRunOf(ctx, word, tracks, () => ({ spacing: trackingPx(drawnFont(type.font, tracks)), base: type.font, reserved: reservedFont(type.font, type.reserve) }));
+  if (run?.rolled) {
+    const { opacity: rolledOpacity, dx, dy, scale } = run.rolled;
+    if (unit01(rolledOpacity) <= 0) return ctx.restore();
+    ctx.globalAlpha *= unit01(rolledOpacity);
+    ctx.translate(dx, dy);
+    ctx.scale(scale, scale);
+  }
+  const glyphWise = Boolean(run?.placement);
+  const glowing = Boolean(glow) && share > 0;
+  if (glowing && (!glyphWise || run.settled)) drawGlow(ctx, word.text, left, glow, share);
+  if (!glyphWise) ctx.fillText(word.text, left, 0);
+  else drawGlyphs(ctx, run.placement, run.glyphs, left, glowing && !run.settled ? (char, x) => drawGlow(ctx, char, x, glow, share) : null);
   ctx.restore();
+}
+
+// A line with tracks of its own ({ opacity, x, y, scale }, props lineTracks) moves as one block around the drawing of its
+// words: faded and moved, scaled about the line's centre on its baseline. False when the line is not on screen. A line with
+// no tracks, or every one at its rest value, is drawn untouched (no transform that could round a position).
+function enterLine(ctx, line, tracks) {
+  if (!tracks) return true;
+  const opacity = unit01(tracks.opacity);
+  if (opacity <= 0) return false;
+  if (opacity < 1) ctx.globalAlpha *= opacity;
+  if (tracks.x !== 0 || tracks.y !== 0) ctx.translate(tracks.x, tracks.y);
+  if (tracks.scale !== 1) {
+    const centre = (line.x ?? 0) + (line.width ?? 0) / HALF; // a hand-built line may carry no width: its start, never NaN
+    ctx.translate(centre, line.y);
+    ctx.scale(tracks.scale, tracks.scale);
+    ctx.translate(-centre, -line.y);
+  }
+  return true;
 }
 
 function drawText(ctx, n) {
@@ -92,10 +125,16 @@ function drawText(ctx, n) {
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   const type = { font, reserve: layout.reserve };
-  for (const line of layout.lines) {
-    // words has an entry only for each wordTracks entry; a word beyond them is untouched (opacity 1, no offset)
-    for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index] }, fill, glow, type);
-  }
+  layout.lines.forEach((line, k) => {
+    const lineTracks = n.lines?.[k];
+    if (lineTracks) ctx.save();
+    // words has an entry only for each wordTracks entry; a word beyond them is untouched (opacity 1, no offset). A word's
+    // glyph values (n.glyphs, a letter-by-letter entrance) go beside them; a line's tracks never become glyph values.
+    if (enterLine(ctx, line, lineTracks)) {
+      for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index], glyphs: n.glyphs?.[word.index] }, fill, glow, type);
+    }
+    if (lineTracks) ctx.restore();
+  });
 }
 
 // ---- paths ----

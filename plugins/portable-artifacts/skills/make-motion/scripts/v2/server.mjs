@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/kinds/index.mjs';
-import { srcsOfShot } from '../../engine/assets.mjs';
+import { srcsOfShot, IMAGE_EXTENSIONS as ASSET_EXTENSIONS } from '../../engine/assets.mjs';
 import { assetInfo } from './asset-info.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -31,7 +31,6 @@ const MIME = Object.freeze({
   '.woff2': 'font/woff2', '.glsl': 'text/plain; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif',
 });
-const ASSET_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 
 // img-src 'self': pictures are fetched and decoded as bitmaps, never shown from a blob: or data: URL; the page's own
 // inline <style> needs style-src 'unsafe-inline'.
@@ -178,9 +177,10 @@ function handle(ctx, req, res) {
 
 // ---- the files a film names ----
 
-// The file `src` names in shot `shotId`: a relative image path that stays inside specDir once symlinks are resolved.
-function resolveSrc(specDir, shotId, src) {
-  const label = `shot "${shotId}": src "${src}"`;
+// The file `src` names for `owner` (`shot "<id>"`, or the film's `overlays.logo`): a relative image path that stays inside
+// specDir once symlinks are resolved.
+function resolveSrc(specDir, owner, src) {
+  const label = `${owner}: src "${src}"`;
   if (typeof src !== 'string' || src === '') throw new Error(`${label} must be a non-empty path`);
   if (path.isAbsolute(src)) throw new Error(`${label} must be relative to the film's folder`);
   const isImage = (file) => ASSET_EXTENSIONS.has(path.extname(file).toLowerCase());
@@ -193,18 +193,22 @@ function resolveSrc(specDir, shotId, src) {
   return { root, file };
 }
 
-// The distinct src strings the film names (through each shot's kind srcFields), in first-seen order, each with the
-// shot that first named it. A shot whose kind is not registered contributes none: the page reports the unknown kind
-// when it expands the shot. A string used twice is one file, so one entry.
+// The distinct src strings the film names (through each shot's kind srcFields, then the film's logo), in first-seen order,
+// each with the owner that first named it (`shot "<id>"` or `overlays.logo`). A shot whose kind is not registered
+// contributes none: the page reports the unknown kind when it expands the shot. A string used twice is one file, so one entry.
 function distinctSrcs(film) {
   const seen = new Map();
   for (const shot of film.shots) {
     if (!registries.kinds.has(shot.show)) continue;
     for (const src of srcsOfShot(shot, registries.kinds.get(shot.show).srcFields)) {
-      if (!seen.has(src)) seen.set(src, shot.id);
+      if (!seen.has(src)) seen.set(src, `shot "${shot.id}"`);
     }
   }
-  if (seen.size > MAX_IMAGES) throw new Error(`a film may use at most ${MAX_IMAGES} images; this one names ${seen.size}`);
+  const logo = film.overlays?.logo?.src;
+  if (typeof logo === 'string' && !seen.has(logo)) seen.set(logo, 'overlays.logo');
+  // the logo is one of the images when no shot names the same file: say so, as it is the film's one picture outside its shots
+  const logoCounts = seen.get(logo) === 'overlays.logo';
+  if (seen.size > MAX_IMAGES) throw new Error(`a film may use at most ${MAX_IMAGES} images; this one names ${seen.size}${logoCounts ? ' (the logo counts as one)' : ''}`);
   return seen;
 }
 
@@ -212,7 +216,7 @@ function distinctSrcs(film) {
 // clip's src is left out: its frames are served from `clips` (the caller decoded them: scripts/v2/clips.mjs).
 function assetList(film, specDir, clipSrcs) {
   const seen = [...distinctSrcs(film)].filter(([src]) => !clipSrcs.has(src));
-  return { srcs: seen.map(([src]) => src), files: seen.map(([src, shotId]) => resolveSrc(specDir, shotId, src)) };
+  return { srcs: seen.map(([src]) => src), files: seen.map(([src, owner]) => resolveSrc(specDir, owner, src)) };
 }
 
 // The film's clips as the server keeps them ({ root: the real frames folder, count }) and as /film.json lists them

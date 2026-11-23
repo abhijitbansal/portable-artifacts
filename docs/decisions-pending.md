@@ -399,3 +399,61 @@ and its place (a band above the cover). Judgment calls taken while building it, 
   Default: re-render it with make-motion 2 the next time the explainer examples change. The make-motion SKILL.md byte
   budget went from 20,900 to 21,150 for this review's fixes (`bin/test/skill-budget.test.mjs`); trim SKILL.md instead if
   you prefer.
+
+## make-motion second reviewer: how strong the proof is (branch feat/motion-steals, 2026-11-22)
+
+The billed proof of the `motion-reviewer` agent passed: the pilot found 4 of 4 defects for 1.74 USD, and the full run
+found 12 of 12 with no false fail for 4.83 USD, measured from the session streams (`eval/results/summary-motion-reviewer-2026-11-22.md`).
+The W5 wave review then found that each planted defect can be read from the film's JSON alone (`value: 24`,
+`highlight: "May"`, `region: blue`, the shot id `aside`), and that the score never checks which sheets the agent
+opened. So the proof shows the agent finds defects the spec and its narration state, not that it reads pictures.
+
+- **A (default, shipped):** `reviewing.md`, the summary and the INDEX row claim only what was measured, and the agent
+  stays listed as optional.
+- **B:** a second billed proof with defects that exist only in the pixels (for example a highlight drawn on the wrong
+  region with a neutral region name, or a chart mark coloured against its label), scored on `looked` too. Estimated
+  6 to 15 USD for 15 sessions at the first proof's cost; needs the owner's yes.
+
+## make-motion overlays: where the progress bar sits on a viral short (branch feat/motion-steals, 2026-11-22)
+
+On a 9:16 viral short the bar sits at the top of the platform safe zone (about y=290), which is also the top edge of
+the text band in pop, cosmos and poster, so the two touch. The bottom of the safe zone is worse: every band runs past
+1245 px, so the bar would cross the lower text.
+
+- **A (default, shipped):** keep the bar inside the safe zone at its top edge, touching the band; schema.md and the
+  `overlay-covers` row say so.
+- **B:** end the bar on the safe-zone line (`y = insets.top - h`, about 284 to 290 px): it shares no pixel with any band
+  but sits 6 px inside the area the platform may cover.
+- **C:** let `overlay-covers` also judge the bar's box (about 5 lines), so a text under the bar is flagged.
+
+## make-motion letter entrances: decided by how the browser draws a word (branch feat/motion-steals, 2026-11-22)
+
+A `letters` entrance draws a word glyph by glyph only when that matches the whole word pixel for pixel on a scratch
+canvas; otherwise the word arrives as one block. The check runs in the browser at render time, so on another system
+(macOS against Linux CI) or after a Chromium or font update a borderline word can switch between the two.
+
+- **A (default, shipped):** keep the pixel check; the docs scope "two renders give the same frames" to the same machine,
+  browser build and fonts, as frame hashes already are.
+- **B:** decide from shaping data instead (no ligature or mark sequences, no kern pairs the per-glyph advance misses),
+  so the choice is the same on every system, at the cost of more words arriving as one block.
+- **C:** pin a per-look table of the words the example films use and assert it on each platform in CI.
+
+## make-motion statement kicker: timed from the old entrance length (branch feat/motion-steals, 2026-11-22)
+
+A centred statement's kicker is timed from the look's `enter` move (0.5 s) even when the look now brings the title in by
+`letters` or `lines` (cosmos letters: 0.18 s a letter). The two only differ when the first word is spoken late, which
+the estimated timeline never produces, so no shipped film or test shows it.
+
+- **A (default, shipped):** leave the kicker on `enter.dur`; the lead is cosmetic.
+- **B:** time it from the entrance actually used (`letters.dur` or `lines.dur` when present), with a test on a film
+  whose first word is spoken late, and regenerate the cosmos statement frozen entries it moves.
+
+## make-motion text boxes while letters or lines arrive (branch feat/motion-steals, 2026-11-22)
+
+The review's word boxes (ink, off-frame and overlap checks, `--inspect` and the poster read) use each word's own place,
+not the offset its letters or line still carry mid-entrance. A box drawn on an arriving frame can sit up to the
+entrance distance away from the ink; at rest the two agree, and landing already waits for rest.
+
+- **A (default, shipped):** keep word-level boxes; only frames at rest are judged for placement.
+- **B:** offset each box by its line's and the mean of its letters' x and y while arriving, so `--inspect` mid-entrance
+  shows where the ink is.

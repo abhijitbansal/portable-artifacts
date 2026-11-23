@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
-import { CURRENT_MARKER } from './agents.mjs';
+import { CURRENT_MARKER, reviewerFileState } from './agents.mjs';
 import { missingPackages } from './missing-packages.mjs';
 
 const REPO = 'abhijitbansal/portable-artifacts';
@@ -46,6 +46,14 @@ export function defaultCtx(skillDir) {
     cwd: process.cwd(),
     homedir: os.homedir(),
     exists: (p) => fs.existsSync(p),
+    // Whether the path itself is a symbolic link (lstat: a dangling one counts). Optional in a test ctx: absent means no link.
+    isLink: (p) => {
+      try {
+        return fs.lstatSync(p).isSymbolicLink();
+      } catch {
+        return false;
+      }
+    },
     readFile: (p) => fs.readFileSync(p, 'utf8'),
     realpath: (p) => fs.realpathSync(p),
     isExecutable: (p) => {
@@ -526,6 +534,7 @@ export const cutout = () => optionalPackage({
 // A file without CURRENT_MARKER (make.mjs) predates the one-command operator and is reported as outdated, with
 // the command that replaces it. The doctor never overwrites it: the writer keeps an existing file.
 // Limit: project level means the current folder, not the git root.
+// The Claude Code motion-reviewer file is checked too (see REVIEWER_PLACES below): the writer for `claude` writes both files.
 const BUILDER_AGENT_HOST_DIRS = ['.claude', '.copilot', '.codex'];
 const BUILDER_AGENT_FILE_FOR = { claude: 'artifact-builder.md', copilot: 'artifact-builder.agent.md', codex: 'artifact-builder.toml' };
 const BUILDER_AGENT_HOST_OF = Object.fromEntries(Object.entries(BUILDER_AGENT_FILE_FOR).map(([host, file]) => [file, host]));
@@ -555,11 +564,55 @@ function outdatedBuilderAgents(ctx) {
   });
 }
 
+// The read-only motion-reviewer file (Claude Code only), user level and project level. It has no copilot or codex form.
+// Each existing file is 'current', 'ours' (carries our fingerprint line but not the current marker) or 'foreign' (no
+// fingerprint: the user's own file). Only a user-level 'ours' file is rewritten by --fix, through the writer's
+// write-reviewer --force, which touches that one file and first copies it to .bak. A foreign file is one info note and
+// never rewritten; a project-level file (often committed) is never rewritten either, so it gets a manual line only.
+// A missing reviewer is an info note (builderAgent().presentInfo), never a failure.
+const REVIEWER_PLACES = [['home', '.claude/agents'], ['cwd', '.claude/agents']];
+function reviewerAgentFiles(ctx) {
+  const P = pp(ctx);
+  const base = { home: ctx.homedir ?? os.homedir(), cwd: ctx.cwd ?? process.cwd() };
+  return REVIEWER_PLACES
+    .map(([where, rel]) => ({ file: P.join(base[where], ...rel.split('/'), 'motion-reviewer.md'), host: 'claude', project: where === 'cwd' }))
+    .filter(({ file }) => ctx.exists(file) || ctx.isLink?.(file) === true) // a dangling link is something there too
+    // When the project folder is the home folder both places are one file: list it once, at user level (it comes first).
+    .filter((r, i, all) => all.findIndex((x) => x.file === r.file) === i);
+}
+
+// Every existing reviewer file with its state ('current', 'older', 'newer', 'foreign' or 'linked': a symbolic link, whatever it
+// points at, which the writer never replaces). An unreadable file is left out: nothing to compare, so it counts as current.
+function reviewerStates(ctx) {
+  return reviewerAgentFiles(ctx).flatMap((r) => {
+    if (ctx.isLink?.(r.file) === true) return [{ ...r, state: 'linked' }];
+    try {
+      return [{ ...r, state: reviewerFileState(ctx.readFile(r.file)) }];
+    } catch {
+      return [];
+    }
+  });
+}
+
+// The only reviewer state that is a problem: our own older file. A newer file or a foreign one is never one: they are
+// notes (see reviewerNewer, reviewerForeign), so the doctor does not nag about a file it will never touch.
+const reviewerProblems = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'older');
+// Our files written by a newer skill: never rewritten, only noted.
+const reviewerNewer = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'newer');
+// Files the user wrote under our name: never rewritten, only noted.
+const reviewerForeign = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'foreign');
+// Symbolic links: the writer refuses to replace one, so the doctor offers no fix for it, only a note.
+const reviewerLinked = (ctx) => reviewerStates(ctx).filter((r) => r.state === 'linked');
+// The copy the writer makes before it rewrites an older file of ours (see agents.mjs writeReviewerFile).
+const backupNote = (file) => `${file} is copied to ${file}.bak first (or the next free .bak.N)`;
+
 const pluginBuilderAgent = (ctx) => pp(ctx).join(ctx.skillDir, '..', '..', 'agents', BUILDER_AGENT_FILE_FOR.claude);
 // The plugin file serves Claude Code only. It satisfies the requirement only on a machine that has no
 // ~/.copilot or ~/.codex, and the writer then skips the claude file (the plugin already ships that agent).
 const pluginServes = (ctx) => ctx.exists(pluginBuilderAgent(ctx));
 const otherHostsPresent = (ctx) => ['.copilot', '.codex'].some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d)));
+// An artifact-builder file exists somewhere, or the plugin ships it and no other host needs one.
+const hasBuilder = (ctx) => builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx));
 
 export function builderAgent() {
   const install = 'node <path-to-portable-artifacts>/plugins/portable-artifacts/bin/install.mjs';
@@ -568,44 +621,111 @@ export function builderAgent() {
     rank: RANK.other,
     why: (ctx) => {
       const old = outdatedBuilderAgents(ctx).map((f) => f.file);
+      const ours = reviewerProblems(ctx).map((r) => r.file);
       const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
-      return old.length ? `${base}; ${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)` : base;
+      const parts = [];
+      if (old.length) parts.push(`${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)`);
+      if (ours.length) parts.push(`${ours.join(' and ')} is an older portable-artifacts motion-reviewer file`);
+      return parts.length ? `${base}; ${parts.join('; ')}` : base;
     },
     required: false,
     size: '≈2 KB',
     // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
-    check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0,
+    check: (ctx) => hasBuilder(ctx) && outdatedBuilderAgents(ctx).length === 0 && reviewerProblems(ctx).length === 0,
+    // A Claude Code builder with no motion-reviewer.md at either level (and no plugin shipping the agents): one note, never a failure.
+    // The newer-file and foreign-file notes are alwaysInfo, so they show even while another builder_agent problem is reported.
+    // The foreign note offers no command: the file is the user's own, and the replace command would destroy it.
+    alwaysInfo: (ctx) => {
+      const newer = reviewerNewer(ctx);
+      const foreign = reviewerForeign(ctx);
+      const linked = reviewerLinked(ctx);
+      const notes = [];
+      if (linked.length) notes.push(`${linked.map((r) => r.file).join(' and ')} is a symbolic link: left alone (neither the doctor nor the writer replaces a link; if it points at an older portable-artifacts file, replace the link yourself)`);
+      if (newer.length) notes.push(`${newer.map((r) => r.file).join(' and ')} was written by a newer portable-artifacts than this skill's copy: left alone (this skill's copy is older; update it, or run the doctor from the newer one)`);
+      if (foreign.length) notes.push(`${foreign.map((r) => r.file).join(' and ')} is not a portable-artifacts motion-reviewer file: left alone (it is your own, so the optional second reviewer there is yours, not ours)`);
+      return notes.length ? { note: notes.join('; ') } : null;
+    },
+    presentInfo: (ctx) => {
+      const P = pp(ctx);
+      const builder = builderAgentFiles(ctx).find((f) => f.host === 'claude');
+      if (!builder || reviewerAgentFiles(ctx).length > 0 || pluginServes(ctx)) return null;
+      const dir = P.join(builder.file, '..');
+      return { note: `${P.join(dir, 'motion-reviewer.md')} is not installed (the optional read-only second reviewer for Claude Code, from this skill's own writer: node ${P.join(ctx.skillDir, 'shared', 'agents.mjs')} write claude ${dir}; it keeps every existing file)` };
+    },
     // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
     // exists (user level; an existing file is kept). That works for an install made with the skills CLI,
     // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
     // The program is this process's own Node, not "node" from PATH: it may not be on PATH, and on Windows
     // cmd.exe would look in the current (project) folder first.
-    // An outdated file has no auto fix, because the writer keeps what is there: the manual line names the
+    // A stale builder file has no auto fix, because the writer keeps what is there: the manual line names the
     // installer with --force, which replaces it, and `outdated` lists the files so the report says so.
+    // A reviewer problem never replaces the builder's fix: a missing builder is written first, and an older reviewer of ours
+    // (user level) is rewritten after it, by the writer, which copies the old file to .bak first. A foreign or newer
+    // reviewer is never touched and has no command here (see alwaysInfo).
     fix: (ctx) => {
       const P = pp(ctx);
       const old = outdatedBuilderAgents(ctx);
+      const older = reviewerProblems(ctx);
+      const stateOf = new Map(reviewerStates(ctx).map((r) => [r.file, r.state]));
+      const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
+      const node = ctx.execPath ?? process.execPath;
+      const tail = '<path-to-portable-artifacts> is a local checkout, or clone the repo';
+      // The reviewer-only command: replaces just that one file of ours, never the builder.
+      const reviewerCmd = (r) => `node ${writer} write-reviewer claude ${P.join(r.file, '..')} --force (replaces only ${r.file}, after copying it to ${r.file}.bak or the next free .bak.N)`;
       if (old.length) {
         const cwd = ctx.cwd ?? process.cwd();
-        const cmds = old.map(({ host, project }) => `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''}`);
+        // The installer command writes every agent file of its host in that folder: say which ones it replaces. It keeps a
+        // reviewer file that is not ours or is newer than this skill's copy, and copies an older one of ours first.
+        const cmds = [...new Map(old.map(({ file, host, project }) => {
+          const reviewer = P.join(P.join(file, '..'), 'motion-reviewer.md');
+          const state = host === 'claude' ? stateOf.get(reviewer) : undefined;
+          const kept = state === 'foreign' || state === 'newer' || state === 'linked';
+          const files = [file, ...(host === 'claude' && !kept ? [reviewer] : [])];
+          const warn = state === 'foreign' ? `; ${reviewer} is kept as it is: it is not a portable-artifacts file`
+            : state === 'newer' ? `; ${reviewer} is kept as it is: it is newer than this skill's copy`
+              : state === 'linked' ? `; ${reviewer} is kept as it is: it is a symbolic link`
+              : state === 'older' ? `; the old ${reviewer} is copied to ${reviewer}.bak first` : '';
+          return [`${host}|${project}`, `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''} (replaces ${files.join(' and ')}${warn})`];
+        })).values()];
         return {
           auto: null,
-          outdated: old.map((f) => f.file),
-          manual: manualAll(`${cmds.join(' ; ')} (replaces the outdated file; <path-to-portable-artifacts> is a local checkout, or clone the repo)`),
-          notes: `${old.map((f) => f.file).join(' and ')} predates make.mjs; the doctor never overwrites an agent file, so run the command yourself`,
+          outdated: [...old, ...older].map((f) => f.file),
+          manual: manualAll(`${[...cmds, ...older.map(reviewerCmd)].join(' ; ')} (${tail})`),
+          notes: `${old.map((f) => f.file).join(' and ')} is outdated; the doctor never overwrites a builder agent file, so run the command yourself${older.length ? `; ${older.map((f) => f.file).join(' and ')} is left alone too` : ''}`,
         };
       }
       const home = ctx.homedir ?? os.homedir();
-      const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
-      const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ host, dotDir }) => ctx.exists(P.join(home, dotDir)) && !(host === 'claude' && pluginServes(ctx)));
-      const auto = hosts.map(({ host, dotDir }) => [ctx.execPath ?? process.execPath, writer, 'write', host, P.join(home, dotDir, 'agents')]);
-      const files = hosts.map(({ host, dotDir }) => P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]));
+      const needBuilder = !hasBuilder(ctx);
+      // With nothing to repair (a plain `--fix builder_agent`) the writer still runs: it keeps every file that exists.
+      const hosts = needBuilder || older.length === 0 ? BUILDER_AGENT_USER_HOSTS.filter(({ host, dotDir }) => ctx.exists(P.join(home, dotDir)) && !(host === 'claude' && pluginServes(ctx))) : [];
+      const builderAuto = hosts.map(({ host, dotDir }) => [node, writer, 'write', host, P.join(home, dotDir, 'agents')]);
+      // `write claude` also writes motion-reviewer.md beside the builder, unless one is already there (it keeps it,
+      // and a dangling link counts as one: the writer keeps the link).
+      const files = hosts.flatMap(({ host, dotDir }) => {
+        const dir = P.join(home, dotDir, 'agents');
+        const reviewerFile = P.join(dir, 'motion-reviewer.md');
+        return [P.join(dir, BUILDER_AGENT_FILE_FOR[host]), ...(host === 'claude' && !ctx.exists(reviewerFile) && ctx.isLink?.(reviewerFile) !== true ? [reviewerFile] : [])];
+      });
       const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
+      // Only user-level files of ours are rewritten (one file each, in its own folder); a project-level one gets a manual line.
+      const autoFiles = older.filter((r) => !r.project);
+      const left = older.filter((r) => r.project);
+      const reviewerAuto = autoFiles.map(({ file }) => [node, writer, 'write-reviewer', 'claude', P.join(file, '..'), '--force']);
+      const auto = [...builderAuto, ...reviewerAuto];
+      const builderManual = `${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} claude --agents-only (Claude Code), ${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both Copilot and Codex; add --project <dir> to install into one repo; <path-to-portable-artifacts> is a local checkout (or clone the repo)`;
+      const manual = hosts.length > 0 || older.length === 0 ? [builderManual, ...older.map(reviewerCmd)].join(' ; ') : `${older.map(reviewerCmd).join(' ; ')} (${tail})`;
+      const notes = [
+        ...(files.length ? [`writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`] : []),
+        ...(autoFiles.length ? [`rewrites ${autoFiles.map((f) => f.file).join(' and ')} (our own older motion-reviewer file; ${autoFiles.map((f) => backupNote(f.file)).join(' and ')}; the artifact-builder file is left alone)`] : []),
+        ...(left.length ? [`${left.map((f) => f.file).join(' and ')} is left alone (in this project): the doctor never rewrites it`] : []),
+      ];
       return {
         auto: auto.length ? auto : null,
-        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} claude --agents-only (Claude Code), ${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both Copilot and Codex; add --project <dir> to install into one repo; <path-to-portable-artifacts> is a local checkout (or clone the repo)`),
-        notes: `writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`,
+        // `outdated` labels the report line; a missing builder is the bigger fact, so it keeps the "missing" label.
+        ...(!needBuilder && older.length ? { outdated: older.map((f) => f.file) } : {}),
+        manual: manualAll(manual),
+        notes: notes.length ? notes.join('; ') : 'nothing to write',
       };
     },
     needsSudo: () => false,
@@ -619,6 +739,9 @@ export async function diagnose(requirements, ctx) {
   const info = [];
   for (const r of requirements) {
     if (r.applies && !r.applies(ctx)) continue;
+    // alwaysInfo: a note that holds whatever else the requirement reports (present or missing).
+    const always = r.alwaysInfo?.(ctx);
+    if (always) info.push({ id: r.id, note: always.note, sudoHint: always.sudoHint });
     if (await r.check(ctx)) {
       const hint = r.presentInfo?.(ctx);
       if (hint) info.push({ id: r.id, note: hint.note, sudoHint: hint.sudoHint });
@@ -636,7 +759,8 @@ export async function diagnose(requirements, ctx) {
     if (fix.notes) entry.notes = fix.notes;
     // Installed, but older than a pin in package.json "overrides": reported as stale, not missing. Still required, still exit 1.
     if (fix.stale?.length > 0) entry.stale = fix.stale;
-    // An installed file that predates the current text: reported as outdated, not missing. The doctor never overwrites it.
+    // An installed file that predates the current text: reported as outdated, not missing. The doctor never overwrites a
+    // builder file; it rewrites an older motion-reviewer file of ours only after copying it to .bak.
     if (fix.outdated?.length > 0) entry.outdated = fix.outdated;
     if (fix.sudoHint) entry.sudoHint = fix.sudoHint;
     missing.push(entry);

@@ -16,8 +16,13 @@
 // anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
 import { shotTime, lookOfShot } from '../../engine/graph/film.mjs';
-import { auditFrame, textStatesIn, textLandings } from '../../engine/review/frame.mjs';
+import { auditFrame, textStatesIn, textLandings, landedTexts, COMPOSITION_RULES } from '../../engine/review/frame.mjs';
+import { seenWords } from '../../engine/review/seen.mjs';
+import { overlayCoverFindings } from '../../engine/review/overlay.mjs';
 import { regionMarkIds } from '../../engine/review/regions.mjs';
+import { outlineFindings, capCreative } from '../../engine/review/outline.mjs';
+import { aimedAtOf } from '../../engine/review/dropped.mjs';
+import { showsWordsOf } from '../../engine/captions/index.mjs';
 import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
@@ -26,6 +31,7 @@ import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { auditMoments } from './plan.mjs';
+import { inSlice, sliceAuditPlan } from './slice.mjs';
 import { pageFinding } from './report.mjs';
 import { loopFindings } from './loop.mjs';
 import { handReviewFindings } from './review-hand.mjs';
@@ -93,9 +99,9 @@ export function dedupeFindings(items, shots = []) {
     });
 }
 
-// For each audit frame: which shot to audit alone ([shot index, frame]) when the frame is inside a cut window, else
-// [-1, frame] for the whole frame.
-export function auditPlan(film, timeline) {
+// For each audit frame (`frames`: every audit moment unless a slice names its own): which shot to audit alone ([shot index,
+// frame]) when the frame is inside a cut window, else [-1, frame] for the whole frame.
+export function auditPlan(film, timeline, frames = auditMoments(film, timeline)) {
   const windowShot = (frame) => {
     const shot = shotAtFrame(timeline, frame);
     if (shot.index === 0) return NOT_A_CUT_SHOT;
@@ -105,7 +111,7 @@ export function auditPlan(film, timeline) {
     // shot time as the film reads it (rounded: 72 / 30 - 2 is 0.3999..., which the film draws as after a 0.4 s window)
     return shotTime(frame / timeline.fps, shot.start) < cut.dur ? shot.index : NOT_A_CUT_SHOT;
   };
-  return auditMoments(film, timeline).map((frame) => [windowShot(frame), frame]);
+  return frames.map((frame) => [windowShot(frame), frame]);
 }
 
 async function snapshotsOf(session, plan, signal) {
@@ -119,14 +125,18 @@ async function snapshotsOf(session, plan, signal) {
   return out;
 }
 
-async function heldFlags(session, signal) {
-  const { frameCount } = session.timeline;
-  const held = [];
-  for (let from = 0; from < frameCount; from += HELD_CHUNK) {
+// held[i]: frame i equals frame i - 1, for the whole film or, with a slice, for its frames alone (the frames before it are
+// false, and so is its own first frame, which would be compared with a frame outside the slice).
+async function heldFlags(session, signal, slice = null) {
+  const first = slice === null ? 0 : slice.from;
+  const end = slice === null ? session.timeline.frameCount : slice.to + 1;
+  const held = Array.from({ length: first }, () => false);
+  for (let from = first; from < end; from += HELD_CHUNK) {
     signal?.throwIfAborted();
-    const to = Math.min(frameCount, from + HELD_CHUNK) - 1;
+    const to = Math.min(end, from + HELD_CHUNK) - 1;
     held.push(...await session.page.evaluate(([a, b]) => window.__heldFlags(a, b, false), [from, to]));
   }
+  if (slice !== null && first < held.length) held[first] = false;
   return held;
 }
 
@@ -158,29 +168,70 @@ function modalScales(trees, lastTree) {
 function modalWordScales(trees, lastTree) {
   const counts = new Map();
   trees.forEach((tree) => textStatesIn(tree).forEach(({ opacity, node }, id) => {
-    if (opacity < 1 || !Array.isArray(node.words)) return;
+    const words = seenWords(node);
+    if (opacity < 1 || words.length === 0) return;
     const perWord = counts.get(id) ?? [];
-    node.words.forEach((w, i) => { if ((w.opacity ?? 1) >= 1) perWord[i] = tally(perWord[i], w.scale ?? 1); });
+    words.forEach((w, i) => { if (w.opacity >= 1) perWord[i] = tally(perWord[i], w.scale); });
     counts.set(id, perWord);
   }));
   const last = textStatesIn(lastTree);
-  return new Map([...last].filter(([, s]) => Array.isArray(s.node.words)).map(([id, s]) => [id, s.node.words.map((w, i) => modal(counts.get(id)?.[i], w.scale ?? 1))]));
+  return new Map([...last].filter(([, s]) => seenWords(s.node).length > 0).map(([id, s]) => [id, seenWords(s.node).map((w, i) => modal(counts.get(id)?.[i], w.scale))]));
 }
 
 /**
  * shot id -> what its sampled frames say about its texts (see engine/review/frame.mjs): the scale each text
- * (restScales) and each of its words (restWords) holds on most of its frames is the scale it rests at.
+ * (restScales) and each of its words (restWords) holds on most of its frames is the scale it rests at; and, for a shot
+ * whose resting (last) frame carries caption nodes, `captionZone`, the union of the zones those nodes reserved (their
+ * props.caption.zone: the composition rules measure the frame less that room). A caption is on the resting frame only
+ * while it shows (its opacity, multiplied down the tree, above 0): one drawn earlier in the shot for a neighbour's words
+ * heard over the cut has faded by then, so its room is not taken out. A shot for which `holdsRoom(shotId)` is true
+ * captions its own words throughout (captionsHoldRoom), so the room its captions reserve counts even after the last has faded.
  * @param {{ fps: number, shots: { id: string, start: number, end: number }[] }} timeline
  * @param {{ frame: number, tree: object[] }[]} snapshots
+ * @param {(shotId: string) => boolean} [holdsRoom]
  */
-export function restingByShot(timeline, snapshots) {
+export function restingByShot(timeline, snapshots, holdsRoom = () => false) {
   const byFrame = new Map(snapshots.map((snap) => [snap.frame, snap.tree]));
   return new Map(timeline.shots.map((shot) => {
     const first = Math.round(shot.start * timeline.fps), last = Math.round(shot.end * timeline.fps) - 1;
     const tree = byFrame.get(last);
     const trees = snapshots.filter((snap) => snap.frame >= first && snap.frame <= last).map((snap) => snap.tree);
-    return [shot.id, tree ? { restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree) } : {}];
+    const captionZone = tree ? captionZoneIn([tree], shot.id, holdsRoom(shot.id)) : null;
+    return [shot.id, tree ? { restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree), ...(captionZone ? { captionZone } : {}) } : {}];
   }));
+}
+
+// The union ([x, y, w, h]) of the zones the caption nodes of shot `shotId` carry (props.caption.zone) in `trees`, or null.
+// A caption that has been said stays in the graph, hidden by the opacity of its group: unless `hidden` counts it, only a
+// node whose opacity, multiplied down from the root, is above 0 reserves room.
+function captionZoneIn(trees, shotId, hidden = false) {
+  const zones = [];
+  const walk = (n, inherited) => {
+    const shown = inherited * (n.opacity ?? 1);
+    if (shown <= 0 && !hidden) return;
+    if (n.props?.caption && Array.isArray(n.props.caption.zone) && String(n.id).startsWith(`${shotId}.captions`)) zones.push(n.props.caption.zone);
+    (n.children ?? []).forEach((child) => walk(child, shown));
+  };
+  trees.forEach((tree) => (Array.isArray(tree) ? tree : []).forEach((n) => walk(n, 1)));
+  if (zones.length === 0) return null;
+  const left = Math.min(...zones.map(([x]) => x)), top = Math.min(...zones.map(([, y]) => y));
+  const right = Math.max(...zones.map(([x, , w]) => x + w)), bottom = Math.max(...zones.map(([, y, , h]) => y + h));
+  return [left, top, right - left, bottom - top];
+}
+
+/**
+ * shotId -> does the shot caption its own words (a kind that does not show them: a diagram, a chart, and a say of its
+ * own to speak), so its captions are on screen as it speaks and their room stays reserved? A kind that shows its words
+ * (statement, number) captions only a neighbour's, over the cut (captions/index.mjs wordsToCaption), and so does a shot
+ * with no say (a hold): the captions its tree carries are a neighbour's.
+ */
+export function captionsHoldRoom(film) {
+  const byId = new Map((film.shots ?? []).map((shot) => [shot.id, shot]));
+  return (shotId) => {
+    const shot = byId.get(shotId);
+    const speaks = typeof shot?.say === 'string' && shot.say.trim() !== '';
+    return speaks && registries.kinds.has(shot.show) && !showsWordsOf(registries.kinds.get(shot.show), shot);
+  };
 }
 
 /**
@@ -204,9 +255,21 @@ export function opensShotAt(film, timeline, frame, whole) {
   return whole === true && frame === openingFrameOf(film, timeline, shot.index);
 }
 
+/**
+ * Is `frame`, audited whole, the frame a shot rests on (its last frame, outside any cut window)? The composition rules
+ * judge a shot there: earlier frames have elements still arriving, and a frame inside a window shows two shots.
+ */
+export function restsShotAt(timeline, frame, whole) {
+  const shot = shotAtFrame(timeline, frame);
+  return whole === true && frame === Math.round(shot.end * timeline.fps) - 1;
+}
+
+// Does the shot's kind lay out equals (kind.peers: list, feed, compare, timeline)? Then scale-contrast is not judged.
+const isPeerShot = (spec) => typeof spec?.show === 'string' && registries.kinds.has(spec.show) && registries.kinds.get(spec.show).peers === true;
+
 // The ctx auditFrame takes for one snapshot: the shot it belongs to, the look and canvas, what the shot's frames say,
 // and the colour painted under the shot (`backgrounds`, per shot, from the page: session.info.backgrounds).
-function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds = []) {
+export function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds = []) {
   const shot = shotAtFrame(timeline, frame);
   const [width, height] = canvasSize(film);
   const look = lookOfShot(film, shot.index), canvas = { w: width, h: height };
@@ -214,8 +277,11 @@ function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds =
     look, canvas, safe: safeRectFor(canvas, look, registries.modes.get(film.mode ?? DEFAULT_MODE)), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t: frame / timeline.fps,
     isFirstShot: shot.index === 0, ...restingOf.get(shot.id),
     opensShot: opensShotAt(film, timeline, frame, whole),
+    restsShot: restsShotAt(timeline, frame, whole),
+    peers: isPeerShot(film.shots[shot.index]),
     background: backgrounds[shot.index],
     regionMarks: regionMarksOf(film)[shot.index] ?? [],
+    aimed: aimedAtOf(film, shot.index),
   };
 }
 
@@ -254,6 +320,27 @@ export function settleFindings(film, timeline, restingOf, snapshots) {
       message: `text "${id}" never settles within the shot: on every sampled frame it is still arriving, fading or moving, so it cannot be checked; let it land well before the shot ends (lengthen the shot or bring it in sooner)`,
     },
   }));
+}
+
+/**
+ * The landed texts of each whole audited frame (a frame inside a cut window is audited as the incoming shot alone, away from
+ * where the cut puts it) set against the logo's box in `overlays` (the page's __snapshotOverlays: the logo stands still, so
+ * one frame's boxes serve them all). Items as dedupeFindings takes them: { shot, t, finding }.
+ */
+export function overlayCoverItems(film, timeline, restingOf, snapshots, overlays, backgrounds = []) {
+  return snapshots.filter((snap) => snap.whole).flatMap((snap) => {
+    const ctx = frameContext(film, timeline, restingOf, snap, backgrounds);
+    return overlayCoverFindings(landedTexts(snap.tree, ctx), overlays, ctx).map((finding) => ({ shot: ctx.shotId, t: ctx.t, finding }));
+  });
+}
+
+// The deduplicated overlay-covers findings of a film that asks for a logo. dedupeFindings is given no shots, so the path stays
+// `overlays.logo` and does not take a field of the shot the text came from.
+async function logoCoverFindings(session, restingOf, snapshots, backgrounds) {
+  const { film, timeline } = session;
+  if (film.overlays?.logo === undefined) return [];
+  const overlays = await session.page.evaluate((i) => window.__snapshotOverlays(i), 0);
+  return dedupeFindings(overlayCoverItems(film, timeline, restingOf, snapshots, overlays, backgrounds));
 }
 
 function pacingFindings(film, timeline, held) {
@@ -353,8 +440,9 @@ export function matchFindings(film, timeline, snapshots) {
 }
 
 // The first shot of a mode that reads from frame 0 must show all of its text on frame 0: in a kind that says its hero
-// reads so (kind.hookText: the statement), every word of the hero is on screen (opacity above 0) in the first frame.
-// Mechanical when not.
+// reads so (kind.hookText: the statement), every word of the hero is on screen (opacity above 0) and at rest (its letters
+// and its line no longer moving: seenWords) in the first frame. Mechanical when not; the message counts both kinds of word,
+// one not on screen yet and one whose letters or line are still moving, so it never claims a visible word is missing.
 export function hookFindings(film, timeline, snapshots) {
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
   const first = film.shots[0];
@@ -363,29 +451,71 @@ export function hookFindings(film, timeline, snapshots) {
   const texts = [];
   const walk = (n) => { if (n.type === 'text' && n.props?.role === 'hero') texts.push(n); (n.children ?? []).forEach(walk); };
   zero.tree.forEach(walk);
-  const [shown, all] = texts.reduce((sum, n) => [sum[0] + (n.words ?? []).filter((w) => w.opacity > 0).length, sum[1] + (n.words ?? []).length], [0, 0]);
+  const [shown, all] = texts.reduce((sum, n) => [sum[0] + seenWords(n).filter((w) => w.opacity > 0 && w.rest !== false).length, sum[1] + seenWords(n).length], [0, 0]); // seen: its letters and line count
   if (all === 0 || shown === all) return [];
   return [{
     kind: 'mechanical', shot: first.id, path: 'shots[0]', t: 0, rule: 'hook', node: '',
-    message: `the first shot of a ${film.mode} film must show all of its text on frame 0; ${all - shown} of its ${all} words are not on screen yet`,
+    message: `the first shot of a ${film.mode} film must show all of its text on frame 0; ${all - shown} of its ${all} words are not on screen yet, or its letters or lines are still moving`,
   }];
 }
 
+export const COMPOSITION_CAP = 3;
+const COMPOSITION_RULE_IDS = new Set(COMPOSITION_RULES);
+
 /**
- * @param {{ session: object, signal?: AbortSignal }} opts session from openSession
+ * At most `cap` composition findings (dead-space, scale-contrast) a film: the ones with the largest `measure` stay, the
+ * smallest of those says how many findings were dropped. Findings of any other rule pass through; the order is unchanged.
+ */
+export function capComposition(findings, cap = COMPOSITION_CAP) {
+  const composition = findings.filter((f) => COMPOSITION_RULE_IDS.has(f.rule));
+  if (composition.length <= cap) return findings;
+  const worst = [...composition].sort((a, b) => b.measure - a.measure).slice(0, cap);
+  const kept = new Set(worst);
+  const last = worst.at(-1), dropped = composition.length - cap;
+  const note = ` (${dropped} more composition ${dropped === 1 ? 'finding is' : 'findings are'} left out; fix the worst first)`;
+  return findings.flatMap((f) => {
+    if (!COMPOSITION_RULE_IDS.has(f.rule)) return [f];
+    if (!kept.has(f)) return [];
+    return [f === last ? { ...f, message: `${f.message}${note}` } : f];
+  });
+}
+
+// The rules that judge a whole shot and sit at its start (or at a time in it that has no frame of its own): a slice that
+// touches the shot reports them, whichever of its frames the slice holds.
+const SHOT_LEVEL_RULES = new Set(['kind', 'cut-window', 'unsettled']);
+
+// Does a slice report this finding? A shot-level one when the slice touches its shot; any other when its time is a frame of
+// the slice (a frame finding is judged per frame, so one whose fault is still on screen inside the slice is there).
+const reported = (slice, fps, finding) => (SHOT_LEVEL_RULES.has(finding.rule) ? slice.shots.includes(finding.shot) : inSlice(slice, fps, finding.t));
+
+/**
+ * The film's review findings: every audit moment is snapshotted and judged, and the film-wide rules run. With `slice`
+ * (slice.mjs: --shot, --range) every audit frame of each shot it touches is snapshotted and judged, as the full run does (so
+ * rest scales and `match` are the full run's), and only what is about the slice is reported (`reported`): a frame finding
+ * at the first frame of the slice it shows on (a fault on every frame of a shot is reported by a range that starts
+ * mid-shot), a shot-level one (`kind`, `cut-window`, `unsettled`) when the slice touches its shot. The result is the full
+ * review cut down to the slice, but for the caps, which count the findings of the slice. `still` is read over the slice's
+ * frames alone, and `loop`, `cut-variety` and `sameness` (slice.SLICE_SKIPPED) are not run.
+ * @param {{ session: object, signal?: AbortSignal, slice?: object | null }} opts session from openSession
  * @returns {Promise<{ kind: 'mechanical' | 'creative', shot: string, path: string, message: string, t: number, rule: string, node: string }[]>}
  */
-export async function reviewFilm({ session, signal }) {
+export async function reviewFilm({ session, signal, slice = null }) {
   const { film, timeline } = session;
-  const snapshots = await snapshotsOf(session, auditPlan(film, timeline), signal);
-  const restingOf = restingByShot(timeline, snapshots);
+  const planned = slice === null ? null : sliceAuditPlan(film, timeline, slice);
+  const snapshots = await snapshotsOf(session, auditPlan(film, timeline, planned?.map((p) => p.frame)), signal);
+  const restingOf = restingByShot(timeline, snapshots, captionsHoldRoom(film));
   const backgrounds = session.info?.backgrounds ?? [];
   const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
-  const deduped = dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots);
-  const still = pacingFindings(film, timeline, await heldFlags(session, signal));
-  const loop = await loopFindings(session); // root loop: true (loop.mjs)
+  // a frame finding is kept once, at the first frame of the slice it shows on (dedupeFindings runs after the slice filter)
+  const onFrames = [...audited, ...settleFindings(film, timeline, restingOf, snapshots)].filter((item) => slice === null || reported(slice, timeline.fps, { ...item.finding, shot: item.shot, t: item.t }));
+  const deduped = capComposition(dedupeFindings(onFrames, film.shots));
+  const covers = await logoCoverFindings(session, restingOf, snapshots, backgrounds); // a landed text under the logo (overlays)
+  const still = pacingFindings(film, timeline, await heldFlags(session, signal, slice));
+  const loop = slice === null ? await loopFindings(session) : []; // root loop: true (loop.mjs)
   const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings
-  return [...deduped, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop].sort((a, b) => a.t - b.t);
+  const found = [...deduped, ...covers, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
+  const inside = slice === null ? found : found.filter((f) => reported(slice, timeline.fps, f)); // only what is about the slice
+  return capCreative(inside).sort((a, b) => a.t - b.t);
 }
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });

@@ -4,7 +4,7 @@
 // layout runs on ctx.measure.
 import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { fitText } from '../text/layout.mjs';
 import { landing, colourOf, polyline, scrimColour } from '../devices/shared.mjs';
@@ -277,6 +277,33 @@ export function enterTracks(look, unit, at, rest = { y: 0 }) {
   return tracks;
 }
 
+// An entrance of the letters or lines move landing on `at`: a fade, plus a rise of `dist` units. It has no end value of
+// its own: every track ends at the identity (opacity 1, offset 0), which is what the review's "has landed" reads.
+function restingEntrance(move, unit, at) {
+  const tracks = { opacity: landing(at, move, 0, 1) };
+  if (move.dist) tracks.y = landing(at, move, move.dist * unit, 0);
+  return tracks;
+}
+
+/** The longest a word's letters may take to arrive, in seconds from its spoken time to its last letter landing. A word longer than
+ * `LETTER_SPREAD_CAP / stagger + 1` letters is staggered closer, so a URL or a path is at rest inside its shot. 0.6 s leaves
+ * every word of the shipped films alone (the longest, "portable-artifacts", takes 0.595 s at a 0.035 s stagger). */
+export const LETTER_SPREAD_CAP = 0.6;
+
+/** The seconds between one letter and the next in a word of `count` glyphs: the look's stagger, shrunk so the word's last letter
+ * lands within LETTER_SPREAD_CAP of its spoken time. */
+export const letterStagger = (look, count) => (count > 1 ? Math.min(look.moves.letters.stagger, LETTER_SPREAD_CAP / (count - 1)) : look.moves.letters.stagger);
+
+/** The look's letters move as one track map per glyph of a word of `count` glyphs (graphemes): glyph k lands on `at + k * stagger`
+ * (letterStagger). */
+export function letterTracks(look, unit, at, count) {
+  const stagger = letterStagger(look, count);
+  return Array.from({ length: count }, (_, k) => restingEntrance(look.moves.letters, unit, at + k * stagger));
+}
+
+/** The look's lines move as the track map of one line, landing on `at`: the line moves as one block. */
+export const lineEntrance = (look, unit, at) => restingEntrance(look.moves.lines, unit, at);
+
 /** A scale track: the enter pop landing on `start + enter.dur` (when `enter`), then the emphasize pulse from `pulse` up to `peak` (default: the look's value). `enterFrom` replaces the pop's start scale. */
 export function pulseScale(look, { enterAt, enterFrom, pulse, peak }) {
   const { enter, emphasize } = look.moves;
@@ -417,7 +444,7 @@ function spokenWindow(n) {
 
 /** A copy of a top-level node with props.fixed: the camera leaves it where it stands (a slug or a caption pinned to the
  *  frame stays put while a picture is pushed in). */
-export const pinned = (n) => node(n.type, n.id, { ...n.props, fixed: true }, { tracks: n.tracks, children: n.children, depth: n.depth, step: n.step, wordTracks: n.wordTracks });
+export const pinned = (n) => node(n.type, n.id, { ...n.props, fixed: true }, { tracks: n.tracks, children: n.children, depth: n.depth, step: n.step, ...textTracksOf(n) });
 
 /** A card's children with its paper (id `<card id>.paper`) marked props.textCard: a card that holds text (a slug, a
  *  caption card), which the frame review keeps other texts off. */

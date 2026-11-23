@@ -22,7 +22,7 @@ GALLERY = DOCS / "gallery.html"
 PAGES = (PAGE, GALLERY)
 PLUGIN_JSON = ROOT / "plugins" / "portable-artifacts" / ".claude-plugin" / "plugin.json"
 SKILLS = ("make-motion", "make-explainer", "make-diagram", "make-dashboard", "make-scene")  # page order
-SHEET_ORDER = ("reel", "films") + SKILLS + ("notes", "gallery")
+SHEET_ORDER = ("how-it-works", "reel", "films") + SKILLS + ("notes", "gallery")
 EXAMPLES = (
     ROOT / "plugins" / "portable-artifacts" / "skills" / "make-motion"
     / "references" / "examples" / "v2"
@@ -38,6 +38,7 @@ FILM_SOURCES = {
     GAL + "/looks/poster": "look-poster.json",
     GAL + "/looks/keynote": "gate-keynote.json",
     GAL + "/looks/marker": "gate-marker.json",
+    GAL + "/motion-how-it-works": "how-it-works.json",
 }
 # Ids the previous one-page site had; links to them must still land somewhere.
 OLD_IDS = (
@@ -97,7 +98,7 @@ def test_both_pages_exist_with_one_h1():
         assert len(re.findall(r"<h1\b", _text(path))) == 1, path.name
 
 
-def test_reel_then_cover_then_five_sheets_then_notes_and_register_in_order():
+def test_how_it_works_reel_then_reel_then_cover_then_five_sheets_then_notes_and_register_in_order():
     page = _text(PAGE)
     offsets = []
     for sheet_id in SHEET_ORDER:
@@ -107,7 +108,7 @@ def test_reel_then_cover_then_five_sheets_then_notes_and_register_in_order():
     assert offsets == sorted(offsets), "sheets are out of order"
     main_at = page.index('<main id="main">')
     first = re.compile(r'<section\b[^>]*\bid="([\w-]+)"').search(page, main_at)
-    assert first and first.group(1) == "reel", "the reel band must be the first section in <main>"
+    assert first and first.group(1) == "how-it-works", "the how-it-works reel must be the first section in <main>"
 
 
 def test_quick_install_copy_buttons_hold_one_command_without_comment():
@@ -136,7 +137,7 @@ def test_every_local_src_href_and_poster_resolves():
 
 def test_videos_are_muted_loops_with_poster_and_label_and_never_autoplay():
     videos = [a for t, a in _tags(PAGE) + _tags(GALLERY) if t == "video"]
-    assert len(videos) == 3  # the reel, the cover plate, the make-motion plate
+    assert len(videos) == 4  # the how-it-works reel, the reel, the cover plate, the make-motion plate
     for attrs in videos:
         assert "autoplay" not in attrs, "pa.js plays loops in view; never autoplay in markup"
         for key in ("muted", "playsinline", "poster", "aria-label"):
@@ -187,6 +188,17 @@ def test_reel_loop_is_light_and_its_chapter_specs_exist():
     assert len(chapters) >= 8, chapters
     for chapter in chapters:
         assert json.loads(chapter.read_text(encoding="utf-8"))["version"] == 2, chapter
+
+
+def test_how_it_works_reel_links_its_voiced_film_and_keeps_its_loop_light():
+    loop = DOCS / "media" / "how-it-works-loop.mp4"
+    assert loop.stat().st_size <= 2 * 1024 * 1024, f"{loop}: {loop.stat().st_size} bytes"
+    assert (DOCS / "media" / "how-it-works-poster.jpg").is_file()
+    block = _section(_text(PAGE), "how-it-works")
+    assert 'data-full-film="%s/motion-how-it-works/video.mp4"' % GAL in block
+    assert 'href="%s/motion-how-it-works/video.mp4"' % GAL in block, "a plain link to the voiced film"
+    for name in ("video.mp4", "poster.jpg", "film.json"):
+        assert (DOCS / GAL / "motion-how-it-works" / name).is_file(), name
 
 
 def test_title_block_revision_matches_plugin_version():
@@ -273,7 +285,9 @@ def test_each_gallery_explainer_has_the_simple_english_toggle():
 
 
 def test_gallery_films_stay_under_the_repo_size_warning():
-    for video in (DOCS / GAL).glob("*/*/video.mp4"):
+    videos = sorted((DOCS / GAL).rglob("video.mp4"))
+    assert any(v.parent.name == "motion-how-it-works" for v in videos), "a film one folder deep is checked too"
+    for video in videos:
         assert video.stat().st_size <= 30 * 1024 * 1024, f"{video}: {video.stat().st_size} bytes"
 
 

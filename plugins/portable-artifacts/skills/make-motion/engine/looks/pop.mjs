@@ -59,15 +59,17 @@ export const pop = {
     slam: { ease: 'spring(320,20)', dur: 0.16, scale: 1.6 },
     pop: { ease: 'spring(260,16)', dur: 0.28, scale: 0.6 },
     settle: { ease: 'spring(200,22)', dur: 0.3 },
+    letters: null, // pop is a stack: it sets its own words, a statement entrance would not be read
+    lines: null,
   },
   wordStagger: 0,
   camera: { drift: 0, style: 'locked' },
   // every registered cut but `ripple` may be named; the palette is pop's own set, in its order, cutStyle its defaults per cut.
   // `ripple` is parked here: after two revision rounds it still drew no rings on 9:16 and read as a dip to black and a
   // fade (look review gate-cuts-3), so a pop film naming it is refused and desk and cosmos keep it
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
-  cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom'],
+  cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'flood', 'polka-dots', 'glitch-memories', 'cross-zoom'],
   // the motion blur on the cuts that move (engine/cuts/smear.mjs)
   // the punch gets 0.3 s to land and settle (look review gate-cuts-1 P1: 0.2 s read as a 3% nudge)
   // slides and covers smear only when they move across the frame: on the condensed type the blur of a vertical move
@@ -106,6 +108,12 @@ export const pop = {
   captions: 'stack',
   // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units; the bar at
+  // the top of the band, clear of the captions under it
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'top', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs, quote.mjs, compare.mjs, chart.mjs);
   // sizes are units or 1-based scale steps.
   kinds: {
@@ -167,7 +175,7 @@ export const pop = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh',
+    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, flood: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh',
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': 'impact', wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': 'click', pixelize: 'click', 'water-drop': null, erase: null },
     device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
       label: null, focus: null, route: null, numeral: null, sticker: 'pop', sweep: 'whoosh', duotone: null, halftone: null, zoom: 'whoosh',

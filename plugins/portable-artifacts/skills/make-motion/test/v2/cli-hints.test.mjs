@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE } from './helpers/session.mjs';
 import { FLAGS, REMOVED_FLAGS, parseMakeArgs } from '../../scripts/v2/cli.mjs';
+import { noMusicLine, rendersVideo } from '../../scripts/v2/run.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { ACCEPTED_VOICES } from '../../scripts/v2/voice/kokoro.mjs';
 import { requirementsFor } from '../../scripts/lib/requirements.mjs';
@@ -102,6 +103,51 @@ test('parseMakeArgs throws a UsageError that carries the sentence as its hint', 
 
 test('a value that happens to spell a removed flag after --out is not mistaken for it', () => {
   assert.throws(() => parseMakeArgs([FILM, '--out', '--fps']), (err) => err instanceof UsageError && err.hint === undefined);
+});
+
+// ---- --poster takes film time as written (film-time.mjs reads it once the timeline exists) ----
+
+test('--poster keeps its text as written: a number, a shot, shot@anchor or an anchor', () => {
+  for (const time of ['2.5', 'rows', 'rows@end-0.5', 'word:3', 'end-1']) {
+    assert.equal(parseMakeArgs([FILM, '--poster', time]).poster, time);
+  }
+  assert.equal(parseMakeArgs([FILM]).poster, null);
+});
+
+test('--poster with no text is a usage error that lists the forms; --poster-out names --poster <film time>', () => {
+  assert.throws(() => parseMakeArgs([FILM, '--poster', '']), (err) => err instanceof UsageError && /a shot id, <shot-id>@<anchor> or an anchor/.test(err.message));
+  assert.throws(() => parseMakeArgs([FILM, '--poster-out', 'p.png']), (err) => err instanceof UsageError && /--poster <film time>/.test(err.message));
+});
+
+// ---- --no-music renders the film without its music track ----
+
+test('--no-music is a boolean flag: options.noMusic, false without it', () => {
+  assert.equal(parseMakeArgs([FILM, '--no-music']).noMusic, true);
+  assert.equal(parseMakeArgs([FILM]).noMusic, false);
+  assert.ok(FLAGS.includes('--no-music'));
+});
+
+test('--no-music does not go with --outline, --phonemes, --poster, --poster-out, --inspect or --preview', () => {
+  for (const other of [['--outline'], ['--phonemes'], ['--poster', '2'], ['--poster', '2', '--poster-out', 'p.png'], ['--inspect', '2'], ['--preview']]) {
+    assert.throws(() => parseMakeArgs([FILM, '--no-music', ...other]), (err) => err instanceof UsageError && /does not go with/.test(err.message) && err.message.includes('--no-music'), other.join(' '));
+  }
+});
+
+test('the --no-music log line says what the run did: rendered only when a video is, planned otherwise', () => {
+  const lineFor = (...flags) => {
+    const options = parseMakeArgs([FILM, '--no-music', ...flags]);
+    return noMusicLine({ muted: true, renders: rendersVideo(options) });
+  };
+  assert.match(lineFor(), /the film is rendered without its music/);
+  // a slice renders its own (silent) MP4, so it says rendered, as the film does
+  for (const flags of [['--shot', 'a'], ['--range', '0..1']]) assert.match(lineFor(...flags), /the film is rendered without its music/, flags.join(' '));
+  for (const flags of [['--no-render'], ['--sheets-only']]) {
+    const line = lineFor(...flags);
+    assert.doesNotMatch(line, /rendered/, flags.join(' '));
+    assert.match(line, /the film is planned without its music/, flags.join(' '));
+    assert.match(line, /cuts stay where the music put them/, flags.join(' '));
+  }
+  assert.equal(noMusicLine({ muted: false, renders: false }), 'make: --no-music: the film has no music; nothing to leave out');
 });
 
 // ---- Step 1 (c): the voices the validator accepts can be listed ----

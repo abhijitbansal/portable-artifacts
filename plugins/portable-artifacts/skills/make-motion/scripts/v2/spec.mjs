@@ -9,7 +9,7 @@ import { validateMode } from '../../engine/modes/index.mjs';
 import { listedKinds } from '../../engine/looks/index.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { hintRefusals } from './voice/calls.mjs';
-import { buildTimeline } from '../../engine/script/timing.mjs';
+import { NARRATION_SHIFT_MAX, PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
@@ -17,6 +17,7 @@ import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
 import { fieldAt } from '../../engine/assets.mjs';
 import { SpecError, isPlainObject, quote, schemaErrors, srcProblem } from './spec-common.mjs';
 import { cutErrors } from './spec-cuts.mjs';
+import { checkOverlays } from './spec-overlays.mjs';
 import { cutNameOf } from '../../engine/cuts/resolve.mjs';
 import { AUDIO_SCHEMA, CUES_MAX, MUSIC_SCHEMA, VOICE_SCHEMA, checkAudio, checkCueItems, checkMusic, checkVoice, isRecordingVoice, readRecording } from './spec-sound.mjs';
 
@@ -67,6 +68,7 @@ const ROOT_SCHEMA = {
     provenance: { type: 'boolean' }, // false: the MP4 carries no provenance tags (stamp.mjs), as --no-provenance
     loop: { type: 'boolean' }, // true: the review checks the last frame against the first (loop.mjs)
     audio: AUDIO_SCHEMA, // checkAudio: each { src, at? }, src inside the folder
+    overlays: {}, // checkOverlays (spec-overlays.mjs): { logo?: { src, corner? }, progress?: true }, each an overlay the look draws
     vars: {}, // vars.mjs varsErrors checks it, and substitute puts the values in before validation
     voice: VOICE_SCHEMA, // checkVoice: one of the two shapes, a voice that exists
     // Items are not listed: Ajv would walk and report every one of a huge array.
@@ -89,12 +91,20 @@ const ON_ITEM_SCHEMA = {
   },
 };
 
+const NARRATION_SHIFT_SCHEMA = { type: 'number', minimum: 0, maximum: NARRATION_SHIFT_MAX };
+const NARRATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { lead: NARRATION_SHIFT_SCHEMA, trail: NARRATION_SHIFT_SCHEMA },
+};
+
 const SHOT_PROPERTIES = {
   id: { type: 'string' }, // checkShotId shows the allowed spelling
   show: { type: 'string' },
   say: { type: 'string', minLength: 1, maxLength: SAY_MAX },
   hold: { type: 'number', minimum: HOLD_MIN, maximum: HOLD_MAX },
   cut: {}, // a name or { type, direction?, duration?, smear? }: checkCut says what to write
+  narration: NARRATION_SCHEMA, // { lead?, trail? }: narrationErrors says where it cannot work
   on: { type: 'array', maxItems: ON_MAX, items: ON_ITEM_SCHEMA },
 };
 
@@ -275,15 +285,21 @@ function checkNarration(shot, base) {
   return { errors, hasLength };
 }
 
-function checkCut(shot, index, base, ctx) {
+// `outgoing`: the shot before, { id, kind, targets } (see checkShots), the cut's `at` names a target of.
+function checkCut(shot, index, base, ctx, outgoing) {
   if (shot.cut === undefined) return [];
-  return cutErrors(shot.cut, pathJoin(base, 'cut'), { look: ctx.look, first: index === 0, regs: ctx.regs });
+  return cutErrors(shot.cut, pathJoin(base, 'cut'), { look: ctx.look, first: index === 0, regs: ctx.regs, outgoing });
 }
 
-// The root `cut`: every shot after the first takes it when it names none, so it is checked as theirs is.
+// The root `cut`: every shot after the first takes it when it names none, so it is checked as theirs is. Its `at` would name
+// a target of a shot before every shot, so it is refused here and the rest of the cut is judged without it.
 function checkRootCut(spec, ctx) {
   if (spec.cut === undefined) return [];
-  return cutErrors(spec.cut, 'cut', { look: ctx.look, regs: ctx.regs });
+  const hasAt = isPlainObject(spec.cut) && spec.cut.at !== undefined;
+  const cut = hasAt ? Object.fromEntries(Object.entries(spec.cut).filter(([key]) => key !== 'at')) : spec.cut;
+  const errors = cutErrors(cut, 'cut', { look: ctx.look, regs: ctx.regs });
+  const atError = { path: 'cut.at', message: '"at" names a target of the shot before, so it goes on a shot\'s own cut, not the film\'s' };
+  return hasAt ? [...errors, atError] : errors;
 }
 
 // The shot as the timeline sees it, so anchors resolve against real word times.
@@ -300,7 +316,40 @@ function timelineShot(shot, ctx) {
 const LENGTHEN = 'anchor it inside the shot, or lengthen the shot';
 const LENGTHEN_MEASURED = 'anchor it inside the shot, or end its say with a pause such as (0.5) to lengthen it';
 
-function checkAnchor(item, at, entry, { fps, inside = true, measured = false }) {
+const WORD_ANCHOR_RE = /^(word|sentence):/;
+// A word heard this close to the shot's end (a seam, float noise in the sums) is heard after it
+const SEAM_EPSILON = 1e-6;
+
+// Does the word or sentence anchor `ref` name a word for which `isMarked(word)` holds? Asked of the entry with each word's
+// `start` swapped for a marker (1 when marked, else 0), so the anchor grammar, offsets included, stays anchors.mjs's own:
+// the marked read less the unmarked one is the named word's marker, whatever offset the anchor adds.
+const marked = (entry, markOf) => ({
+  ...entry,
+  words: entry.words.map((w) => ({ ...w, start: markOf(w) })),
+  sentences: entry.sentences.map((s) => ({ ...s, start: markOf(entry.words[s.first]) })),
+});
+const namesWord = (ref, entry, isMarked) => anchorSeconds(ref, marked(entry, (w) => (isMarked(w) ? 1 : 0)))
+  - anchorSeconds(ref, marked(entry, () => 0)) > 0;
+
+const anchoredThing = (ref) => (String(ref).startsWith('sentence:') ? 'sentence' : 'word');
+
+// The error for a word or sentence anchor on a word a J or L cut leaves outside its shot, or null: `shifted` says the
+// timeline has a J or L cut (a shot carries narrationAt). The word is judged, not the anchor plus its offset (a generic
+// span check does that). A word the lead made heard before the shot begins is shown from its first frame, after it was
+// heard; a word the trail left behind is shown from the edge of the shot it is heard after (its shown time is clamped to
+// the shot), so an anchor on it names the shot's last frame.
+function shiftedAnchorError(item, at, entry) {
+  if (!WORD_ANCHOR_RE.test(String(item.at))) return null;
+  const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
+  const name = `${quote(item.at)} names a ${anchoredThing(item.at)} that is heard`;
+  if (namesWord(item.at, entry, (w) => w.soundStart < 0)) {
+    return { path: pathJoin(at, 'at'), message: `${name} before the shot has begun (the shot runs from ${span}); anchor a later word, or shorten the narration "lead"` };
+  }
+  if (!namesWord(item.at, entry, (w) => w.soundStart >= entry.duration - SEAM_EPSILON)) return null;
+  return { path: pathJoin(at, 'at'), message: `${name} after the shot has ended (the shot runs from ${span}); anchor an earlier word, or shorten the narration "trail"` };
+}
+
+function checkAnchor(item, at, entry, { fps, inside = true, measured = false, shifted = false }) {
   if (entry === null || item.at === undefined) return [];
   let seconds;
   try {
@@ -310,6 +359,8 @@ function checkAnchor(item, at, entry, { fps, inside = true, measured = false }) 
     return [{ path: pathJoin(at, 'at'), message: err.message }];
   }
   if (!inside) return [];
+  const shiftedError = shifted ? shiftedAnchorError(item, at, entry) : null;
+  if (shiftedError !== null) return [shiftedError];
   const slack = 1 / fps;
   if (seconds >= -slack && seconds <= entry.duration + slack) return [];
   const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
@@ -389,7 +440,7 @@ function checkOn(shot, base, ctx, { entry, targets, kindName, kind }) {
   return shot.on.slice(0, ON_MAX).flatMap((item, j) => {
     if (!isPlainObject(item)) return [];
     const at = pathJoin(pathJoin(base, 'on'), j);
-    const anchor = checkAnchor(item, at, entry, { fps: ctx.fps, inside: !ctx.voiced });
+    const anchor = checkAnchor(item, at, entry, { fps: ctx.fps, inside: !ctx.voiced, shifted: ctx.shifted?.timeline !== undefined });
     return [...anchor, ...checkDevice(item, at, ctx, kind), ...checkTarget(item, at, targets, kindName)];
   });
 }
@@ -401,12 +452,13 @@ function checkOn(shot, base, ctx, { entry, targets, kindName, kind }) {
  */
 export function anchorSpanErrors(film, timeline) {
   const measured = timeline.timed === 'measured';
+  const shifted = timeline.shots.some((s) => s.narrationAt !== undefined);
   return film.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => {
     if (!isPlainObject(shot) || !Array.isArray(shot.on)) return [];
     const entry = timeline.shots[index] ?? null;
     const base = pathJoin(pathJoin('shots', index), 'on');
     return shot.on.slice(0, ON_MAX).flatMap((item, j) => (
-      isPlainObject(item) ? checkAnchor(item, pathJoin(base, j), entry, { fps: timeline.fps, measured }) : []
+      isPlainObject(item) ? checkAnchor(item, pathJoin(base, j), entry, { fps: timeline.fps, measured, shifted }) : []
     ));
   });
 }
@@ -459,21 +511,25 @@ function checkKindRules(shot, base, ctx, { kind, entry, shapeIsValid }) {
   }));
 }
 
-function checkShot(shot, index, ctx, seen) {
+// `carry.outgoing` is the shot before as a cut's `at` sees it; this shot leaves its own there for the next.
+function checkShot(shot, index, ctx, seen, carry) {
   const base = pathJoin('shots', index);
   const resolved = resolveKind(shot, base, ctx.regs);
   const check = resolved.kind ? shotCheckerFor(resolved.name, resolved.kind) : checkBaseShot;
   const bounded = boundedShot(shot);
   const shape = [...schemaErrors(check, bounded, base), ...onCountErrors(shot, base)];
   const narration = checkNarration(shot, base);
-  const entry = narration.hasLength ? timelineShot(shot, ctx) : null;
+  // a film with a J or L cut is drawn on its shifted timeline, so its anchors are judged there
+  const entry = narration.hasLength ? (ctx.shifted?.timeline?.shots[index] ?? timelineShot(shot, ctx)) : null;
   const targets = kindTargets(resolved.kind, resolved.name, bounded, shape.length === 0);
+  const outgoing = carry.outgoing;
+  carry.outgoing = typeof shot.id === 'string' && resolved.kind ? { id: shot.id, kind: resolved.name, targets } : null;
   return [
     ...resolved.errors,
     ...shape,
     ...checkShotId(shot, base, seen),
     ...narration.errors,
-    ...checkCut(shot, index, base, ctx),
+    ...checkCut(shot, index, base, ctx, outgoing),
     ...checkOn(shot, base, ctx, { entry, targets, kindName: resolved.name, kind: resolved.kind }),
     ...checkSrcFields(shot, base, resolved.kind, ctx.specDir),
     // A voiced film's kind rules run without times here (their timing rules are skipped) and with measured ones after
@@ -486,9 +542,80 @@ function checkShot(shot, index, ctx, seen) {
 function checkShots(spec, ctx) {
   if (!Array.isArray(spec.shots)) return [];
   const seen = new Map();
-  return spec.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => (
-    isPlainObject(shot) ? checkShot(shot, index, ctx, seen) : [{ path: pathJoin('shots', index), message: 'must be object' }]
-  ));
+  const carry = { outgoing: null };
+  return spec.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => {
+    if (isPlainObject(shot)) return checkShot(shot, index, ctx, seen, carry);
+    carry.outgoing = null;
+    return [{ path: pathJoin('shots', index), message: 'must be object' }];
+  });
+}
+
+// --- narration lead and trail (J and L cuts) ---
+
+// The seconds a shot's narration.lead or .trail holds, 0 when it is not a number from 0 to NARRATION_SHIFT_MAX (the
+// schema reports that).
+function shiftOf(shot, key) {
+  const seconds = isPlainObject(shot) && isPlainObject(shot.narration) ? shot.narration[key] : undefined;
+  return typeof seconds === 'number' && seconds > 0 && seconds <= NARRATION_SHIFT_MAX ? seconds : 0;
+}
+
+// What a shot's `narration` cannot do where it is: each error at the field that cannot work.
+function narrationFieldErrors(shots, recording) {
+  return shots.flatMap((shot, index) => {
+    if (!isPlainObject(shot) || !isPlainObject(shot.narration)) return [];
+    const at = pathJoin(pathJoin('shots', index), 'narration');
+    if (shot.say === undefined) return [{ path: at, message: 'a shot with no "say" has no narration to move; remove "narration"' }];
+    if (recording) return [{ path: at, message: 'a recording sets where its own words fall; "narration" works with a made voice or with no voice' }];
+    const errors = [];
+    if (index === 0 && shiftOf(shot, 'lead') > 0) {
+      errors.push({ path: pathJoin(at, 'lead'), message: 'the first shot has nothing before it for its narration to start over; remove "lead"' });
+    }
+    if (index === shots.length - 1 && shiftOf(shot, 'trail') > 0) {
+      errors.push({ path: pathJoin(at, 'trail'), message: 'the last shot has nothing after it for its narration to run over; remove "trail"' });
+    }
+    if (index > 0 && shiftOf(shot, 'lead') > 0 && shiftOf(shots[index - 1], 'trail') > 0) {
+      errors.push({ path: pathJoin(at, 'lead'), message: `shot "${shots[index - 1].id}" already trails over this cut (its narration.trail); keep one of the two` });
+    }
+    return errors;
+  });
+}
+
+/**
+ * The film's estimated timeline when some shot has a narration shift: { timeline }, or { errors } when the shift leaves a
+ * shot under 1 s or under its cut (a PlacementError's). null for a film with no shift, one whose narration field is refused
+ * (`field`, its narrationFieldErrors: that error is the only one), and for one not well-formed enough to be timed: any
+ * other failure of the timeline is another check's own error (a bad say, hold, mode or cut is reported where it is), and a
+ * film with none of them builds, as loadFilm does next. The film is then drawn on this timeline, so its anchors are
+ * judged on it (checkShot).
+ */
+function shiftedEstimate(spec, ctx, field) {
+  if (ctx.mode === null || ctx.fps === null || !saysReady(spec)) return null;
+  if (!spec.shots.some((shot) => shiftOf(shot, 'lead') > 0 || shiftOf(shot, 'trail') > 0)) return null;
+  // a refused field is the only error: its film is not drawn, so its anchors are not judged on the timeline it would make
+  if (field.length > 0) return null;
+  // only the valid seconds reach the timeline: a refused value is reported by the schema, not twice
+  const shots = spec.shots.map((shot) => (isPlainObject(shot.narration)
+    ? { ...shot, narration: { lead: shiftOf(shot, 'lead'), trail: shiftOf(shot, 'trail') } }
+    : shot));
+  try {
+    return { timeline: buildTimeline({ ...spec, shots }, { fps: ctx.fps, modes: ctx.regs.modes, cuts: ctx.regs.cuts }) };
+  } catch (err) {
+    return err instanceof PlacementError ? { errors: err.errors } : null;
+  }
+}
+
+/**
+ * The errors of the `narration` fields of `spec`'s shots, each { path, message }: a lead on the first shot, a trail on
+ * the last, narration on a shot with no say or in a film narrated by a recording, a lead and a trail on the same cut;
+ * and, when none of those fired, a shift that leaves a shot too short on the estimated timeline. `ctx.narrationField` and
+ * `ctx.shifted` are what validateFilm worked out once; without them they are worked out here.
+ */
+export function narrationErrors(spec, ctx) {
+  if (!Array.isArray(spec.shots)) return [];
+  const field = ctx.narrationField ?? narrationFieldErrors(spec.shots.slice(0, SHOTS_MAX), isRecordingVoice(spec.voice));
+  if (field.length > 0) return field;
+  const shifted = ctx.shifted === undefined ? shiftedEstimate(spec, ctx, field) : ctx.shifted;
+  return shifted?.errors ?? [];
 }
 
 // --- match cuts ---
@@ -549,7 +676,9 @@ function checkRecording(spec, specDir) {
 function collectErrors(spec, specDir, regs) {
   if (!isPlainObject(spec)) return [{ path: '', message: NOT_OBJECT_MESSAGE }];
   if (Array.isArray(spec.scenes) || spec.version === 1) return [{ path: '', message: V1_MESSAGE }];
-  const { ctx, errors: settings } = resolveContext(spec, specDir, regs);
+  const { ctx: base, errors: settings } = resolveContext(spec, specDir, regs);
+  const narrationField = Array.isArray(spec.shots) ? narrationFieldErrors(spec.shots.slice(0, SHOTS_MAX), isRecordingVoice(spec.voice)) : [];
+  const ctx = { ...base, narrationField, shifted: shiftedEstimate(spec, base, narrationField) };
   return [
     ...checkVersion(spec),
     ...schemaErrors(checkRootSchema, spec, ''),
@@ -561,8 +690,10 @@ function collectErrors(spec, specDir, regs) {
     ...checkCueItems(spec),
     ...checkAccent(spec),
     ...settings,
+    ...checkOverlays(spec, base),
     ...checkRootCut(spec, ctx),
     ...checkShots(spec, ctx),
+    ...narrationErrors(spec, ctx),
     ...checkMatchCuts(spec, regs),
   ];
 }

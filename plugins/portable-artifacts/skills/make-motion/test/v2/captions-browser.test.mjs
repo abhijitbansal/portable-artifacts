@@ -77,30 +77,52 @@ before(() => {
 });
 after(() => rmSync(exampleDir, { recursive: true, force: true }));
 
+// The composition findings (W2 Task 3) an example gets, by "<kind> <look> <format>", as "<kind> <rule>": the same sparse frames
+// review-browser.test.mjs names, plus one. The zone the caption layout puts its captions in is left out of what is measured
+// (ctx.captionZone), which removed the screen pop 16:9 entry that was flagged only with captions on. The desk timeline 16:9
+// still fires with captions on (45% of the height bare once the zone is out; 39% without captions, under desk's band 0.40),
+// so it stays listed: the shorter side makes a bare band at the top score higher (frame.mjs safeLessCaptions).
+const SPARSE = ['creative dead-space'];
+const KNOWN = Object.freeze({
+  // (desk diagram 16:9 is a finding without captions, at 40%, and not with them: it sits on the edge of desk's band)
+  'free desk 16:9': SPARSE, 'number desk 16:9': SPARSE, 'free desk 9:16': SPARSE,
+  'number desk 9:16': SPARSE, 'timeline desk 9:16': SPARSE, 'free pop 16:9': SPARSE, 'diagram pop 16:9': SPARSE,
+  'free pop 9:16': SPARSE, 'list pop 9:16': SPARSE,
+  'timeline desk 16:9': SPARSE,
+});
+
 for (const [mode, look, format] of EXAMPLE_COMBOS) {
   for (const entry of listEntries('kinds')) {
-    test(`the ${entry.name} example with captions on in ${look} at ${format} has no review finding`, async (t) => {
+    test(`the ${entry.name} example with captions on in ${look} at ${format} has only its known review findings`, async (t) => {
       const on = entry.example.on?.map((item) => ({ ...item, do: look === 'pop' ? 'underline' : item.do }));
       const film = { version: 2, mode, look, format, fps: FPS, seed: 3, captions: true, shots: [{ ...entry.example, ...(on ? { on } : {}) }] };
       const session = await sessionOrNull(film, { specDir: exampleDir });
       if (!session) { t.skip('no browser'); return; }
       t.after(() => session.close());
       const findings = await reviewFilm({ session });
-      assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule}: ${f.message}`), []);
+      assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule}`), KNOWN[`${entry.name} ${look} ${format}`] ?? [], findings.map((f) => f.message).join('\n'));
       assert.deepEqual(session.errors, []);
     });
   }
 }
 
+// The composition findings of the gate films, as "<kind> <rule> <shot>" (frames viewed, .scratch/motion-steals-w2/t3/png-gate-*):
+// gate-desk has none (its left-flush statements leave 35 to 36% of the width bare and read filled; desk's band is 0.40); pop
+// `hook` and `local` are a three-line block with 39% of the height bare below it (top-heavy, they read sparse).
+const GATE_KNOWN = Object.freeze({
+  'gate-desk': [],
+  'gate-pop': ['creative dead-space hook', 'creative dead-space local'],
+});
+
 for (const [name, extra] of [['gate-desk', { captions: true }], ['gate-pop', { captions: true }]]) {
-  test(`${name} with captions on has no review finding`, async (t) => {
+  test(`${name} with captions on has only its known review findings`, async (t) => {
     const film = gate(name, extra);
     const session = await open(t, film); if (!session) return;
     const proof = buildTimeline(film, { fps: FPS }).shots.find((s) => s.id === 'proof');
     const snapshot = await session.page.evaluate((i) => window.__snapshot(i), Math.round((proof.start + 0.3) * FPS));
     assert.ok(captionTexts(snapshot).length > 0, 'the clipping is captioned');
     const findings = await reviewFilm({ session });
-    assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule} at ${f.t}: ${f.message}`), []);
+    assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule} ${f.shot}`), GATE_KNOWN[name], findings.map((f) => f.message).join('\n'));
     assert.deepEqual(session.errors, []);
   });
 }

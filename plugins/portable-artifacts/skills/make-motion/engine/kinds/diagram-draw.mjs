@@ -6,7 +6,7 @@
 // other nodes to `dim` once the diagram is built (desk) or keeps the highlighted node lit (pop). Every reveal is a step on
 // its time (arrivals.mjs). The title: a display heading three times the labels (desk) or the look's tag (pop). Pure.
 import { registries } from '../registry.mjs';
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { colourOf, polyline, landing, isHand, softRoundedRect, roundedRect } from '../devices/shared.mjs';
@@ -186,7 +186,7 @@ function storyOrder(shot, { title, boxes, edges, labels }) {
 
 // The first node's label carries the edge labels left out (the frame review's "left out its ..." finding).
 function markDropped(group, dropped) {
-  const mark = (n) => (n.type === 'text' ? node('text', n.id, { ...n.props, dropped }, { tracks: n.tracks, wordTracks: n.wordTracks }) : node(n.type, n.id, n.props, { tracks: n.tracks, children: n.children.map(mark) }));
+  const mark = (n) => (n.type === 'text' ? node('text', n.id, { ...n.props, dropped }, { tracks: n.tracks, ...textTracksOf(n) }) : node(n.type, n.id, n.props, { tracks: n.tracks, children: n.children.map(mark) }));
   return mark(group);
 }
 

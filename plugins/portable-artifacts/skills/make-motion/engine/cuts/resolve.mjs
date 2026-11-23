@@ -12,8 +12,8 @@ import './index.mjs';
 
 /** The cut a shot gets when neither it nor the film names one. */
 export const DEFAULT_CUT = 'cut';
-/** The keys a cut object may hold. */
-export const CUT_KEYS = Object.freeze(['type', 'direction', 'duration', 'smear']);
+/** The keys a cut object may hold. `at` (a target of the shot before) is a shot's own, never a look's cutStyle. */
+export const CUT_KEYS = Object.freeze(['type', 'direction', 'duration', 'smear', 'at']);
 /** The range of a cut's `duration` option, in seconds (the version 1 limits). */
 export const CUT_DURATION = Object.freeze({ min: 0.1, max: 2 });
 
@@ -28,8 +28,10 @@ const asObject = (value) => (typeof value === 'string' ? { type: value } : (valu
  *   look (its cutStyle gives defaults; null skips them), the film's root `cut`, the length of the shot the cut opens (the
  *   window is clamped to it) and the cuts registry (default the shared one)
  * @returns {{ name: string, entry: object, family: 'node' | 'layer' | 'shader', direction: string | null, dur: number,
- *   smear: boolean, incomingOnly: boolean }} frozen. Defaults, in order: the shot's value, the root cut (when it names the
- *   same cut), look.cutStyle[name], the registry entry. Throws for an unregistered name (the validator reports first).
+ *   smear: boolean, incomingOnly: boolean, at: string | null }} frozen. Defaults, in order: the shot's value, the root cut
+ *   (when it names the same cut), look.cutStyle[name], the registry entry. `at`, the target of the shot before that the cut
+ *   opens from, is the shot's own value only: never the root cut's or the look's. Throws for an unregistered name (the
+ *   validator reports first).
  */
 export function resolveCut(value, { look = null, rootCut, shotDuration, cuts = registries.cuts } = {}) {
   const own = asObject(value), root = asObject(rootCut);
@@ -47,6 +49,7 @@ export function resolveCut(value, { look = null, rootCut, shotDuration, cuts = r
     dur: Number.isFinite(shotDuration) ? Math.min(full, shotDuration) : full,
     smear: entry.smearable === true && pick('smear') === true,
     incomingOnly: entry.incomingOnly === true,
+    at: typeof own?.at === 'string' ? own.at : null,
   });
 }
 
@@ -74,6 +77,16 @@ function smearProblem(value, name, entry, cuts) {
   return value && entry.smearable !== true ? `the "${name}" cut takes no smear; the cuts that do: ${smearableNames(cuts).join(', ')}` : null;
 }
 
+// A shot's own cut only (a look's cutStyle takes no `at`): the target of the shot before an iris or a zoom opens from.
+// The cuts that can are those whose registry entry says `origin: true`.
+function atProblem(value, name, entry, cuts) {
+  if (entry.origin !== true) {
+    const origins = cuts.names().filter((other) => cuts.get(other).origin === true);
+    return `the "${name}" cut takes no "at"; the cuts that open from a point: ${origins.join(', ')}`;
+  }
+  return typeof value === 'string' && value !== '' ? null : `must be the name of a target of the shot before (the names an "on" event's "target" takes there), got ${shown(value)}`;
+}
+
 // a look's cutStyle only (engine/cuts/smear.mjs smearsAlong): the axes the cut's smear runs along
 function smearAxesProblem(value, name, entry, cuts) {
   const listed = Array.isArray(value) && value.length > 0 && value.every((axis) => SMEAR_AXES.includes(axis)) && new Set(value).size === value.length;
@@ -97,7 +110,7 @@ function easeProblem(value, name) {
  * What is wrong with the options of registered cut `name` in `options` (a cut object, or a look's cutStyle entry), as
  * [{ key, message }]: a key outside `keys` (with a did-you-mean), a direction outside the cut's list or on a cut with
  * none, a duration outside CUT_DURATION or on the hard cut, smear that is not a boolean or is true on a cut that cannot
- * smear. The validator (scripts/v2/spec-cuts.mjs) and validateLook (engine/looks) both report through it.
+ * smear, an `at` that is not a name or sits on a cut that opens from no point. The validator (scripts/v2/spec-cuts.mjs) and validateLook (engine/looks) both report through it.
  */
 export function cutOptionProblems(options, name, { keys = CUT_KEYS, cuts = registries.cuts } = {}) {
   const entry = cuts.get(name);
@@ -111,6 +124,7 @@ export function cutOptionProblems(options, name, { keys = CUT_KEYS, cuts = regis
     ['smear', (v) => smearProblem(v, name, entry, cuts)],
     ['smearAxes', (v) => smearAxesProblem(v, name, entry, cuts)],
     ['ease', (v) => easeProblem(v, name)],
+    ['at', (v) => atProblem(v, name, entry, cuts)],
   ];
   // a key outside `keys` is reported once, as unknown (smearAxes in a film's cut object), not checked as well
   const known = checks.filter(([key]) => keys.includes(key) && options[key] !== undefined)
@@ -192,5 +206,6 @@ function sheetUnseen(film, look, index) {
  */
 export function explicitCut(cut) {
   if (cut.entry.dur === 0) return Object.freeze({ type: cut.name });
-  return Object.freeze({ type: cut.name, ...(cut.direction === null ? {} : { direction: cut.direction }), duration: cut.dur, smear: cut.smear });
+  const origin = cut.at === null ? {} : { at: cut.at };
+  return Object.freeze({ type: cut.name, ...(cut.direction === null ? {} : { direction: cut.direction }), duration: cut.dur, smear: cut.smear, ...origin });
 }

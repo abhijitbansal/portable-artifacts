@@ -79,11 +79,11 @@ export function streamRotation(stream) {
  * index, attachedPic }], videoIndex }, or { format: null, error } when it does not open (a format off the list, a file that
  * is not a clip), with `codecRefused` when ffprobe stopped at a stream whose decoder is not on the list.
  */
-export async function probeClip({ file, ffprobe, signal }) {
+export async function probeClip({ file, ffprobe, signal, timeout = PROBE_TIMEOUT_MS }) {
   const binary = ffprobe ?? (await tools()).ffprobe;
   const args = ['-v', 'error', '-show_entries', 'format=format_name,duration:stream=index,codec_type,codec_name,width,height:stream_side_data=rotation:stream_tags=rotate:stream_disposition=attached_pic', '-of', 'json', ...clipInput(file)];
-  const result = await run(binary, args, { signal, timeout: PROBE_TIMEOUT_MS });
-  if (result.killed) throw Object.assign(new Error(`ffprobe did not finish reading ${path.basename(file)}`), { hint: FFMPEG_HINT });
+  const result = await run(binary, args, { signal, timeout });
+  if (result.killed) throw Object.assign(new Error(`ffprobe did not finish within ${timeout / 1000} s reading ${path.basename(file)}`), { hint: FFMPEG_HINT });
   if (result.code !== 0) return { format: null, error: lastLine(result.stderr).replace(`${file}: `, '') || `ffprobe exited ${result.code}`, codecRefused: WHITELIST_REFUSAL.test(result.stderr) };
   const parsed = JSON.parse(result.stdout);
   const streams = (parsed.streams ?? []).map((s) => {

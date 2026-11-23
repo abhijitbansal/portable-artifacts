@@ -6,6 +6,140 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-22
+
+A make-motion release: films are tagged and converted as BT.709, the review says more about how a frame is composed and
+how cuts repeat, there are tools to look at one frame, one shot or one look, and an optional second reviewer. Layer and
+shader cuts that used to freeze the shot they leave now keep it moving. make-explainer gains two small checks. Nothing in make-dashboard,
+make-diagram or make-scene changes, apart from the agent-file item their doctors share (below).
+
+### Behaviour changes to know about
+
+- **make-motion: colour is converted and tagged BT.709.** Every MP4 now carries `bt709` on colour space, primaries and
+  transfer, in limited (`tv`) range, on both capture paths (fast and `--exact`), and the picture is converted from the
+  capture's matrix to BT.709 instead of only being range-scaled. Before, the fast path wrote `bt470bg` and the exact path
+  wrote no tags, and a player that assumes BT.709 for HD showed shifted colours: a flat red patch whose red is 214 read
+  as 227. It reads 214 now. A new test decodes four flat patches as BT.709 and holds each within 2 levels of its fill. A
+  film you rendered before keeps its old tags until you render it again; no spec changes.
+- **make-motion: new creative findings, and they never fail a run.** `dead-space` (an empty band that reaches 35% of the
+  safe area's width or height; 40% in `desk` and `ledger`) and `scale-contrast` (a hero that leads the next element but
+  fills under half the frame) judge each shot's resting frame, at most 3 a film. `cut-variety` (over two thirds of a
+  film's cuts are one type) and `sameness` (three or more shots in a row of one kind, cut or move) judge the whole
+  film (a film keeps the first 2 findings of each outline rule, and the kind, cut and move runs of `sameness` count
+  apart). `overlay-covers` (text under the logo) and `poster-read` (the poster's biggest line is too small
+  as a thumbnail) cover the new overlay and the poster. All are `creative`: `ok` is unchanged by them, so a film that
+  was valid before is still valid and may print a few more notes. Every finding now carries the `rule` that raised it,
+  and `suggest` where the rule has a fix value (`references/rules.md` lists every rule, `references/calibration.md` says
+  how the thresholds were chosen).
+- **make-motion: a layer or shader cut keeps the outgoing shot moving.** `crossfade`, `fade`, `wipe`, `iris`, `zoom`,
+  `blur`, the new `flood` and every shader cut (`ripple`, `cube`, `page-curl`, and the rest) now draw the shot they leave
+  with its camera and animated fields still running, instead of a frozen last frame (a video clip in it holds its last
+  frame). A node cut (`cut`, `slide`, `cover`, `punch`, `match`, `erase`) and every cut in a hand-drawn look still hold
+  it. `--list cuts` says which is which. A film that uses these cuts looks different when rendered again.
+- **make-motion: a render fails, and keeps no file, when the finished file is short of frames or blank.** After the
+  encode the file is decoded and checked: `render check: the finished file holds N frames, the timeline has M`, or `render
+  check: the finished file's picture is blank: none of its N frames has any detail`. Both are errors, not findings, and
+  neither leaves an MP4. A stage that gives no answer for 120 s stops the render with `render stalled in the <stage>
+  stage at frame N of M`, followed by the last page messages. The report gains `timing` (`drawMs`, `captureMs`,
+  `encodeMs`, `checkMs`).
+- **make-motion: some looks draw statements differently.** A statement of six words or fewer takes more of the frame in
+  `desk`, `cosmos` and `keynote`; a `cosmos` number sits centred with its label down the frame; a `desk` statement
+  brings each line in as one block, and a `cosmos` statement brings each word in letter by letter. These are the looks'
+  own data, not film fields; the two entrances never play in `viral`, which reads from frame 0. A film in these looks
+  changes when rendered again.
+- **make-motion: `--json` reports absolute paths** for `output`, `sheets`, `board`, `poster.file`, `inspect`,
+  `subtitles.file` and `compare.file` on a single-film run, so a reviewer that can only read files opens a sheet from any
+  folder. `--batch --json` rows keep the paths as given.
+- **The doctor's agent-file item (every skill) knows the optional `motion-reviewer.md`.** It writes the file for Claude
+  Code once you agree, and rewrites an older copy of ours only after copying it to `motion-reviewer.md.bak`. A file you
+  wrote, a newer one, or a symbolic link is left alone, and `install.mjs --force` never replaces one of those unless you
+  also pass `--replace-foreign`.
+- **make-motion: a picture the browser cannot decode now exits 1, not 2.** It used to stop the run as machine trouble
+  (exit 2, with a hint to replace the file with a PNG). It is now a `mechanical` finding at the path that names the
+  picture (`shots[i].src`, `overlays.logo.src` and the like), so the report has `ok: false` and the exit code is 1, as for
+  a picture that is missing or outside the film's folder. The message says to replace it with a PNG, JPEG, WebP or GIF.
+  A picture the preview server fails to serve (`HTTP <n>`) is still exit 2. A script that treats exit 2 as "the machine,
+  retry" and exit 1 as "fix the film" now fixes the film for this case.
+
+### New in make-motion
+
+- **Doctrine and colour (W1).** `SKILL.md` is a router and the detail moved into `references/`. `story.md` plans a film
+  around one thing, drafts three storylines as three films and picks one, and ends with the teaching check; `tells.md`
+  lists what gives each look away, with the case where each tell is right; `types/explainer.md`, `types/data.md` and
+  `types/vertical.md` cover the three kinds of film; `reviewing.md` ranks review notes P0 to P2, never scores, asks the
+  pictures-alone question and names four delivery lines; `broll.md` covers a clip a generator made; `music.md` holds the
+  beat notes. The intake recommends captions in `viral` and folds in the film's type. Ideas this release took from
+  HyperFrames, Rune and others are credited in `THIRD_PARTY_NOTICES.md`; no code is ported.
+- **Composition and cut craft (W2).** The `dead-space` and `scale-contrast` findings; look data `fill` tunes them, and
+  `fillShort` lets a short statement take more of the frame. A shot's `narration` takes `{ "lead", "trail" }` (0 to 1.5 s):
+  the voice starts before the shot's picture, or runs into the next one, and the cut moves, not the sound; captions follow
+  what is heard. A cut's `at` (`iris`, `zoom` and the new `flood`) opens from a named part of the shot it leaves, such as the
+  button just clicked, instead of the centre. `flood` paints a colour as a growing circle over the outgoing shot, then opens
+  the next shot from the same point. Every look accepts it; only `pop` and `poster` list it among their preferred cuts.
+- **Inspection tools (W3).** `references/rules.md` is the one list of every rule, kept equal to the code by a test.
+  Film time names a moment (`2.5`, `rows`, `rows@end-0.5`, `rows@word:0`, `word:12`, `end-1`) and `--poster` reads it.
+  `--inspect <film time>` writes one frame as a PNG and a JSON dump of its nodes. `--shot <id>` and `--range
+  <from>..<to>` review and write the sheets of one slice, plus a silent MP4 of it that is frame-equal to the full render.
+  `scripts/locate.mjs` turns a target you can see in a picture into the `[x, y, w, h]` a `clipping` shot's `regions` takes
+  (`--cols`, `--rows`, `--cells`, `--out`, `--json`). See `references/tools.md`.
+- **Shorts, sound and overlays (W4).** `--subtitles srt|vtt --subtitle-words` writes one cue per word. A film's
+  `overlays` field puts a `logo` (with a `corner`) and a `progress` bar over the film, after every cut. A sound cue that
+  repeats rotates through three takes. `--no-music` renders a second delivery without the music track while the cuts
+  stay where the music put them.
+- **Evidence loop II (W5).** `make.mjs film.json --sheets-only --estimated` draws every shot with no voice made and writes a
+  board of stills; `storyboard.mjs film.json --out plan.json --stills <name>.sheets/board` shows it on the plan page, marked
+  as estimated. The preview page reloads when you edit the film and comes back to the same frame and the same play or
+  pause state. On Claude Code the optional `motion-reviewer` agent (read-only, `model: opus`) reads a film's spec and
+  sheets and returns ranked notes as JSON. On 2026-11-22 it found 12 of 12 planted defects in three runs and failed none of
+  three runs of a clean film; every planted defect was also readable from the spec, so that shows it finds what the spec
+  and narration state, not that it reads pictures.
+- **Type and look (W6).** A look's moves take `cubic-bezier(x1,y1,x2,y2)` and `steps(n)` eases beside the named ones, and
+  two new entrance moves, `letters` and `lines`, are used by `cosmos` and `desk`. `--list moves` prints each move's
+  `bounce` and its `visible` length. `--compare-looks <shot-id>` draws one shot in every look that can draw it on one
+  PNG (`<name>.looks.png`). `scripts/measure.mjs <video>` turns a reference video on your machine into measured numbers
+  (duration, size, cuts, shot lengths, loudness) and guessed ones (`mode`, `pace`), copying nothing from it.
+
+### New in make-explainer
+
+- **A page review names its screenshots (E1).** The agent names the PNG each defect was seen in, and the report lists the
+  screenshots viewed; a defect described from memory is not reported as seen.
+- **A section-sameness warning (E2).** `validate.mjs` warns when three or more sections of one type run in a row, at the
+  run's third section. It is a warning: it never blocks a build and `--strict` does not turn it into an error. Runs of
+  `decision`, `approval` and `question` sections are left alone, as plans use them in runs. The `plan` scaffold now keeps
+  every workstream's tasks in one `steps` section.
+
+### Measured and dropped
+
+W0 measured these before any code changed, against thresholds written down first. Each was kept off the plan when the
+number said so.
+
+- **No beat audit.** The audio of a finished MP4 (a music file with nine known clicks) sat 0.042 ms from where it
+  was planned, the median of nine onsets decoded as a player decodes, against a 20 ms bar.
+- **No motion gate.** Prototype jump and pop-in checks (never shipped as rules) raised 9, 0 and 135 findings on films in
+  the `pop`, `desk` and `marker` looks; 0 of the 7 events viewed were defects.
+- **No raw capture path.** The fastest of three capture arms took 0.808 of today's time over three interleaved rounds,
+  short of the 0.80 bar, and every arm's worst pixel difference was the same (75 levels). Capture stays as it is. In a fast
+  render of `kinds-desk` capture was 55.6% of 74.2 s, drawing 42.6%, encoding 1.4%.
+- **No in-shot motion blur.** A `punch` cut's separate copies, 35 px apart at most with a smear, do not read as a strobe.
+- **No half-size draft for slices.** The validator rejects a root `size`, so a draft would need a schema change.
+- **Checked, nothing to do.** Held-frame reuse (5 of 5 checks pass: a held frame is pixel-equal to the one before it), text shimmer under a slow
+  drift (0.229% spread against 2%), gradient banding (no steps visible) and a pixel pass over finished files (0 defects in
+  11 events viewed; the lowest picture detail 47.21 against the 1.5 blank limit).
+
+### Films and site
+
+- **A how-it-works film, the 30th example.** `references/examples/v2/how-it-works.json` (88.0 s, `desk`, voiced) shows
+  how a film is made: the director and the cheaper operator, a closed spec, the review's checks, the looks, the vertical
+  short and the local voice, with its `how-it-works.review.md`. The site's new first sheet, "How it works", plays a 12 s
+  muted loop of it and links the full film and its spec; the register lists it (R-01.8).
+- **Eight gallery films rebuilt** for the new colour, cuts and entrances, each probing `bt709`/`tv`: the pro showreel
+  (49.1 s, from 46.8 s; it now opens on a problem shot, then the dashboard), the viral showreel (23.8 s, from 22.7 s,
+  with a word-timed `video.vtt`), `whats-new` (113.0 s), and the `cosmos` (16.9 s, from 15.0 s), `ledger`, `poster`,
+  `keynote` and `marker` look films. Posters, plate loops and thumbnails were rebuilt from them.
+- **The local voice.** The voiced films were rendered with the Kokoro voice made on the build machine. No agent has
+  listened to the audio of any rebuilt film; the reports say only what the run printed.
+- The plugin README's preview GIF shows the new opening of the pro reel.
+
 ## [2.2.1] - 2026-11-21
 
 A docs and site release. The skills, their spec formats and their output are unchanged.

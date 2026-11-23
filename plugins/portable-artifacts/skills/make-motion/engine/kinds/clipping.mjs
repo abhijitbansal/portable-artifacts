@@ -394,7 +394,11 @@ function pinnedParts(shot, ctx, { plan, boxes, close }, follow) {
   // clears too (it sat on the zoomed picture under the region alone); without one each is its region's box
   const anchor = lift ? boxes[`${REGION_PREFIX}${lift.region}`] : unionBox([boxes.image, ...closes, ...(close?.shown ?? []), ...(marks ?? [])]);
   const caption = captionNodes(shot, ctx, { left: area?.left, maxWidth: area?.w, anchor, at: lift?.at ?? 0, follow });
-  return { nodes: [...kicker, ...(caption ? caption.nodes : [])], boxes: caption ? { caption: caption.box } : {} };
+  return {
+    nodes: [...kicker, ...(caption ? caption.nodes : [])],
+    boxes: caption ? { caption: caption.box } : {},
+    targetNodes: caption ? { caption: caption.nodes[0].id } : {}, // the pinned node the caption box belongs to (a cut's `at`)
+  };
 }
 
 // What an editorial caption card follows when the camera pushes in on a region: the region's box and its marker frame's
@@ -429,6 +433,7 @@ function expandClipping(given, ctx) {
     nodes: placeDevices([fieldNode(shot, ctx), laid.group, ...laid.close.nodes, ...pins.nodes], devices),
     camera: [...drift, ...(push ? [push] : []), ...laid.close.camera, ...deviceCamera(devices)],
     boxes,
+    targetNodes: pins.targetNodes,
     hero: laid.hero,
     background: look.palette.paper,
   };
@@ -444,7 +449,7 @@ registries.kinds.add('clipping', {
     src: 'assets/screenshot.png',
     say: 'Every chart on this page shows its query.',
     caption: 'The query',
-    regions: { query: [0.55, 0.2, 0.35, 0.2] },
+    regions: { query: [0.58, 0.14, 0.37, 0.24] },
     on: [{ at: 'word:query', do: 'circle', target: 'region:query' }],
   },
   schema: {

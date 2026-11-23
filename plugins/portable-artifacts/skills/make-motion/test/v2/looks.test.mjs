@@ -20,7 +20,7 @@ import { validateFilm, withFilmDefaults } from '../../scripts/v2/spec.mjs';
 const LANDSCAPE = { w: 1920, h: 1080 };
 const PORTRAIT = { w: 1080, h: 1920 };
 const UHD = { w: 3840, h: 2160 };
-const KNOWN_CUTS = ['cut', 'match', 'slide', 'punch', 'cover', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+const KNOWN_CUTS = ['cut', 'match', 'slide', 'punch', 'cover', 'crossfade', 'fade', 'wipe', 'iris', 'flood', 'zoom', 'blur', 'ripple', 'cube',
   'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop', 'erase'];
 // the ten shader cuts ported from gl-transitions, each with no cue unless a look names one; and the drawing hand's erase
 // (looks-four Task 2), silent in every look but the hand look
@@ -157,9 +157,9 @@ test('the zero-duration exception refuses a timeless entrance and an emphasis th
 test('every move names a curve that parses and has the keys the grammar needs', () => {
   for (const name of lookNames()) {
     const { moves } = registries.looks.get(name);
-    // the five the first kinds use, then the named moves of engine/moves (rise, wipe, slam, pop, settle; draw and count
-    // are among the five)
-    assert.deepEqual(Object.keys(moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle']);
+    // the five the first kinds use, then the named moves of engine/moves (rise, wipe, slam, pop, settle, letters, lines; draw
+    // and count are among the five)
+    assert.deepEqual(Object.keys(moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle', 'letters', 'lines']);
     for (const [key, move] of Object.entries(moves)) {
       if (move === null) continue; // a named move the look does not use
       assert.equal(typeof ease(move.ease), 'function', `${name}.${key}`);
@@ -207,7 +207,7 @@ test('pop values are the brief values', () => {
   assert.deepEqual({ ...l.moves.emphasize }, { ease: 'spring(300,12)', dur: 0.2, scale: 1.12 });
   assert.deepEqual({ ...l.moves.draw }, { ease: 'outExpo', dur: 0.2 });
   assert.deepEqual({ ...l.camera }, { drift: 0, style: 'locked' });
-  assert.deepEqual([...l.cutPalette], ['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom']);
+  assert.deepEqual([...l.cutPalette], ['cut', 'punch', 'slide', 'cover', 'zoom', 'flood', 'polka-dots', 'glitch-memories', 'cross-zoom']);
   assert.deepEqual({ ...l.post }, { grain: 0.02, halftone: 0, bloom: 0 });
   assert.deepEqual({ ...l.caps }, { display: true, label: true });
   assert.deepEqual({ ...l.lineHeight }, { display: 0.92, text: 1.15 });
@@ -419,7 +419,7 @@ test('revision 1 look data: desk display line height 1.1; pop word space, recolo
 
 test('desk sounds are the brief values: paper cuts and slides, marker hand marks, a paper card, a click on the landing', () => {
   const { sounds } = registries.looks.get('desk');
-  assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null, ripple: null, cube: null, ...PORTED_CUES({ 'page-curl': 'paper' }) });
+  assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, flood: null, zoom: null, blur: null, ripple: null, cube: null, ...PORTED_CUES({ 'page-curl': 'paper' }) });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
     // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)
@@ -435,7 +435,7 @@ test('desk sounds are the brief values: paper cuts and slides, marker hand marks
 
 test('pop sounds are the brief values: click, whoosh and impact cuts, a pop highlight, an impact punch, a pop on emphasis, a sub on the landing', () => {
   const { sounds } = registries.looks.get('pop');
-  assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh', ...PORTED_CUES({ 'cross-zoom': 'impact', 'glitch-memories': 'click', pixelize: 'click' }) });
+  assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, flood: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh', ...PORTED_CUES({ 'cross-zoom': 'impact', 'glitch-memories': 'click', pixelize: 'click' }) });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
     // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)
@@ -522,6 +522,46 @@ test('desk, pop and cosmos carry frozen composition data for the end, list, quot
       assert.ok(Object.isFrozen(kinds[kind]), `${name} kinds.${kind} frozen`);
     }
   }
+});
+
+test('a look\'s fill is a band and a hero share, each above 0 and at most 1; anything else is refused by name', () => {
+  const desk = registries.looks.get('desk');
+  const bad = (fill) => () => validateLook({ ...desk, name: 'test-fill', fill });
+  assert.throws(bad({ band: 1.2 }), /look "test-fill": fill\.band must be a number above 0 and at most 1, got 1\.2/);
+  assert.throws(bad({ hero: 0 }), /look "test-fill": fill\.hero must be a number above 0 and at most 1, got 0/);
+  assert.throws(bad({ band: Number.NaN }), /look "test-fill": fill\.band must be a number above 0 and at most 1, got NaN/);
+  assert.throws(bad({ hero: '0.4' }), /look "test-fill": fill\.hero must be a number above 0 and at most 1, got "0\.4"/);
+  assert.throws(bad({ gap: 0.3 }), /look "test-fill": fill\.gap is not a field; it takes band, hero/);
+  assert.throws(bad({ constructor: 0.3 }), /look "test-fill": fill\.constructor is not a field; it takes band, hero/);
+  assert.throws(bad(3), /look "test-fill": fill must be an object of band, hero, got 3/);
+  assert.doesNotThrow(bad({ band: 0.3, hero: 1 }));
+  assert.doesNotThrow(bad({}));
+  for (const name of registries.looks.names.all()) assert.doesNotThrow(() => validateLook({ ...registries.looks.get(name), name }), `${name} is valid`);
+});
+
+test('a look\'s kinds.statement.fillShort needs words and height; every field is checked and anything else is refused by name', () => {
+  const desk = registries.looks.get('desk');
+  const bad = (fillShort) => () => validateLook({ ...desk, name: 'test-fs', kinds: { ...desk.kinds, statement: { fillShort } } });
+  const path = 'look "test-fs": kinds.statement.fillShort';
+  assert.throws(bad({ height: 0.8 }), new RegExp(`${path}\\.words: needs a whole number of at least 1, got undefined`));
+  assert.throws(bad({ words: 6 }), new RegExp(`${path}\\.height: needs a number above 0 and at most 1, got undefined`));
+  assert.throws(bad({ words: 0, height: 0.8 }), new RegExp(`${path}\\.words: needs a whole number of at least 1, got 0`));
+  assert.throws(bad({ words: 6, height: 1.2 }), new RegExp(`${path}\\.height: needs a number above 0 and at most 1, got 1\\.2`));
+  assert.throws(bad({ words: 6, height: 0.8, toWide: 13 }), new RegExp(`${path}\\.toWide: needs a whole number from 1 to 12, got 13`));
+  assert.throws(bad({ words: 6, height: 0.8, linesWide: 2.5 }), new RegExp(`${path}\\.linesWide: needs a whole number of at least 1, got 2\\.5`));
+  assert.throws(bad({ words: 6, height: 0.8, max: 0 }), new RegExp(`${path}\\.max: needs a number above 0, got 0`));
+  assert.throws(bad({ words: 6, height: 0.8, max: '360' }), new RegExp(`${path}\\.max: needs a number above 0, got "360"`));
+  assert.throws(bad({ words: 6, height: 0.8, gap: 1 }), new RegExp(`${path}\\.gap: is not a field; it takes words, height, toWide, linesWide, max`));
+  assert.throws(bad({ words: 6, height: 0.8, constructor: 1 }), new RegExp(`${path}\\.constructor: is not a field`));
+  assert.throws(bad(3), new RegExp(`${path}: needs an object of words, height, toWide, linesWide, max, got 3`));
+  assert.doesNotThrow(bad({ words: 6, height: 0.8 }));
+  assert.doesNotThrow(bad({ words: 6, height: 1, toWide: 11, linesWide: 3, max: 360 }));
+});
+
+test('desk and ledger take a wider bare column (band 0.40), ledger a lower hero bar too (0.45); every other look takes the default fill', () => {
+  assert.deepEqual(registries.looks.get('desk').fill, { band: 0.4 });
+  assert.deepEqual(registries.looks.get('ledger').fill, { band: 0.4, hero: 0.45 });
+  for (const name of ['pop', 'cosmos', 'poster', 'keynote', 'marker']) assert.equal(registries.looks.get(name).fill, undefined, `${name} takes the default fill`);
 });
 
 test('a look may leave kinds out; when it has kinds, each entry must be an object', () => {

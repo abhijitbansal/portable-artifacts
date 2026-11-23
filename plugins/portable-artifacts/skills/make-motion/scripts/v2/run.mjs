@@ -2,10 +2,10 @@
 // for a film with sound: cues planned from its events, a bed fitted to its cuts, a music file checked), review (the
 // sheets and the audit), render. One browser session serves review and render. runMake always returns a report
 // (report.mjs) and an exit code: 0 ok, 1 not ok (the film does not validate, its anchors fall outside their shots on
-// its measured timeline, a mechanical finding exists, or the page raised an error about it), 2 for trouble with the
-// machine (a missing film file, a voice that cannot be made, no browser, no ffmpeg, ffmpeg failing, a crashed or closed
-// browser page, a timeout, a lost WebGL context, a picture the browser cannot decode: `report.error` says which and how
-// to fix it),
+// its measured timeline, a mechanical finding exists (a picture the browser cannot decode is one, at the path that names
+// it), or the page raised an error about it), 2 for trouble with the machine (a missing film file, a voice that cannot be
+// made, no browser, no ffmpeg, ffmpeg failing, a crashed or closed browser page, a timeout, a lost WebGL context, a picture
+// the server failed to serve: HTTP n: `report.error` says which and how to fix it),
 // 130 when stopped through `signal`. What was done before a stop stays in the report. It always closes what it opened,
 // never prints to stdout and never waits for input.
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -17,18 +17,24 @@ import { registries } from '../../engine/registry.mjs';
 import { PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { withLookEmphasis, fallbackNotice } from '../../engine/kinds/emphasis-fallback.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
+import { outlineFindings, capCreative } from '../../engine/review/outline.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
 import { openSession, pageErrorMessage, machineMessage, canvasSize } from './session.mjs';
 import { clipUses, prepareClips, clipAudioTracks } from './clips.mjs';
-import { writeSheets } from './sheets.mjs';
+import { writeBoard, writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
 import { stampTags, tagArgs } from './stamp.mjs';
 import { readBeatsFile } from './sound/beats-file.mjs';
 import { snapFilm } from './sound/snap.mjs';
-import { posterFrame, posterPath, writePoster } from './poster.mjs';
+import { posterFindings, posterPath, writePoster } from './poster.mjs';
+import { filmFrame, filmSeconds } from './film-time.mjs';
+import { inspectDir, writeInspect } from './inspect.mjs';
+import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf, slicePath } from './slice.mjs';
+import { comparePath, memoiseMusicInput, writeComparison } from './compare.mjs';
 import { writeSubtitles } from './subtitles.mjs';
+import { logoThrowFinding, pictureLoadFinding } from './picture-finding.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
 const MS_PER_SECOND = 1000;
@@ -62,7 +68,8 @@ const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_
 
 const newState = () => ({
   validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
-  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, outline: null, sheetsDir: null, provenance: null,
+  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, timing: null, outline: null, sheetsDir: null, provenance: null,
+  film: null, // the validated film, once known: a picture the browser cannot decode is a finding at the path that names it (picture-finding.mjs)
 });
 
 // Runs fn and records its stage in state.stages whether it returns or throws; each stage is also said to `log`.
@@ -113,25 +120,45 @@ function outputPaths(options) {
   return { out, sheetsDir: path.join(path.dirname(out), `${path.basename(out, path.extname(out))}.sheets`) };
 }
 
-// The stages that need the page: the sheets and the audit, then (unless --no-render) the video.
-async function reviewAndRender({ options, loaded, made, sound, state, io: { signal, log, browser } }) {
+const SLICE_SILENT_LINE = 'make: the slice is silent: the sound is mastered for the whole film';
+
+// The report's `slice`: the frames and shots a --shot or --range run covers, whether the film's sound is left out of it (a
+// slice is always silent: the sound is mastered for the whole film), and the review rules a slice does not run.
+const sliceReport = (slice, film, clips) => ({
+  from: slice.from, to: slice.to, frames: slice.to - slice.from + 1, shots: slice.shots, silent: film.voice !== undefined || wantsSound(film, clips), skipped: [...SLICE_SKIPPED],
+});
+
+// The measured audio of a --no-music render still names the music it left out (its summary, with `muted: true`), whether or
+// not the render plan holds any other sound (a narrated film with no cues has none, and the voice alone is mixed).
+const mutedAudio = (audio, mutedMusic) => (audio === null || mutedMusic === null ? audio : { ...audio, music: mutedMusic });
+
+// The stages that need the page: the sheets and the audit, then (unless --no-render) the video: the film's, or a slice's own.
+// `mutedMusic`: with --no-music, the summary of the music left out of `sound` (makeSound), else null.
+async function reviewAndRender({ options, loaded, made, sound, mutedMusic = null, state, io: { signal, log, browser } }) {
   const { out, sheetsDir } = outputPaths(options);
   state.sheetsDir = sheetsDir;
+  const slice = sliceOf(options, loaded.film, loaded.timeline); // on the timeline the film is drawn with (measured, and after music.snap)
+  if (slice !== null) state.slice = sliceReport(slice, loaded.film, loaded.clips);
   const session = await openSession(loaded, { browser });
   try {
     state.post = session.info.post;
     state.cuts = session.info.cuts ?? null; // the shader cuts the page ran or replaced (engine/page/post.mjs)
-    const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal }));
+    const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal, slice }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);
+    if (options.estimated === true) state.board = await stage(state, log, 'board', () => writeBoard({ session, dir: sheetsDir, signal, log }));
     if (!options.noRender) {
       const tags = stampTags({ generatedBy: loaded.film.generatedBy, flags: options.provenance ?? {}, provenance: loaded.film.provenance });
+      // a slice's video is <name>.<label>.mp4 beside the film's own path, which it never writes, and it is silent
+      const target = slice === null ? out : slicePath(out, slice.label);
+      const sliceFrames = slice === null ? {} : { frames: { from: slice.from, to: slice.to } };
       const rendered = await stage(state, log, 'render', () => {
+        if (state.slice?.silent) log(SLICE_SILENT_LINE);
         log('make: render started');
-        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined, stamp: tagArgs(tags),
-          workers: options.workers ?? 1, openPage: () => openSession(loaded, { browser: session.page.context().browser() }) });
+        return renderFilm({ out: target, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined, stamp: tagArgs(tags),
+          workers: options.workers ?? 1, openPage: () => openSession(loaded, { browser: session.page.context().browser() }), ...sliceFrames });
       });
-      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, audio: rendered.audio, provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
+      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, timing: rendered.timing, audio: mutedAudio(rendered.audio, mutedMusic), provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
     }
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
@@ -358,18 +385,22 @@ async function audioTracks(steps, film, timeline, specDir, signal) {
 /**
  * The sound stage, for a film with sound (wantsSound): the cue plan (sound/cues.mjs), the bed fitted to the cuts or the
  * music file checked (sound/bed.mjs), recorded in the report's audio (planned, not yet measured); with `work` (a render
- * follows) the cue and bed WAVs are written there. -> { sound } (renderFilm's plan, or null), or null when the film is
+ * follows) the cue and bed WAVs are written there. -> { timeline, sound, mutedMusic } (renderFilm's plan, or null; the
+ * summary of the music --no-music left out, or null), or null when the film is
  * at fault (its errors become findings: exit 1). Machine trouble (ffprobe or ffmpeg failing) and a stop propagate.
  * The result's `timeline` is the one to draw: the given one, or its cuts moved onto the music's beats (music.snap); the
  * cues are planned on it.
  */
-async function makeSound(loaded, timeline, state, io, work, clips = []) {
+export async function makeSound(loaded, timeline, state, io, work, clips = [], { noMusic = false } = {}) { // exported for the --no-music test
   const { film, specDir } = loaded;
   try {
     return await stage(state, io.log, 'sound', async () => {
       io.signal?.throwIfAborted();
       const steps = await soundSteps();
-      const music = await musicPlan(steps, film, timeline, specDir, io.signal);
+      // --no-music: the music is still planned (music.snap moves the cuts, the cues sit on that timeline); only its track is left out
+      const planned = await musicPlan(steps, film, timeline, specDir, io.signal);
+      const muted = noMusic && planned !== null;
+      const music = muted ? { ...planned, summary: { ...planned.summary, muted: true } } : planned;
       const drawn = music?.timeline ?? timeline;
       const cues = steps.planCues(film, drawn);
       io.signal?.throwIfAborted();
@@ -379,7 +410,10 @@ async function makeSound(loaded, timeline, state, io, work, clips = []) {
       const tracks = [...await audioTracks(steps, film, drawn, specDir, io.signal), ...clipTracks];
       const extra = tracks.length > 0 ? { tracks: tracks.length } : {}; // the extra audio files, only when the film has some
       if (cues.length > 0 || music !== null || tracks.length > 0) state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null, ...extra };
-      return { timeline: drawn, sound: work === null ? null : await soundFiles(steps, { film, timeline: drawn, cues, music, tracks, work }) };
+      // `mutedMusic` is the summary of the music left out, beside `sound` (the render plan): a film with no other sound has no plan
+      const mutedMusic = muted ? music.summary : null;
+      const files = { film, timeline: drawn, cues, tracks, work, music: muted ? null : music };
+      return { timeline: drawn, sound: work === null ? null : await soundFiles(steps, files), mutedMusic };
     });
   } catch (err) {
     const findings = io.signal?.aborted ? null : soundFindings(err);
@@ -391,17 +425,90 @@ async function makeSound(loaded, timeline, state, io, work, clips = []) {
 
 // ---- the poster ----------------------------------------------------------------------------------------------------------
 
-// --poster: one still of the film's frame (poster.mjs) on its timeline (measured for a voiced film), no review, no
-// sound, no ffmpeg. A time past the end is the machine-trouble exit (2) with the film's length.
+// `timeline` with its cuts moved onto the beats of the film's music (music.snap): the music plan alone, no cue plan and no WAV.
+// A SpecError when the music is the film's to fix (no steady beat, an anchor the move leaves outside its shot).
+// `steps`: the sound stage's modules when the caller has them already (--compare-looks shares one set across the looks).
+async function snappedTimeline({ film, specDir }, timeline, signal, steps) {
+  return (await fileMusicPlan(steps ?? await soundSteps(), film, timeline, specDir, signal)).timeline;
+}
+
+// The timeline a still (--poster, --inspect) reads film time on: the one the render draws, so with music.snap the cuts are
+// moved onto the beats first (as makeSound does; fileMusicPlan), and a frame of the still is the frame of the video. Only the
+// snap is made: no cue plan, no WAV. A music file with no beats file is read for its beats by ffmpeg. -> the timeline, or
+// null when the film is at fault (its errors become findings: exit 1).
+async function drawnTimeline(loaded, timeline, clips, state, io) {
+  if (loaded.film.music?.snap !== true || !wantsSound(loaded.film, clips)) return timeline;
+  try {
+    return await stage(state, io.log, 'sound', () => snappedTimeline(loaded, timeline, io.signal));
+  } catch (err) {
+    const findings = io.signal?.aborted ? null : soundFindings(err);
+    if (findings === null) throw err;
+    state.findings = findings;
+    return null;
+  }
+}
+
+// --poster: one still of the film's frame (poster.mjs) on its timeline (measured for a voiced film), no frame review (only
+// the poster-read check, creative), no sound, no ffmpeg. A time past the end is the machine-trouble exit (2) with the film's length.
 async function makePoster(options, loaded, state, io) {
-  const frame = posterFrame(options.poster, loaded.timeline);
+  const frame = filmFrame(options.poster, loaded.film, loaded.timeline);
   const file = posterPath(options.posterOut ?? null, outputPaths(options).out);
   const session = await openSession(loaded, { browser: io.browser });
   try {
     state.poster = await stage(state, io.log, 'poster', () => writePoster({ session, frame, file }));
+    // how the poster reads as a thumbnail: creative findings (poster-read), so the exit code stays 0
+    const read = await stage(state, io.log, 'poster-read', () => posterFindings({ session, frame }));
+    state.findings = [...state.findings, ...read.map(reviewFinding)];
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
     await session.close();
+  }
+}
+
+// --inspect: one frame of the film as a PNG and a JSON dump (inspect.mjs) in <out stem>.inspect/ beside the MP4 path, on its
+// timeline (measured for a voiced film), no review, no sound, no ffmpeg.
+async function makeInspect(options, loaded, state, io) {
+  const frame = filmFrame(options.inspect, loaded.film, loaded.timeline, '--inspect'); // a time past the end is said under --inspect
+  const dir = inspectDir(outputPaths(options).out);
+  const session = await openSession(loaded, { browser: io.browser });
+  try {
+    state.inspect = await stage(state, io.log, 'inspect', () => writeInspect({ session, frame, dir }));
+  } finally {
+    state.findings = [...state.findings, ...sessionFindings(session)];
+    await session.close();
+  }
+}
+
+// ---- the comparison ------------------------------------------------------------------------------------------------------
+
+// What --compare-looks draws for one look's film (compare.mjs `prepare`): its own estimated timeline (look data can lengthen a shot),
+// with the cuts moved onto the beats for a music.snap film, as --poster draws it, and its clips decoded. A film's fault is a SpecError.
+// The music's beats are detected once for the run, not once per look (memoiseMusicInput).
+const comparePrepare = (options, io) => {
+  let steps = null;
+  return async (loaded) => {
+    const { film, specDir } = loaded;
+    const [w, h] = canvasSize(film);
+    const clips = clipUses(film).length === 0 ? [] : await prepareClips({ film, specDir, timeline: loaded.timeline, cacheDir: clipCacheDir(options), canvas: { w, h }, signal: io.signal });
+    const snapped = film.music?.snap === true && wantsSound(film, clips);
+    if (snapped) steps ??= memoiseMusicInput(await soundSteps());
+    return { ...loaded, clips, timeline: snapped ? await snappedTimeline(loaded, loaded.timeline, io.signal, steps) : loaded.timeline };
+  };
+};
+
+// --compare-looks: one PNG of the anchor shot in every look that can draw it (compare.mjs), beside the MP4 path, on estimated timing,
+// no review, no sound, no video. A film no look can draw is a finding at the shot (exit 1) and writes no file.
+async function makeCompare(options, state, io) {
+  const file = comparePath(outputPaths(options).out);
+  try {
+    const { findings, ...compare } = await stage(state, io.log, 'compare', () => writeComparison({
+      specPath: options.specPath, values: options.values ?? {}, shot: options.compareLooks, file, browser: io.browser, signal: io.signal, prepare: comparePrepare(options, io),
+    }));
+    state.compare = compare;
+    state.findings = [...state.findings, ...findings];
+  } catch (err) {
+    if (!(err instanceof SpecError) || io.signal?.aborted) throw err;
+    state.findings = err.errors.map(validationFinding);
   }
 }
 
@@ -472,6 +579,7 @@ async function execute(options, state, io) {
     return;
   }
   const { film, specDir } = loaded;
+  state.film = film;
   // a parked look renders as any other; the run says so once, and the report carries it (never a finding)
   const parked = experimentalLook(film);
   if (parked) {
@@ -483,8 +591,23 @@ async function execute(options, state, io) {
   for (const entry of state.kinds) io.log(experimentalKindLine(entry));
   // an emphasis device the look does not draw takes the look's own emphasis: one info line per event, never a finding
   for (const entry of withLookEmphasis(film).moved) io.log(fallbackNotice(resolveLook(film).name, entry));
-  // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
-  const voiced = film.voice !== undefined && options.outline !== true;
+  // --poster and --inspect: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.
+  const reference = options.poster ?? options.inspect;
+  if (typeof reference === 'string') filmSeconds(reference, film, loaded.timeline); // the timeline loadFilm built: estimated for a voiced film
+  // a film with no voice and no music.snap is drawn on exactly that timeline: a time past its end is refused now, before a clip is decoded
+  if (typeof reference === 'string' && film.voice === undefined && film.music?.snap !== true) filmFrame(reference, film, loaded.timeline, typeof options.inspect === 'string' ? '--inspect' : '--poster');
+  checkSlice(options, film, loaded.timeline); // --shot and --range likewise: a shot the film lacks, a reference that names nothing
+  if (typeof options.compareLooks === 'string') {
+    // --compare-looks: the anchor must be a shot of the film, judged now; no voice is made, so every look is drawn on estimated timing
+    checkSlice({ shot: options.compareLooks }, film, loaded.timeline);
+    io.log('make: --compare-looks: no voice was made; every cell uses estimated timing');
+    if (await timelineFor(film, null, state, io.log)) await makeCompare(options, state, io);
+    return;
+  }
+  // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so. So does --estimated
+  // (with --sheets-only): its sheets and board are drawn on the estimate, whose times the render later measures.
+  const voiced = film.voice !== undefined && options.outline !== true && options.estimated !== true;
+  if (film.voice !== undefined && options.estimated === true) io.log('make: --estimated: no voice was made; the sheets and the board use estimated timing');
   const made = !voiced ? null
     : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
   if (voiced && made === null) return;
@@ -494,13 +617,17 @@ async function execute(options, state, io) {
   if (options.outline || options.outlineMeasured) {
     const drawn = outlineTimeline(loaded, timeline);
     Object.assign(state, { outline: outlineOf(film, drawn.timeline), outlineNote: outlineNote(film, options, drawn.snapped) });
+    // the two spec-only rules: creative, so `ok` and the exit code stay as they were
+    state.findings = [...state.findings, ...capCreative(outlineFindings(film, drawn.timeline)).map(reviewFinding)];
     return;
   }
   // A film's video clips are probed, and their frames taken from (or decoded into) the cache beside the video (clips.mjs).
   const clips = clipUses(film).length === 0 ? [] : await clipStage(loaded, timeline, state, io, clipCacheDir(options));
   if (clips === null) return;
-  if (typeof options.poster === 'number') {
-    await makePoster(options, { film, timeline, specDir, prepared: loaded.prepared, clips }, state, io);
+  if (typeof options.poster === 'string' || typeof options.inspect === 'string') {
+    const drawn = await drawnTimeline(loaded, timeline, clips, state, io); // music.snap moves the cuts the render draws
+    if (drawn === null) return;
+    await (typeof options.poster === 'string' ? makePoster : makeInspect)(options, { film, timeline: drawn, specDir, prepared: loaded.prepared, clips }, state, io);
     return;
   }
   await soundReviewRender({ options, loaded, timeline, made, clips, state, io });
@@ -509,20 +636,36 @@ async function execute(options, state, io) {
 // The clip frame cache: <out dir>/.clips, beside the voice cache (<out dir>/.voice).
 const clipCacheDir = (options) => path.join(path.dirname(outputPaths(options).out), '.clips');
 
+const NO_MUSIC_LINE = 'make: --no-music: the film is rendered without its music; its cuts stay where the music put them';
+const NO_MUSIC_PLANNED_LINE = 'make: --no-music: the film is planned without its music, and this run renders no video; its cuts stay where the music put them';
+const NO_MUSIC_NONE_LINE = 'make: --no-music: the film has no music; nothing to leave out';
+
+/** Does the run render a video? Not with --no-render or --sheets-only. A slice (--shot, --range) renders its own silent MP4. */
+export const rendersVideo = (options) => !options.noRender;
+
+/** The log line --no-music prints, by what the run did: `muted` (the film had music to leave out), `renders` (rendersVideo). */
+export const noMusicLine = ({ muted, renders }) => {
+  if (!muted) return NO_MUSIC_NONE_LINE;
+  return renders ? NO_MUSIC_LINE : NO_MUSIC_PLANNED_LINE;
+};
+
 // The sound stage, the subtitles, then the page's stages (review, render).
 async function soundReviewRender({ options, loaded, timeline, made, clips, state, io }) {
   const { film, specDir } = loaded;
   const sounded = wantsSound(film, clips);
   // The cue and bed WAVs live in a work folder of this run only, removed on every way out of it.
-  const work = sounded && !options.noRender ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
+  const renders = rendersVideo(options); // a slice renders too (its own silent MP4), so ffmpeg is checked for it as for a film
+  // The cue and bed files are for a film's sound; a slice is silent and writes none (its sound plan still sets the timeline).
+  const work = sounded && renders && !isSlice(options) ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
   try {
-    const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
+    const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips, { noMusic: options.noMusic === true }) : { sound: null };
     if (planned === null) return;
+    if (options.noMusic === true) io.log(noMusicLine({ muted: Boolean(planned.mutedMusic), renders }));
     // --subtitles: the caption file from the timeline the film is drawn with (after music.snap), before the browser starts
-    if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out });
-    if (!options.noRender) await findFfmpeg(); // fail before the browser starts, naming how to fix it
+    if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out, level: options.subtitleWords ? 'word' : 'sentence' });
+    if (renders) await findFfmpeg(); // fail before the browser starts, naming how to fix it
     io.signal?.throwIfAborted();
-    await reviewAndRender({ options, loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made, sound: planned.sound, state, io });
+    await reviewAndRender({ options, loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made, sound: planned.sound, mutedMusic: planned.mutedMusic ?? null, state, io });
   } finally {
     if (work !== null) rmSync(work, { recursive: true, force: true });
   }
@@ -542,12 +685,15 @@ async function clipStage({ film, specDir }, timeline, state, io, cacheDir) {
 
 /**
  * What an error that stopped the run means: { exitCode, error } or { exitCode, finding }. A stop is an interrupt; the
- * page failing is the film's fault (a finding); anything else is the machine's.
+ * page failing is the film's fault (a finding); a picture of `film` the browser cannot decode, or a logo with no size, is a
+ * finding at the path that names it (picture-finding.mjs); anything else is the machine's.
  */
-export function failureOutcome(err, signal) {
+export function failureOutcome(err, signal, film = null) {
   if (signal?.aborted) return { exitCode: EXIT_INTERRUPTED, error: { message: 'interrupted', hint: '' } };
+  const picture = pictureLoadFinding(err, film);
+  if (picture !== null) return { exitCode: EXIT_NOT_OK, finding: picture };
   const pageMessage = pageErrorMessage(err);
-  if (pageMessage !== null) return { exitCode: EXIT_NOT_OK, finding: pageFinding('mechanical', `page: ${pageMessage}`) };
+  if (pageMessage !== null) return { exitCode: EXIT_NOT_OK, finding: logoThrowFinding(pageMessage) ?? pageFinding('mechanical', `page: ${pageMessage}`) };
   return { exitCode: EXIT_MACHINE, error: machineError(err) };
 }
 
@@ -573,7 +719,7 @@ export function reportFindings(findings, exitCode) {
 
 // Records what failureOutcome says in the run's state and returns the exit code.
 function settle(state, err, signal) {
-  const { exitCode, error, finding } = failureOutcome(err, signal);
+  const { exitCode, error, finding } = failureOutcome(err, signal, state.film);
   if (error) state.error = error;
   if (finding) state.findings = [...state.findings, finding];
   return exitCode;

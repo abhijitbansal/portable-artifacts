@@ -52,12 +52,16 @@ export const desk = {
     slam: { ease: 'linear', dur: 0 },
     pop: { ease: 'outCubic', dur: 0.5, dist: 24 },
     settle: { ease: 'outCubic', dur: 0.6 },
+    // the statement's entrance (kinds.statement.entrance 'lines'): each line rises into place as one block, on a long
+    // ease-out bezier, landing on its first word's spoken time (W6 task 4); desk does not bring words in letter by letter
+    letters: null,
+    lines: { ease: 'cubic-bezier(0.16,1,0.3,1)', dur: 0.6, dist: 28 },
   },
   wordStagger: 0,
   camera: { drift: 12, style: 'desk' },
   // every registered cut may be named (transitions plan, decision 2); the palette is the look's own set, in its order,
   // and cutStyle its defaults per cut (engine/cuts/resolve.mjs)
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade', 'page-curl'],
   // the motion blur on the cuts that move (engine/cuts/smear.mjs)
@@ -66,6 +70,10 @@ export const desk = {
   cutMotion: { irisAt: [0.8, 0.5] },
   // a cover's sheet shows its leading edge on identical paper: a hairline and a soft shadow cast on the sheet below
   coverEdge: { line: { color: 'ink2', width: 2, alpha: 0.35 }, shadow: { color: 'ink', width: 28, alpha: 0.16, steps: 7 } },
+  // the review's composition thresholds (engine/looks/fill.mjs DEFAULT_FILL, band 0.35): desk's flush-left statements and lists
+  // leave 35 to 39% of the width (or the top) bare beside the pinned slug and read filled (viewed: gate-desk problem, how and
+  // close, the desk list), so dead-space fires from 0.40 here
+  fill: { band: 0.4 },
   keyline: 8,
   shadow: { dx: 10, dy: 14, blur: 18, alpha: 0.25, color: '#000000' },
   // Styling for the devices this look draws. Colours are palette keys (or #rrggbb), sizes are units.
@@ -91,10 +99,20 @@ export const desk = {
   captions: 'lower',
   // 0.02: the paper field already carries the texture; more grain is noise a 20 s film pays for in megabytes (round 4 measurements)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units; accent2 for
+  // the bar, since desk's yellow accent is too pale to read on the paper
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'bottom', height: 6, inset: 0, bar: 'accent2', track: 'rule' },
+  },
   // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs, quote.mjs, compare.mjs, chart.mjs);
   // sizes are units, shares of the frame,
   // em of the text they follow, or 1-based scale steps.
   kinds: {
+    // statement (statement.mjs): a claim of at most `words` words may take `height` of the band (0.64 otherwise) and
+    // columns 2 to `toWide` (9 otherwise): a short claim set at the usual share left the right third bare (W2 task 5)
+    // `entrance` 'lines': each line arrives as one block (moves.lines), where the other looks bring words in one by one
+    statement: { fillShort: { words: 6, height: 0.8, toWide: 11 }, entrance: 'lines' },
     // end: the closing line fitted to columns 2 to `toWide` (`toTall` on vertical formats) from step `fromStep` to `max`,
     // at most `height` of the frame; the ask in the text face `askGap` em of the title under its last baseline, at the
     // largest of `askSteps` the title stays three times; the block centred at `centre` of the height; the mark in the
@@ -175,7 +193,7 @@ export const desk = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null, ripple: null, cube: null,
+    cut: { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, flood: null, zoom: null, blur: null, ripple: null, cube: null,
       'page-curl': 'paper', 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
       label: null, focus: null, route: 'marker', numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,

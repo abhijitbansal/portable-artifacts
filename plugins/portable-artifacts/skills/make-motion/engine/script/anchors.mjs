@@ -36,7 +36,8 @@ export const ECHO_LIMIT = 80;
 const ELLIPSIS = '...';
 const CONTROL_RE = /[\p{Cc}\u2028\u2029]/gu;
 
-const SECONDS_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+// A number of seconds as an anchor reads it: "3", "3.", ".5", "+3", "-.5" (slice.mjs reads an anchor with the same pattern).
+export const SECONDS_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 // A base, then an optional signed number of seconds. The base is lazy so the
 // offset claims "-0.08" in "word:file-0.08", and any character may be in it
 // (a line terminator included) so the pattern always matches.

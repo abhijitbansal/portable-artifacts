@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { track } from '../../engine/time/track.mjs';
-import { node } from '../../engine/graph/node.mjs';
+import { node, textTracksOf } from '../../engine/graph/node.mjs';
 import { sampleGraph, stateKey } from '../../engine/graph/sample.mjs';
 import { camera, applyCamera } from '../../engine/graph/camera.mjs';
 
@@ -250,6 +250,119 @@ test('stateKey changes with words, children, static props and node order', () =>
   assert.notEqual(stateKey(sampleGraph([path('M0 0H1')], 0)), stateKey(sampleGraph([path('M0 0H2')], 0)));
   const a = node('group', 'a', {}), b = node('group', 'b', {});
   assert.notEqual(stateKey(sampleGraph([a, b], 0)), stateKey(sampleGraph([b, a], 0)));
+});
+
+// ---- glyph and line tracks ----
+
+// Two words on one line: 'ab' (two graphemes) and 'cde' (three). Words carry the index and text the layout gives them.
+const LAYOUT = {
+  size: 48, width: 200, height: 60,
+  lines: [{ x: 0, y: 40, width: 200, words: [{ text: 'ab', index: 0, x: 0, width: 90 }, { text: 'cde', index: 1, x: 110, width: 90 }] }],
+};
+const glyphProps = () => ({ layout: LAYOUT, font: { family: 'Fraunces', size: 48 }, fill: '#112233' });
+const hold = (v) => track([{ t: 0, v }]);
+const AT = (a, b) => track([{ t: a, v: 0 }, { t: b, v: 1, ease: 'linear' }]);
+const glyphNode = (opts) => node('text', 't', glyphProps(), opts);
+
+// The state key of the plain two-word text at t = 0.5 as recorded BEFORE glyph and line tracks existed (this file's
+// glyphProps, one opacity ramp on word 0).
+const KEY_BEFORE = '[{"blur":0,"children":[],"depth":0,"draw":1,"id":"plain","opacity":1,"props":{"fill":"#112233","font":{"family":"Fraunces","size":48},"layout":{"height":60,"lines":[{"width":200,"words":[{"index":0,"text":"one","width":90,"x":0},{"index":1,"text":"two","width":90,"x":110}],"x":0,"y":40}],"size":48,"width":200}},"reveal":1,"rotate":0,"scale":1,"scaleX":1,"scaleY":1,"type":"text","visible":true,"words":[{"fill":"#112233","opacity":0.5,"scale":1,"x":0,"y":0},{"fill":"#112233","opacity":1,"scale":1,"x":0,"y":0}],"x":0,"y":0}]';
+
+test('glyph tracks sample per glyph; the word keeps its own values and the roll-up carries the mean of its letters', () => {
+  const n = glyphNode({ wordTracks: [{}], glyphTracks: [[{ opacity: AT(0, 1) }, { opacity: AT(1, 2) }]] });
+  const [s] = sampleGraph([n], 1);
+  assert.deepEqual(s.glyphs[0].map((g) => g.opacity), [1, 0]);
+  assert.equal(s.words[0].opacity, 1, "the word's own: the first letter must draw at full strength");
+  assert.equal(s.seen[0].opacity, 0.5, 'as the review sees it: the mean of the letters (1 and 0), not all here yet');
+  assert.equal(sampleGraph([n], 2)[0].seen[0].opacity, 1);
+  assert.equal(sampleGraph([n], 0)[0].seen[0].opacity, 0, 'no letter has started');
+});
+
+test('the roll-up is over one entry per grapheme, as the draw pads: a short glyph list leaves the rest at the identity', () => {
+  // 'cde' is three graphemes and only the first has a track: the mean of 0, 1 and 1
+  const n = glyphNode({ glyphTracks: [undefined, [{ opacity: hold(0) }]] });
+  const [s] = sampleGraph([n], 0);
+  assert.equal(s.glyphs[1].length, 1);
+  assert.ok(Math.abs(s.seen[1].opacity - 2 / 3) < 1e-9);
+  assert.equal(s.seen[0], undefined, 'a word with no glyph track and no line track has no roll-up: it is the word');
+});
+
+test('a decomposed accent is one grapheme in the roll-up, as in the draw', () => {
+  const layout = { ...LAYOUT, lines: [{ ...LAYOUT.lines[0], words: [{ text: 'café', index: 0, x: 0, width: 90 }] }] };
+  const n = node('text', 't', { ...glyphProps(), layout }, { glyphTracks: [[{ opacity: hold(0) }, {}, {}, {}]] });
+  assert.ok(Math.abs(sampleGraph([n], 0)[0].seen[0].opacity - 0.75) < 1e-9, 'four graphemes, not five code points');
+});
+
+test('a line track multiplies into the roll-up of every word of that line, not into the words', () => {
+  const n = glyphNode({ wordTracks: [{}], lineTracks: [{ opacity: hold(0.5), scale: hold(0.8) }] });
+  const [s] = sampleGraph([n], 0);
+  assert.deepEqual(s.lines, [{ opacity: 0.5, x: 0, y: 0, scale: 0.8 }]);
+  assert.deepEqual([s.seen[0].opacity, s.seen[0].scale], [0.5, 0.8]);
+  assert.deepEqual([s.seen[1].opacity, s.seen[1].scale], [0.5, 0.8], 'a word with no word track of its own is in the line too');
+  assert.deepEqual([s.words[0].opacity, s.words[0].scale], [1, 1]);
+  assert.equal(s.glyphs, undefined, 'a line track never becomes per-glyph tracks');
+});
+
+test('a text with line tracks and no word tracks still has a roll-up for every word of its layout', () => {
+  const [s] = sampleGraph([glyphNode({ lineTracks: [{ opacity: AT(0, 1) }] })], 0);
+  assert.equal(s.words, undefined);
+  assert.deepEqual(s.seen.map((w) => w.opacity), [0, 0]);
+});
+
+test('the roll-up combines the word, its letters and its line in draw order, each factor clamped', () => {
+  // word opacity 0.5 and scale 2; letters 0 and 1 (mean 0.5) at scales 1 and 1.5 (mean 1.25); line opacity 0.5, scale 0.8
+  const n = glyphNode({
+    wordTracks: [{ opacity: hold(0.5), scale: hold(2) }],
+    glyphTracks: [[{ opacity: hold(0), scale: hold(1) }, { opacity: hold(1), scale: hold(1.5) }]],
+    lineTracks: [{ opacity: hold(0.5), scale: hold(0.8) }],
+  });
+  const [s] = sampleGraph([n], 0);
+  assert.equal(s.seen[0].opacity, 0.5 * 0.5 * 0.5);
+  assert.ok(Math.abs(s.seen[0].scale - 2 * 1.25 * 0.8) < 1e-9);
+  // an overshoot ease on one factor must not make up for an unfinished other: word 1.5 clamps to 1 before the letters' 0.5
+  const over = glyphNode({ wordTracks: [{ opacity: hold(1.5) }], glyphTracks: [[{ opacity: hold(0) }, { opacity: hold(1) }]] });
+  assert.equal(sampleGraph([over], 0)[0].seen[0].opacity, 0.5);
+});
+
+test('a text with neither glyph nor line tracks keeps the state key it has today', () => {
+  const plain = node('text', 'plain', { ...glyphProps(), layout: { ...LAYOUT, lines: [{ ...LAYOUT.lines[0], words: [{ text: 'one', index: 0, x: 0, width: 90 }, { text: 'two', index: 1, x: 110, width: 90 }] }] } }, { wordTracks: [{ opacity: AT(0, 1) }, {}] });
+  assert.equal(stateKey(sampleGraph([plain], 0.5)), KEY_BEFORE);
+});
+
+test('glyph and line tracks on a non-text node, or an unknown glyph or line track, are errors naming what is accepted', () => {
+  assert.throws(() => node('path', 'p', { d: 'M0 0' }, { glyphTracks: [[{}]] }), /glyphTracks only apply to a text node/);
+  assert.throws(() => node('path', 'p', { d: 'M0 0' }, { lineTracks: [{}] }), /lineTracks only apply to a text node/);
+  assert.throws(() => glyphNode({ glyphTracks: [[{ fill: hold(1) }]] }), /unknown track 'fill'; accepted: opacity, x, y, scale/);
+  assert.throws(() => glyphNode({ lineTracks: [{ glow: hold(1) }] }), /unknown track 'glow'; accepted: opacity, x, y, scale/);
+  assert.throws(() => glyphNode({ glyphTracks: 'no' }), /glyphTracks must be an array/);
+  assert.throws(() => glyphNode({ lineTracks: [{ x: 3 }] }), /must be a track/);
+});
+
+test('textTracksOf is what a copy of a text passes on: word, glyph and line tracks together', () => {
+  const t = hold(1);
+  const original = glyphNode({ wordTracks: [{ opacity: t }], glyphTracks: [[{ opacity: t }]], lineTracks: [{ y: t }] });
+  const copy = node('text', 't', original.props, { tracks: original.tracks, ...textTracksOf(original) });
+  assert.deepEqual([copy.wordTracks[0].opacity, copy.glyphTracks[0][0].opacity, copy.lineTracks[0].y], [t, t, t]);
+  const bare = node('text', 't', glyphProps(), { tracks: {}, ...textTracksOf(glyphNode({})) });
+  assert.equal(bare.glyphTracks, undefined, 'a text without them copies to a node without them');
+});
+
+test('a sampled word and line report whether every letter and the line are at rest', () => {
+  const [s] = sampleGraph([glyphNode({ glyphTracks: [[{ x: AT(0, 1) }]], lineTracks: [{ opacity: hold(1) }] })], 0.5);
+  assert.deepEqual([s.seen[0].rest, s.seen[1].rest], [false, true], 'word 0 has a letter off its place; word 1 only a line at rest');
+});
+
+test('glyph and line tracks follow the node step', () => {
+  const n = glyphNode({ step: 4, lineTracks: [{ x: track([{ t: 0, v: 0 }, { t: 1, v: 100, ease: 'linear' }]) }] });
+  assert.equal(sampleGraph([n], 0.3)[0].lines[0].x, 25);
+});
+
+test('stateKey separates glyph and line states', () => {
+  const key = (opts, t = 0) => stateKey(sampleGraph([glyphNode(opts)], t));
+  const glyphs = { glyphTracks: [[{ opacity: AT(0, 1) }, {}]] };
+  assert.notEqual(key(glyphs, 0), key(glyphs, 0.5));
+  const lines = { lineTracks: [{ y: AT(0, 1) }] };
+  assert.notEqual(key(lines, 0), key(lines, 0.5));
 });
 
 test('stateKey separates states after the camera and returns a string', () => {

@@ -83,7 +83,7 @@ function stepped(n) {
   if (keys === undefined && (opacity === undefined || opacity === 1)) return n;
   const first = keys?.find((k) => k.v > 0);
   const tracks = { ...n.tracks, opacity: track(first === undefined || first.t <= 0 ? [{ t: 0, v: 1 }] : [{ t: 0, v: 0 }, { t: first.t, v: 0 }, { t: first.t, v: 1 }]) };
-  return node(n.type, n.id, props, { tracks, children: n.children, wordTracks: n.wordTracks, step: n.step, depth: n.depth });
+  return node(n.type, n.id, props, { tracks, children: n.children, wordTracks: n.wordTracks, glyphTracks: n.glyphTracks, lineTracks: n.lineTracks, step: n.step, depth: n.depth });
 }
 
 // A group that is only a position: no turn and no scale.
@@ -93,7 +93,7 @@ const isOffset = (g) => g.type === 'group' && !g.props.rotate && g.props.scale =
 function moved(n, dx, dy, fixed) {
   if (dx === 0 && dy === 0 && !fixed) return n;
   const props = { ...n.props, x: (n.props.x ?? 0) + dx, y: (n.props.y ?? 0) + dy, ...(fixed ? { fixed: true } : {}) };
-  return node(n.type, n.id, props, { tracks: n.tracks, children: n.children, wordTracks: n.wordTracks, step: n.step, depth: n.depth });
+  return node(n.type, n.id, props, { tracks: n.tracks, children: n.children, wordTracks: n.wordTracks, glyphTracks: n.glyphTracks, lineTracks: n.lineTracks, step: n.step, depth: n.depth });
 }
 
 function lift(n, dx = 0, dy = 0, fixed = false) {

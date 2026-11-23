@@ -1,6 +1,6 @@
 // The `ledger` look (experimental) against the review rules in the page: every kind's example (as --list kinds prints
-// it) that ledger ships unparked, in pro at 16:9 and 9:16, reviewed at the sheet moments, comes back with no finding and
-// no page error. The kinds come from the registry, not from a listing: a hidden look is in none, so a sweep built on
+// it) that ledger ships unparked, in pro at 16:9 and 9:16, reviewed at the sheet moments, comes back with no finding
+// beyond those in KNOWN, and no page error. The kinds come from the registry, not from a listing: a hidden look is in none, so a sweep built on
 // listEntries(...).looks would test nothing (the count is asserted). Run with --test-concurrency=1; skips without a
 // browser.
 import test, { before, after } from 'node:test';
@@ -21,6 +21,21 @@ const FORMATS = Object.freeze(['16:9', '9:16']);
 const look = registries.looks.get('ledger');
 const SHIPPED = registries.kinds.names().filter((kind) => supportsKind(look, kind) && !isParkedKind(look, kind));
 const exampleOf = (kind) => listEntries('kinds').find((e) => e.name === kind)?.example ?? registries.kinds.get(kind).example;
+// The composition findings (W2 Task 3) ledger gives on a kind's example, by "<kind> <format>", as "<kind> <rule> <path>"; the
+// examples are shared with the other looks, so their copy stays:
+// - free: one 80-unit bar on an empty page (the kind's minimal example): dead-space is right;
+// - diagram 16:9: three small boxes in one row, 43% of the height bare above and below (the same frame as keynote's, which
+//   was viewed): dead-space is right;
+// - timeline 9:16: viewed (.scratch/motion-steals-w2/t3/png-ledger/history.png), three years in a column hugging the
+//   left rule, the right 48% of the width bare: dead-space is right.
+// (Ledger's band is 0.40: its timeline 16:9 at 36% bare above, not viewed, and its left-flush statement 16:9 with 39% of the
+// width bare, viewed and read filled, are not findings.)
+const KNOWN = Object.freeze({
+  'free 16:9': ['creative dead-space shots[0]'],
+  'free 9:16': ['creative dead-space shots[0]'],
+  'diagram 16:9': ['creative dead-space shots[0]'],
+  'timeline 9:16': ['creative dead-space shots[0]'],
+});
 
 // A striped PNG, built by hand so a browser can decode it: a stand-in screenshot.
 function stripedPng(w, h) {
@@ -51,13 +66,13 @@ test('the sweep covers every kind ledger ships: sixteen less the one it parks (n
 
 for (const format of FORMATS) {
   for (const kind of SHIPPED) {
-    test(`look ledger: the ${kind} example at ${format} has no finding`, async (t) => {
+    test(`look ledger: the ${kind} example at ${format} has only its known findings`, async (t) => {
       const film = { version: 2, mode: 'pro', look: 'ledger', format, fps: FPS, seed: 3, shots: [exampleOf(kind)] };
       const session = await sessionOrNull(film, { specDir });
       if (!session) { t.skip('no browser'); return; }
       t.after(() => session.close());
       const findings = await reviewFilm({ session });
-      assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule} ${f.path}`), [], findings.map((f) => f.message).join('\n'));
+      assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule} ${f.path}`), KNOWN[`${kind} ${format}`] ?? [], findings.map((f) => f.message).join('\n'));
       assert.deepEqual(session.errors, []);
     });
   }

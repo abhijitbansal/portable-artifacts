@@ -1,0 +1,130 @@
+// The two spec-only rules, `cut-variety` and `sameness`: they read the film and its timeline and nothing that is drawn, so
+// `--outline` runs them and the full review runs them again (scripts/v2/review.mjs). Pure. Both are creative: a film made
+// of one cut, or of three shots alike, can be intended, so a finding asks and never fails the run. `capCreative` keeps the
+// first few of each a film, so a film built of one pattern is told once and not thirty times.
+import { resolveShotCut, filmLook } from '../cuts/resolve.mjs';
+
+/** A film with fewer seams (the arrival at each shot after the first) is never judged: with three, any cut is "more than two thirds". */
+export const MIN_SEAMS = 4;
+/** `cut-variety` fires when one windowed cut takes more than this share of the seams. Not the cut-window rule's share of a shot. */
+export const REPEATED_CUT_SHARE = 2 / 3;
+/** `sameness` fires on this many shots in a row, or more, that share a kind, a windowed cut or a move. */
+export const SAME_RUN = 3;
+/** Findings of one capped rule a film keeps (of one form, for `sameness`); the rest are counted in the last one kept. */
+export const CREATIVE_CAP = 2;
+/** The rules `capCreative` caps. W2's composition rules (`COMPOSITION_RULES`, frame.mjs) are capped by `capComposition`, by measure. A later rule that is capped by time appends its id. */
+export const CAPPED_HERE = Object.freeze(['cut-variety', 'sameness', 'overlay-covers']);
+
+const SHARE_EPSILON = 1e-9;
+
+/**
+ * Where the author changes shot `index`'s cut: its own `cut`, or the root `cut` when the shot has none and the film names
+ * one (every such shot takes it). With no root cut the shot's cut is the look's pick, and the shot's own `cut` is the field
+ * to set: a root `cut` the film does not have would give every seam that cut.
+ */
+export const cutPath = (film, index) => (film.shots[index].cut === undefined && film.cut !== undefined ? 'cut' : `shots[${index}].cut`);
+
+/** The cuts the look allows but `name`: what a finding suggests in its place. */
+const cutsInstead = (film, name) => (filmLook(film)?.cuts ?? []).filter((cut) => cut !== name);
+
+/** { index, name } of every seam whose cut has a window (a duration above 0): the plain cut changes the subject and is never counted as a repeat. */
+function windowedSeams(film) {
+  return film.shots.flatMap((_, index) => {
+    const cut = resolveShotCut(film, index);
+    return cut !== null && cut.dur > 0 ? [{ index, name: cut.name }] : [];
+  });
+}
+
+/**
+ * One finding when a windowed cut opens more than two thirds of a film's shots after the first. At the first shot that uses it.
+ * @returns {{ kind: 'creative', shot: string, path: string, t: number, rule: 'cut-variety', node: string, message: string, suggest: { cuts: string[] } }[]}
+ */
+export function cutVarietyFindings(film, timeline) {
+  const seams = film.shots.length - 1;
+  if (seams < MIN_SEAMS) return [];
+  const counts = new Map();
+  const first = new Map();
+  for (const { index, name } of windowedSeams(film)) {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    if (!first.has(name)) first.set(name, index);
+  }
+  return [...counts].filter(([, count]) => count / seams > REPEATED_CUT_SHARE + SHARE_EPSILON).map(([name, count]) => {
+    const index = first.get(name);
+    return {
+      kind: 'creative', shot: timeline.shots[index].id, path: cutPath(film, index), t: timeline.shots[index].start, rule: 'cut-variety', node: name,
+      message: `${count} of the ${seams} cuts are the ${name}, more than two thirds of them; give some shots another cut, so the film says how each pair of shots relates`,
+      suggest: { cuts: cutsInstead(film, name) },
+    };
+  });
+}
+
+// The devices a shot's `on` events place, each once, in name order: its move. '' for a shot that places none.
+const moveOf = (shot) => [...new Set((shot.on ?? []).map((event) => event.do))].sort().join('+');
+
+/** The runs of `SAME_RUN` or more equal keys in `keys`, as [first, last] indexes; a falsy key ends a run and never starts one. */
+function runsOf(keys) {
+  const runs = [];
+  let start = 0;
+  for (let i = 1; i <= keys.length; i += 1) {
+    if (i < keys.length && keys[i] && keys[i] === keys[start]) continue;
+    if (keys[start] && i - start >= SAME_RUN) runs.push([start, i - 1]);
+    start = i;
+  }
+  return runs;
+}
+
+/**
+ * One finding per run of `SAME_RUN` or more shots in a row with the same kind, the same windowed cut or the same move,
+ * at the third shot of the run. A shot that places no device has no move to share.
+ * @returns {{ kind: 'creative', shot: string, path: string, t: number, rule: 'sameness', node: string, message: string, suggest?: { cuts: string[] } }[]}
+ */
+export function samenessFindings(film, timeline) {
+  const windowed = new Map(windowedSeams(film).map(({ index, name }) => [index, name]));
+  const forms = [
+    { keys: film.shots.map((shot) => shot.show), field: 'show', node: (key) => `kind:${key}`, say: (key) => `the ${key} kind`, fix: 'another kind' },
+    { keys: film.shots.map((_, i) => windowed.get(i) ?? ''), field: 'cut', node: (key) => `cut:${key}`, say: (key) => `the ${key} cut`, fix: 'another cut' },
+    { keys: film.shots.map(moveOf), field: 'on', node: (key) => `move:${key}`, say: (key) => `the same move (${key.replaceAll('+', ' and ')})`, fix: 'another move' },
+  ];
+  return forms.flatMap(({ keys, field, node, say, fix }) => runsOf(keys).map(([first, last]) => {
+    const third = first + SAME_RUN - 1, key = keys[first];
+    const ids = `"${timeline.shots[first].id}" to "${timeline.shots[last].id}"`;
+    return {
+      kind: 'creative', shot: timeline.shots[third].id, path: field === 'cut' ? cutPath(film, third) : `shots[${third}].${field}`, t: timeline.shots[third].start,
+      rule: 'sameness', node: node(key),
+      message: `${last - first + 1} shots in a row (${ids}) have ${say(key)}; give one of them ${fix}`,
+      ...(field === 'cut' ? { suggest: { cuts: cutsInstead(film, key) } } : {}),
+    };
+  }));
+}
+
+/** Both rules' findings, in time order. */
+export const outlineFindings = (film, timeline) => [...cutVarietyFindings(film, timeline), ...samenessFindings(film, timeline)].sort((a, b) => a.t - b.t);
+
+// What a cap counts together: a rule's findings, and for `sameness` each form (the `kind:`, `cut:` or `move:` of its node) on
+// its own, so a run of the same kind can never hide the run of one cut, the only one that carries `suggest.cuts`.
+const capGroup = (f) => (f.rule === 'sameness' ? `sameness ${String(f.node ?? '').split(':')[0]}` : f.rule);
+
+/**
+ * At most `CREATIVE_CAP` findings of each rule in `CAPPED_HERE` (of each form, for `sameness`): the earliest stay, in their
+ * place in the list, and the last of them says how many were left out and in which shots, each shot's id once. Every other
+ * finding passes through untouched; the input is not changed.
+ */
+export function capCreative(findings) {
+  const groups = new Map();
+  for (const f of [...findings].sort((a, b) => a.t - b.t)) {
+    if (!CAPPED_HERE.includes(f.rule)) continue;
+    const key = capGroup(f);
+    groups.set(key, [...(groups.get(key) ?? []), f]);
+  }
+  const dropped = new Set();
+  const lastKept = new Map(); // the finding that carries the count -> the findings left out
+  for (const group of groups.values()) {
+    if (group.length <= CREATIVE_CAP) continue;
+    group.slice(CREATIVE_CAP).forEach((f) => dropped.add(f));
+    lastKept.set(group[CREATIVE_CAP - 1], group.slice(CREATIVE_CAP));
+  }
+  return findings.filter((f) => !dropped.has(f)).map((f) => {
+    const more = lastKept.get(f);
+    return more === undefined ? f : { ...f, message: `${f.message} (and ${more.length} more: ${[...new Set(more.map((m) => m.shot))].join(', ')})` };
+  });
+}

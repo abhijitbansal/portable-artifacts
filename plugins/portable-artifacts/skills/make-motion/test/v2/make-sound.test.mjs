@@ -10,12 +10,15 @@ import path from 'node:path';
 import { browserAvailable, ffmpegOrNull } from './helpers/session.mjs';
 import { findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
-import { runMake } from '../../scripts/v2/run.mjs';
+import { runMake, makeSound } from '../../scripts/v2/run.mjs';
+import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { formatText, NOT_RENDERED_NOTE, soundLine } from '../../scripts/v2/report.mjs';
 import { withFilmDefaults } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { planCues } from '../../scripts/v2/sound/cues.mjs';
 import { fitBeatGrid } from '../../scripts/v2/sound/bed.mjs';
+import { writeNoise } from './helpers/clicks.mjs';
+import { writeBeatsFile } from '../../scripts/v2/sound/beats-file.mjs';
 import { NO_VOICE_NOTE } from '../../scripts/v2/voice/master.mjs';
 
 const FPS = 30;
@@ -212,6 +215,152 @@ test('--outline takes no sound stage', async () => {
   const { report, exitCode } = await run(writeFilm('outline', viral({ music: { bed: 'tape' } })), { outline: true, noRender: false });
   assert.equal(exitCode, 0);
   assert.deepEqual(stagesOf(report).map(([name]) => name), ['validate', 'timeline']);
+});
+
+// ---- --no-music: the music is planned (so music.snap still moves the cuts), then left out of the sound ----
+
+const SNAP_FREE = (id, hold, cut) => ({ id, show: 'free', hold, background: '#f3eee3', ...(cut ? { cut } : {}), nodes: [{ type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' } }] });
+const SNAP_BEATS = Array.from({ length: 21 }, (_, k) => k * 0.5); // 120 BPM over 10 s
+// A film with no narration, a music file and a beats file whose beats move three cuts (as sound-snap.test.mjs builds its own).
+function snapFilm(name, extra = {}) {
+  const at = path.join(dir, name);
+  mkdirSync(at, { recursive: true });
+  writeNoise(path.join(at, 'm.wav'), { seconds: 10 });
+  writeBeatsFile(path.join(at, 'm.beats.json'), { source: 'm.wav', bpm: 120, confidence: 1, beats: SNAP_BEATS });
+  const film = { version: 2, fps: FPS, mode: 'pro', shots: [SNAP_FREE('a', 1.9), SNAP_FREE('b', 2.3, 'cut'), SNAP_FREE('c', 2.1, 'cut'), SNAP_FREE('d', 1.7, 'cut')], music: { src: 'm.wav', beats: 'm.beats.json', snap: true }, ...extra };
+  const specPath = path.join(at, 'film.json');
+  writeFileSync(specPath, JSON.stringify(film));
+  return specPath;
+}
+
+test('--no-music keeps the cuts the snap moved and drops the track', async (t) => {
+  if (!await mediaTools(t)) return;
+  if (!await needsBrowser(t)) return;
+  const specPath = snapFilm('snap-nomusic');
+  const withMusic = await run(specPath);
+  const without = await run(specPath, { noMusic: true });
+  assert.equal(withMusic.exitCode, 0, JSON.stringify(withMusic.report.findings));
+  assert.equal(without.exitCode, 0, JSON.stringify(without.report.findings));
+  assert.ok(withMusic.report.audio.music.moved.length > 0, 'the snap moved a cut');
+  assert.deepEqual(without.report.audio.music.moved, withMusic.report.audio.music.moved);
+  assert.equal(without.report.audio.music.muted, true);
+  assert.equal(withMusic.report.audio.music.muted, undefined);
+  // the picture and the timeline are the same film
+  assert.equal(without.report.timed, withMusic.report.timed);
+  assert.equal(without.report.frames, withMusic.report.frames);
+  assert.equal(without.report.seconds, withMusic.report.seconds);
+});
+
+test('--no-music leaves every shot start and every cue time where the snap put them', async (t) => {
+  if (!await mediaTools(t)) return;
+  const loaded = loadFilm(snapFilm('snap-nomusic-times', { sound: 'on' }));
+  const plain = buildTimeline(loaded.film, { fps: loaded.film.fps });
+  const plan = async (noMusic) => {
+    const state = { stages: [], findings: [], audio: null };
+    const { timeline } = await makeSound(loaded, plain, state, { log: () => {} }, null, [], { noMusic });
+    return { starts: timeline.shots.map((s) => [s.id, s.start]), cues: planCues(loaded.film, timeline).map((c) => [c.cue, c.t]), audio: state.audio };
+  };
+  const [withMusic, without] = [await plan(false), await plan(true)];
+  assert.notDeepEqual(withMusic.starts, plain.shots.map((s) => [s.id, s.start]), 'the snap moved a cut');
+  assert.ok(withMusic.cues.length > 0, 'the film has cues');
+  assert.deepEqual(without.starts, withMusic.starts, 'every shot start');
+  assert.deepEqual(without.cues, withMusic.cues, 'every cue time');
+  assert.equal(without.audio.cues, withMusic.audio.cues);
+  assert.deepEqual(without.audio.music.moved, withMusic.audio.music.moved);
+  assert.equal(without.audio.music.muted, true);
+});
+
+test('--no-music leaves the cue plan and the timeline of a film with cues as they were', async (t) => {
+  if (!await needsBrowser(t)) return;
+  const specPath = writeFilm('cues-nomusic-plan', viral({ music: { bed: 'pulse', bpm: 120 } }));
+  const withMusic = await run(specPath);
+  const without = await run(specPath, { noMusic: true });
+  assert.equal(without.exitCode, 0, JSON.stringify(without.report.findings));
+  assert.ok(without.report.audio.cues > 0);
+  assert.equal(without.report.audio.cues, withMusic.report.audio.cues);
+  assert.equal(without.report.timed, withMusic.report.timed);
+  assert.equal(without.report.frames, withMusic.report.frames);
+  assert.deepEqual({ ...without.report.audio.music, muted: undefined }, { ...withMusic.report.audio.music, muted: undefined });
+  assert.equal(without.report.audio.music.muted, true);
+});
+
+test('--no-music says what the run did, once, on the log: planned on --no-render, rendered when a video is', async (t) => {
+  if (!await mediaTools(t)) return;
+  if (!await needsBrowser(t)) return;
+  const said = async (name, flags) => {
+    const lines = [];
+    const { report, exitCode } = await run(snapFilm(name), { noMusic: true, ...flags }, { log: (line) => lines.push(line) });
+    assert.equal(exitCode, 0, JSON.stringify(report.findings));
+    return lines.filter((l) => /--no-music/.test(l));
+  };
+  assert.deepEqual(await said('snap-nomusic-log-plan', {}), ['make: --no-music: the film is planned without its music, and this run renders no video; its cuts stay where the music put them']);
+  assert.deepEqual(await said('snap-nomusic-log', { noRender: false }), ['make: --no-music: the film is rendered without its music; its cuts stay where the music put them']);
+});
+
+test('--no-music on a film with no music says there is no music to leave out, once, in a film with and without sound', async (t) => {
+  if (!await needsBrowser(t)) return;
+  for (const [name, film] of [['viral', viral()], ['pro', pro()]]) {
+    const lines = [];
+    const { report, exitCode } = await run(writeFilm(`nomusic-none-${name}`, film), { noMusic: true }, { log: (line) => lines.push(line) });
+    assert.equal(exitCode, 0, JSON.stringify(report.findings));
+    assert.deepEqual(lines.filter((l) => /--no-music/.test(l)), ['make: --no-music: the film has no music; nothing to leave out'], name);
+  }
+});
+
+test('the text report says a muted music is muted', () => {
+  const bed = { kind: 'bed', bed: 'pulse', bpm: 108, landed: 1, cuts: 3, short: false };
+  assert.equal(soundLine({ cues: 2, music: { ...bed, muted: true } }), 'sound: 2 cues, bed pulse at 108 bpm, 1 of 3 cuts on a beat (muted)');
+  assert.equal(soundLine({ cues: 0, music: { ...bed, muted: true } }), 'sound: no cues, bed pulse at 108 bpm, 1 of 3 cuts on a beat (muted)');
+  assert.doesNotMatch(soundLine({ cues: 2, music: bed }), /muted/);
+});
+
+test('a narrated film with a bed and no cues keeps the muted bed in its report after the render, and the voice in its file', async (t) => {
+  if (!await needsBrowser(t)) return;
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const at = path.join(dir, 'narrated-muted');
+  mkdirSync(at, { recursive: true });
+  const made = spawnSync(tools.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=f=440:d=3', path.join(at, 'take.wav')], { encoding: 'utf8' });
+  assert.equal(made.status, 0, made.stderr);
+  writeFileSync(path.join(at, 'take.json'), JSON.stringify({ segments: [{ words: [{ word: ' Go.', start: 0.2, end: 0.5 }] }] }));
+  const specPath = path.join(at, 'film.json');
+  writeFileSync(specPath, JSON.stringify({ version: 2, mode: 'pro', voice: { src: 'take.wav', words: 'take.json' }, music: { bed: 'pulse', bpm: 120 }, shots: [{ id: 'go', show: 'statement', say: 'Go.' }] }));
+  const out = path.join(at, 'out', 'film.mp4');
+  const { report, exitCode } = await runMake({ specPath, out, exact: false, noRender: false, outline: false, noMusic: true });
+  assert.equal(exitCode, 0, JSON.stringify(report));
+  assert.equal(report.audio.music.muted, true, JSON.stringify(report.audio));
+  assert.equal(report.audio.music.bed, 'pulse');
+  assert.equal(typeof report.audio.lufs, 'number', 'the voice is in the file and measured');
+  const probe = JSON.parse(spawnSync(tools.ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'json', out], { encoding: 'utf8' }).stdout);
+  assert.equal(probe.streams.filter((s) => s.codec_type === 'audio').length, 1);
+});
+
+test('a film with cues renders the cues and not the bed with --no-music, and says so in its report', async (t) => {
+  if (!await needsBrowser(t)) return;
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const out = path.join(dir, 'out-cues-muted', 'film.mp4');
+  const film = viral({ music: { bed: 'pulse', bpm: 120 } });
+  const { report, exitCode } = await runMake({ specPath: writeFilm('cues-muted', film), out, exact: false, noRender: false, outline: false, noMusic: true });
+  assert.equal(exitCode, 0, JSON.stringify(report));
+  assert.equal(report.audio.cues, planOf(film).cues.length);
+  assert.equal(report.audio.music.muted, true);
+  assert.equal(report.audio.music.kind, 'bed');
+  assert.match(soundLine(report.audio), /\(muted\)$/);
+  const probe = JSON.parse(spawnSync(tools.ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'json', out], { encoding: 'utf8' }).stdout);
+  assert.equal(probe.streams.filter((s) => s.codec_type === 'audio').length, 1);
+});
+
+test('a film whose only sound is a bed renders silent with --no-music', async (t) => {
+  if (!await needsBrowser(t)) return;
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const out = path.join(dir, 'out-bed-muted', 'film.mp4');
+  const { report, exitCode } = await runMake({ specPath: writeFilm('bed-muted', pro({ music: { bed: 'pulse', bpm: 120 } })), out, exact: false, noRender: false, outline: false, noMusic: true });
+  assert.equal(exitCode, 0, JSON.stringify(report));
+  assert.equal(report.audio, null);
+  const probe = JSON.parse(spawnSync(tools.ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'json', out], { encoding: 'utf8' }).stdout);
+  assert.equal(probe.streams.filter((s) => s.codec_type === 'audio').length, 0);
 });
 
 test('a full render of a viral film with a bed: one audio stream, the bed and cues in it, the level measured in the file', async (t) => {

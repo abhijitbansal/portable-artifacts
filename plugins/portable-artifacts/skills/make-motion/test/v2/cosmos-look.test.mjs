@@ -105,12 +105,15 @@ test('composition, emphasis, field, camera, cuts, grain, captions and modes', ()
   assert.deepEqual([...l.modes], ['pro', 'viral']);
 });
 
-test('motion: smooth curves, entrances scale from 0.92 with a fade and a small overshoot that never backs off first, nothing steps', () => {
+test('motion: smooth curves, entrances scale from 0.92 with a fade and a small overshoot that never backs off first, nothing steps but the letters entrance', () => {
   const { moves } = look();
   assert.equal(moves.enter.scale, 0.92);
   assert.equal(moves.enter.dist, undefined, 'entrances scale, they do not travel');
   // the second-wave moves (rise, wipe, slam, pop, settle) are null in the parked look: it does not use them
   for (const [key, move] of Object.entries(moves).filter(([, m]) => m !== null)) assert.equal(move.step, undefined, `${key} is smooth, not stepped`);
+  // the one exception, by ruling (W6 task 4): the letters entrance flickers up on a steps() ease; no other move steps
+  assert.match(moves.letters.ease, /^steps\(/, 'the letters entrance steps');
+  for (const [key, move] of Object.entries(moves).filter(([name, m]) => m !== null && name !== 'letters')) assert.doesNotMatch(move.ease, /^steps\(/, `${key} does not step`);
   for (const key of ['exit', 'emphasize', 'draw', 'count']) assert.match(moves[key].ease, /^inOut/, `${key} eases in and out`);
   const curve = ease(moves.enter.ease);
   const samples = Array.from({ length: 101 }, (_, i) => curve(i / 100));
@@ -120,7 +123,7 @@ test('motion: smooth curves, entrances scale from 0.92 with a fade and a small o
 
 test('sounds are the brief values, one for every registered cut, device and kind event device', () => {
   const { sounds } = look();
-  assert.deepEqual({ ...sounds.cut }, { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
+  assert.deepEqual({ ...sounds.cut }, { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', flood: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
     'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'chime', circle: 'chime', underline: 'chime', arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'pop', turn: 'whoosh',
@@ -187,8 +190,11 @@ test('its field is registered and plans with its params at 16:9 and 9:16', () =>
 
 test('every move parses and has the grammar keys; tracking answers each role and refuses others', () => {
   const l = look();
-  assert.deepEqual(Object.keys(l.moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle']);
-  for (const key of ['rise', 'wipe', 'slam']) assert.equal(l.moves[key], null, `${key}: not used by the look`);
+  assert.deepEqual(Object.keys(l.moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle', 'letters', 'lines']);
+  for (const key of ['rise', 'wipe', 'slam', 'lines']) assert.equal(l.moves[key], null, `${key}: not used by the look`);
+  // W6 task 4: a statement arrives one letter after another, flickering up in three steps (an entrance that ends at rest)
+  assert.deepEqual({ ...l.moves.letters }, { ease: 'steps(3)', dur: 0.18, stagger: 0.035 });
+  assert.equal(l.kinds.statement.entrance, 'letters');
   // the second-wave kinds ask for two of the named moves: the screen's card pops in, a part settles into place (looks phase)
   assert.deepEqual({ ...l.moves.pop }, { ease: 'outBack', dur: 0.55, scale: 0.92 });
   assert.deepEqual({ ...l.moves.settle }, { ease: 'inOutCubic', dur: 0.6 });

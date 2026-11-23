@@ -18,7 +18,7 @@ import { runMake } from '../../scripts/v2/run.mjs';
 const CLIP = path.resolve(HERE, '../../../references/examples/v2/media-clip.mp4'); // HERE is test/v2/helpers
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
 const FILM = { version: 2, fps: 30, look: 'desk', seed: 3, shots: [
-  { id: 'open', show: 'free', hold: 1, background: '#f3eee3', nodes: [{ type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' } }] },
+  { id: 'open', show: 'free', hold: 1, background: '#f3eee3', nodes: [{ type: 'path', id: 'bar', props: { d: 'M300 140H1620V940H300Z', fill: '#15130f' } }] }, // a block that fills the frame, so the clip tests do not depend on the composition thresholds
   { id: 'reel', show: 'media', cut: 'cut', src: 'clip.mp4', in: 1, hold: 1.5 },
 ] };
 

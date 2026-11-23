@@ -220,13 +220,13 @@ test('display width takes only the six stretch keywords', () => {
   assert.equal(look().fonts.display.width, 'extra-condensed');
 });
 
-test('camera locked, OKLab colour, hook at full ink, the six cuts of the palette, a little grain and nothing else', () => {
+test('camera locked, OKLab colour, hook at full ink, the seven cuts of the palette, a little grain and nothing else', () => {
   const { closeUp, ...camera } = look().camera;
   assert.deepEqual(camera, { drift: 0, style: 'locked' });
   assert.deepEqual(Object.keys(closeUp).sort(), ['height', 'minGain', 'pad', 'width'], 'the close-up window is data for a cut, not a move');
   assert.equal(look().colorSpace, 'oklab');
   assert.equal(look().hookInk, true);
-  assert.deepEqual([...look().cutPalette], ['cut', 'cover', 'iris', 'wipe', 'punch', 'slide']);
+  assert.deepEqual([...look().cutPalette], ['cut', 'cover', 'iris', 'flood', 'wipe', 'punch', 'slide']);
   assert.deepEqual({ ...look().post }, { grain: 0.015, halftone: 0, bloom: 0 });
   assert.equal(look().composition, 'stack');
   assert.equal(look().emphasis, 'scale');

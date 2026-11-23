@@ -97,12 +97,16 @@ export const cosmos = {
     // the second-wave named moves (engine/moves): the look uses the two its second-wave kinds ask for, the screen's card
     // (`pop`, the enter spring) and a part settling into place (`settle`, a plain ease: the data never overshoots)
     rise: null, wipe: null, slam: null, pop: { ease: SMOOTH, dur: 0.55, scale: 0.92 }, settle: { ease: PLAIN, dur: 0.6 },
+    // the statement's entrance (kinds.statement.entrance 'letters', W6 task 4): each letter flickers up in three steps over
+    // 0.18 s, one letter every 0.035 s, the first landing on the word's spoken time
+    letters: { ease: 'steps(3)', dur: 0.18, stagger: 0.035 },
+    lines: null,
   },
   wordStagger: 0,
   // the resting camera: a slow linear drift across each shot (the 'desk' camera style), no shake
   camera: { drift: 10, style: 'desk' },
   // every registered cut may be named; the palette is cosmos's own set, in its order, cutStyle its defaults per cut
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'match', 'crossfade', 'fade', 'iris', 'ripple'],
   cutStyle: {},
@@ -110,7 +114,8 @@ export const cosmos = {
   // a soft shadow in a darker navy: depth from light, not from paper
   shadow: { dx: 0, dy: 12, blur: 32, alpha: 0.35, color: '#05081c' },
   // Styling for the devices this look draws. Colours are palette keys (or #rrggbb), sizes are units. Every style is
-  // smooth and round: no tilt, no tape, no hand wobble, no stepped frames.
+  // smooth and round: no tilt, no tape, no hand wobble, no stepped frames (the one steps() ease in the look is its letters
+  // entrance, moves.letters).
   devices: {
     // a neon pill: the deep navy at `alpha` behind the phrase, and round it a soft accent glow (screened, so it only
     // brightens) whose edge falls off over `glow` units. An accent pill at an alpha read as a brown band (rendered).
@@ -145,7 +150,11 @@ export const cosmos = {
     // phrase, strength)
     // (gate round 3) `fromSun`: on a wide frame from the column the sun leaves free (sun.mjs besideSun) to `toWide`, so
     // the sun has a column of its own; on a tall one centred on the sun's axis (`tallAlign`) in the band under its disc
-    statement: { toWide: 12, fromSun: true, tallAlign: 'center', linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { strength: 1 } },
+    // `fillShort` (statement.mjs): a claim of at most 6 words may take 0.8 of the band's height (0.64 otherwise), up to
+    // `linesWide` 3 lines (2 otherwise) and a size of 360 units (300 otherwise): at 2 lines and 300 units a short claim
+    // left the lower half of the frame bare (W2 task 5)
+    // `entrance` 'letters': a word arrives one letter after another (moves.letters) in pro; viral keeps its lit ghosts
+    statement: { toWide: 12, fromSun: true, tallAlign: 'center', linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { strength: 1 }, fillShort: { words: 6, height: 0.8, linesWide: 3, max: 360 }, entrance: 'letters' },
     // clipping (optional data, clipping.mjs): the picture on the look's rounded `card`, square (`turn` 0), with a soft
     // accent `glow` (units of blur) round the card, and a region's marker frame round-cornered (`mark`: radius, width units)
     clipping: { card: true, turn: 0, glow: 26, mark: { radius: 18, width: 6 } },
@@ -235,9 +244,15 @@ export const cosmos = {
     feed: { lit: { spoken: 'ink', other: 'ink2' }, face: 'display', titleFace: 'label', steps: [2, 3, 4], maxLines: 4, pad: 28, gap: 20, share: 0.82, radius: 36, bold: 700, me: { fill: '#3a3180', text: 'ink' }, them: { fill: '#2e2770', text: 'ink' }, card: { fill: '#2e2770', text: 'ink' }, discs: ['shape', 'shape2', 'ink2'], discText: 'deep', dots: 'ink2', title: 'ink2', lineWidth: 0, shadow: false },
   },
   post: { grain: 0.01, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units; the bar at
+  // the top of the band, clear of the captions under it
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'top', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
+    cut: { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', flood: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: {
       highlight: 'chime', circle: 'chime', underline: 'chime', arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'pop', turn: 'whoosh',

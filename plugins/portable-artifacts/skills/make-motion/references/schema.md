@@ -36,10 +36,11 @@ An unknown root field is an error. Only `shots` and `version` are required.
 | `sound` | `"on"` or `"off"` | `on` plays the designed sound cues. In `viral` they play unless the film says `off` |
 | `cues` | array of up to 64 `{ "at", "cue" }` | Your own sound cues. See Sound |
 | `audio` | array of up to 20 `{ "src", "at" }` | Extra sound files. See Sound |
+| `overlays` | `{ "logo": { "src", "corner" }, "progress": true }` | A logo and a progress bar that stay unbroken over every cut. See Overlays |
 | `captions` | boolean | Draws the narration as captions, on shots whose kind does not show its own words. Off by default |
 | `loop` | boolean | `true`: the review checks that the last frame matches the first |
 | `vars` | object | Typed names for `{{name}}` in the film (see Variables) |
-| `generatedBy` | `{ "model", "effort", "agent" }` | Which model wrote the film. Each value is 1 to 60 letters, digits, spaces and `. _ : / ( ) + [ ] -`. Written into the MP4's metadata |
+| `generatedBy` | `{ "model", "effort", "agent" }` | Which model wrote the film. Each value is 1 to 60 letters, digits, spaces and `. _ : / ( ) + [ ] -`. Written into the MP4's metadata. `--model`, `--effort` and `--agent` on `make.mjs` override the three keys |
 | `provenance` | boolean | `false` leaves the authoring tags out of the MP4, as `--no-provenance` does |
 
 ## Fields every shot takes
@@ -53,6 +54,7 @@ A kind adds its own fields on top (`--list kinds`). A shot with a field its kind
 | `say` | string, 1 to 400 characters | The narration of the shot. It sets how long the shot lasts |
 | `hold` | number, 1 to 30 | Seconds a shot with no `say` lasts. A shot takes `say` or `hold`, never both |
 | `cut` | a cut | How the film arrives at this shot (see Cuts). The first shot takes only `"cut"` |
+| `narration` | `{ "lead", "trail" }`, seconds from 0 to 1.5 | Sound across a cut: `lead` starts this shot's narration before its picture, `trail` lets it run into the next shot's picture. Needs `say` |
 | `on` | array of up to 8 events | Devices placed on words of the narration (see Anchors) |
 
 ## Narration markup
@@ -84,7 +86,7 @@ An anchor says when in a shot something happens. It is a number of seconds from 
 
 `beat:<n>` is refused. Cut to music with `music.beats` and `music.snap`. An anchor that lands more than one frame outside its shot is an error.
 
-An event in `on` is `{ "at": <anchor>, "do": <device>, "target": <target> }`. `at` and `do` are required. `do` is one of `--list devices`. `target` is a region of the shot (`region:query`) or one of the parts the kind names. A device the look does not draw is an error that lists the devices it does.
+An event in `on` is `{ "at": <anchor>, "do": <device>, "target": <target> }`. `at` and `do` are required. `do` is one of `--list devices`. `target` is a region of the shot (`region:query`) or one of the parts the kind names. A device the look does not draw is an error that lists the devices it does. To find the box of a region on a picture, see Locating a region in `references/tools.md`.
 
 ## Sound
 
@@ -95,7 +97,20 @@ Sound is opt-in. A film with none of `voice`, `music`, `sound`, `cues` or `audio
 - **`cues`**: `[{ "at": 2.5, "cue": "pop" }]`. `at` is seconds from the start of the film, or an anchor. The cue is one of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`, `swoosh`, `drop`, `ding`, `sub`, `paper`, `marker`, `erase`.
 - **`audio`**: `[{ "src": "sounds/ding.wav", "at": 3 }]`. `at` is seconds from the start, 0 or more.
 
+`--no-music` renders the film without its music, for a second delivery with no bed or track. The music is still planned, so `music.snap` moves the cuts as before and the cues sit on that timeline: the picture is the same film. When the render holds any other sound (a voice, cues, extra audio), `report.audio.music` keeps its summary and gains `muted: true`, and the text report's sound line ends `(muted)`; a film whose only sound was the music renders with no audio stream and `report.audio` is `null`. On a film with no music the flag does nothing and says so on the log. It does not go with `--outline`, `--phonemes`, `--poster`, `--poster-out`, `--inspect` or `--preview`.
+
 Every `src` is a file inside the film's folder. A URL, an absolute path or a path that leaves the folder is an error.
+
+## Overlays
+
+`overlays` puts two marks over the film itself, not over a shot, so a cut never moves, fades or breaks them: `{ "logo": { "src": "assets/logo.png", "corner": "top-right" }, "progress": true }`. Each key is optional. An unknown key gets a did-you-mean.
+
+- **`logo`**: a png, jpg, webp or gif inside the film's folder, held to the same rules as a shot's picture; a problem is reported at `overlays.logo.src`. `corner` is `top-left`, `top-right`, `bottom-left` or `bottom-right`; left out, it takes the look's own corner. The logo keeps its proportions and sits in its corner, inset by the look's margin; a very wide one is scaled down to fit the width it has.
+- **`progress`**: `true` draws a thin bar along one edge of the frame that fills from left to right over the film's length. The look sets the edge, thickness and colours. The bar sits on the frame's own edge, never moved in to the band a banded look composes in (`pop`, `cosmos`, `poster` on 9:16). In `viral` mode on a 9:16 frame the frame's edge is the edge of the platform's safe zone, so the bar starts at the top (or ends at the foot) of the safe zone. A banded look's band begins at that same line, so there the bar cannot be kept off the band: it lies in the band's first pixels, and no rule judges a text that reaches it.
+
+The logo stands inside the rectangle the look composes in and, in `viral` mode on a 9:16 frame, inside the platform's safe zone too, so it keeps clear of the platform's caption and buttons. Both are drawn over the composed frame, after the cut; for a shader cut they are laid over the transition's result before the post pass (grain, bloom, halftone). The review's composition rules do not see them, and a moving bar does not stop the `still` finding from firing. The poster and the `loop` check are taken without them; `--inspect` lists them in `overlays`, beside `nodes`. The look decides how each is drawn (`--list looks --json` says which overlays each look draws); asking for an overlay a look does not draw, such as `progress` in `marker`, is an error that names the looks that do.
+
+A progress bar makes every frame a fresh capture, so a film of held shots renders slower with it. Measured, one render each with `make.mjs --json`, fast capture, 30 fps, `desk`, on one machine (2026-11-22): three held shots of 4 s (360 frames) captured 144 frames at 22.2 ms per frame without the bar and 360 frames at 51.9 ms per frame with it, 2.3 times the time. A film that moves on every frame has nothing to lose: four moving statements joined by a slide, a crossfade and a ripple (179 frames) captured all 179 with the bar and with a logo alone, at 63.0 and 63.1 ms per frame.
 
 ## Variables
 
@@ -103,7 +118,23 @@ Every `src` is a file inside the film's folder. A URL, an absolute path or a pat
 
 ## Cuts
 
-A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", "duration": 0.5, "smear": true }`. Only `type` is required. `direction`, `duration` and `smear` apply to the cuts that take them. `--list cuts` prints each cut with its family, directions, default length and an example. A cut must be one the look lists: the error names the cuts it has. `"cut": "match"` carries the node two shots share across the cut, so both shots need a node with the same id (see `hero` in `--list kinds`).
+A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", "duration": 0.5, "smear": true, "at": "mark" }`. Only `type` is required. `direction`, `duration`, `smear` and `at` apply to the cuts that take them. `at` is a target of the shot the cut leaves (the names an `on` event's `target` takes there) and only `iris`, `zoom` and `flood` take it: the cut opens from that thing on screen, such as the button just clicked, instead of from the centre (or the point the look keeps clear). A name the shot before lacks is an error that lists the names it has; the cut never opens from the centre in silence. `flood` paints a colour over the outgoing shot as a growing circle, then opens the next shot from the same point; its colour is the first of the look's `cutFlood.colors` (default: the accent) that differs from both shots' grounds. `--list cuts` prints each cut with its family, directions, default length, whether the outgoing shot stays live, and an example. A layer or shader cut shows the outgoing shot still moving (its camera and its animated fields carry on; a video clip in it holds its last frame); a node cut (and a smear) holds its last frame, and so does every cut in a look drawn by hand. A cut must be one the look lists: the error names the cuts it has. `"cut": "match"` carries the node two shots share across the cut, so both shots need a node with the same id (see `hero` in `--list kinds`).
+
+## Composition findings
+
+Two `creative` findings judge how a shot fills its frame. Each is judged once per shot, on its resting frame: a shot mid-entrance, a frame inside a cut, and a frame that is all picture (a ground or a full-bleed image) give none. The caption zone, when captions are on, is taken out of the safe area first. At most 3 a film reach the report, the largest overshoots; the last kept finding says how many were left out.
+
+- `dead-space`: the longest empty band of the safe area reaches `band` of its width or height. Fix: let the hero take more of the frame, add a second element, or use a look that fills with type.
+- `scale-contrast`: the hero is the largest element and leads the next by at least 1.5 times in area, but its extent (the larger of its width and its height, each as a share of the safe area) is under `hero`. Fix: set it larger, crop in on it, or give it a second mass. A kind that lays out equals (the engine marks it `peers`: `list`, `compare`, `timeline`, `feed`) is not judged, since a slug or a divider is its "second" element.
+
+| Look data | Meaning |
+|---|---|
+| `fill` | `{ "band", "hero" }`, each a number above 0 and at most 1. Defaults 0.35 and 0.50. Set only where a look's layouts are measured and viewed to fill well under them |
+| `kinds.statement.fillShort` | `{ "words", "height", "toWide", "linesWide", "max" }`. A statement of at most `words` words may set its text block up to `height` of the composition band's height, up to column `toWide` and `linesWide` lines on a wide frame, and take a size cap of `max` units in place of 300. `words` and `height` are required. `desk`, `cosmos` and `keynote` set `fillShort`; the other looks keep their usual share |
+| `moves.letters`, `moves.lines`, `kinds.statement.entrance` | Two entrance moves a look may give a statement. `letters`: `{ "ease", "dur", "dist"?, "stagger" }`, a word comes in one letter after another, letter *k* landing `stagger` seconds after letter *k* - 1 and the last letter never later than 0.6 s after the word is spoken (a word of more than 18 letters at cosmos's stagger is staggered closer, so a URL is at rest inside its shot), the word's spacing and kerning kept (a word the glyph path cannot draw faithfully, such as a ligature or a right-to-left word, arrives whole with its letters' average). `lines`: `{ "ease", "dur", "dist"? }`, each line comes in as one block, landing on its first word's time. Both are entrances only: they carry no end value and always finish at rest (opacity 1, offset 0, scale 1), so a look that names another field is refused. A look drawn by hand writes its text and never fades it in, so `letters` and `lines` must be `null` there. `kinds.statement.entrance` (`"letters"` or `"lines"`) picks the move for the statement; the move must not be `null`. It never applies in a mode that reads from frame 0 (`viral`: every word is on screen from the first frame, whatever the look's emphasis), nor to a hero that arrives on a match cut. A look that opens composed (`ledger`, `keynote`, `poster`) or composes as a stack (`pop`, `poster`) has nothing to play, so it is refused an `entrance`. `cosmos` takes `letters` (`steps(3)`, 0.18 s, a letter every 0.035 s) and `desk` takes `lines`; every other look gives `null` for both |
+| An ease (`moves.*.ease`, `cutMotion.punchEase`, `cutStyle.cover.ease`, `kinds.chart.growEase`) | A name: `linear`; `in`, `out` or `inOut` with `Quad`, `Cubic`, `Quart`, `Expo` or `Back` (`outCubic`); `spring(<stiffness>,<damping>)`, both above 0; `cubic-bezier(<x1>,<y1>,<x2>,<y2>)`, the CSS curve, with `x1` and `x2` from 0 to 1 and `y1` and `y2` any number (a `y` past 0 or 1 overshoots and counts as bounce); `steps(<n>)` or `steps(<n>,start\|end)`, n from 1 to 120, `end` by default, holding each step's value until the next boundary. Every ease reads 0 at time 0 and 1 at the end, so `steps(<n>,start)` still reads 0 at time 0 and takes its first step just after it (CSS reads 1/n there). A look with a name that does not parse is refused when it registers |
+
+`desk` and `ledger` set `fill.band` to 0.40 (`ledger` also `hero` to 0.45): their flush-left statements and lists leave 35 to 39% of the width bare beside the slug and read filled, so the default would flag them. That is a ruled trade, and it has a cost: the 0.40 band also lets through two `desk` shapes that were viewed as sparse, the 16:9 statement and the 16:9 timeline. Look at those two on the sheets even when no finding is printed.
 
 ## The `--list` names
 
@@ -115,14 +146,14 @@ A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", 
 | `looks` | The looks |
 | `modes` | The modes, with their pace |
 | `devices` | The devices an `on` event can place |
-| `moves` | The motion values each look gives each move |
+| `moves` | The motion values each look gives each move, with how far it passes its end (`bounce`, a percent, only when above 0) and how long a viewer sees it move (`visible`, in seconds: a spring or an `outExpo` is visible for less than its `dur`). `--json` carries both as `facts` beside `looks`, `null` where a look does not use the move. `letters` reports one letter's curve, its `stagger` and `maxSpread` (the most a word's letters may spread, 0.6 s: a longer word is staggered closer): a word's own length depends on its letter count |
 | `cuts` | The cuts, their directions and lengths |
 | `fields` | The backgrounds a look can draw |
 | `voices` | The voices `voice.name` accepts |
 
 ## The report
 
-`make.mjs --json` prints one object on stdout. Every path gives the same keys.
+`make.mjs --json` prints one object on stdout. Every path gives the same keys. In the report of a single-film run, every file path (`output`, `sheets`, `board`, `poster.file`, `inspect.png` and `.json`, `subtitles.file`, `compare.file`) is absolute, resolved against the folder `make.mjs` ran in, so a reviewer that can only Read opens a sheet from any folder; the text form prints the paths as you gave them, and the rows of a `--batch --json` report keep the paths as given.
 
 | Key | Meaning |
 |---|---|
@@ -136,14 +167,29 @@ A cut is a name (`"slide"`) or an object `{ "type": "slide", "direction": "up", 
 | `stages` | `[{ name, ok, seconds }]` for each stage that ran |
 | `frames`, `captured` | Frames in the film, and frames actually captured |
 | `seconds`, `msPerFrame`, `bytes`, `mbps` | Render time, time per frame, file size and bit rate |
-| `findings` | `[{ kind, shot, path, message }]` (see below) |
+| `timing` | `{ drawMs, captureMs, encodeMs, checkMs }`: where the render's time went, summed across pages with `--workers`, or `null` when nothing was rendered |
+| `findings` | `[{ kind, shot, path, message, t?, rule?, suggest? }]` (see below): `t` and `rule` are on a review finding, `suggest` only where the rule has a fix value |
 | `provenance` | `{ comment, artist }` as stamped into the MP4, or `null` |
 
-These keys appear only when they apply: `poster`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
+These keys appear only when they apply: `poster`, `inspect`, `slice`, `board`, `compare`, `workers`, `subtitles`, `cuts`, `look` (an experimental look), `kinds` (the parked kinds the film uses), `error`.
 
-A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `path` and says what to change; it makes `ok` false. A `creative` finding is a call for the author and never fails the run. A parked kind is not a finding: it renders, and the report's `kinds` lists it.
+`subtitles` is `{ file, format, timed, level }`, on a `--subtitles` run only. `level` is `sentence`, or `word` with `--subtitle-words` (needs `--subtitles`): one cue per word, at the film second it is heard (a word that leads or trails its cut keeps its heard time), sorted across the film, each cue held inside the film; words heard at the same moment, within a millisecond of each other (a merged run such as "$5 million"), are one cue, and each cue ends where the next starts, so no two cues overlap. An estimated VTT says so in a `NOTE`; an estimated SRT is refused.
+
+`slice` is `{ from, to, frames, shots, silent, skipped }`, on a `--shot` or `--range` run only: the frames it covers, the shots it touches, whether the film's sound is left out, and the review rules it does not run (`references/tools.md`, "One shot or a range").
+
+`board` is the paths of the board strips, in order (`<name>.sheets/board/board-1.jpg` on): six shots to a strip, one tile per shot, on a `--sheets-only --estimated` run only. That run makes no voice, so `timed` is `"estimated"` and `voice` is `null`.
+
+`compare` is `{ file, shot, frame, frameLook, looks }`, on a `--compare-looks` run only: the sheet, the anchor shot, its late frame and the look that frame is in (the film's own look when it is on the sheet, else the first look drawn whole; both `null` when every look drew the anchor alone), and one `{ look, status, note, frame }` per look on the sheet in listed order (`status` is `drawn`, `parked` or `refused`; `note` says why for a parked look, a refused one, or a look that drew the anchor alone; `frame` is `null` for a refused look and for one that drew the anchor alone). The run writes no sheets and no video, so `output` is `null` and `sheets` is `[]` (`references/tools.md`, "Comparing looks").
+
+A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `path` and says what to change; it makes `ok` false. A `creative` finding is a call for the author and never fails the run. A parked kind is not a finding: it renders, and the report's `kinds` lists it. Every rule a finding can name, with what it asks and the value that fixes it, is in `references/rules.md`.
 
 `error` is `{ message, hint }`. It is set when something about the machine stopped the run (a missing film file, no browser, no ffmpeg, a crashed page, an interrupt). A fault in the film is a finding, not an error.
+
+Three render errors come from the checks the render makes on itself, and each leaves no MP4:
+
+- `render stalled in the <stage> stage at frame N of M: ...; last page messages: ...`: a stage (draw, capture, encode or check) gave no answer for 120 s, or the browser timed out. With `--workers` the messages come from every page, as `page N: message`, a few lines from each (at least one, and the error keeps at least one per worker), because the render does not know which page stalled. Run again, and with `--workers 1` if it keeps happening.
+- `render check: the finished file holds N frames, the timeline has M`: the finished file does not hold the frames the timeline has. The encode lost or added frames. Run again with `--workers 1`, then with `--exact`.
+- `render check: the finished file's picture is blank: none of its N frames has any detail`: the finished film is blank. Check that the shots draw something: a film of one `free` shot with only a `background` validates and draws nothing. It is an error and not a finding, because the film is valid and the file is useless.
 
 ## Exit codes
 
@@ -153,6 +199,10 @@ A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `pa
 | 1 | The film is invalid, or a mechanical finding exists (the MP4 is still written when the film validated) |
 | 2 | A usage error, or trouble with the machine. `error` says which and how to fix it |
 | 130 | Stopped by SIGINT or SIGTERM. The report keeps what was done |
+
+## Reproducibility
+
+Two renders of one film give the same frames on the same machine, browser build and fonts. The browser draws the text, so how it draws some words (kerning, ligatures, right-to-left scripts) and which of them are drawn letter by letter can differ between systems.
 
 ## Limits
 
@@ -166,3 +216,4 @@ A finding is `mechanical` or `creative`. A `mechanical` finding names a JSON `pa
 | Sound cues | 64 |
 | Extra audio files | 20 |
 | `--workers` | 1 to 8, or `auto` |
+| A render stage with no answer | 120 s, then the render stops with `render stalled` (the check restarts it on every frame it decodes) |

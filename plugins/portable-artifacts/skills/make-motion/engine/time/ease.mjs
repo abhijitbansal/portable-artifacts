@@ -1,5 +1,6 @@
 // Easing for the v2 engine: ease(name) -> (p) => number, p in [0, 1].
-// Names: linear; in|out|inOut + Quad|Cubic|Quart|Expo|Back; spring(<stiffness>,<damping>).
+// Names: linear; in|out|inOut + Quad|Cubic|Quart|Expo|Back; spring(<stiffness>,<damping>);
+// cubic-bezier(<x1>,<y1>,<x2>,<y2>) (the CSS curve, x1 and x2 from 0 to 1); steps(<n>) or steps(<n>,start|end).
 // Pure functions, no clock, no randomness: the same name always gives the same curve.
 import { createRegistry } from '../registry.mjs';
 
@@ -84,7 +85,79 @@ function parseSpring(name) {
   return spring(Number(m[1]), Number(m[2]));
 }
 
+// ---- cubic-bezier ----
+
+const BEZIER_FORM = 'cubic-bezier(<x1>,<y1>,<x2>,<y2>) with x1 and x2 from 0 to 1';
+const NUMBER = '(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))';
+const BEZIER_PATTERN = new RegExp(`^cubic-bezier\\(\\s*${[NUMBER, NUMBER, NUMBER, NUMBER].join('\\s*,\\s*')}\\s*\\)$`);
+const BEZIER_PRECISION = 1e-7; // how close the solved x must land to the asked x
+const NEWTON_STEPS = 8;
+const FLAT_SLOPE = 1e-6; // a slope under this is too flat for a Newton step: bisect instead
+
+// The CSS curve through (0,0), (x1,y1), (x2,y2), (1,1); y is read at the parameter whose x equals p.
+function cubicBezier(x1, y1, x2, y2) {
+  const coord = (a, b) => (t) => ((1 - 3 * b + 3 * a) * t + (3 * b - 6 * a)) * t * t + 3 * a * t; // Bernstein form, t^3 folded in
+  const x = coord(x1, x2);
+  const y = coord(y1, y2);
+  const slope = (t) => (3 * (1 - 3 * x2 + 3 * x1) * t + 2 * (3 * x2 - 6 * x1)) * t + 3 * x1;
+  const solve = (p) => {
+    let t = p;
+    for (let i = 0; i < NEWTON_STEPS; i++) {
+      const error = x(t) - p;
+      if (Math.abs(error) < BEZIER_PRECISION) return t;
+      const d = slope(t);
+      if (Math.abs(d) < FLAT_SLOPE) break;
+      t -= error / d;
+    }
+    let lo = 0;
+    let hi = 1;
+    t = p;
+    while (lo < hi && Math.abs(x(t) - p) >= BEZIER_PRECISION) {
+      if (x(t) < p) lo = t; else hi = t;
+      const next = (lo + hi) / 2;
+      if (next === t) break;
+      t = next;
+    }
+    return t;
+  };
+  return (p) => {
+    if (p <= 0) return 0;
+    if (p >= 1) return 1;
+    return y(solve(p));
+  };
+}
+
+function parseCubicBezier(name) {
+  const m = BEZIER_PATTERN.exec(name);
+  const [x1, y1, x2, y2] = m ? m.slice(1).map(Number) : [];
+  const xsOk = m && x1 >= 0 && x1 <= 1 && x2 >= 0 && x2 <= 1;
+  if (!xsOk) throw new Error(`bad ease "${name}"; expected ${BEZIER_FORM}`);
+  if (!Number.isFinite(y1) || !Number.isFinite(y2)) throw new Error(`bad ease "${name}"; y1 and y2 must be finite numbers`);
+  return cubicBezier(x1, y1, x2, y2);
+}
+
+// ---- steps ----
+
+const STEPS_FORM = 'steps(<n>) or steps(<n>,start|end) with n from 1 to 120';
+const STEPS_PATTERN = /^steps\(\s*(\d+)\s*(?:,\s*(start|end)\s*)?\)$/;
+const MAX_STEPS = 120;
+
+// CSS steps: end (the default) holds each step's value until the next boundary, start jumps at the boundary.
+function parseSteps(name) {
+  const m = STEPS_PATTERN.exec(name);
+  const n = m ? Number(m[1]) : 0;
+  if (!(n >= 1 && n <= MAX_STEPS)) throw new Error(`bad ease "${name}"; expected ${STEPS_FORM}`);
+  const round = m[2] === 'start' ? Math.ceil : Math.floor;
+  return (p) => {
+    if (p <= 0) return 0;
+    if (p >= 1) return 1;
+    return round(p * n) / n;
+  };
+}
+
 export function ease(name) {
   if (typeof name === 'string' && name.startsWith('spring(')) return parseSpring(name);
+  if (typeof name === 'string' && name.startsWith('cubic-bezier(')) return parseCubicBezier(name);
+  if (typeof name === 'string' && name.startsWith('steps(')) return parseSteps(name);
   return curves.get(name);
 }

@@ -201,6 +201,31 @@ test('an anchor that snap leaves outside its shortened shot is refused at its pa
   assert.match(finding?.message ?? '', /outside the shot.*music\.snap/, JSON.stringify(report.findings));
 });
 
+test('--inspect and --poster on a snapped film draw the frame the render draws: a@end is the last frame of the snapped shot a', async (t) => {
+  if (!await mediaTools(t)) return;
+  if (!await browserAvailable()) { t.skip('no browser'); return; }
+  const at = folder('run-snap-still');
+  writeNoise(path.join(at, 'm.wav'), { seconds: 10 });
+  writeBeatsFile(path.join(at, 'm.beats.json'), { source: 'm.wav', bpm: 120, confidence: 1, beats: grid(120, 10) });
+  const specPath = path.join(at, 'film.json');
+  writeFileSync(specPath, JSON.stringify({ ...FOUR, music: { src: 'm.wav', beats: 'm.beats.json', snap: true } }));
+  const base = { specPath, out: path.join(at, 'out', 'film.mp4'), exact: false, noRender: true, outline: false };
+  // a runs 0 to 1.9 s unsnapped (frames 0 to 56) and 0 to 2 s snapped (frames 0 to 59); b opens at frame 57, then at frame 60
+  const slice = await runMake({ ...base, shot: 'a' });
+  assert.equal(slice.exitCode, 0, JSON.stringify(slice.report.findings));
+  assert.deepEqual([slice.report.slice.from, slice.report.slice.to], [0, 59], 'the slice draws the snapped timeline');
+  const inspected = await runMake({ ...base, inspect: 'a@end' });
+  assert.equal(inspected.exitCode, 0, JSON.stringify(inspected.report.findings));
+  assert.equal(inspected.report.inspect.frame, slice.report.slice.to, '--inspect a@end is the frame --shot a ends on');
+  assert.equal(inspected.report.inspect.shot, 'a');
+  const opening = await runMake({ ...base, inspect: 'b' });
+  assert.equal(opening.report.inspect.frame, 60, 'b opens at the snapped cut, 2 s');
+  assert.equal(opening.report.inspect.shot, 'b');
+  const poster = await runMake({ ...base, poster: 'a@end' });
+  assert.equal(poster.exitCode, 0, JSON.stringify(poster.report.findings));
+  assert.equal(poster.report.poster.frame, 59, '--poster a@end is the same frame');
+});
+
 test('the review draws the snapped timeline: each shot opens where its cut was moved to', async (t) => {
   if (!await mediaTools(t)) return;
   if (!await browserAvailable()) { t.skip('no browser'); return; }

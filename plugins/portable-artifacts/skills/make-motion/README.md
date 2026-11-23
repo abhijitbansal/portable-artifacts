@@ -29,7 +29,7 @@ node <skill-dir>/scripts/make.mjs <skill-dir>/references/examples/v2/gate-desk.j
 node <skill-dir>/scripts/make.mjs <skill-dir>/references/examples/v2/gate-desk.json --out out/gate-desk.mp4
 ```
 
-The first command prints each shot with its start, end and narration, with no browser. The second writes `out/gate-desk.mp4` and the review sheets in `out/gate-desk.sheets/`, one PNG per shot and one strip per cut. A film of your own goes in your project folder as `film.json`, and `make.mjs film.json` writes `out/film.mp4` beside it. To see a film in a page with a scrubber, run `make.mjs film.json --preview --open`. It serves on `127.0.0.1` until you stop it.
+The first command prints each shot with its start, end and narration, with no browser. The second writes `out/gate-desk.mp4` and the review sheets in `out/gate-desk.sheets/`, one PNG per shot and one strip per cut. A film of your own goes in your project folder as `film.json`, and `make.mjs film.json` writes `out/film.mp4` beside it. To see a film in a page with a scrubber, run `make.mjs film.json --preview --open`. It serves on `127.0.0.1` until you stop it, and when you edit the film it reloads and comes back to the same frame and the same play or pause state.
 
 From an agent, ask: *"Make an 8-second film: Q3 revenue up 18%, then a bar chart of Q1 to Q3."* In Claude Code or Copilot you can call `/make-motion ...`, and in Codex `$make-motion ...`.
 
@@ -54,7 +54,29 @@ To run this skill's tests one browser at a time, use `npm run test:serial`.
 }
 ```
 
-`say` is the narration. A shot lasts as long as its narration takes at the mode's pace, plus a short tail. `*word*` marks emphasis. `on` places a device (a circle, a highlight, an arrow) on a word. `node scripts/make.mjs --list kinds` prints every kind with its fields and one example to copy. The root fields, the fields every shot takes, the report and the exit codes are in [`references/schema.md`](references/schema.md). How to write for the picture is in [`references/story.md`](references/story.md). Finished films to start from are in [`references/examples/v2/`](references/examples/v2/): `showreel-pro.json` (pro, `desk`), `showreel-viral.json` (viral, `pop`), `whats-new.json` (pro, `desk`, voiced, 113 s: every change in 2.0, with its `whats-new.review.md` and `whats-new-assets/`), `look-cosmos.json` (`cosmos`), `gate-ledger.json` (`ledger`), `look-poster.json` (`poster`), `gate-keynote.json` (`keynote`), `gate-marker.json` (`marker`, the whiteboard look), `voiced-desk.json` (a voice), `sound-desk.json` (a music bed and cues), `kinds-b-desk.json` (a map and code) and `batch-welcome.json` (`vars`).
+`say` is the narration. A shot lasts as long as its narration takes at the mode's pace, plus a short tail. `*word*` marks emphasis. `on` places a device (a circle, a highlight, an arrow) on a word. `node scripts/make.mjs --list kinds` prints every kind with its fields and one example to copy. The root fields, the fields every shot takes, the report and the exit codes are in [`references/schema.md`](references/schema.md). How to write for the picture is in [`references/story.md`](references/story.md). Finished films to start from are in [`references/examples/v2/`](references/examples/v2/): `showreel-pro.json` (pro, `desk`, voiced, with a logo and a progress bar; it opens on a problem shot, then the dashboard), `showreel-viral.json` (viral, `pop`), `whats-new.json` (pro, `desk`, voiced, 113 s: every change in 2.0, with its `whats-new.review.md` and `whats-new-assets/`), `how-it-works.json` (pro, `desk`, voiced, 88 s: how a film is made, with its `how-it-works.review.md` and `how-it-works-assets/`), `look-cosmos.json` (`cosmos`), `gate-ledger.json` (`ledger`), `look-poster.json` (`poster`), `gate-keynote.json` (`keynote`), `gate-marker.json` (`marker`, the whiteboard look), `voiced-desk.json` (a voice), `sound-desk.json` (a music bed and cues), `kinds-b-desk.json` (a map and code) and `batch-welcome.json` (`vars`).
+
+`overlays` puts a logo (`{ "logo": { "src": "assets/logo.png", "corner": "top-right" } }`) and a progress bar (`"progress": true`) over the film itself, so no cut moves or breaks them. A progress bar changes every frame, so held frames are not reused and the render captures every frame, which takes longer; see Overlays in [`references/schema.md`](references/schema.md). A designed cue that sounds more than once rotates through three takes (the first as it was, then a little higher and a little lower, each with its own noise), so a repeated whoosh is not stamped. `--no-music` renders a second delivery without the music track; the cuts stay where the music put them.
+
+A shot's `narration` (`{ "lead", "trail" }`, 0 to 1.5 s) starts its voice before its picture or lets it run into the next shot, so a cut can land mid-sentence: the cut moves and the sound does not, and captions follow what is heard. A cut's `at` names a part of the shot it leaves (the names an `on` event's `target` takes) for `iris`, `zoom` and `flood` to open from, such as the button just clicked; `flood` paints a colour as a growing circle over the outgoing shot, then opens the next shot from the same point (every look accepts it; only `pop` and `poster` list it among their preferred cuts). A layer or shader cut keeps the outgoing shot moving, and a node cut holds its last frame; `--list cuts` says which each cut is. Every MP4 is converted to BT.709 and tagged `bt709`, limited range, on both capture paths. The render checks its own file before it keeps it: a file short of the timeline's frames or with a blank picture is an error and leaves no MP4, and a stage that gives no answer for 120 s stops the render and names the stage.
+
+The review's findings each name the `rule` that raised them and, where a fix value can be computed, carry it as `suggest`. `dead-space`, `scale-contrast`, `cut-variety`, `sameness`, `overlay-covers` and `poster-read` are `creative`: they are calls for the director, they never fail a run, and a film keeps only the first few of each. [`references/rules.md`](references/rules.md) lists every rule and where its number comes from; [`references/calibration.md`](references/calibration.md) says how the four composition and outline thresholds were chosen.
+
+## References
+
+`SKILL.md` is a router; the detail is in `references/`:
+
+| File | What it holds |
+|---|---|
+| [`schema.md`](references/schema.md) | Root fields, shot fields, cuts, sound, overlays, the report, exit codes, limits |
+| [`story.md`](references/story.md) | One thing, claims, three storylines as three films, writing for the picture, narration, the teaching check |
+| [`tells.md`](references/tells.md) | What gives each look away, and the case where each tell is right |
+| [`types/`](references/types/) | `explainer.md`, `data.md` and `vertical.md`: how each kind of film is built |
+| [`reviewing.md`](references/reviewing.md) | The review protocol: ranked P0 to P2 notes, never a score, the pictures-alone question, four delivery lines, and the optional second reviewer |
+| [`rules.md`](references/rules.md), [`calibration.md`](references/calibration.md) | Every review rule with its fix value and evidence, and how the thresholds were calibrated |
+| [`tools.md`](references/tools.md) | Film time, `--inspect`, `--shot` and `--range`, `locate.mjs`, `--sheets-only --estimated`, `--compare-looks`, `measure.mjs` |
+| [`broll.md`](references/broll.md), [`music.md`](references/music.md) | Clips a generator made, and cutting to your music |
+| [`migrating.md`](references/migrating.md) | Version 1 features and what replaced each |
 
 ## Looks
 
@@ -78,19 +100,27 @@ Each look serves the modes it names, and some kinds are not drawn in some looks.
 - `keynote`: a product launch film, a near-white ground with a soft mesh and product screens on cards.
 - `marker`: a whiteboard time-lapse. A hand draws every stroke in one black marker and one accent colour, and erases between boards.
 
+A look's motion is its own data, printed by `--list moves` with each move's `bounce` and `visible` length. An ease is a name (`outCubic`), `spring(<stiffness>,<damping>)`, `cubic-bezier(<x1>,<y1>,<x2>,<y2>)` or `steps(<n>)`. Two entrance moves, `letters` (a word arrives letter by letter, `cosmos`) and `lines` (each line arrives as one block, `desk`), play on a statement outside `viral`. `make.mjs film.json --compare-looks <shot-id>` draws one shot in every look that can draw it on one PNG, so a look can be chosen from the picture.
+
 ## Scripts
 
 | Command | Does | Flags |
 |---|---|---|
-| `make.mjs <film.json>` | Validates, builds the timeline, reviews every shot in a browser, writes the sheets and renders the MP4. Exit 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted | `--out <file>.mp4`, `--json`, `--outline`, `--sheets-only`, `--no-render`, `--exact`, `--preview`, `--open`, `--poster <seconds>`, `--poster-out <file>`, `--subtitles srt\|vtt`, `--workers <1-8 or auto>`, `--batch <rows.json>`, `--phonemes`, `--list <name>`, `--all`, `--model`, `--effort`, `--agent`, `--no-provenance` |
+| `make.mjs <film.json>` | Validates, builds the timeline, reviews every shot in a browser, writes the sheets and renders the MP4. Exit 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted | `--out <file>.mp4`, `--json`, `--outline`, `--sheets-only`, `--estimated` (with `--sheets-only`: no voice, and the board strips), `--no-render`, `--exact`, `--preview`, `--open`, `--poster <film time>`, `--poster-out <file>`, `--inspect <film time>`, `--shot <id>`, `--range <from>..<to>`, `--compare-looks <shot-id>`, `--subtitles srt\|vtt`, `--subtitle-words` (one cue per word, with `--subtitles`), `--no-music`, `--workers <1-8 or auto>`, `--batch <rows.json>`, `--phonemes`, `--list <name>`, `--all`, `--model`, `--effort`, `--agent`, `--no-provenance` |
 | `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`, the voice package), with the fix for your system. `--fix <id>` installs what needs no `sudo`. Runs before the first install | `--json`, `--for <film.json\|voiceover\|cutout>`, `--fix <id[,id]>` |
 | `cutout.mjs <photo.png\|clip.mp4>` | Cuts the person out of a photo (an RGBA PNG) or a clip (a VP9 alpha WebM) with MODNet, on this machine. A `cutout` device takes the picture. It needs `doctor --for cutout --fix cutout` | `--out <dir>`, `--fps <n>` |
 | `beats.mjs <audio>` | Finds the beat grid of a music file and writes `<stem>.beats.json`, for `music.beats`. Exit 1 with `no steady beat found` when the track has none | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>`, `--min-bpm <n>`, `--max-bpm <n>` |
-| `storyboard.mjs <film.json>` | For a film over 20 s: writes a make-explainer `plan` page the user answers before the film is built. Prints `storyboard: skipped (<reason>)` and writes nothing when it is not needed | `--out <plan.json>`, `--non-interactive` |
+| `locate.mjs <picture.png>` | Turns a target you can see in a picture into the `[x, y, w, h]` box a `clipping` shot's `regions` entry takes: it draws numbered strips and cells, you name the numbers, it prints the box. No network, no model | `--cols <a-b>`, `--rows <a-b>`, `--cells <a-b>`, `--out <dir>`, `--json` |
+| `measure.mjs <video file>` | Turns one video on this machine into numbers for pacing and mixing a film like it: measured (duration, size, frame rate, cut count, shot lengths, loudness and true peak) and guessed (`mode`, `pace`). Local files only, nothing written, nothing fetched; it copies nothing from the video | `--json` |
+| `storyboard.mjs <film.json>` | For a film over 20 s: writes a make-explainer `plan` page the user answers before the film is built. Prints `storyboard: skipped (<reason>)` and writes nothing when it is not needed | `--out <plan.json>`, `--non-interactive`, `--stills <board dir>` (the strips of `--sheets-only --estimated`, shown under the shots) |
 
 `--list` takes `kinds`, `looks`, `modes`, `devices`, `moves`, `cuts`, `fields` or `voices`.
 
-Two renders of the same film and media give the same frames. The MP4's `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set. A version 1 spec is refused with a pointer to [`references/migrating.md`](references/migrating.md), which maps each version 1 feature to version 2 or says it is not in 2.0.
+`--inspect`, `--shot` and `--range` check one part of a film without a whole-film pass. They read film time, the one way a moment is named (a number of seconds, `rows@end`, `rows@word:3`; [`references/tools.md`](references/tools.md)). `--inspect <film time>` writes one frame as a PNG and a JSON dump of its nodes. `--shot <id>` and `--range <from>..<to>` review and write the sheets of that slice, and a silent MP4 of it beside the film's own. A film with `music.snap` is read on the timeline its render draws.
+
+`make.mjs film.json --sheets-only --estimated` draws every shot with no voice made and writes a board of stills (`<name>.sheets/board/`) that `storyboard.mjs --stills` shows on the plan page. On Claude Code, `references/reviewing.md` lets the director start the optional read-only `motion-reviewer` agent once per finished film; its file pins `model: opus`, and it was proven on planted defects that are also readable from the spec, so it shows it finds what the spec and narration state, not that it reads pictures.
+
+Two renders of the same film and media give the same frames on the same machine, browser build and fonts (the browser draws the text, so another system can set some words differently). The MP4's `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set. A version 1 spec is refused with a pointer to [`references/migrating.md`](references/migrating.md), which maps each version 1 feature to version 2 or says it is not in 2.0.
 
 ## Security
 

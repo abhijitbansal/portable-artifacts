@@ -14,7 +14,7 @@ import { applyAccent, gridX, lookForFormat } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
 import { resolveAnchor } from '../script/anchors.mjs';
-import { captionsOn, shotCaptions, kindContext } from '../captions/index.mjs';
+import { captionsOn, captionWordsOf, shotCaptions, kindContext } from '../captions/index.mjs';
 import { sampleGraph } from './sample.mjs';
 import { handLayer } from '../hand/index.mjs';
 import { hasGrounds, shotLook, groundSheet } from '../looks/grounds.mjs';
@@ -22,8 +22,9 @@ import { node } from './node.mjs';
 import { FIELD_ID } from '../kinds/shared.mjs';
 import { stackArea } from '../kinds/stack.mjs';
 import { withLookEmphasis } from '../kinds/emphasis-fallback.mjs';
+import { overlayNodes } from '../overlays/index.mjs';
 import { localMatrix } from '../page/bounds.mjs';
-import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
+import { camera as trackCamera, applyCamera, layeredCamera, pointThroughCamera } from './camera.mjs';
 
 const DEFAULT_MODE = 'pro';
 const DEFAULT_SEED = 1;
@@ -118,6 +119,8 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     unit: unitOf(canvas),
     gridX: (column) => gridX(look, canvas, column),
     timing,
+    // the words heard while this shot is on screen, whichever shot speaks them (the shot's own words with no J or L cut)
+    captionWords: captionWordsOf(timeline, index),
     at: (ref) => resolveAnchor(ref, timing),
     measure,
     seed: film.seed ?? DEFAULT_SEED,
@@ -170,13 +173,111 @@ function heroBox(n, rest) {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 }
 
+// ---- the outgoing shot of a cut ----
+
+// Does a cut show the outgoing shot still moving? A layer or shader cut composes two pictures, so it can; a node cut (and so
+// every smear) moves the nodes themselves from the outgoing shot's last frame, and a look drawn by hand (look.hand) holds
+// the last frame so its one hand does not write on while the board is being left.
+const isLiveOutgoing = (cut, look) => cut.family !== 'node' && !look.hand;
+
+/**
+ * The time, in the outgoing shot's own seconds, at which a cut's window reads that shot: its duration `D` plus `local`, the
+ * seconds into the window, for a cut that shows it live (isLiveOutgoing); else `D`, its last frame.
+ */
+export function outgoingTime(cut, look, duration, local) {
+  return isLiveOutgoing(cut, look) ? duration + local : duration;
+}
+
+// The window a frame is in, from the shot's resolved cut and its length (`cutDur`), the seconds into the shot (`local`), the
+// film's look and the outgoing shot's duration: null outside it (no cut, a hard cut, or past the window), else { cut, p,
+// live, outgoingT }: how far the cut has come, whether the outgoing shot is live, and the second of the outgoing shot the
+// window reads it at. frameAt and cutWindowAt both read the window here, so they cannot disagree.
+function windowOf(cut, cutDur, local, look, outgoingDuration) {
+  if (!cut || local >= cutDur) return null;
+  return { cut, p: local / cutDur, live: isLiveOutgoing(cut, look), outgoingT: outgoingTime(cut, look, outgoingDuration, local) };
+}
+
+/**
+ * The cut window frame `frame` of `film` is in, on `timeline`, or null: { cut, p, live, shot, from, outgoingT } where `cut`
+ * is the cut that opens shot `shot` (the resolved cut: name, family, direction), `p` how far it has come (0 on its first
+ * frame), `from` the outgoing shot's index, `live` whether that shot keeps moving through the window (isLiveOutgoing), and
+ * `outgoingT` the second of it the window reads (its own seconds). The same window buildFilm's frameAt opens, for a node cut
+ * and a smear as well as a layer or shader cut; a hard cut and the film's first shot have none. A frame outside the film
+ * throws, as frameAt does for a time outside it.
+ */
+export function cutWindowAt(film, timeline, frame) {
+  const t = frame / timeline.fps;
+  if (!Number.isFinite(t) || t < 0 || t > timeline.duration + 1 / TIME_DECIMALS) throw new Error(`time must be in 0..${timeline.duration}, got ${t}`);
+  const index = timeline.shots.findLastIndex((s) => s.start <= t + 1 / TIME_DECIMALS);
+  if (index <= 0) return null;
+  const shot = timeline.shots[index];
+  // film is the given film, not buildFilm's withLookEmphasis(film): that rewrites only a shot's `on` and `say`, never its
+  // look, seed, show or cut, so the cut resolved here is the one buildFilm resolves (the look handed to resolveShotCut is
+  // the shot's own, as expandOne passes it)
+  const cut = resolveShotCut(film, index, { look: lookOfShot(film, index) });
+  const found = windowOf(cut, cut ? Math.min(cut.dur, shot.duration) : 0, shotTime(t, shot.start), resolveLook(film), timeline.shots[index - 1].duration);
+  return found && { ...found, shot: index, from: index - 1 };
+}
+
+// A shot's camera at time t past its end `duration`: held at its end, with the pan carried on at the speed it ended with
+// (the last frame's travel, at `fps`); zoom and rotate hold. A drift keys end at the shot's duration, so a plain hold
+// would stop the picture dead as the cut begins.
+function carriedCamera(cam, duration, t, fps) {
+  const end = cam(duration);
+  const last = cam(duration - 1 / fps);
+  const frames = (t - duration) * fps;
+  return { ...end, x: end.x + (end.x - last.x) * frames, y: end.y + (end.y - last.y) * frames };
+}
+
+// ---- where a cut opens from ----
+
+const HALF = 2;
+const centreOf = ([x, y, w, h]) => [x + w / HALF, y + h / HALF];
+
+function findNode(nodes, id) {
+  for (const n of nodes) {
+    const found = n.id === id ? n : findNode(n.children, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+// Where the centre of target `at`'s box (laid out at rest) is drawn as shot `prev` ends. A target is a camera node of depth 0
+// unless the kind names the node it belongs to (targetNodes): that node's own depth then sets how far the camera moves it,
+// and a pinned (fixed) node skips the camera and is moved only by its own tracks, from its rest pose to its pose at the end.
+// `targetNodes` names the node a box was laid out for, which is a top-level node of the shot (clipping's caption card, the end
+// card's mark): the box is its parent's frame, so a node inside a fixed group would need the group's pose as well, and no
+// kind maps one. A kind that does must name the group, not the child.
+function drawnCentre(prev, at, canvas) {
+  const centre = centreOf(prev.boxes[at]);
+  const id = prev.targetNodes[at];
+  const rest = id === undefined ? null : findNode(prev.nodes, id);
+  if (rest === null) return pointThroughCamera(centre, prev.cam(prev.duration), canvas);
+  const drawn = findNode(sampleGraph(prev.nodes, prev.duration), id);
+  if (rest.props.fixed !== true) return pointThroughCamera(centre, prev.cam(prev.duration), canvas, drawn.depth);
+  return [centre[0] + drawn.x - (rest.props.x ?? 0), centre[1] + drawn.y - (rest.props.y ?? 0)];
+}
+
+/**
+ * A shot whose cut names `at` gets `origin`: where the box `at` names in the shot before is drawn as that shot ends (one
+ * fixed point for the whole window; drawnCentre). A name the shot before has no box for throws, listing the boxes it has: a
+ * cut never opens from the middle in silence. Any other shot is returned as it is.
+ */
+function withOrigin(shot, index, shots, canvas) {
+  const at = shot.cut?.at ?? null;
+  if (at === null) return shot;
+  const prev = shots[index - 1];
+  if (!prev.boxes[at]) throw new Error(`shot "${shot.id}": cut at "${at}" has no box in shot "${prev.id}" (have: ${Object.keys(prev.boxes).join(', ')})`);
+  return { ...shot, origin: drawnCentre(prev, at, canvas) };
+}
+
 // ---- shots ----
 
 // The shot's nodes: its kind's, then its captions (drawn last, pinned over everything) when the film is captioned. `cam`
 // is the shot's camera, for where its marks stand on the frame (the captions keep off them).
 function withCaptions(out, shot, kind, ctx, film, cam) {
   if (!captionsOn(film, ctx.mode)) return out.nodes;
-  const captions = shotCaptions(shot, ctx, { kind, hero: out.hero ?? null, filmStart: ctx.timing.start, nodes: out.nodes, camera: cam });
+  const captions = shotCaptions(shot, ctx, { kind, hero: out.hero ?? null, filmStart: ctx.timing.start, nodes: out.nodes, camera: cam, words: ctx.captionWords });
   return captions.length === 0 ? out.nodes : [...out.nodes, ...captions];
 }
 
@@ -208,8 +309,11 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look: filmL
   const box = kind.heroTarget === undefined ? undefined : out.boxes?.[kind.heroTarget];
   const cam = cameraOf(out.camera, canvas, `shot "${shot.id}"`);
   return {
+    id: shot.id,
     start: timing.start,
     duration: timing.duration,
+    boxes: out.boxes ?? {}, // the kind's target boxes at rest: where a cut that opens from one of them (cut.at) starts
+    targetNodes: out.targetNodes ?? {}, // a target's node id, for a box that is not a plain camera node's (withOrigin)
     // a look with `hand` data draws the shot with the drawing hand (engine/hand); any other look: the nodes as they are
     nodes: handLayer(groundLayer(withCaptions(out, shot, kind, ctx, film, cam), ctx), timing, ctx),
     cam,
@@ -263,12 +367,16 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   if (!(canvas?.w > 0 && canvas?.h > 0)) throw new Error('buildFilm: canvas must be { w, h }');
   const look = resolveLook(film);
-  const shots = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }));
+  const expanded = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }));
+  const shots = expanded.map((shot, index) => withOrigin(shot, index, expanded, canvas));
 
-  // One shot alone at its local time t: sampled, camera applied, the hero carrying its box.
+  // One shot alone at its local time t: sampled, camera applied, the hero carrying its box. Past the shot's end (t above its
+  // duration: the outgoing shot of a layer or shader cut, outgoingTime) the nodes are sampled at t, every track holding its
+  // last key, and the camera's pan carries on at the speed it ended with (carriedCamera).
   const sampleShot = (index, t) => {
     const shot = shots[index];
-    const sampled = applyCamera(sampleGraph(shot.nodes, t), shot.cam(t), canvas);
+    const cam = t > shot.duration ? carriedCamera(shot.cam, shot.duration, t, timeline.fps) : shot.cam(t);
+    const sampled = applyCamera(sampleGraph(shot.nodes, t), cam, canvas);
     if (!shot.hero) return sampled;
     return Object.freeze(sampled.map((n) => (n.id === shot.hero.id ? Object.freeze({ ...n, bbox: heroBox(n, shot.hero) }) : n)));
   };
@@ -283,33 +391,43 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
     const index = shotIndexAt(t);
     const shot = shots[index];
     const local = shotTime(t, shot.start);
-    if (!shot.cut || local >= shot.cutDur) return { background: shot.background, sampled: sampleShot(index, local) };
-    const from = sampleShot(index - 1, shots[index - 1].duration);
-    // a layer or shader cut composes two pictures in the page: the incoming shot live, the outgoing one frozen at its end
-    // (`t`: the film second it froze at, the time its fields are painted with)
+    const opening = windowOf(shot.cut, shot.cutDur, local, look, shots[index - 1]?.duration);
+    if (opening === null) return { background: shot.background, sampled: sampleShot(index, local) };
+    const prev = shots[index - 1];
+    const { live } = opening;
+    const from = sampleShot(index - 1, opening.outgoingT);
+    // a layer or shader cut composes two pictures in the page: the incoming shot live and the outgoing one, still moving
+    // (`live`) in a look drawn without a hand, else frozen at its end (`t`: the film second it stands at, the time its
+    // fields are painted with)
     if (shot.cut.family !== 'node') {
-      const prev = shots[index - 1];
       return {
         background: shot.background,
         sampled: sampleShot(index, local),
-        cut: { name: shot.cut.name, family: shot.cut.family, p: local / shot.cutDur, direction: shot.cut.direction },
-        from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration },
+        cut: { name: shot.cut.name, family: shot.cut.family, p: opening.p, direction: shot.cut.direction, ...(shot.origin ? { at: shot.origin } : {}) },
+        from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration + (live ? local : 0), ...(live ? { live: true } : {}) },
       };
     }
     // `landing`: the incoming shot as the cut ends, for a cut that carries the one hand from the outgoing pose to where the
     // incoming board's writing starts (cuts/hands.mjs); only a look with a hand has one
     const landing = look.hand ? sampleShot(index, shot.cutDur) : undefined;
-    const args = { from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, background: shot.background, direction: shot.cut.direction, ...(landing ? { landing } : {}) };
+    const args = { from, to: sampleShot(index, local), p: opening.p, canvas, look, background: shot.background, direction: shot.cut.direction, ...(landing ? { landing } : {}) };
     // the smear, when the resolved cut asks for it (the shot's, the root cut's or the look's cutStyle), inside the window
     if (shot.cut.smear && args.p > 0 && args.p < 1) return smearedFrame(shot, args, 1 / (timeline.fps * shot.cutDur));
     return { background: shot.background, sampled: shot.cut.entry.apply(args) };
   };
+
+  // The film's overlays (engine/overlays), built once and sampled at film time with no camera: they belong to the film, so
+  // they are in no shot's nodes, no outgoing picture and no smear layer. [] for a film that asks for none.
+  const overlays = overlayNodes({ film, look, canvas, timeline, assets, viralInsets });
+  const overlayAt = (t) => sampleGraph(overlays, t);
 
   return {
     duration: timeline.duration,
     frameCount: timeline.frameCount,
     look,
     frameAt,
+    overlayAt,
+    hasOverlays: overlays.length > 0,
     sampleAt: (t) => {
       const frame = frameAt(t);
       return frame.smear?.whole ?? frame.sampled;

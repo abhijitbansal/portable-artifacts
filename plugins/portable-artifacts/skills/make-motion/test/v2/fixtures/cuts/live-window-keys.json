@@ -1,0 +1,62 @@
+{
+  "note": "Every frame inside a layer or shader cut window of the film, digested over the incoming shot, the cut and its progress, and the outgoing shot with its film second and live flag. Made after motion-steals W2 Task 8, when the outgoing shot began to keep moving past its end: a window whose outgoing shot freezes again, or is carried on differently, changes its sha. Regenerate with a stated reason if the film or a look changes under it, never to clear a red test.",
+  "film": "cuts-desk",
+  "regenerated": "motion-steals W6 task 4 (desk takes the `lines` statement entrance, so a desk statement on one side of a window carries line tracks, not word fades): the 7 windows with a desk statement on one side, into dissolve, dip, page, focus, curl, drop and warp; the other 4 (steps, circle, gust, slats) are unchanged.",
+  "windows": {
+    "into dissolve": {
+      "frames": 15,
+      "live": true,
+      "sha": "bbf986d5e8cbf16ea64cdb805b21f8fb5983ad0efe55e050a7edcb9731d7a1b2"
+    },
+    "into dip": {
+      "frames": 12,
+      "live": true,
+      "sha": "997c867899328f8d36e86e4c315341aa8aea5bccb6dc1735e94470c6979e8fcb"
+    },
+    "into page": {
+      "frames": 12,
+      "live": true,
+      "sha": "2f34f3b82033c4595576a9ffdcfed2f79aaace33aaf92c8018c55a8f566978b1"
+    },
+    "into steps": {
+      "frames": 12,
+      "live": true,
+      "sha": "9a068fc5c144af2d8f6f486b4b6e811aa749eb1e8adee452471db901a7d0309f"
+    },
+    "into circle": {
+      "frames": 12,
+      "live": true,
+      "sha": "48c1f72979cfd8ecd1940c3bcdc828be47125bc354e35b04772e21564e1a8974"
+    },
+    "into focus": {
+      "frames": 24,
+      "live": true,
+      "sha": "03e5992b23af32e9b727264b2ba20c461989605fc23e73e151f39aa5139d181f"
+    },
+    "into curl": {
+      "frames": 18,
+      "live": true,
+      "sha": "b9c272863ea4a0304a7e7be2c283c51459fe70f4a92c6b1fdfbf53bcf8d1dc11"
+    },
+    "into gust": {
+      "frames": 18,
+      "live": true,
+      "sha": "b09e0682c2070d84ebc6c212537940c0d84432231f9fff3bcf77b51183c74dbb"
+    },
+    "into slats": {
+      "frames": 18,
+      "live": true,
+      "sha": "3cc7f91a2d474f9fe71d786109bc294d8c84beced024f6d1c442cac5002937de"
+    },
+    "into drop": {
+      "frames": 18,
+      "live": true,
+      "sha": "fa85619d9cc38d4ce0dacac2b27bcaa7d1f03852e028f69ecce534639175ac80"
+    },
+    "into warp": {
+      "frames": 18,
+      "live": true,
+      "sha": "9e97f68f20e1a95bb503876f20f939f9883b2f362212aca2819becbce8cd7bb2"
+    }
+  }
+}

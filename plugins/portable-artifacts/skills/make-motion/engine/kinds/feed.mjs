@@ -93,6 +93,7 @@ registries.kinds.add(KIND, {
   eventDevices: Object.freeze(['message']),
   events: (shot, timing) => timesOf(shot, timing).slice(1).map((t) => ({ kind: 'device', device: 'message', t })),
   lookData: true,
+  peers: true, // its parts are equals: the review does not judge a hero's scale (frame.mjs scale-contrast)
   numbered: false,
   showsWords: true,
 });

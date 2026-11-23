@@ -71,6 +71,56 @@ test('the default poster is poster.jpg beside where the MP4 would go', async (t)
   return undefined;
 });
 
+test('a poster at film time: a shot id is its first frame, shot@end-<s> is inside that shot', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const film = writeFilm('film-time', FILM);
+  const shot = JSON.parse(make([film, '--poster', 'b', '--poster-out', path.join(dir, 'b.png'), '--json'], NO_FFMPEG).stdout);
+  assert.deepEqual(shot.poster, { file: path.join(dir, 'b.png'), frame: 30, seconds: 1 });
+  const inside = JSON.parse(make([film, '--poster', 'b@end-0.5', '--poster-out', path.join(dir, 'b-end.png'), '--json'], NO_FFMPEG).stdout);
+  assert.deepEqual(inside.poster, { file: path.join(dir, 'b-end.png'), frame: 45, seconds: 1.5 });
+  const last = JSON.parse(make([film, '--poster', 'end', '--poster-out', path.join(dir, 'last.png'), '--json'], NO_FFMPEG).stdout);
+  assert.equal(last.poster.frame, 59, 'the film\'s end is its last frame (60 frames)');
+  const aEnd = JSON.parse(make([film, '--poster', 'a@end', '--poster-out', path.join(dir, 'a-end.png'), '--json'], NO_FFMPEG).stdout);
+  assert.equal(aEnd.poster.frame, 29, 'a@end is a\'s last frame, not b\'s first');
+  return undefined;
+});
+
+// W4 task 2: the poster is read as a thumbnail (engine/review/poster.mjs), by the layout the page reports.
+const headline = (size) => ({ type: 'text', id: 'headline', props: { x: 300, y: 400, text: 'Plain words', font: { family: 'Geist', weight: 600, size }, maxWidth: 1400, fill: '#15130f' } });
+const textFilm = (size) => ({ version: 2, fps: 30, shots: [{ id: 'a', show: 'free', hold: 1, background: '#f3eee3', nodes: [headline(size)] }] });
+
+test('a poster whose biggest line is small is a creative finding, and the exit code stays 0', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const run = make([writeFilm('small-poster', textFilm(40)), '--poster', '0.5', '--poster-out', path.join(dir, 'small.png'), '--json'], NO_FFMPEG);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  const report = JSON.parse(run.stdout);
+  const found = report.findings.filter((f) => f.rule === 'poster-read');
+  assert.equal(found.length, 1, run.stdout);
+  assert.equal(found[0].kind, 'creative');
+  assert.equal(found[0].shot, 'a');
+  assert.equal(found[0].path, 'shots[0]');
+  assert.deepEqual(found[0].suggest, { minSize: 84, factor: 2.1 });
+  assert.match(found[0].message, /is 6\.7 px tall on a 180 px thumbnail; it needs 14 px \(84 units\).*"headline"/);
+  assert.equal(report.ok, true, 'a creative finding does not fail the run');
+  assert.deepEqual(report.stages.filter((s) => s.name.startsWith('poster')).map((s) => [s.name, s.ok]), [['poster', true], ['poster-read', true]], 'the check is a stage of its own, so a failure names it');
+  return undefined;
+});
+
+// A "no finding" case proves nothing alone: it also passes when makePoster never runs the check. So the two cases that
+// expect none run in one test with a small poster as the control, which fails the whole test unless the check ran.
+test('a poster that reads at thumbnail size, or has no text, has no poster-read finding while a small one does', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const poster = (name, film) => {
+    const run = make([writeFilm(name, film), '--poster', '0.5', '--poster-out', path.join(dir, `${name}.png`), '--json'], NO_FFMPEG);
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    return JSON.parse(run.stdout).findings.filter((f) => f.rule === 'poster-read');
+  };
+  assert.equal(poster('control-small', textFilm(40)).length, 1, 'the control: the check runs, so a small line is found');
+  assert.deepEqual(poster('big-poster', textFilm(120)), [], 'a 120-size line reads at 180 px');
+  assert.deepEqual(poster('picture-poster', FILM), [], 'no text: a picture poster is not judged');
+  return undefined;
+});
+
 test('a time past the end is exit 2 with the film\'s length', async (t) => {
   if (!await browserAvailable()) return t.skip('no browser');
   const run = make([writeFilm('past', FILM), '--poster', '40'], NO_FFMPEG);
@@ -85,7 +135,10 @@ test('refused pairs and a wrong --poster-out extension are usage errors', () => 
   }
   assert.equal(make(['f.json', '--poster-out', 'p.jpg']).status, 2);
   assert.match(make(['f.json', '--poster', '1', '--poster-out', 'p.gif']).stderr, /\.jpg, \.jpeg, \.png/);
-  assert.match(make(['f.json', '--poster', 'soon']).stderr, /--poster takes a time in seconds/);
+  // film time is read once the film's timeline exists (film-time.mjs): a word that names nothing is refused there, with the list
+  const soon = make([writeFilm('soon', FILM), '--poster', 'soon']);
+  assert.equal(soon.status, 2);
+  assert.match(soon.stderr, /the shots are: a, b/);
 });
 
 test('a captioned film\'s poster has no caption ink; the rest of the frame is the film\'s', async (t) => {

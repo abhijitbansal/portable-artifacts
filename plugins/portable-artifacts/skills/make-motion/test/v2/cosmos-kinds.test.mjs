@@ -9,7 +9,8 @@ import { registries } from '../../engine/registry.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { compositionRect, runInk } from '../../engine/kinds/shared.mjs';
 import { editorialBounds } from '../../engine/kinds/editorial.mjs';
-import { expandIn, filmOf, all, measure, near } from './helpers/kinds.mjs';
+import { sunAnchor } from '../../engine/devices/sun.mjs';
+import { expandIn, expandShot, filmOf, all, measure, near } from './helpers/kinds.mjs';
 
 // every kind's example from the registry (a listing may leave a kind out: --list kinds shows only the listed ones)
 const example = (name) => {
@@ -47,6 +48,60 @@ test('number at 9:16: the example with its delta keeps the figure, label and del
     assert.ok(y > yEnd(upper) && y + h < yStart(lower), `${key} in the break`);
     assert.ok(y >= bounds.top && y + h <= bounds.bottom, `${key} inside the band`);
   }
+});
+
+// W2 Task 4 (fix round 1): a wide number fills the lower half of the frame, which the sun-height line left bare, without
+// moving the sun (a cut from a statement keeps it on its anchor): the label is one scale step larger and the block
+// (label, then delta) grows downward.
+const SAGAN = { id: 'n', show: 'number', value: 778, label: 'million kilometres from the Sun', say: 'Seven hundred seventy eight million kilometres.' };
+const lineY = (nodes) => Number(/M[\d.]+ ([\d.]+)L/.exec(byId(nodes, 'n.line0').props.d)[1]);
+
+test('number at 16:9: the sun, line and Earth stay on the sun anchor; the label is one scale step larger and fills the lower half', () => {
+  const { boxes, nodes, canvas, ctx } = expandShot(SAGAN, 'cosmos', '16:9');
+  const look = registries.looks.get('cosmos');
+  const anchor = sunAnchor(look, ctx), y = lineY(nodes);
+  assert.equal(y, anchor.cy, 'the line is on the sun anchor');
+  assert.equal(byId(nodes, 'n.sun').props.y, anchor.cy, 'the sun is where a statement puts it');
+  assert.equal(byId(nodes, 'n.earth').props.y, anchor.cy, 'Earth is on the line');
+  assert.ok(y > boxes.value[1] + boxes.value[3] && y < boxes.label[1], 'the line still runs between the figure and its label');
+  assert.equal(byId(nodes, 'n.label').props.font.size, look.scale[look.kinds.number.sky.labelStep] * ctx.unit, 'one step above the look label step');
+  assert.ok(boxes.label[1] + boxes.label[3] >= 0.7 * canvas.h, `the block reaches down to ${boxes.label[1] + boxes.label[3]} of ${canvas.h}`);
+  assert.ok(boxes.label[1] + boxes.label[3] <= editorialBounds(ctx).bottom, 'inside the band');
+});
+
+test('number at 16:9 with a delta: the delta grows the block downward, inside the band', () => {
+  const { boxes, ctx } = expandShot({ ...SAGAN, delta: '+3%' }, 'cosmos', '16:9');
+  assert.ok(boxes.delta[1] >= boxes.label[1] + boxes.label[3], 'the delta under the label');
+  assert.ok(boxes.delta[1] + boxes.delta[3] <= editorialBounds(ctx).bottom, `delta bottom ${boxes.delta[1] + boxes.delta[3]}`);
+});
+
+test('number at 16:9 with no label: the sun stays on its anchor and the delta hangs under the figure', () => {
+  const { label: _label, ...bare } = SAGAN;
+  const { boxes, nodes, ctx } = expandShot({ ...bare, delta: '+3%' }, 'cosmos', '16:9');
+  const anchor = sunAnchor(registries.looks.get('cosmos'), ctx);
+  assert.equal(byId(nodes, 'n.label'), undefined);
+  assert.equal(byId(nodes, 'n.sun').props.y, anchor.cy);
+  assert.ok(boxes.delta[1] >= boxes.value[1] + boxes.value[3], 'the delta is under the figure');
+});
+
+test('number at 16:9: a long figure at its floor keeps its hero ratio over the larger label', () => {
+  const look = registries.looks.get('cosmos');
+  for (const value of [7, 778, 149600000, 1392700000]) {
+    const { nodes, ctx } = expandShot({ ...SAGAN, value }, 'cosmos', '16:9');
+    const label = byId(nodes, 'n.label').props.font.size;
+    const figure = Math.max(...all(nodes).filter((n) => /^n\.value/.test(n.id) && n.props.font).map((n) => n.props.font.size));
+    const base = look.scale[look.kinds.number.sky.labelStep - 1] * ctx.unit;
+    assert.ok(label >= base - 1e-9 && (label === base || figure / label >= 3), `${value}: figure ${figure}, label ${label}`);
+  }
+});
+
+// recorded before the change: the tall sky centres its block already and does not move
+test('number at 9:16: the tall sky is as it was', () => {
+  const { boxes } = expandShot(SAGAN, 'cosmos', '9:16');
+  assert.deepEqual(boxes, {
+    value: [125.66999999999996, 709.74, 753.6600000000001, 331.79999999999995],
+    label: [125, 1089.54, 755, 145.92000000000007],
+  });
 });
 
 test('number: the figure opens in ink, counting, never fading in grey', () => {

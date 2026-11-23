@@ -80,15 +80,21 @@ export const ledger = {
     slam: { ease: 'linear', dur: 0 }, // ledger does not slam
     pop: ENTER,
     settle: { ease: 'inOutCubic', dur: 0.6 },
+    letters: null, // every shot opens composed (opens 'set'): its claim is whole on frame 0, no letter or line entrance
+    lines: null,
   },
   wordStagger: 0,
   // no drift: a locked camera keeps the grid on the columns; a region close-up is a cut, not a push, to a window of the
   // source round the region (the CLOSE_UP constants above)
   camera: { drift: 0, style: 'locked', closeUp: { width: CLOSE_UP_WIDTH, height: CLOSE_UP_HEIGHT, pad: CLOSE_UP_PAD, minGain: CLOSE_UP_GAIN } },
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'match', 'fade', 'wipe'],
   cutStyle: {},
+  // the review's composition thresholds (engine/looks/fill.mjs DEFAULT_FILL, band 0.35 and hero 0.50): ledger's ruled
+  // layouts fill well with a hero down to 0.466 of the frame (the calibration's `year` shot), under the default 0.50; and a
+  // left-flush statement leaves 35 to 39% of the width bare on the right and reads filled (viewed: ledger statement 16:9)
+  fill: { band: 0.4, hero: 0.45 },
   keyline: 4,
   // nothing in ledger casts a shadow (the card is plain); a cut-out keeps a faint contact edge
   shadow: { dx: 0, dy: 4, blur: 8, alpha: 0.12, color: '#16181d' },
@@ -120,6 +126,11 @@ export const ledger = {
   captions: 'lower',
   captionVariant: 'plain',
   post: { grain: 0, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'bottom', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   // Composition data for the kinds that read it, in the editorial family's terms (desk.mjs explains each field).
   kinds: {
     // the claim across columns 2 to 11 at 16:9 (`toWide`, gate-ledger-1 ruling 5: on 2 to 9 it left the right half
@@ -202,7 +213,7 @@ export const ledger = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null, ripple: null, cube: null,
+    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: 'paper', iris: null, flood: null, zoom: null, blur: null, ripple: null, cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: null, circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'click', turn: null,
       label: 'click', focus: null, route: null, numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,

@@ -17,14 +17,17 @@ import { startV2Server } from './server.mjs';
 // "TimeoutError"; the others "Error"). Only the first form, a plain Error the engine raised on purpose, is the film's.
 const PAGE_THROWN = /^page\.evaluate: Error: ([^\n]*)/;
 // Thrown on purpose by the page but not the film's fault: a WebGL context lost or broken (engine/page/post.mjs), and a
-// picture the browser cannot decode (engine/page/stage.mjs), a file problem like a missing picture.
-const NOT_THE_FILM = /^(?:post pass: |image ".*" could not be loaded)/;
+// picture the server failed to serve (engine/page/stage.mjs: HTTP <n>). A picture the browser cannot decode is the film's
+// own file: a finding at the path that names it (scripts/v2/picture-finding.mjs).
+// The page's own `overlays.logo.src: no loaded picture` is one too: the asset list and the film disagree, whatever the file.
+const NOT_THE_FILM = /^(?:post pass: |image ".*" could not be loaded: HTTP \d+|overlays\.logo\.src: no loaded picture)/;
 // Playwright's call prefix ("page.evaluate: ") and an error class name before the message.
 const CALL_PREFIX = /^(?:(?:page|frame|browser|browserContext|locator)\.\w+: )?(?:[A-Za-z]*Error: )?/;
 
 /** The message of an Error the page raised on purpose about the film (one it cannot draw: an unknown font, a node it
- *  cannot place), or null for anything else: a crashed or closed page, a timeout, a lost WebGL context, an undecodable
- *  picture, an error the page did not mean to raise, or an error from outside the page. Those are the machine's. */
+ *  cannot place, a picture it cannot decode), or null for anything else: a crashed or closed page, a timeout, a lost WebGL
+ *  context, a picture the server failed to serve, an error the page did not mean to raise, or an error from outside the
+ *  page. Those are the machine's. */
 export function pageErrorMessage(err) {
   const message = PAGE_THROWN.exec(String(err?.message ?? ''))?.[1] ?? null;
   return message === null || NOT_THE_FILM.test(message) ? null : message;

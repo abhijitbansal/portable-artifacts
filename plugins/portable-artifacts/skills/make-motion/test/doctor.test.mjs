@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { quoteArg } from '../shared/doctor.mjs';
+import { quoteArg, OPTIONAL } from '../shared/doctor.mjs';
 
 const SKILL = fileURLToPath(new URL('..', import.meta.url));
 const NAME = 'make-motion';
@@ -71,7 +71,8 @@ test('ffmpeg is reported required-missing when PATH is empty and FFMPEG_PATH uns
 test('--for voiceover asks for kokoro; plain does not; --for check (version 1\'s target) is refused with the accepted targets', () => {
   const ids = (args) => JSON.parse(run(SKILL, ['--json', ...args]).stdout).missing.map((m) => m.id);
   assert.equal(ids([]).includes('kokoro'), false);
-  const hasKokoro = fs.existsSync(path.join(SKILL, 'optional/voice/node_modules/kokoro-js'));
+  // the package the doctor itself looks for (the voice stack no longer installs kokoro-js in optional/voice)
+  const hasKokoro = fs.existsSync(path.join(SKILL, 'optional', OPTIONAL.kokoro.dir, 'node_modules', OPTIONAL.kokoro.pkg));
   assert.equal(ids(['--for', 'voiceover']).includes('kokoro'), !hasKokoro);
   const refused = run(SKILL, ['--for', 'check']);
   assert.equal(refused.status, 2);

@@ -161,3 +161,14 @@ test('M22 an end logo is at most a sixth of the short side: a small picture is n
   assert.deepEqual(pictureSize({ width: 100, height: 50 }, { w: 1920, h: 1080 }), { w: 100, h: 50 }, 'a small logo keeps its size');
   assert.deepEqual(pictureSize({ width: 1600, height: 800 }, { w: 1920, h: 1080 }), fitLongestSide({ width: 1600, height: 800 }, 180));
 });
+
+test('pinned keeps a text\'s glyph and line tracks (a letter-by-letter or line entrance survives the copy)', async () => {
+  const { node } = await import('../../engine/graph/node.mjs');
+  const { track } = await import('../../engine/time/track.mjs');
+  const fade = track([{ t: 0, v: 0 }, { t: 1, v: 1 }]);
+  const text = node('text', 't', {}, { glyphTracks: [[{ opacity: fade }]], lineTracks: [{ y: fade }] });
+  const copy = shared.pinned(text);
+  assert.strictEqual(copy.glyphTracks[0][0].opacity, fade);
+  assert.strictEqual(copy.lineTracks[0].y, fade);
+  assert.equal(copy.props.fixed, true);
+});

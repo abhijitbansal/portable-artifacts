@@ -8,6 +8,7 @@
 import { localMatrix } from '../page/bounds.mjs';
 import { pathPoints } from '../devices/shared.mjs';
 import { unionBox as union } from '../kinds/shared.mjs';
+import { seenWords } from './seen.mjs';
 
 const IDENTITY = Object.freeze([1, 0, 0, 1, 0, 0]);
 const HALF = 2;
@@ -23,7 +24,7 @@ const multiply = (p, q) => [p[0] * q[0] + p[2] * q[1], p[1] * q[0] + p[3] * q[1]
  */
 export function showsItself(n) {
   if ((n.reveal ?? 1) <= 0) return false;
-  if (n.type === 'text') return !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => (w.opacity ?? 1) > 0);
+  if (n.type === 'text') { const words = seenWords(n); return words.length === 0 || words.some((w) => w.opacity > 0); }
   if (n.type === 'path') return (Boolean(n.props?.fill) && (n.draw ?? 1) >= 1) || (Boolean(n.props?.stroke) && (n.draw ?? 1) > 0);
   return n.type === 'image';
 }

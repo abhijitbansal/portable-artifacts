@@ -77,11 +77,13 @@ export const keynote = {
     slam: { ease: 'linear', dur: 0 }, // keynote does not slam
     pop: { ease: SETTLE, dur: 0.7, scale: 0.96 },
     settle: { ease: SETTLE, dur: 1.0 },
+    letters: null, // every shot opens composed (opens 'set'): its claim is whole on frame 0, no letter or line entrance
+    lines: null,
   },
   wordStagger: 0,
   // a slow continuous move through every shot: never still
   camera: { drift: 18, style: 'desk' },
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'flood', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   // `fade` and `wipe` added for the type cuts (gate-keynote-2 ruling 8: a dip through the ground, the plan's mask reveal)
   cutPalette: ['cut', 'match', 'crossfade', 'zoom', 'blur', 'cross-zoom', 'fade', 'wipe'],
@@ -121,6 +123,11 @@ export const keynote = {
   captions: 'pill',
   captionWeight: 700,
   post: { grain: 0.012, halftone: 0, bloom: 0 },
+  // the film-level overlays (engine/overlays): the logo in a corner, the progress bar along an edge, in units
+  overlays: {
+    logo: { corner: 'top-right', height: 56, margin: 40, opacity: 0.9 },
+    progress: { edge: 'bottom', height: 6, inset: 0, bar: 'accent', track: 'rule' },
+  },
   kinds: {
     // one huge headline up to 264 across columns 1 to 11, set whole on frame 0; the sweep on its emphasised word
     // `linesWide` 2: on a wide frame at most two lines when that fits (three one-word lines left the right half empty
@@ -130,7 +137,10 @@ export const keynote = {
     // n2 ruling 3: at 16:9 across all twelve columns (`toWide` 12) and centred down the frame, not hung under the tag:
     // hung, the two-line claim left 34 percent of the height empty under it (measured with real glyphs,
     // keynote-glyphs-browser.test.mjs)
-    statement: { toWide: 12, linesWide: 2, tallFrom: 1, tail: 1.6 },
+    // `fillShort` (statement.mjs): a claim of at most 6 words may take 0.8 of the band's height (0.64 otherwise), up to
+    // `linesWide` 3 lines (2 otherwise) and a size of 360 units (300 otherwise): at 2 lines and 300 units a short claim
+    // left the lower third of the frame bare (W2 task 5)
+    statement: { toWide: 12, linesWide: 2, tallFrom: 1, tail: 1.6, fillShort: { words: 6, height: 0.8, linesWide: 3, max: 360 } },
     // parked (looks-four Task 10): on 9:16 the desk number composition leaves 75 percent of the height empty (25 percent
     // used, keynote-kinds.test.mjs; the 35 percent rule), as it did in ledger; a tall number composition is open work
     number: { experimental: true, labelFace: 'text' },
@@ -231,7 +241,7 @@ export const keynote = {
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: null, zoom: 'whoosh', blur: 'whoosh', ripple: null, cube: null,
+    cut: { cut: null, slide: null, punch: null, match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: null, flood: null, zoom: 'whoosh', blur: 'whoosh', ripple: null, cube: null,
       'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': 'whoosh', wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: null, circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'click', turn: null,
       label: null, focus: null, route: null, numeral: 'sub', sticker: null, sweep: 'chime', duotone: null, halftone: null, zoom: 'whoosh',

@@ -333,12 +333,20 @@ function expandEnd(shot, ctx) {
   const parts = product !== null ? productParts(shot, ctx, data, times, product)
     : wordmark ? expandWordmark(shot, ctx, data, times, titleOf(shot))
       : isEditorial(look) ? expandDesk(shot, ctx, data, times) : expandPop(shot, ctx, data, times);
-  const behind = Object.fromEntries(Object.keys(parts.boxes).filter((k) => k === 'title' || k.startsWith('word:')).map((k) => [k, parts.hero]));
+  // a left-out ask or mark has the title's box (end-mark.mjs), so a highlight on it goes behind the line as one on the title does
+  const { title: titleBox } = parts.boxes;
+  const behind = Object.fromEntries(Object.entries(parts.boxes).filter(([k, box]) => k === 'title' || k.startsWith('word:') || (titleBox !== undefined && box === titleBox)).map(([k]) => [k, parts.hero]));
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'title', behind });
+  // the mark is pinned to the frame (fixed) as a desk card, a ledger tag or a product end's tag: the camera does not move it,
+  // so a cut that opens from it (cut.at: "mark") reads it as drawn (graph/film.mjs drawnCentre). Elsewhere (a wordmark's
+  // text, a pop kicker or picture) it is an ordinary camera node and needs no targetNodes entry. A wordmark card that
+  // left its ask or mark out (props.dropped) gives that target the title's box (end-mark.mjs), so a cut still opens from it.
+  const pinned = parts.nodes.find((n) => n.id === `${shot.id}.mark` && n.props.fixed === true);
   return {
     nodes: placeDevices([fieldNode(shot, ctx), ...parts.nodes], devices),
     camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
     boxes: parts.boxes,
+    targetNodes: pinned ? { mark: pinned.id } : {},
     hero: parts.hero,
     background: look.palette.paper,
   };

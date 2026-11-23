@@ -93,8 +93,14 @@ function secondsForShot(shot, pace) {
  */
 export const NARRATION_LEAD = 0;
 
-/** The film second a timeline shot's narration (its WAV, for a voiced film) starts at. */
-export const narrationStart = (shot) => shot.start + NARRATION_LEAD;
+/** The longest a shot's `narration.lead` or `narration.trail` may be, in seconds (a J or L cut). */
+export const NARRATION_SHIFT_MAX = 1.5;
+
+/**
+ * The film second a timeline shot's narration (its WAV, for a voiced film) starts at: its picture start plus its
+ * narrationAt, which a timeline shot carries only when a J or L cut moved its picture's start off its narration's.
+ */
+export const narrationStart = (shot) => shot.start + (shot.narrationAt ?? NARRATION_LEAD);
 
 // The measured words of `shot` from its sidecar entry in the estimate's shape, each time plus `offset` (NARRATION_LEAD:
 // shot-local seconds; 0 for a recording's words, which stay in seconds from the start of the file).
@@ -314,6 +320,85 @@ function recordedTimeline(film, { fps, pace, words, cuts, modes }) {
   return { fps, duration: startFrame / fps, frameCount: startFrame, timed: 'measured', shots: entries };
 }
 
+// ---- J and L cuts: a shot's narration may lead its picture or trail past it -----------------------------------------------
+
+const narrationFrames = (shot, key, fps) => {
+  const seconds = shot.narration?.[key];
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * fps) : 0;
+};
+
+// Frames each seam moves by, in order: the seam between shot k and k + 1 moves later for the lead of k + 1 and earlier
+// for the trail of k.
+const seamShifts = (film, fps) => film.shots.slice(0, -1).map((shot, k) => (
+  narrationFrames(film.shots[k + 1], 'lead', fps) - narrationFrames(shot, 'trail', fps)
+));
+
+// Seconds of the cut that opens shot `index`, 0 for the first shot or a cut the registry does not have (the validator says so).
+function cutSeconds(film, index, { cuts, modes }) {
+  if (index === 0 || !cuts?.has?.(cutNameOf(film.shots[index].cut, film.cut))) return 0;
+  return resolveShotCut(film, index, { look: filmLook(film, { modes }), cuts }).dur;
+}
+
+// A shot the shift shortens below 1 s or below the cut that opens it is the field's error: the shot's own lead (its
+// opening seam later) or trail (its closing seam earlier), whichever took more.
+function shortenedErrors(film, frames, shifts, fps, ctx) {
+  return film.shots.flatMap((shot, index) => {
+    const opening = shifts[index - 1] ?? 0, closing = shifts[index] ?? 0;
+    const left = frames[index] + closing - opening;
+    if (left >= frames[index]) return [];
+    const cut = cutSeconds(film, index, ctx);
+    if (left >= Math.ceil(Math.max(MIN_SHOT_SECONDS, cut) * fps - FRAME_EPSILON)) return [];
+    const field = Math.max(opening, 0) >= Math.max(-closing, 0) ? 'lead' : 'trail';
+    const cutText = cut > MIN_SHOT_SECONDS ? ` and at least its cut (${secondsText(cut)} s)` : '';
+    return [{
+      path: `shots[${index}].narration.${field}`,
+      message: `a ${field} of ${secondsText(shot.narration[field])} s leaves shot "${shot.id}" ${(Math.max(0, left) / fps).toFixed(1)} s; a shot lasts at least ${MIN_SHOT_SECONDS} s${cutText}`,
+    }];
+  });
+}
+
+// One word of a shot whose picture start moved: it is heard where it was (the sound times gain narrationAt, the signed
+// seconds from the new picture start to the narration's start) and shown there too, clamped into the shot. A shot whose
+// picture start moved still shows its first word from its first frame.
+function movedWord(word, { narrationAt, duration, firstStart }) {
+  const shown = (seconds) => clamp(seconds + narrationAt, 0, duration);
+  return {
+    ...word,
+    start: narrationAt !== 0 && word.start === firstStart ? 0 : shown(word.start),
+    end: shown(word.end),
+    soundStart: word.soundStart + narrationAt,
+    soundEnd: word.soundEnd + narrationAt,
+  };
+}
+
+function movedEntry(entry, { start, frames, narrationAt, fps }) {
+  const duration = frames / fps;
+  const firstStart = entry.words[0]?.start;
+  const words = entry.words.map((w) => movedWord(w, { narrationAt, duration, firstStart }));
+  const sentences = entry.sentences.map((s) => ({ ...s, start: words[s.first].start, end: words[s.last].end }));
+  return { ...entry, start: start / fps, end: (start + frames) / fps, duration, words, sentences, ...(narrationAt === 0 ? {} : { narrationAt }) };
+}
+
+// `timeline` with every seam moved by its shots' narration lead and trail (see buildTimeline); `timeline` itself when
+// no shot has one, so a film without the field is exactly what it was. Throws a PlacementError for a shot left too short.
+function narrationShifted(film, timeline, ctx) {
+  const { fps } = timeline;
+  const shifts = seamShifts(film, fps);
+  if (shifts.every((s) => s === 0)) return timeline;
+  const frames = timeline.shots.map((s) => Math.round(s.duration * fps));
+  const errors = shortenedErrors(film, frames, shifts, fps, ctx);
+  if (errors.length > 0) throw new PlacementError(errors);
+  let start = 0;
+  const shots = timeline.shots.map((entry, index) => {
+    const opening = shifts[index - 1] ?? 0, closing = shifts[index] ?? 0;
+    const length = frames[index] + closing - opening;
+    const moved = movedEntry(entry, { start, frames: length, narrationAt: opening === 0 ? 0 : -opening / fps, fps });
+    start += length;
+    return moved;
+  });
+  return { ...timeline, shots };
+}
+
 /**
  * The shot timeline of `film` at `fps`, each spoken shot paced by its mode (the registered mode's wpm and tail).
  * `modes` is the modes registry (default: the shared one; the validator passes the registries it checked with).
@@ -324,6 +409,12 @@ function recordedTimeline(film, { fps, pace, words, cuts, modes }) {
  * Without it, 'estimated'. `recording: true` says the words are a recording's (scripts/v2/voice/sidecar.mjs
  * fromWhisper: one file, times from its start) and the timeline follows the file (recordedTimeline); `cuts` is the
  * cuts registry whose durations it checks against the shots (default: the shared one).
+ * A shot's `narration: { lead, trail }` (seconds, each up to NARRATION_SHIFT_MAX) moves the seam between two shots by whole
+ * frames: later for the lead of the shot after it, earlier for the trail of the shot before it. The shot that gains the
+ * frames is the other one, so the film is as long, and no word is heard at another film second. A shot whose opening seam
+ * moved by s frames carries narrationAt = -s / fps (narrationStart adds it), each of its words' sound times gains it, and the
+ * shown times are clamped into the shot. A shift that leaves a shot under 1 s or under its cut throws a PlacementError at
+ * the field (not for a recording, which sets where its words fall).
  */
 export function buildTimeline(given, { fps, modes = registries.modes, words, recording = false, cuts = registries.cuts } = {}) {
   if (!Number.isFinite(fps) || fps <= 0) throw new RangeError(`fps must be a positive number, got ${fps}`);
@@ -353,5 +444,6 @@ export function buildTimeline(given, { fps, modes = registries.modes, words, rec
     startFrame += frames;
     return entry;
   });
-  return { fps, duration: startFrame / fps, frameCount: startFrame, timed: words === undefined ? 'estimated' : 'measured', shots };
+  const timeline = { fps, duration: startFrame / fps, frameCount: startFrame, timed: words === undefined ? 'estimated' : 'measured', shots };
+  return narrationShifted(film, timeline, { cuts, modes });
 }

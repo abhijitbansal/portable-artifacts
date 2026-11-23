@@ -6,7 +6,7 @@
 // Without look.hand the nodes come back as they are. handFindings judges a plan: drawing faster than look.hand.maxSpeed
 // (creative), the hand over a finished text for more than COVER_SECONDS or crossing the frame's top or left edge
 // (mechanical). Pure and DOM-free.
-import { node } from '../graph/node.mjs';
+import { node, textTracksOf } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { deviceRng, polyline } from '../devices/shared.mjs';
 import { unitOf } from '../units.mjs';
@@ -23,7 +23,7 @@ export { handPose } from './pose.mjs';
 export { handNodes } from './shape.mjs';
 
 const FPS = 30;
-const COVER_SECONDS = 0.3;
+export const COVER_SECONDS = 0.3;
 const TEXT_UP = 0.74; // em above the baseline a written line's ink reaches (capitals) and below it (descenders): the board's text boxes
 const TEXT_DOWN = 0.22;
 // a word's entrance, and the colour a word not yet spoken is given (the ghost grey of a recolour look): what is written is
@@ -51,7 +51,8 @@ function wobbled(n, look, seed, unit) {
 
 // A text's words without their entrances or ghost colours (what is written is never faded in or greyed); other word tracks
 // stay. An opacity that only
-// steps (0 or 1: the number's digits shown a step at a time) is not a fade and stays.
+// steps (0 or 1: the number's digits shown a step at a time) is not a fade and stays. A text's glyph and line tracks are
+// kept as they are (a line's tracks follow it into the node of its own line, as its index 0).
 const isStep = (tr) => tr.points.every((k) => k.v === 0 || k.v === 1);
 // A text whose words come on a step at a time (the number's `steps`) keeps those; any other text is written whole by its reveal, so
 // a word is never held back to its spoken time (it showed as a grey half-word on the end kind's first sheet).
@@ -65,6 +66,7 @@ function writtenLines(n, strokes) {
     const s = strokes.find((x) => x.line === k);
     return node('text', layout.lines.length === 1 ? n.id : `${n.id}.line${k}`, { ...n.props, layout: { ...layout, lines: [line] } }, {
       tracks: { reveal: progress(s.start, s.end) }, wordTracks: writtenWords(n.wordTracks, n.props.steps !== undefined), depth: n.depth,
+      glyphTracks: n.glyphTracks, ...(n.lineTracks?.[k] ? { lineTracks: [n.lineTracks[k]] } : {}),
     });
   });
 }
@@ -160,7 +162,7 @@ export function handPlan(shotNodes, timing, ctx) {
 function setNode(n, at) {
   const rest = Object.fromEntries(Object.entries(n.tracks).filter(([name]) => name !== 'draw' && name !== 'opacity'));
   const wordTracks = n.type === 'text' ? writtenWords(n.wordTracks, false) : n.wordTracks;
-  return node(n.type, n.id, n.props, { tracks: { ...rest, opacity: arrivalTrack(at) }, children: n.children, wordTracks, step: n.step, depth: n.depth });
+  return node(n.type, n.id, n.props, { tracks: { ...rest, opacity: arrivalTrack(at) }, children: n.children, ...textTracksOf(n), wordTracks, step: n.step, depth: n.depth });
 }
 
 /**
@@ -241,7 +243,7 @@ export function handFindings(plan, look, texts, { canvas, unit = 1, duration, re
     }
   }
   for (const [id, { worst, at }] of covered) {
-    if (worst > COVER_SECONDS) out.push({ kind: 'mechanical', rule: 'covered', node: id, t: at, message: `the hand rests over the finished text "${id}" for ${worst.toFixed(2)} s; the most is ${COVER_SECONDS} s` });
+    if (worst > COVER_SECONDS) out.push({ kind: 'mechanical', rule: 'hand-covered', node: id, t: at, message: `the hand rests over the finished text "${id}" for ${worst.toFixed(2)} s; the most is ${COVER_SECONDS} s` });
   }
   out.push(...strokeEdgeFindings(plan, canvas, unit));
   if (edge !== null) out.push({ kind: 'mechanical', rule: 'hand-edge', node: 'hand', t: edge, message: 'the hand crosses the top or left edge of the frame; it may leave only through the bottom or right edge' });

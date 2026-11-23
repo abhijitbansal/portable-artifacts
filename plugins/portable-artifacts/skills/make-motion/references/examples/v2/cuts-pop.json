@@ -105,6 +105,13 @@
       "say": "A warp sweeps in on a *bent* diagonal."
     },
     {
+      "id": "fill",
+      "show": "statement",
+      "cut": "flood",
+      "kicker": "Flood",
+      "say": "A flood fills the frame with *colour*, then the next shot opens from it."
+    },
+    {
       "id": "lift",
       "show": "statement",
       "cut": { "type": "wipe", "direction": "up" },

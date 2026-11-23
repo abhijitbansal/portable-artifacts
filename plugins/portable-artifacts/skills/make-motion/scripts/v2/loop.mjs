@@ -11,8 +11,9 @@ const BYTE = 255;
 const DECIMALS = 2;
 
 // A frame as the page draws it, decoded (png.mjs): the page's policy refuses data: pictures, so pixels are read in Node.
+// Without the film's overlays: a progress bar moves from the first frame to the last and would never let a loop match.
 async function framePixels(page, frame) {
-  await page.evaluate((i) => window.__seek(i), frame);
+  await page.evaluate((i) => window.__seek(i, { overlays: false }), frame);
   return readPng(await page.screenshot({ type: 'png' }));
 }
 
@@ -42,6 +43,8 @@ export async function loopFindings(session) {
     kind: 'creative',
     shot: timeline.shots.at(-1).id,
     path: 'loop',
+    rule: 'loop',
+    node: '',
     t: last / timeline.fps,
     message: `the last frame does not match the first (difference ${diff.toFixed(DECIMALS)}); end on the opening picture again so the film loops`,
   }];
