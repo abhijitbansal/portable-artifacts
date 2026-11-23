@@ -20,13 +20,14 @@ Socket, Snyk) flag. No spec changes; pages build the same.
   make-dashboard `inspect` and `query` text output (200 characters a cell; `--json` unchanged), make-scene row errors
   (80), make-explainer `gather` output, warnings and error messages (the facts file and the page data stay exact; only what `gather` prints to the terminal is cut at 200 characters a subject).
 - **make-explainer `gather` and make-scene `rows.mjs git` no longer run commands from a repository's own git config.**
-  They pass `core.fsmonitor=false`, `--no-textconv`, `--no-ext-diff` and `log.mailmap=false`, do not enter submodules, and drop
-  `GIT_CONFIG`, `GIT_CONFIG_PARAMETERS`/`COUNT`/`KEY_n`/`VALUE_n`. Before, a hostile `.git/config` (an unpacked archive, a
-  shared checkout) could run a command through `git status`.
+  `gather` passes `core.fsmonitor=false`, `--no-textconv`, `--no-ext-diff` and `log.mailmap=false` and does not enter
+  submodules; both drop `GIT_CONFIG` and `GIT_CONFIG_PARAMETERS`/`COUNT`/`KEY_n`/`VALUE_n` and give every git call a 60 s
+  limit. Before, a hostile `.git/config` (an unpacked archive, a shared checkout) could run a command through `gather`'s
+  `git status`, and a partial clone could run one through either tool's lazy fetch.
   - **Partial clones are refused.** A clone made with `--filter` fetches missing objects on demand, which runs the
     repository's own `remote.<name>.uploadpack`, `core.sshCommand` or credential helper. Both tools read the config first
-    (`remote.<name>.promisor`, `partialclonefilter` or `extensions.partialclone` in the repository's own config, on any
-    git version) and stop with a usage error that says to run on a full clone. `GIT_NO_LAZY_FETCH=1` stays as a second layer
+    (`remote.<name>.promisor`, `partialclonefilter` or `extensions.partialclone` in the repository's own config; this
+    check does not depend on `GIT_NO_LAZY_FETCH`) and stop with a usage error that says to run on a full clone. `GIT_NO_LAZY_FETCH=1` stays as a second layer
     on git 2.44 or later. Needs git 2.26 or later to read the config; an older git is refused too.
   - **The uncommitted-changes check is skipped when the repository's own config defines a filter.** When its
     `.git/config`, `config.worktree` or a file they include defines a filter driver or a git-lfs extension
