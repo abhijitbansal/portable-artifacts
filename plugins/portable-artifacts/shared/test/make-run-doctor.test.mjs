@@ -27,8 +27,19 @@ function fixture() {
   const spec = path.join(dir, 'spec.json');
   fs.writeFileSync(spec, '{}');
   const scripts = { doctor, validate: stub(dir, 'validate'), build: stub(dir, 'build'), check: stub(dir, 'check') };
-  return { make, spec, skillDir, env: { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts) } };
+  return { make, spec, skillDir, env: { PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts), NODE_ENV: 'test' } };
 }
+
+// PA_MAKE_TEST_SCRIPTS swaps the scripts make.mjs runs, so it only counts when NODE_ENV is "test".
+test('PA_MAKE_TEST_SCRIPTS is ignored outside NODE_ENV=test: the stand-in scripts never run', async () => {
+  const { make, spec, env } = fixture();
+  const marker = path.join(path.dirname(make), 'ran');
+  const scripts = { ...Object.fromEntries(['doctor', 'validate', 'build', 'check'].map((s) => [s, stub(path.dirname(make), s, { marker })])) };
+  for (const NODE_ENV of ['production', '']) {
+    const { stdout } = await runNode(make, [spec, '--json'], { env: { ...env, NODE_ENV, PA_MAKE_TEST_SCRIPTS: JSON.stringify(scripts) } });
+    assert.equal(fs.existsSync(marker), false, `NODE_ENV=${JSON.stringify(NODE_ENV)}: a stand-in script ran: ${stdout}`);
+  }
+});
 
 test('a missing node_modules from the real doctor gives --json error.hint as a string with the install command', async () => {
   const { make, spec, skillDir, env } = fixture();
