@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Dashboards, diagrams, explainer pages, 3D scenes and MP4 films from one small JSON spec, offline, for any coding agent.",
-    "version": "2.3.0"
+    "version": "2.3.1"
   },
   "plugins": [
     {
