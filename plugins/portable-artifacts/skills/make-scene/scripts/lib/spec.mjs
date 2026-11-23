@@ -9,7 +9,7 @@ import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { SCHEMA, ROWS_SCHEMA, LINKS_SCHEMA, LIMITS } from './schema.mjs';
 import { q, suggestion, checkLength } from './checks.mjs';
-import { agentText, agentJson } from '../../shared/agent-text.mjs';
+import { agentJson } from '../../shared/agent-text.mjs';
 import { checkRows, checkLinks, checkWorld } from './row-checks.mjs';
 import { readSource, resolveLocal, focusKeys, DataError } from './rows.mjs';
 import { sceneWarnings } from './warnings.mjs';
@@ -129,8 +129,9 @@ function loadSource(errors, spec, dir, allowOutside) {
 function checkTour(errors, spec, keys, noun = 'group or label') {
   const tour = spec.tour ?? [];
   if (tour.length > LIMITS.beats) errors.push({ path: 'tour', message: `${tour.length} beats; the limit is ${LIMITS.beats}; merge or drop beats` });
-  // Group names and labels come from the user's data (a git repository's folder names too): print them escaped and capped.
-  const candidates = keys ? [...keys].map((k) => agentText(k, { max: ECHO_MAX })) : [];
+  // Group names and labels come from the user's data (a git repository's folder names too); suggestion() matches on the raw
+  // names and prints them escaped and capped.
+  const candidates = keys ? [...keys] : [];
   tour.forEach((beat, i) => {
     const p = `tour[${i}]`;
     checkLength(errors, beat, 'title', p, LIMITS.beatTitle);

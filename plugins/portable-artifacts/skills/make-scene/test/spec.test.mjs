@@ -112,6 +112,22 @@ test('a tour focus label that matches nothing is echoed escaped and capped, and 
   assert.match(message, /api\\u\{e0069\}\\u\{e0067\}/);
 });
 
+test('a did-you-mean hint escapes an invisible character once (a single backslash), and never offers a capped name', async () => {
+  const hinted = scene({
+    data: { rows: [{ group: 'a\u{200B}b', t: 'W1', value: 1 }, { group: 'zz', t: 'W1', value: 1 }] },
+    tour: [{ title: 'T', caption: 'c', focus: ['a\u{200B}c'] }],
+  });
+  assert.equal(errorAt(await check(hinted), 'tour[0].focus[0]').message, '"a\\u{200b}c" is not a group, label or t value; did you mean "a\\u{200b}b"?');
+  const long = `${'q'.repeat(100)}1`;
+  const capped = scene({
+    data: { rows: [{ group: long, t: 'W1', value: 1 }, { group: 'zz', t: 'W1', value: 1 }] },
+    tour: [{ title: 'T', caption: 'c', focus: [`${'q'.repeat(100)}2`] }],
+  });
+  const message = errorAt(await check(capped), 'tour[0].focus[0]').message;
+  assert.doesNotMatch(message, /did you mean "q+…/, 'a hint cut by the cap is not a valid name');
+  assert.match(message, /is not a group, label or t value; (available|did you mean)/);
+});
+
 test('csv line numbers count blank lines, quoted newlines and the header', async () => {
   const { dir, spec } = csvSpec('lines.csv', 'g,v\n\n"x\ny",1\nb,oops\n');
   const r = await validateSpec(spec, { dir });

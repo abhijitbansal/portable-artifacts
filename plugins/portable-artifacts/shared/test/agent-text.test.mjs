@@ -41,6 +41,15 @@ test('controls, line and paragraph separators, variation selectors, private use,
   assert.equal(agentText('\uFEFFhi'), '\\u{feff}hi');
 });
 
+test('Hangul fillers, every variation selector and other default-ignorable characters are escaped', () => {
+  for (const cp of [0x115F, 0x1160, 0x3164, 0xFFA0, 0x034F, 0x17B4, 0x17B5, 0xFE00, 0xFE0D, 0xFE0E, 0xFE0F, 0xE0100, 0xE01EF]) {
+    const char = String.fromCodePoint(cp);
+    assert.equal(agentText(`a${char}b`), `a\\u{${cp.toString(16).padStart(4, '0')}}b`, `U+${cp.toString(16)}`);
+    assert.doesNotMatch(escapeJsonInvisible(JSON.stringify(`a${char}b`)), /[ᅟᅠㅤﾠ͏឴឵︀-️]|\uDB40[\uDD00-\uDDEF]/);
+  }
+  assert.equal(agentText('café 中文 \u{1F600}'), 'café 中文 \u{1F600}', 'visible text is untouched');
+});
+
 test('a lone surrogate is escaped', () => {
   assert.equal(agentText('a\uD800b'), 'a\\u{d800}b');
 });

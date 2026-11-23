@@ -2,7 +2,8 @@
 // It escapes and never deletes: every character a person cannot see, or that reorders or hides text from a person but
 // not from a model, is written out as a code point, so nothing can ride along unseen and nothing is lost.
 //   Cc control, Cf format (zero-width, bidi controls, the byte order mark, Unicode Tag characters U+E0000-E007F),
-//   Co private use, Cn unassigned, Cs lone surrogate, Zl and Zp (U+2028, U+2029) and every variation selector.
+//   Co private use, Cn unassigned, Cs lone surrogate, Zl and Zp (U+2028, U+2029), every variation selector and the rest of
+//   the default-ignorable set (the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0, U+034F, U+17B4, U+17B5, ...).
 // Letters, digits, punctuation, spaces and emoji stay as they are. A ZWJ emoji or a tag-sequence flag therefore
 // prints with its joiner or tag characters shown as code points; that is deliberate.
 // Two forms:
@@ -14,7 +15,7 @@
 
 export const DEFAULT_MAX = 200;
 
-const INVISIBLE = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\p{Variation_Selector}]/u;
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\p{Variation_Selector}\p{Default_Ignorable_Code_Point}]/u;
 const INVISIBLE_ALL = new RegExp(INVISIBLE.source, 'gu');
 const MIN_HEX_DIGITS = 4;
 const BMP = 0xFFFF;
