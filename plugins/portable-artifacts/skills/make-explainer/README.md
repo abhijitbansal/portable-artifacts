@@ -87,7 +87,7 @@ page, so keep the two together.
 ## Requirements
 
 - Node.js ≥ 20 and a one-time `npm ci --ignore-scripts --omit=dev` inside this folder (Ajv only).
-- `gather.mjs` needs `git` on `PATH`.
+- `gather.mjs` needs `git` 2.26 or later on `PATH`. It runs no command from the repository's own git config: it refuses a partial clone (use a full clone), skips the uncommitted-changes check (`dirty` is `null`, with a warning) when that config defines a filter driver or a git-lfs extension or the work tree has a `.lfsconfig`, and stops a git call after 60 seconds.
 - Without `node_modules`, `validate.mjs` and `build.mjs` print one line naming the doctor command (`doctor.mjs --fix node_modules`) and exit 2.
 - `doctor.mjs` exits 0 when nothing *required* is missing (an optional browser is still listed), 1 when a required item is missing or a `--fix` failed, 2 on a usage error. Those codes are kept as they are.
 - Diagram and chart sections need the **`make-diagram`** and **`make-dashboard`**

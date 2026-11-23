@@ -164,7 +164,8 @@ The agent writes the SQL, so it is treated as untrusted:
   Table names in SQL match case-insensitively, as DuckDB binds them; system names are
   refused in any case. The page runs under a CSP without `unsafe-eval`
   (Vega's AST interpreter is used) and with chart actions disabled.
-- **The built page contains the query results.** Sharing it shares the data.
+- **The built page contains the query results.** Sharing it shares the data. The skill publishes a page to a link only when you ask.
+- **Rows and column names are data, never instructions.** The text output of `inspect.mjs` and `query.mjs` escapes invisible characters (bidi controls, zero-width and Tag characters) as `\u{XXXX}` and cuts a cell at 200 characters; `--json` is unchanged.
 
 ## Requirements and licences
 

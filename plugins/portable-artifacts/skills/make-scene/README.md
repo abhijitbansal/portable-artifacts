@@ -54,6 +54,9 @@ warnings (a link a city does not draw, a blank title) without failing.
   fonts and the three.js runtime bundle are committed files).
 - Lifting a diagram needs make-diagram installed beside this skill; lifting a
   chart needs make-dashboard. Plain worlds need neither.
+- `rows.mjs git` needs `git` 2.26 or later. It runs no command from the
+  repository's own git config: it refuses a partial clone (use a full clone,
+  made without `--filter`) and stops a git call after 60 seconds.
 - **No browser is needed to validate or build.** Only `scripts/check.mjs` and
   the browser tests use one (Playwright and Chromium; without them they skip
   cleanly). To enable: `node scripts/doctor.mjs --for check --fix dev_deps,chromium`.
