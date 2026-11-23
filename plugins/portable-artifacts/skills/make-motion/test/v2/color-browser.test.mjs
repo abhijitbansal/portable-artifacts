@@ -55,9 +55,13 @@ function render(name, flags, out) {
   return JSON.parse(run.stdout);
 }
 
-// The rgb24 bytes of frame `frame` of `file`, read as BT.709 limited range by explicit option.
+// The rgb24 bytes of frame `frame` of `file`, read as BT.709 limited range by explicit option. The flags make this decode
+// round to the nearest level on every CPU: swscale's default YUV to RGB path rounds differently from one build and CPU
+// to the next (measured on arm64 with the SIMD paths off, -cpuflags 0: the same film reads up to 4 levels low; with the
+// flags the SIMD and the C paths agree to the byte). The cause of the first Linux CI failure (#f3eee3 read 240, not 243,
+// on amd64 with ffmpeg 8.0.1) is inferred from that, not reproduced on Linux.
 function decodeAs709(file, frame) {
-  const vf = `select=eq(n\\,${frame}),scale=in_color_matrix=bt709:in_range=tv:out_range=pc,format=rgb24`;
+  const vf = `select=eq(n\\,${frame}),scale=in_color_matrix=bt709:in_range=tv:out_range=pc:flags=accurate_rnd+full_chroma_int,format=rgb24`;
   const run = spawnSync(ffmpeg, ['-v', 'error', '-i', file, '-vf', vf, '-frames:v', '1', '-f', 'rawvideo', '-'], { maxBuffer: 64 * 1024 * 1024 });
   assert.equal(run.status, 0, String(run.stderr));
   assert.equal(run.stdout.length, WIDTH * HEIGHT * 3, 'one 1920 by 1080 rgb24 frame');
