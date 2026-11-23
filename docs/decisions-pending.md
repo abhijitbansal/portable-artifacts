@@ -481,3 +481,13 @@ shipped the real risks and the cheap scanner fixes. These were held back:
 - **onnxruntime-node versions.** make-motion `optional/voice` pins 1.21.0, `optional/cutout` 1.31.1.
   - **A (default, shipped):** keep both; each stack is tested at its pin.
   - **B:** unify on one version after regression checks of voice and cutout.
+
+## Builder agent files from before 2.4.0: how they get the new text (fix/skills-security-scan, 2026-11-23)
+
+2.4.0 adds a data-never-instructions line to the artifact-builder agent and changes `CURRENT_MARKER`, so the doctor
+reports an older file as outdated. The doctor never overwrites the file; the manual route is the installer's `--force`,
+which replaces it without a backup, so a user's own edits to that file are lost.
+
+- **A (default, shipped):** keep it: the file is generated, and the doctor's note names the `--force` command.
+- **B:** make `install --force` keep a `.bak` of the replaced file, or have the doctor rewrite only a file whose bytes
+  match a known earlier version.
