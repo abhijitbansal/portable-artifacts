@@ -256,7 +256,7 @@ test('a subfolder a build created is recorded in the manifest and removed once i
 
 // ---- Minor 9: case variants of the manifest's own name --------------------------------------------------------------
 
-test('a manifest entry that is a case variant of the manifest or its temp name is never unlinked', async () => {
+test('a manifest entry that is a case variant of the manifest or its temp name is never unlinked', async (t) => {
   const p = project(motions('Tour'));
   await rebuild(p);
   const caseInsensitive = fs.existsSync(path.join(p.assets, MANIFEST.toUpperCase()));
@@ -265,15 +265,12 @@ test('a manifest entry that is a case variant of the manifest or its temp name i
     put(path.join(p.assets, `${MANIFEST.toUpperCase()}.TMP`), 'mine');
   }
   put(path.join(p.assets, MANIFEST), JSON.stringify({ version: 1, files: ['tour.mp4', MANIFEST.toUpperCase(), `${MANIFEST.toUpperCase()}.TMP`, `${MANIFEST}.tmp`] }));
-  const unlinked = [];
-  const realUnlink = fs.unlinkSync;
-  fs.unlinkSync = (f, ...rest) => { unlinked.push(String(f)); return realUnlink(f, ...rest); };
-  try {
-    p.write(motions('Walk'));
-    await rebuild(p);
-  } finally {
-    fs.unlinkSync = realUnlink;
-  }
+  // A spy that calls through: the end state alone cannot show that the manifest was never unlinked, because the build
+  // writes it again afterwards. `t.mock` restores fs.unlinkSync when the test ends.
+  const unlink = t.mock.method(fs, 'unlinkSync');
+  p.write(motions('Walk'));
+  await rebuild(p);
+  const unlinked = unlink.mock.calls.map((c) => String(c.arguments[0]));
   const names = unlinked.map((f) => path.basename(f).toLowerCase());
   assert.ok(!names.includes(MANIFEST) && !names.includes(`${MANIFEST}.tmp`), `unlinked: ${unlinked.join(', ')}`);
   if (!caseInsensitive) {

@@ -124,11 +124,19 @@ test('ui: plain strips markup and stays escaped; rawText unescapes; unknown glyp
 
 test('ui: chip never puts an unexpected tone into the class attribute', () => {
   assert.match(chip(['Ok', 'check', 'good']), /class="chip tone-good"/);
-  for (const bad of ['"><img src=x onerror=1>', 'good" onclick="1', 'Good', '', undefined, 'a b']) {
+  for (const bad of ['"><img src=x onerror=1>', 'good" onclick="1', 'Good', '', undefined, 'a b', '"><script>', 'good bad', 'purple', 'constructor']) {
     const out = chip(['Ok', 'check', bad]);
     assert.match(out, /^<span class="chip tone-neutral">/, String(bad));
-    assert.ok(!out.includes('onclick') && !out.includes('<img'), String(bad));
+    assert.ok(!out.includes('onclick') && !out.includes('<img') && !out.includes('<script'), String(bad));
   }
+});
+
+test('ui: chip accepts exactly the tones the stylesheet defines, and an unknown one falls back to neutral', () => {
+  const css = fs.readFileSync(new URL('../template/base.css', import.meta.url), 'utf8');
+  const defined = new Set([...css.matchAll(/^\.tone-([a-z]+)\b/gm), ...css.matchAll(/, \.tone-([a-z]+)\b/g)].map((m) => m[1]));
+  assert.deepEqual([...defined].sort(), ['accent', 'bad', 'critical', 'good', 'high', 'low', 'medium', 'neutral', 'warn']);
+  for (const tone of defined) assert.match(chip(['Ok', 'check', tone]), new RegExp(`^<span class="chip tone-${tone}">`), tone);
+  assert.match(chip(['Ok', 'check', 'unknown']), /^<span class="chip tone-neutral">/);
 });
 
 // ---- behaviour of individual renderers --------------------------------------------

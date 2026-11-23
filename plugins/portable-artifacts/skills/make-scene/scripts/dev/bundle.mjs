@@ -1,7 +1,9 @@
 // Rebuilds template/vendor/scene-runtime.min.js from template/runtime/index.js.
 // Dev-only (esbuild is a devDependency): run `npm run bundle` after any runtime edit and commit the result.
+// test/bundle-bytes.test.mjs calls buildBundleText() and compares it with the committed file byte for byte.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { BUNDLE_FILE, SKILL_DIR, bundleHeader } from '../lib/bundle.mjs';
 
@@ -13,7 +15,8 @@ function threeNotice() {
   return `/*! three.js licence (MIT), from three/LICENSE\n\n${text}\n*/`;
 }
 
-try {
+/** The whole bundle file as text (header, minified body, three's licence), built in memory; nothing is written. */
+export async function buildBundleText() {
   const header = bundleHeader();
   const result = await build({
     absWorkingDir: SKILL_DIR,
@@ -25,10 +28,16 @@ try {
     legalComments: 'eof', // three is MIT: its @license / SPDX notice must travel with every inlined copy
     write: false,
   });
-  const body = result.outputFiles[0].text;
-  fs.writeFileSync(BUNDLE_FILE, `${header}\n${body}${threeNotice()}\n`);
-  console.log(`wrote ${BUNDLE_FILE} (${Buffer.byteLength(body)} bytes + header)`);
-} catch (err) {
-  console.error(`bundle failed: ${err.message}`);
-  process.exitCode = 1;
+  return `${header}\n${result.outputFiles[0].text}${threeNotice()}\n`;
+}
+
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const text = await buildBundleText();
+    fs.writeFileSync(BUNDLE_FILE, text);
+    console.log(`wrote ${BUNDLE_FILE} (${Buffer.byteLength(text)} bytes including header and licence)`);
+  } catch (err) {
+    console.error(`bundle failed: ${err.message}`);
+    process.exitCode = 1;
+  }
 }

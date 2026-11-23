@@ -10,7 +10,7 @@ const BASELINE = 0.35; // baseline sits this many em below the middle of a line 
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 // eslint-disable-next-line no-control-regex
-const XML_FORBIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
+const XML_FORBIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
 
 /** Text or attribute value -> safe markup. Control characters XML forbids are dropped. */
 export const esc = (value) => String(value).replace(XML_FORBIDDEN, '').replace(/[&<>"']/g, (c) => ESCAPES[c]);
