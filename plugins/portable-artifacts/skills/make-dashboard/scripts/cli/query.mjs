@@ -3,6 +3,11 @@ import { UsageError, parseCli, parseTimeout, exitUsage } from '../../shared/cli.
 import { printResult } from '../../shared/errors.mjs';
 import { chartData } from '../lib/pipeline.mjs';
 import { loadSpec, MAX_ROWS_DEFAULT } from '../lib/spec.mjs';
+import { agentText, agentRow } from '../../shared/agent-text.mjs';
+
+// Cells and column names come from the user's data, so printed text is third-party text for the agent: hidden
+// characters print as \u{xxxx} and a long cell is cut. --json output stays exact, because a program parses it.
+const CELL_MAX = 200;
 
 const USAGE = 'node scripts/query.mjs <spec.json> --chart <id> [--limit <n>] [--json] [--allow-outside] [--timeout <seconds>]';
 const DEFAULT_LIMIT = 20;
@@ -26,8 +31,8 @@ function printRows(chartId, { chart, result }, limit, maxRows) {
   const shown = rows.slice(0, limit);
   const out = (text) => process.stdout.write(`${text}\n`);
   out(`chart ${chartId} (query ${chart.query}): ${rowCount} rows${truncated ? ` (truncated at maxRows ${maxRows})` : ''}`);
-  out(`columns: ${columns.map((c, i) => `${c} ${types[i]}`).join(', ')}`);
-  for (const r of shown) out(`  ${JSON.stringify(r)}`);
+  out(`columns: ${columns.map((c, i) => `${agentText(c, { max: CELL_MAX })} ${types[i]}`).join(', ')}`);
+  for (const r of shown) out(`  ${agentRow(r, { max: CELL_MAX })}`);
   if (rows.length > shown.length) out(`  … ${rows.length - shown.length} more rows`);
 }
 

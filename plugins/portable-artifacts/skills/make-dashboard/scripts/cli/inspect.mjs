@@ -12,9 +12,14 @@ import { fetchQuery } from '../lib/data.mjs';
 import { loadSpec, validateSpec } from '../lib/spec.mjs';
 import { printResult } from '../../shared/errors.mjs';
 import { policyFor } from '../lib/sources.mjs';
+import { agentText, agentRow } from '../../shared/agent-text.mjs';
 
 const USAGE = 'node scripts/inspect.mjs <file.csv|parquet|json> [--type t] [--json] [--allow-outside] | --spec dashboard.json --source <name> [--table <t>]';
 const SAMPLE_ROWS = 5;
+// Cells, column names and table names come from the user's data, so printed text is third-party text for the agent:
+// hidden characters print as \u{xxxx} and a long cell is cut. --json output stays exact, because a program parses it.
+const CELL_MAX = 200;
+const shown = (value) => agentText(value, { max: CELL_MAX });
 const BY_EXTENSION = { '.csv': 'csv', '.tsv': 'csv', '.parquet': 'parquet', '.json': 'json', '.jsonl': 'json', '.ndjson': 'json' };
 const VIEW_TYPES = ['csv', 'parquet', 'json'];
 
@@ -28,16 +33,17 @@ function printRows({ rows, columns, types }, { label, json, extra, summary, summ
     out(`${JSON.stringify({ ...extra, columns: columns.map((name, i) => ({ name, type: types[i] })), rows, summary, ...(summaryError ? { summaryError } : {}) })}\n`);
     return;
   }
-  const width = Math.max(...columns.map((c) => c.length));
+  const names = columns.map(shown);
+  const width = Math.max(...names.map((c) => c.length));
   out(`${label}\ncolumns:\n`);
-  columns.forEach((c, i) => out(`  ${c.padEnd(width)}  ${types[i]}\n`));
+  names.forEach((c, i) => out(`  ${c.padEnd(width)}  ${types[i]}\n`));
   out(`sample (${rows.length} rows):\n`);
-  for (const r of rows) out(`  ${JSON.stringify(r)}\n`);
-  if (summaryError) out(`summary: unavailable (${summaryError})\n`);
+  for (const r of rows) out(`  ${agentRow(r, { max: CELL_MAX })}\n`);
+  if (summaryError) out(`summary: unavailable (${shown(summaryError)})\n`);
   if (!summary.length) return;
   // distinct is DuckDB's approximate count (SUMMARIZE's approx_unique), exact for small sets
   out('summary:\n');
-  for (const s of summary) out(`  ${s.name.padEnd(width)}  distinct ${s.distinct}  min ${s.min ?? '—'}  max ${s.max ?? '—'}  null ${percent(s.nullShare)}\n`);
+  for (const s of summary) out(`  ${shown(s.name).padEnd(width)}  distinct ${s.distinct}  min ${shown(s.min ?? '—')}  max ${shown(s.max ?? '—')}  null ${percent(s.nullShare)}\n`);
 }
 
 const SUMMARY_ROWS = 1000; // one row per column
@@ -109,7 +115,7 @@ async function listTables(db, source, json) {
   if (json) out(`${JSON.stringify({ source, tables })}\n`);
   else {
     out(`tables in ${source}:\n`);
-    for (const t of tables) out(`  ${t.schema}.${t.table}\n`);
+    for (const t of tables) out(`  ${shown(t.schema)}.${shown(t.table)}\n`);
     if (!tables.length) out('  (none)\n');
   }
 }

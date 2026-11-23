@@ -52,6 +52,24 @@ test('a summary that cannot be computed never hides the columns and sample rows'
   assert.match(j.summaryError, /\S/);
 });
 
+// Cells come from the user's data (a CSV, a remote database), so printed text is third-party text for the agent:
+// hidden characters print as \u{xxxx} and a long cell is cut. --json stays exact, since a program parses it.
+test('printed sample cells show hidden characters as code points and cap a long cell', () => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dash-insp-cells-')));
+  const hidden = String.fromCodePoint(0xE0069, 0xE0067); // two Unicode tag characters
+  fs.writeFileSync(path.join(dir, 'c.csv'), `note,n\nhello\u{202E}evil${hidden},1\n${'w'.repeat(500)},2\n`);
+  const r = run(['c.csv'], dir);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout, /[\u{202E}\u{E0000}-\u{E007F}]/u, 'no raw bidi or tag character reaches the agent');
+  assert.match(r.stdout, /^ {2}\{"note":"hello\\u\{202e\}evil\\u\{e0069\}\\u\{e0067\}","n":1\}$/m);
+  const long = r.stdout.split('\n').find((l) => l.includes('wwww'));
+  assert.match(long, /…\[\d+ more characters\],"n":2\}$/);
+  assert.ok(long.length < 260, `a 500-character cell is capped, got ${long.length}`);
+  const j = JSON.parse(run(['c.csv', '--json'], dir).stdout);
+  assert.equal(j.rows[0].note, `hello\u{202E}evil${hidden}`, '--json keeps the data exact');
+  assert.equal(j.rows[1].note.length, 500);
+});
+
 test('--json prints machine-readable output', () => {
   const r = run(['sales.csv', '--json'], DATA);
   const out = JSON.parse(r.stdout);

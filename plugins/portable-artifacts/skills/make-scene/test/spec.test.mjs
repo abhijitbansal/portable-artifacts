@@ -75,6 +75,43 @@ test('csv value that is not a number names column, line and cell', async () => {
   fs.rmSync(dir, { recursive: true });
 });
 
+// Validator messages echo the user's own text (cells, headers, group names, focus labels), and the agent reads them:
+// hidden characters print as \u{xxxx} and a long echo is cut at 80 characters.
+const HIDDEN = String.fromCodePoint(0xE0069, 0xE0067); // two Unicode tag characters
+
+test('an echoed csv cell shows hidden characters as code points and is capped at 80 characters', async () => {
+  const { dir, spec } = csvSpec('hostile.csv', `g,v\na,ok\u{202E}${HIDDEN}\nb,${'z'.repeat(300)}\n`);
+  const r = await validateSpec(spec, { dir });
+  const [first, second] = r.errors.map((e) => e.message);
+  assert.equal(first, 'column "v" line 2 has "ok\\u{202e}\\u{e0069}\\u{e0067}", not a number; map columns.value to a numeric column');
+  assert.match(second, /^column "v" line 3 has "z{79}…\[\d+ more characters\], not a number/);
+  assert.doesNotMatch(r.errors.map((e) => e.message).join('\n'), /[\u{202E}\u{E0000}-\u{E007F}]/u);
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('csv headers listed as available, and a missing column named in the spec, are escaped and capped', async () => {
+  const { dir, spec } = csvSpec('hdr.csv', `x\u{202E}${HIDDEN},${'h'.repeat(300)}\n1,2\n`, { group: 'nope', value: 'g\u{200D}v' });
+  const r = await validateSpec(spec, { dir });
+  const text = r.errors.map((e) => e.message).join('\n');
+  assert.doesNotMatch(text, /[\u{200D}\u{202E}\u{E0000}-\u{E007F}]/u);
+  assert.match(text, /csv has no column "g\\u\{200d\}v"/);
+  assert.ok(text.length < 600, `the 300-character header is capped, got ${text.length}`);
+  fs.rmSync(dir, { recursive: true });
+});
+
+test('a tour focus label that matches nothing is echoed escaped and capped, and so are the groups offered', async () => {
+  const groups = [`api${HIDDEN}`, 'web'];
+  const spec = scene({
+    data: { rows: groups.map((g) => ({ group: g, t: 'W1', value: 1 })) },
+    tour: [{ title: 'T', caption: 'c', focus: [`ghost\u{202E}${'x'.repeat(300)}`] }],
+  });
+  const r = await check(spec);
+  const message = errorAt(r, 'tour[0].focus[0]').message;
+  assert.doesNotMatch(message, /[\u{202E}\u{E0000}-\u{E007F}]/u);
+  assert.match(message, /^"ghost\\u\{202e\}x+…\[\d+ more characters\] is not a group, label or t value; /);
+  assert.match(message, /api\\u\{e0069\}\\u\{e0067\}/);
+});
+
 test('csv line numbers count blank lines, quoted newlines and the header', async () => {
   const { dir, spec } = csvSpec('lines.csv', 'g,v\n\n"x\ny",1\nb,oops\n');
   const r = await validateSpec(spec, { dir });
