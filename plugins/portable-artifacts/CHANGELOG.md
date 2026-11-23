@@ -28,17 +28,19 @@ hostile repository safe, and a sandbox is still the right place for a repository
   finds a program of the repository's before the real one (run on macOS). By reading the code, 2.4.0 started git the same
   way. The git environment of `gather`, `rows.mjs git` and the page builders now keeps only the absolute PATH entries
   outside the repository (so the `<repo>/node_modules/.bin` that `npm run` puts on PATH is dropped too, by its real path).
+  The repository here is the folder with the nearest `.git`; see the limits below for what that leaves open.
   A work tree that holds your own tools (a dotfiles repository at your home folder) loses those entries; if git is then not
   found, it is reported as not found, instead of being looked up in the repository. The Windows spelling
   (`Path`) and the `;` delimiter are handled and unit-tested through a platform option, not run on Windows; see the
   Windows limit below.
 - **A relative `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH`** named a place inside
-  the repository, which git read as your own config. These variables now reach git only with an absolute value.
+  the repository, which git used as your own config or programs. These variables now reach git only with an absolute value.
 - **`gather` counted untracked files only if the config let it.** `status.showUntrackedFiles=no`, in the repository's config
-  or in yours, made new files read as clean. `git status` now runs with `--untracked-files=normal`.
+  or in yours, made new files read as clean. `git status` now runs with `--untracked-files=normal`. Ignore rules still count, and a
+  repository's config can name an ignore file of its own (`core.excludesFile`).
 - **`gather` refuses a repository whose work tree does not contain the folder you gave it.** `core.worktree` can name any
   folder, and `gather` then reported that other folder's history. Linked worktrees, submodule checkouts, subfolders and
-  symlinked paths work as before. `rows.mjs git` reads commits only and is not affected (checked).
+  symlinked paths work as before. A repository nested in another one can still name the outer one. `rows.mjs git` reads commits only and is not affected (checked).
 - **`gather` and `rows.mjs git` now read the repository's git config as raw bytes, and a config they cannot read counts
   as untrusted.** Before, they asked git to search the config for risky settings, and in a UTF-8 locale (the usual one) git
   fails that search without any output when a setting's name contains bytes that are not valid text. The 2.4.0 check
@@ -78,7 +80,15 @@ hostile repository safe, and a sandbox is still the right place for a repository
 - Your own global filter drivers still run on the files a repository's attributes select, in that repository's folder, so
   a filter that loads code or finds programs from the current folder can load the repository's.
 - The PATH rule covers git only. make-motion's `ffmpeg` and the doctor look programs up on your PATH as it is, so do not
-  keep `.` or a relative entry on PATH.
+  keep `.`, a relative entry or a folder of the repository on PATH.
+- The PATH rule looks at the nearest `.git` above the folder git starts in. An absolute PATH entry is kept when it lies in
+  an outer repository, in the main checkout of a linked worktree, in a superproject, or in a folder above that has no valid
+  `.git`; when it is a link that leads out of the repository; or when it is spelled through a file-system alias (macOS
+  `/System/Volumes/Data`). Keep folders of a repository you do not trust off PATH: do not start the tools through its
+  `npm run` or its direnv. `gather --repo` given such an alias path is refused.
+- An absolute `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH` that names a folder
+  inside the repository still counts as your own.
+- When the PATH rule leaves no entry, the message says git is not installed.
 - A folder whose name ends in a space is not handled.
 - The time limit stops git; a filter it started may run on.
 - A second process that writes into the repository between `gather`'s config check and its `git status` is not guarded

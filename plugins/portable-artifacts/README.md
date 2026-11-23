@@ -333,19 +333,15 @@ Each skill folder also has its own README.
   valid text cannot hide a setting, and a config they cannot read, or a
   `git status` that fails, is refused or skipped, never taken as clean. Every git
   call runs with `core.fsmonitor` off, the repository's hooks off, no lazy fetch
-  and a PATH of absolute entries only, none of them inside the repository (on
-  macOS and Linux a `.`, an empty entry or `node_modules/.bin` cannot pick a
-  `git` inside the repository; on Windows, not run or closed here, use a
-  sandbox). A relative `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`,
+  and a PATH of absolute entries only, none of them inside the repository, up to the nearest `.git` (run on macOS; nested repositories, linked worktrees and submodules are only partly covered, see the 2.4.1 limits in the changelog; on Windows, not run or closed here, use a sandbox). A relative `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`,
   `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH` is not passed on. `gather` also turns
-  bare-repository discovery off, counts untracked files whatever the config says
+  bare-repository discovery off, counts untracked files whatever `status.showUntrackedFiles` says
   and refuses a repository whose work tree does not contain the folder you
   gave. The page builders' "is `.scratch/` ignored" note is asked the same way,
   with `--no-index` and a 5 second limit. Your own global filter drivers still
   run on the files a repository's attributes select, in that repository's
   folder. The PATH rule covers git only: make-motion's ffmpeg and the doctor
-  look programs up on your PATH as it is, so do not keep `.` or a relative entry
-  on PATH. A folder whose name ends in a space is not handled. This lowers the
+  look programs up on your PATH as it is, so keep `.`, relative entries and folders of the repository off PATH. A folder whose name ends in a space is not handled. This lowers the
   risk; a sandbox is still the right place for a repository you expect to be
   hostile.
 - **No network from specs.** Chart `url`/`data`/`usermeta` keys are rejected at
