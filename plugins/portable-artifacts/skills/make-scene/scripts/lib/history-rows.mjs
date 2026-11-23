@@ -21,16 +21,19 @@ const NUMSTAT = /^(?:\d+|-)\t(?:\d+|-)\t([\s\S]+)$/;
 const REDIRECTING_ENV = new Set([
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
   'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
-  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT',
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG',
 ]);
 const CONFIG_PAIR_ENV = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/;
 
-function gitEnv() {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
+// GIT_NO_LAZY_FETCH: a partial clone would otherwise fetch missing objects through the repository's own
+// remote.<name>.uploadpack, core.sshCommand or credential helper (git 2.44+; an older git ignores it).
+export function gitEnv(source = process.env) {
+  const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
   env.GIT_CONFIG_GLOBAL = os.devNull;
   env.GIT_CONFIG_SYSTEM = os.devNull;
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
+  env.GIT_NO_LAZY_FETCH = '1';
   return env;
 }
 

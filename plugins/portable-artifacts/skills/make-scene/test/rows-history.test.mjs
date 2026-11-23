@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { historyRows } from '../scripts/lib/history-rows.mjs';
+import { historyRows, gitEnv } from '../scripts/lib/history-rows.mjs';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
 
 const ROWS_CLI = fileURLToPath(new URL('../scripts/rows.mjs', import.meta.url));
@@ -430,3 +430,11 @@ for (const name of Object.keys(HOSTILE('', ''))) {
     } finally { repo.cleanup(); decoy.cleanup(); fs.rmSync(empty, { recursive: true, force: true }); }
   });
 }
+
+test('the git environment drops the legacy GIT_CONFIG and the config injectors, and turns lazy fetching off', () => {
+  const env = gitEnv({ PATH: '/usr/bin', GIT_CONFIG: '/tmp/empty.cfg', GIT_CONFIG_PARAMETERS: "'core.fsmonitor=x'", GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'k', GIT_CONFIG_VALUE_0: 'v', GIT_NO_LAZY_FETCH: '0' });
+  for (const k of ['GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0']) assert.equal(Object.hasOwn(env, k), false, k);
+  assert.equal(env.GIT_NO_LAZY_FETCH, '1');
+  assert.equal(env.GIT_CONFIG_GLOBAL, os.devNull);
+  assert.equal(env.PATH, '/usr/bin');
+});

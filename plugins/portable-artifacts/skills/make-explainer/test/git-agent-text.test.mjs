@@ -1,6 +1,6 @@
 // Commit subjects, file names and branch names come from the repository, so gather prints them to the agent as
-// third-party text. gatherGit keeps the data exact (it feeds the page: timeline titles) apart from cutting a long
-// subject; scripts/gather.mjs writes every invisible character as a legal JSON escape where the agent reads it, so
+// third-party text. gatherGit keeps the data exact (it feeds the page: timeline titles); scripts/gather.mjs cuts a
+// long subject only in what it prints to stdout, and writes every invisible character as a legal JSON escape where the agent reads it, so
 // JSON.parse still returns the exact original. Invisible characters are written as braced escapes in this file.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -87,16 +87,45 @@ test('a repository with nothing to hide prints exactly what JSON.stringify gives
   }
 });
 
-test('a commit subject is capped at 200 characters with a count of what was dropped', () => {
+function longSubjectRepo() {
   const repo = makeRepo();
+  repo.write('a.txt', 'a\n');
+  repo.commit('chore: base');
+  git(repo.dir, 'checkout', '-q', '-b', 'feat/x');
+  repo.write('b.txt', 'b\n');
+  repo.commit(`feat: ${'z'.repeat(400)}`);
+  return repo;
+}
+
+test('a commit subject is cut to 200 characters where the agent reads it (stdout), and nowhere the page is built from', () => {
+  const repo = longSubjectRepo();
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gather-out-')), 'facts.json');
+  try {
+    const exact = `feat: ${'z'.repeat(400)}`;
+    assert.equal(gatherGit({ repo: repo.dir }).commits[0].subject, exact, 'gatherGit feeds the page, so it keeps the subject exact');
+    const printed = JSON.parse(gather(repo).stdout);
+    assert.equal(printed.commits[0].subject, `feat: ${'z'.repeat(194)}\u{2026}[206 more characters]`);
+    const wrote = gather(repo, '--out', out);
+    assert.equal(wrote.status, 0, wrote.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(out, 'utf8')).commits[0].subject, exact, 'the facts file scaffold reads keeps the subject exact');
+  } finally {
+    fs.rmSync(path.dirname(out), { recursive: true, force: true });
+    repo.cleanup();
+  }
+});
+
+test('an error that lists branch names shows an invisible character in one as a code point', () => {
+  const repo = makeRepo({ branch: 'dev\u{202E}x' });
   try {
     repo.write('a.txt', 'a\n');
     repo.commit('chore: base');
-    git(repo.dir, 'checkout', '-q', '-b', 'feat/x');
-    repo.write('b.txt', 'b\n');
-    repo.commit(`feat: ${'z'.repeat(400)}`);
-    const [commit] = gatherGit({ repo: repo.dir }).commits;
-    assert.equal(commit.subject, `feat: ${'z'.repeat(194)}\u{2026}[206 more characters]`);
+    const r = gather(repo);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /no main or master branch found; branches that do exist: dev\\u\{202e\}x/);
+    assert.doesNotMatch(r.stderr, RAW_INVISIBLE);
+    const bad = gather(repo, '--base', 'no\u{202E}pe');
+    assert.match(bad.stderr, /base "no\\u\{202e\}pe" does not exist/);
+    assert.doesNotMatch(bad.stderr, RAW_INVISIBLE);
   } finally {
     repo.cleanup();
   }

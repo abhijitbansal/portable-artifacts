@@ -7,12 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { UsageError } from '../../shared/cli.mjs';
-import { capText } from '../../shared/agent-text.mjs';
 
 const MAX_BUFFER = 256 * 1024 * 1024;
-// A commit subject is repository text the agent reads, so a long one is cut (capText). Invisible characters are not
-// changed here: the data stays exact for the page, and gather.mjs writes them as JSON escapes where the agent reads them.
-const SUBJECT_MAX = 200;
 const BASE_NAMES = ['main', 'master'];
 const SHOWN_BRANCHES = 10;
 const SHORT_SHA = 7;
@@ -20,13 +16,14 @@ const SHORT_SHA = 7;
 const CHANGES = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added', T: 'modified' };
 // These GIT_* variables point git at a different repository, object store, index or discovery root than
 // --repo names, so the child gets none of them; nor the config injectors (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and
-// the GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n pairs), which can set core.fsmonitor or a diff driver from outside the repo.
+// the GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n pairs), which can set core.fsmonitor or a diff driver from outside the repo;
+// nor the legacy GIT_CONFIG, which makes `git config` read another file than the repository's (the filter check below).
 // Everything else (GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM, which are the user's own files and hold safe.directory,
 // GIT_EXEC_PATH, identity, GIT_EXTERNAL_DIFF, ...) passes through: --no-ext-diff and --no-pager keep the output free of helpers.
 const REDIRECTING_ENV = new Set([
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
   'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
-  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT',
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG',
 ]);
 const CONFIG_PAIR_ENV = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/;
 
@@ -39,53 +36,30 @@ const TEST_NAME = /(^|\/)test_[^/]*$|[._-]tests?\.[A-Za-z0-9]+$|[._-]spec\.[A-Za
 
 const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** The environment git runs in: `source` without the repo-redirecting variables, and no prompts or optional locks. */
+/**
+ * The environment git runs in: `source` without the repo-redirecting variables, and no prompts, optional locks or lazy
+ * fetches. A partial clone would otherwise fetch missing objects through the repository's own remote.<name>.uploadpack,
+ * core.sshCommand or credential helper (git 2.44+ honours GIT_NO_LAZY_FETCH; an older git ignores it).
+ */
 export function gitEnv(source) {
   const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
+  env.GIT_NO_LAZY_FETCH = '1';
   return env;
 }
 
-// A filter driver (`filter.<name>.clean`, `.smudge` or `.process`) is a command from the repository's own config that
-// git runs whenever it reads a tracked file whose stat data no longer matches the index (`git status` does). Every
-// driver the config names is overridden with an empty command, which git treats as no filter. A driver name may hold
-// dots, so the name is everything between "filter." and the last ".clean", ".smudge" or ".process".
-const FILTER_KEY = /^filter\.(.+)\.(?:clean|smudge|process)$/;
-const BASE_ARGS = ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'core.fsmonitor=false'];
-const filterOverrides = new Map();
-
-function spawnGit(cwd, args) {
-  const r = spawnSync('git', [...BASE_ARGS, ...args], { cwd, encoding: 'utf8', env: gitEnv(process.env), maxBuffer: MAX_BUFFER });
+// git only, an argv array, no shell. `-c core.fsmonitor=false`: `git status` would otherwise run the command a
+// repository's own config names there. Other commands a repository's config can name (filter drivers, a remote's
+// uploadpack through a lazy fetch) are handled where they would run: isDirty and gitEnv.
+function run(cwd, args) {
+  const base = ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'core.fsmonitor=false'];
+  const r = spawnSync('git', [...base, ...args], { cwd, encoding: 'utf8', env: gitEnv(process.env), maxBuffer: MAX_BUFFER });
   if (r.error) {
     if (r.error.code === 'ENOENT') throw new UsageError('git is not installed or not on PATH; install it, then retry');
     throw new UsageError(`cannot run git: ${r.error.code ?? r.error.message}`);
   }
-  return r;
-}
-
-// Reading config never runs a command. Cached per folder; gatherGit drops its folder's entry so each gather re-reads.
-function filterArgs(cwd) {
-  if (!filterOverrides.has(cwd)) {
-    const listed = spawnGit(cwd, ['config', '-z', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|smudge|process)$']);
-    const names = new Set();
-    if (listed.status === 0) {
-      for (const key of listed.stdout.split('\0')) {
-        const m = FILTER_KEY.exec(key);
-        if (m) names.add(m[1]);
-      }
-    }
-    const off = (n) => ['clean=', 'smudge=', 'process=', 'required=false'].flatMap((kv) => ['-c', `filter.${n}.${kv}`]);
-    filterOverrides.set(cwd, [...names].flatMap(off));
-  }
-  return filterOverrides.get(cwd);
-}
-
-// git only, an argv array, no shell. `-c core.fsmonitor=false`: `git status` would otherwise run the command a
-// repository's own config names there; filterArgs does the same for filter drivers.
-function run(cwd, args) {
-  const r = spawnGit(cwd, [...filterArgs(cwd), ...args]);
-  return { ok: r.status === 0, out: r.stdout, err: r.stderr.trim() };
+  return { ok: r.status === 0, status: r.status, out: r.stdout, err: r.stderr.trim() };
 }
 
 const nulFields = (text) => text.split('\0').filter((f) => f !== '');
@@ -159,7 +133,8 @@ function readCommits(repo, range) {
   if (!log.ok) throw new UsageError(`cannot read the commit list: ${log.err}`);
   return nulFields(log.out).map((record) => {
     const [sha, date, ...subject] = record.split('\x1f');
-    return { sha, date, subject: capText(subject.join('\x1f'), { max: SUBJECT_MAX }) };
+    // Exact: the page's timeline titles are built from it. gather.mjs cuts a long subject only where the agent reads it.
+    return { sha, date, subject: subject.join('\x1f') };
   });
 }
 
@@ -224,11 +199,10 @@ export function isTestPath(p) {
  * Facts for the branch checked out in `dir`, measured against `base` (default: main, master,
  * origin/main, origin/master). Committed work only; the working tree is never read.
  * -> { repo, branch, detached, base, mergeBase, commits: [{ sha, date, subject }],
- *      files: [{ path, oldPath?, change, add, del, binary }], tests: [path], date, dirty, warnings: [text] }
+ *      files: [{ path, oldPath?, change, add, del, binary }], tests: [path], date, dirty (null: check skipped, see isDirty), warnings: [text] }
  */
 export function gatherGit({ repo: dir = '.', base } = {}) {
   const root = repoRoot(path.resolve(dir));
-  filterOverrides.delete(root);
   if (!commitExists(root, 'HEAD')) throw new UsageError(`${root} has no commits yet; commit something, then retry`);
   const baseRef = resolveBase(root, base);
   const merge = run(root, ['merge-base', baseRef, 'HEAD']);
@@ -256,12 +230,34 @@ export function gatherGit({ repo: dir = '.', base } = {}) {
   };
 }
 
-// Uncommitted work: a modified or staged tracked file, or an untracked one that is not ignored.
-const isDirty = (root) => run(root, ['status', '--porcelain']).out.trim() !== '';
+// Scopes whose config the user owns. Anything else (the repository's .git/config, its config.worktree, an include
+// either pulls in) is the repository's own, and a filter driver there is a command the repository chooses.
+const USER_SCOPES = new Set(['global', 'system']);
+
+// True when the repository's own config defines any filter driver, or when that cannot be told (fail closed).
+// `git status` runs a driver's clean command on every tracked file whose stat data differs from the index, which an
+// unpacked archive makes all of them. Reading config runs nothing. --show-scope also marks config.worktree, which
+// `--local` misses, and --includes follows include.path and includeIf. Global and system drivers (git-lfs) are the
+// user's own: they stay active and are not counted.
+function repoDefinesFilter(root) {
+  const listed = run(root, ['config', '--includes', '--show-scope', '--name-only', '--get-regexp', '^filter\\.']);
+  if (listed.status === 1 && listed.out === '') return false;
+  if (!listed.ok) return true;
+  return listed.out.split('\n').some((line) => line !== '' && !USER_SCOPES.has(line.split('\t')[0]));
+}
+
+// Uncommitted work: a modified or staged tracked file, or an untracked one that is not ignored. null when the check was
+// skipped. --ignore-submodules=all: a submodule's own config and .gitattributes (under .git/modules) would be read by the
+// status git starts inside it, past the check above, so edits inside a submodule are not counted.
+function isDirty(root) {
+  if (repoDefinesFilter(root)) return null;
+  return run(root, ['status', '--porcelain', '--ignore-submodules=all']).out.trim() !== '';
+}
 
 // What a script cannot fix but the reader should know before trusting the facts.
 function factWarnings({ branch, baseRef, commits, dirty }) {
   const out = [];
+  if (dirty === null) out.push('this repository\'s own git config defines a filter driver; skipped the uncommitted-changes check (dirty is unknown), because git would run that command to compare files');
   if (commits.length === 0) out.push(`no commits on ${branch} beyond ${baseRef}, so a recap would be empty; check out the feature branch, or pass --base <the branch it started from>`);
   if (dirty) out.push('the work tree has uncommitted changes; these facts cover committed work only, so commit them first if the recap should include them');
   return out;

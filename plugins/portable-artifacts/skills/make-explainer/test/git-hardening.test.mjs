@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { gatherGit, gitEnv } from '../scripts/lib/git.mjs';
-import { makeRepo, featureRepo, git } from './helpers/repo.mjs';
+import { makeRepo, cloneRepo, featureRepo, git } from './helpers/repo.mjs';
 
 /** A script that records that it ran: { script, marker } in a folder of its own, outside the repository. */
 function plant() {
@@ -64,8 +65,16 @@ test('a diff driver with a textconv command never runs during gather', () => {
 
 // A tracked file with a same-length edit is stat-dirty at the same size, so `git status` must read its content, and
 // reading content runs the clean filter the repository's config names (an unpacked archive leaves every file like this).
-// The config goes in after the commits, so the plant does not run while the fixture is built.
-function filterRepo(driverName, driverLines) {
+// gather does not enumerate and blank such drivers: when the repository's own config names any filter it skips the
+// uncommitted-changes check (`dirty: null`, plus a warning). The config goes in after the commits, so the plant does not
+// run while the fixture is built.
+const SKIP_WARNING = /own git config defines a filter driver; skipped the uncommitted-changes check/;
+
+function addDriver(repo, name, lines) {
+  appendConfig(repo, `[filter "${name}"]\n${lines}`);
+}
+
+function filterRepo(driverName, driverLines, plantDriver = addDriver) {
   const repo = makeRepo();
   repo.write('.gitattributes', `* filter=${driverName}\n`);
   repo.write('notes.txt', 'two\n');
@@ -73,53 +82,160 @@ function filterRepo(driverName, driverLines) {
   git(repo.dir, 'checkout', '-q', '-b', 'feat/x');
   repo.write('other.txt', 'x\n');
   repo.commit('feat: other');
-  appendConfig(repo, `[filter "${driverName}"]\n${driverLines}`);
+  plantDriver(repo, driverName, driverLines);
   repo.write('notes.txt', 'six\n');
   return repo;
 }
 
-function assertFilterNeverRuns(driverName, marker, repo) {
-  // A process driver that does not speak git's filter protocol makes status fail, but it has run by then.
+// A process driver that does not speak git's filter protocol makes status fail, but it has run by then.
+function plainStatusRuns(repo, marker) {
   try { git(repo.dir, 'status', '--porcelain'); } catch { /* the marker is the control */ }
   assert.equal(fs.existsSync(marker), true, 'control: plain git status runs the planted filter');
   fs.rmSync(marker);
-  const facts = gatherGit({ repo: repo.dir });
-  assert.equal(facts.dirty, true, 'the same-length edit must still be reported as uncommitted');
-  assert.equal(fs.existsSync(marker), false, `gather ran the repository's filter.${driverName} command`);
 }
 
-test('a filter driver with a clean command never runs during gather, and a same-length edit is still dirty', () => {
-  const { script, marker, cleanup } = plant();
-  const lines = `\tclean = ${script}\n`;
-  const repo = filterRepo('evil', lines);
+function assertFilterSkipped(driverName, marker, repo) {
+  plainStatusRuns(repo, marker);
+  const facts = gatherGit({ repo: repo.dir });
+  assert.equal(fs.existsSync(marker), false, `gather ran the repository's filter.${driverName} command`);
+  assert.equal(facts.dirty, null, 'the dirty check is skipped, so dirty is unknown');
+  assert.ok(facts.warnings.some((w) => SKIP_WARNING.test(w)), facts.warnings.join('\n'));
+}
+
+function filterCase(title, name, lines, plantDriver) {
+  test(title, () => {
+    const { marker, script, cleanup } = plant();
+    const repo = filterRepo(name, lines(script), plantDriver);
+    try {
+      assertFilterSkipped(name, marker, repo);
+    } finally {
+      cleanup();
+      repo.cleanup();
+    }
+  });
+}
+
+filterCase('a repository-local filter driver with a clean command never runs during gather', 'evil', (s) => `\tclean = ${s}\n`);
+filterCase('a filter driver with a long-running process command never runs during gather', 'evil', (s) => `\tprocess = ${s}\n\tsmudge = ${s}\n\trequired = true\n`);
+filterCase('a filter driver whose name contains dots never runs during gather', 'my.evil.clean', (s) => `\tclean = ${s}\n`);
+filterCase('a filter driver whose name contains "=" never runs during gather', 'a=b', (s) => `\tclean = ${s}\n`);
+filterCase('a filter driver with an empty name never runs during gather', '', (s) => `\tclean = ${s}\n`);
+filterCase('a filter driver reached through include.path never runs during gather', 'evil', (s) => `\tclean = ${s}\n`, (repo, name, lines) => {
+  fs.writeFileSync(path.join(repo.dir, 'extra.cfg'), `[filter "${name}"]\n${lines}`);
+  appendConfig(repo, '[include]\n\tpath = ../extra.cfg\n');
+});
+filterCase('a filter driver in config.worktree (extensions.worktreeConfig) never runs during gather', 'evil', (s) => `\tclean = ${s}\n`, (repo, name, lines) => {
+  appendConfig(repo, '[extensions]\n\tworktreeConfig = true\n');
+  fs.writeFileSync(path.join(repo.dir, '.git', 'config.worktree'), `[filter "${name}"]\n${lines}`);
+});
+
+test('a GIT_CONFIG variable in the environment does not hide the repository\'s filter from the check', () => {
+  const { marker, script, cleanup } = plant();
+  const repo = filterRepo('evil', `\tclean = ${script}\n`);
+  const empty = path.join(path.dirname(marker), 'empty.cfg');
+  fs.writeFileSync(empty, '');
   try {
-    assertFilterNeverRuns('evil', marker, repo);
+    plainStatusRuns(repo, marker);
+    process.env.GIT_CONFIG = empty;
+    const facts = gatherGit({ repo: repo.dir });
+    assert.equal(fs.existsSync(marker), false, 'gather ran the filter while GIT_CONFIG pointed at an empty file');
+    assert.equal(facts.dirty, null);
   } finally {
+    delete process.env.GIT_CONFIG;
     cleanup();
     repo.cleanup();
   }
 });
 
-test('a filter driver with a long-running process command never runs during gather', () => {
-  const { script, marker, cleanup } = plant();
-  const lines = `\tprocess = ${script}\n\tsmudge = ${script}\n\trequired = true\n`;
-  const repo = filterRepo('evil', lines);
+test('a submodule whose own config defines a filter is not entered by the dirty check', () => {
+  const { marker, script, cleanup } = plant();
+  const sub = makeRepo();
+  const repo = makeRepo();
   try {
-    assertFilterNeverRuns('evil', marker, repo);
+    sub.write('notes.txt', 'two\n');
+    sub.commit('chore: sub base');
+    repo.write('README.md', '# demo\n');
+    repo.commit('chore: base');
+    git(repo.dir, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', `file://${sub.dir}`, 'vendor');
+    repo.commit('chore: add submodule');
+    git(repo.dir, 'checkout', '-q', '-b', 'feat/x');
+    repo.write('other.txt', 'x\n');
+    repo.commit('feat: other');
+    const inner = path.join(repo.dir, 'vendor');
+    fs.appendFileSync(path.join(git(inner, 'rev-parse', '--absolute-git-dir'), 'config'), `[filter "evil"]\n\tclean = ${script}\n`);
+    fs.writeFileSync(path.join(inner, '.gitattributes'), '* filter=evil\n');
+    fs.writeFileSync(path.join(inner, 'notes.txt'), 'six\n');
+    plainStatusRuns(repo, marker);
+    const facts = gatherGit({ repo: repo.dir });
+    assert.equal(fs.existsSync(marker), false, 'gather ran the submodule\'s filter');
+    assert.equal(facts.dirty, false, 'submodule contents are not counted');
   } finally {
     cleanup();
+    sub.cleanup();
     repo.cleanup();
   }
 });
 
-test('a filter driver whose name contains dots is switched off too', () => {
-  const { script, marker, cleanup } = plant();
-  const lines = `\tclean = ${script}\n`;
-  const repo = filterRepo('my.evil.clean', lines);
+test('a partial clone never lets the repository\'s remote.origin.uploadpack run through a lazy fetch', () => {
+  const { marker, cleanup } = plant();
+  const source = makeRepo();
+  let clone;
   try {
-    assertFilterNeverRuns('my.evil.clean', marker, repo);
+    source.write('notes.txt', 'one\n');
+    source.commit('chore: base');
+    git(source.dir, 'checkout', '-q', '-b', 'feat/x');
+    source.write('notes.txt', 'one\ntwo\n');
+    source.commit('feat: edit');
+    git(source.dir, 'config', 'uploadpack.allowFilter', 'true');
+    git(source.dir, 'config', 'uploadpack.allowAnySHA1InWant', 'true');
+    clone = cloneRepo(source, '--filter=blob:none');
+    const fail = path.join(path.dirname(marker), 'upload.sh');
+    fs.writeFileSync(fail, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
+    fs.chmodSync(fail, 0o755);
+    appendConfig(clone, `[remote "origin"]\n\tuploadpack = ${fail}\n`);
+    try { git(clone.dir, 'diff', '--numstat', 'origin/main', 'HEAD'); } catch { /* the marker is the control */ }
+    assert.equal(fs.existsSync(marker), true, 'control: plain git diff lazy-fetches through the planted uploadpack');
+    fs.rmSync(marker);
+    assert.throws(() => gatherGit({ repo: clone.dir }), /cannot read the changed files/);
+    assert.equal(fs.existsSync(marker), false, 'gather ran remote.origin.uploadpack through a lazy fetch');
   } finally {
     cleanup();
+    source.cleanup();
+    clone?.cleanup();
+  }
+});
+
+// A driver from the user's own global config (git-lfs installs filter.lfs.*) is the user's choice, not the repository's:
+// it stays active, so a touched file that the filter makes equal to the index is not reported as modified.
+test('a global-only filter driver is left alone: no skip, and dirty is measured through the filter', () => {
+  const repo = makeRepo();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-global-'));
+  const globalConfig = path.join(dir, 'gitconfig');
+  fs.writeFileSync(globalConfig, '[filter "up"]\n\tclean = tr a-z A-Z\n');
+  const plainStatus = () => spawnSync('git', ['status', '--porcelain'], {
+    cwd: repo.dir, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_SYSTEM: os.devNull },
+  }).stdout.trim();
+  const before = process.env.GIT_CONFIG_GLOBAL;
+  try {
+    repo.write('.gitattributes', 'notes.txt filter=up\n');
+    repo.write('notes.txt', 'TWO\n');
+    repo.commit('chore: base');
+    git(repo.dir, 'checkout', '-q', '-b', 'feat/x');
+    repo.write('other.txt', 'x\n');
+    repo.commit('feat: other');
+    process.env.GIT_CONFIG_GLOBAL = globalConfig;
+    repo.write('notes.txt', 'two\n');
+    assert.equal(plainStatus(), '', 'control: through the global filter the file is unchanged');
+    const same = gatherGit({ repo: repo.dir });
+    assert.equal(same.dirty, false, 'gather blanked the global filter and saw a change that is not there');
+    assert.deepEqual(same.warnings, []);
+    repo.write('notes.txt', 'six\n');
+    assert.notEqual(plainStatus(), '', 'control: a real change shows');
+    assert.equal(gatherGit({ repo: repo.dir }).dirty, true);
+  } finally {
+    if (before === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = before;
+    fs.rmSync(dir, { recursive: true, force: true });
     repo.cleanup();
   }
 });
@@ -145,6 +261,13 @@ test('gitEnv drops every GIT_CONFIG_* variable (injected config) and keeps the r
   assert.equal(env.PATH, '/usr/bin');
   assert.equal(env.HOME, '/home/x');
   assert.equal(env.GIT_AUTHOR_NAME, 'A');
+});
+
+test('gitEnv drops the legacy GIT_CONFIG variable and turns lazy fetching off', () => {
+  const env = gitEnv({ PATH: '/usr/bin', GIT_CONFIG: '/tmp/empty.cfg' });
+  assert.equal(Object.hasOwn(env, 'GIT_CONFIG'), false);
+  assert.equal(env.GIT_NO_LAZY_FETCH, '1');
+  assert.equal(gitEnv({ GIT_NO_LAZY_FETCH: '0' }).GIT_NO_LAZY_FETCH, '1', 'an inherited 0 must not re-enable it');
 });
 
 test('gitEnv keeps GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM: they are the user\'s own files (safe.directory lives there)', () => {
