@@ -6,6 +6,109 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-11-23
+
+A security patch for the page builders of make-diagram, make-explainer and make-scene, for make-explainer `gather` and for
+make-scene `rows.mjs git`. If you run any of them on a repository you did not make yourself (a download, an unpacked
+archive, a shared checkout, a pull-request branch), upgrade to 2.4.1 first. This lowers the risk; it does not make a
+hostile repository safe, and a sandbox is still the right place for a repository you expect to be hostile.
+
+### Behaviour changes to know about
+
+- **The page builders ran the repository's own `core.fsmonitor` command.** When a page is built into
+  `<git root>/.scratch` (the default whenever the spec sits in a git repository), `build.mjs` and `make.mjs` of make-diagram,
+  make-explainer and make-scene ask git whether that folder is ignored, to print a one-line note. They asked with the
+  repository's own config in force, so its `core.fsmonitor` command ran, a missing `.gitignore` blob in a partial clone
+  could start a lazy fetch through the repository's remote settings, and a named pipe at `.gitignore` hung the build. By
+  reading the code, this has been so since 2.1.0 (not run on earlier versions). It was also the next step of the documented
+  recap flow, after `gather`. Now the question is asked with `--no-index`, `core.fsmonitor=false`, the repository's hooks off,
+  no lazy fetch, and a 5 second limit; a repository that cannot answer in time, or at all, gets no note.
+- **On macOS and Linux, a relative PATH entry could pick a `git` inside the repository.** git is started with the
+  repository as its folder, so a PATH entry such as `.`, an empty one (a leading or trailing `:`) or `node_modules/.bin`
+  finds a program of the repository's before the real one (run on macOS). By reading the code, 2.4.0 started git the same
+  way. The git environment of `gather`, `rows.mjs git` and the page builders now keeps only the absolute PATH entries
+  outside the repository (so the `<repo>/node_modules/.bin` that `npm run` puts on PATH is dropped too, by its real path).
+  The repository here is the folder with the nearest `.git`; see the limits below for what that leaves open.
+  A work tree that holds your own tools (a dotfiles repository at your home folder) loses those entries; if git is then not
+  found, it is reported as not found, instead of being looked up in the repository. The Windows spelling
+  (`Path`) and the `;` delimiter are handled and unit-tested through a platform option, not run on Windows; see the
+  Windows limit below.
+- **A relative `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH`** named a place inside
+  the repository, which git used as your own config or programs. These variables now reach git only with an absolute value.
+- **`gather` counted untracked files only if the config let it.** `status.showUntrackedFiles=no`, in the repository's config
+  or in yours, made new files read as clean. `git status` now runs with `--untracked-files=normal`. Ignore rules still count, and a
+  repository's config can name an ignore file of its own (`core.excludesFile`).
+- **`gather` refuses a repository whose work tree does not contain the folder you gave it.** `core.worktree` can name any
+  folder, and `gather` then reported that other folder's history. Linked worktrees, submodule checkouts, subfolders and
+  symlinked paths work as before. A repository nested in another one can still name the outer one. `rows.mjs git` reads commits only and is not affected (checked).
+- **`gather` and `rows.mjs git` now read the repository's git config as raw bytes, and a config they cannot read counts
+  as untrusted.** Before, they asked git to search the config for risky settings, and in a UTF-8 locale (the usual one) git
+  fails that search without any output when a setting's name contains bytes that are not valid text. The 2.4.0 check
+  read that silence as "nothing found", so a repository could hide a filter driver from it and `gather`'s `git status`
+  ran the repository's command; the same silence let a partial clone past both tools, where a lazy fetch runs the
+  repository's own remote settings (that route needs a git that ignores `GIT_NO_LAZY_FETCH`, see the correction below).
+  Anyone who ran `gather` or `rows.mjs git` on an untrusted repository with 2.4.0 was
+  exposed (versions before 2.4.0 had no check at all). Now:
+  - the whole config is listed (at most 16 MiB a call; `gather` makes two listing calls, `rows.mjs git` one) and checked
+    in Node, never matched by git. A listing that fails, is malformed or holds no entry of a repository of its own
+    (an empty `.git/config` is one cause, and the message says so) makes `gather` and `rows.mjs git` refuse ("cannot read
+    the git config"), and makes the dirty check skip (`dirty` is `null`, with a warning) where it would otherwise have run.
+    A repository config without `core.repositoryformatversion` is read, as in 2.4.0. A listing over 16 MiB, a git call that
+    times out and a missing git are each reported as themselves, and no second git call follows a timeout;
+  - the uncommitted-changes check is skipped when the repository's own config defines a filter driver, a git-lfs extension
+    (`lfs.extension.<name>`, in any letter case) or a hook (`hook.<name>`; a defence in depth, see below), when it holds
+    a value or a key that git-lfs could read as an extension, or when the work tree or HEAD has a `.lfsconfig`. An
+    ordinary value with a line break, such as the description `git branch --edit-description` writes, no longer skips it;
+  - when `git status` fails or is stopped, or `git ls-tree` fails, `dirty` is `null` with a warning that says the check
+    did not run. In 2.4.0 a failed `git status` gave `dirty: false`;
+  - your global and system config still do not count (git-lfs itself was not run against this release, so a repository set
+    up with the default global `git lfs install` is untested); linked worktrees, submodule checkouts,
+    `extensions.worktreeConfig` and sha256 repositories still work.
+- **Every git call now runs with `LC_ALL=C` (except `git status`, which keeps your locale for your own global filters),
+  `core.fsmonitor=false`, the repository's hooks off (`core.hooksPath` at the null device), no optional locks and no lazy
+  fetches.** The hook and `hook.<name>` rules are defence in depth: git runs hooks only when it rewrites the index or
+  updates a ref, which these read-only calls do not do. The git environment also drops `GIT_SHALLOW_FILE`,
+  `GIT_GRAFT_FILE`, `GIT_REPLACE_REF_BASE`, `GIT_ATTR_SOURCE`, `GIT_REFERENCE_BACKEND`, `GIT_IMPLICIT_WORK_TREE`, `GIT_PREFIX`
+  and the `GIT_*_PATHSPECS` switches, which point git at other files or change how paths match.
+- **`gather` runs with `safe.bareRepository=explicit`** (a git too old to have that setting ignores it), so a bare
+  repository planted inside the folder is not picked up. `rows.mjs git` does not set it: it reads the repository you name,
+  so a bare or mirror clone works as in 2.4.0, and it runs only `config --list`, `rev-parse` and `log`. File names and commit subjects
+  still come back exact.
+
+### Known limits kept in this release
+
+- Your own global filter drivers still run on the files a repository's attributes select, in that repository's folder, so
+  a filter that loads code or finds programs from the current folder can load the repository's.
+- The PATH rule covers git only. make-motion's `ffmpeg` and the doctor look programs up on your PATH as it is, so do not
+  keep `.`, a relative entry or a folder of the repository on PATH.
+- The PATH rule looks at the nearest `.git` above the folder git starts in. An absolute PATH entry is kept when it lies in
+  an outer repository, in the main checkout of a linked worktree, in a superproject, or above the folder when no `.git` is
+  found; when a `.git` entry that is not a valid repository lies between (the rule stops there); when it is a link that leads out of the repository; or when it is spelled through a file-system alias (macOS
+  `/System/Volumes/Data`). Keep folders of a repository you do not trust off PATH: do not start the tools through its
+  `npm run` or its direnv. `gather --repo` given such an alias path is refused.
+- An absolute `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH` that names a folder
+  inside the repository still counts as your own.
+- When the PATH rule leaves no entry, the message says git is not installed.
+- A folder whose name ends in a space is not handled.
+- The time limit stops git; a filter it started may run on.
+- A second process that writes into the repository between `gather`'s config check and its `git status` is not guarded
+  against.
+- A `.lfsconfig` that exists only in the index is not seen by the skip rule.
+- `lfs.storage` in the repository's config can name where a global git-lfs filter stores objects.
+- Files git opens before the config check (`include.path` files, attribute and ignore files, the alternates): a named pipe
+  is stopped at the time limit; a network path would be opened (Windows UNC paths, Linux autofs mounts; not run).
+- On Windows, git is started by the name `git`, and Node's program lookup there is believed to start in the folder the
+  process is started in (from memory of libuv, not verified, not run on Windows), so a `git.exe` in the repository may be
+  found before PATH is consulted. The PATH rule above would not close that. Treat the PATH fix as macOS and Linux only,
+  and run a repository you do not trust on Windows in a sandbox.
+
+### Correction to the 2.4.0 notes
+
+- The 2.4.0 entry below says git honours `GIT_NO_LAZY_FETCH` from 2.44. It is honoured from git 2.45.0, and by the
+  backports 2.39.4, 2.43.4 and 2.44.1, among others; git 2.44.0 and other releases without the backport ignore it. The
+  partial-clone refusal never depended on it, so nothing changes in what is refused. The comments, tests and docs now say
+  2.45.0.
+
 ## [2.4.0] - 2026-11-23
 
 A security pass over all five skills, against prompt injection and what the skills.sh scanners (Gen Agent Trust Hub,

@@ -18,7 +18,7 @@ const GIT_ENV = {
 export function git(cwd, ...args) {
   const env = { ...process.env, ...GIT_ENV };
   for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete env[k];
-  const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd, encoding: 'utf8', env });
+  const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd, encoding: 'utf8', env, timeout: 60000, killSignal: 'SIGKILL' });
   if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
   return r.stdout.trim();
 }
@@ -61,7 +61,7 @@ function repoAt(dir, removeDir) {
       git(dir, 'add', '-A');
       const env = { GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when };
       const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-q', '--allow-empty', '-m', message], {
-        cwd: dir, encoding: 'utf8', env: { ...process.env, ...GIT_ENV, ...env },
+        cwd: dir, encoding: 'utf8', env: { ...process.env, ...GIT_ENV, ...env }, timeout: 60000, killSignal: 'SIGKILL',
       });
       if (r.status !== 0) throw new Error(`commit failed: ${r.stderr}`);
       return git(dir, 'rev-parse', 'HEAD');

@@ -323,11 +323,27 @@ Each skill folder also has its own README.
   and the CLIs that print such text to the agent escape invisible characters
   (bidi controls, zero-width and Tag characters) as `\u{XXXX}` and cap long
   values.
-- **`gather.mjs` and `rows.mjs git` do not run commands from a repository's own
-  git config.** They refuse a partial clone and git older than 2.26, skip
-  `gather`'s uncommitted-changes check when that config defines a filter or a
-  git-lfs extension (or the work tree has a `.lfsconfig`), and stop a git call
-  after 60 seconds.
+- **`gather.mjs`, `rows.mjs git` and the page builders do not run commands from
+  a repository's own git config.** `gather` and `rows.mjs git` refuse a partial
+  clone and git older than 2.26, skip `gather`'s uncommitted-changes check when
+  that config defines a filter, a git-lfs extension or a hook (a hook as defence
+  in depth), holds a value or a key that git-lfs could read as an extension, or
+  the work tree has a `.lfsconfig`, and stop git after 60 seconds (a filter it
+  started may run on). They read that config as raw bytes, so a name that is not
+  valid text cannot hide a setting, and a config they cannot read, or a
+  `git status` that fails, is refused or skipped, never taken as clean. Every git
+  call runs with `core.fsmonitor` off, the repository's hooks off, no lazy fetch
+  and a PATH of absolute entries only, none of them inside the repository, up to the nearest `.git` (run on macOS; nested repositories, linked worktrees and submodules are only partly covered, see the 2.4.1 limits in the changelog; on Windows, not run or closed here, use a sandbox). A relative `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`,
+  `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH` is not passed on. `gather` also turns
+  bare-repository discovery off, counts untracked files whatever `status.showUntrackedFiles` says
+  and refuses a repository whose work tree does not contain the folder you
+  gave. The page builders' "is `.scratch/` ignored" note is asked the same way,
+  with `--no-index` and a 5 second limit. Your own global filter drivers still
+  run on the files a repository's attributes select, in that repository's
+  folder. The PATH rule covers git only: make-motion's ffmpeg and the doctor
+  look programs up on your PATH as it is, so keep `.`, relative entries and folders of the repository off PATH. A folder whose name ends in a space is not handled. This lowers the
+  risk; a sandbox is still the right place for a repository you expect to be
+  hostile.
 - **No network from specs.** Chart `url`/`data`/`usermeta` keys are rejected at
   any depth; a make-motion film can't name a remote URL or a file outside its folder; pages run under a CSP without
   `unsafe-eval`; the renderer aborts any non-local request; local servers bind

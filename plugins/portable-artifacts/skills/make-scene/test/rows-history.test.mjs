@@ -440,7 +440,8 @@ test('the git environment drops the legacy GIT_CONFIG and the config injectors, 
 });
 
 // A partial clone fetches missing objects through the repository's own remote.<name>.uploadpack. GIT_NO_LAZY_FETCH stops it
-// on git 2.44 and later; the config check refuses on any git, proved here with the environment of an older git.
+// from git 2.45.0 (and the backports 2.39.4, 2.43.4 and 2.44.1, among others; not 2.44.0); the config check refuses on any
+// git, proved here with the environment of a git without it.
 test('a partial clone is refused before git log runs, even for a git that ignores GIT_NO_LAZY_FETCH', (t) => {
   const source = fixtureRepo();
   const dir = tmp('scene-rows-clone-');
@@ -488,3 +489,189 @@ test('a git call that does not finish in the time limit stops with a one-line er
     assert.throws(() => historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW, _test: { timeoutMs: 1500 } }), /git did not finish within 1\.5 seconds/);
   } finally { repo.cleanup(); }
 });
+
+test('the git environment sets LC_ALL to C over an inherited locale', () => {
+  const env = gitEnv({ PATH: '/usr/bin', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' });
+  assert.equal(env.LC_ALL, 'C');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+// ---- Config that git's own key matcher cannot read -----------------------------------------------------------------
+// In a UTF-8 locale `git config --get-regexp` fails with exit 1 and no output on a key whose subsection is not valid
+// UTF-8 (the old check read that as "no match"). The check now lists the whole config as bytes and decides in JavaScript.
+// Each case runs with LANG and LC_ALL set in the parent environment, which the control git sees too.
+function withLocale(lang, fn) {
+  const before = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL };
+  process.env.LANG = lang;
+  process.env.LC_ALL = lang;
+  try {
+    return fn();
+  } finally {
+    for (const [k, v] of Object.entries(before)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+// A partial clone of a fixture repo whose remote.origin section is renamed, byte for byte, to `remote.<name>` and whose
+// uploadpack is a script that records that it ran. fn gets { dir, marker }; the control proves plain git runs it.
+function withByteNamedPartialClone(t, remoteName, fn) {
+  const source = fixtureRepo();
+  const dir = tmp('scene-rows-clone-');
+  const plantDir = tmp('scene-rows-plant-');
+  const marker = path.join(plantDir, 'ran');
+  const script = path.join(plantDir, 'upload.sh');
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull };
+  try {
+    source.commit('2026-10-07T10:00:00Z', 'src/a.js');
+    source.commit('2026-10-14T10:00:00Z', 'src/a.js');
+    spawnSync('git', ['config', 'uploadpack.allowFilter', 'true'], { cwd: source.dir, env });
+    spawnSync('git', ['config', 'uploadpack.allowAnySHA1InWant', 'true'], { cwd: source.dir, env });
+    const cloned = spawnSync('git', ['clone', '-q', '--filter=blob:none', `file://${source.dir}`, dir], { encoding: 'utf8', env });
+    if (cloned.status !== 0) return t.skip(`cannot build a partial clone here: ${cloned.stderr}`);
+    fs.writeFileSync(script, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
+    fs.chmodSync(script, 0o755);
+    fs.appendFileSync(path.join(dir, '.git', 'config'), `[remote "origin"]\n\tuploadpack = ${script}\n`);
+    const file = path.join(dir, '.git', 'config');
+    fs.writeFileSync(file, Buffer.from(fs.readFileSync(file).toString('latin1').replaceAll('[remote "origin"]', `[remote "${remoteName}"]`), 'latin1'));
+    spawnSync('git', ['log', '--numstat', '-3'], { cwd: dir, env });
+    assert.equal(fs.existsSync(marker), true, 'control: plain git log lazy-fetches through the planted uploadpack');
+    fs.rmSync(marker);
+    return fn({ dir, marker });
+  } finally {
+    for (const d of [dir, plantDir]) fs.rmSync(d, { recursive: true, force: true });
+    source.cleanup();
+  }
+}
+
+for (const lang of ['en_US.UTF-8', 'C.UTF-8']) {
+  test(`a partial clone whose remote name is not valid UTF-8 is refused before git log runs (${lang})`, (t) => withLocale(lang, () => {
+    withByteNamedPartialClone(t, '\xff', ({ dir, marker }) => {
+      assert.throws(() => historyRows({ repo: dir, weeks: 3, depth: 1, now: NOW, _test: { omitLazyFetchEnv: true } }), /this is a partial clone .*full clone/);
+      assert.equal(fs.existsSync(marker), false, 'git log ran the uploadpack before the refusal');
+    });
+  }));
+}
+
+test('a partial clone whose remote name is a lone byte c3 is refused too', (t) => withLocale('en_US.UTF-8', () => {
+  withByteNamedPartialClone(t, '\xc3', ({ dir, marker }) => {
+    assert.throws(() => historyRows({ repo: dir, weeks: 3, depth: 1, now: NOW, _test: { omitLazyFetchEnv: true } }), /this is a partial clone .*full clone/);
+    assert.equal(fs.existsSync(marker), false);
+  });
+}));
+
+// A stand-in `git` first on PATH: it runs `before(dir)` (a shell fragment), then the real git.
+function withGitStub(before, fn) {
+  const real = process.env.PATH.split(path.delimiter).map((d) => path.join(d, 'git')).find((p) => fs.existsSync(p));
+  const dir = tmp('scene-rows-stub-');
+  fs.writeFileSync(path.join(dir, 'git'), `#!/bin/sh\n${before(dir)}\nexec '${real}' "$@"\n`);
+  fs.chmodSync(path.join(dir, 'git'), 0o755);
+  const saved = process.env.PATH;
+  process.env.PATH = `${dir}${path.delimiter}${saved}`;
+  try {
+    return fn(dir);
+  } finally {
+    process.env.PATH = saved;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// A `git config --show-scope` call prints `output` (a printf format) and exits with `code`; other calls run the real git.
+const brokenListing = (code, output = '') => () => `case "$*" in *--show-scope*) printf '${output}'; exit ${code};; esac`;
+
+// safe.bareRepository=explicit is not set here: rows git may be pointed at a bare or mirror clone (rows-git-gate.test.mjs).
+test('every git call carries -c core.hooksPath=/dev/null and -c core.fsmonitor=false', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'src/a.js');
+    withGitStub((dir) => `printf '%s\\n' "$*" >> '${dir}/calls'`, (dir) => {
+      assert.equal(valueOf(historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW }), 'src', '2026-W42'), 1);
+      const calls = fs.readFileSync(path.join(dir, 'calls'), 'utf8').trim().split('\n');
+      assert.ok(calls.length >= 3, `only ${calls.length} git calls were seen`);
+      for (const call of calls) {
+        assert.ok(call.includes(`-c core.hooksPath=${os.devNull}`), `no hooksPath override: ${call}`);
+        assert.ok(call.includes('-c core.fsmonitor=false'), `no fsmonitor override: ${call}`);
+        assert.ok(!call.includes('safe.bareRepository'), `a bare repository could not be opened: ${call}`);
+      }
+    });
+  } finally { repo.cleanup(); }
+});
+
+// Fail closed: a listing that cannot be read is never "no match".
+for (const [label, code, output] of [
+  ['exits 1 with no output (what the matcher failure looked like)', 1, ''],
+  ['is well formed but has no entry of a repository of its own', 0, 'global\\0user.name\\nx\\0system\\0core.repositoryformatversion\\n0\\0'],
+  ['has an odd field count', 0, 'junk\\0'],
+]) {
+  test(`a config listing that ${label} is refused, not read as no match`, () => {
+    const repo = fixtureRepo();
+    try {
+      repo.commit('2026-10-14T10:00:00Z', 'src/a.js');
+      withGitStub(brokenListing(code, output), () => {
+        assert.throws(() => historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW }), /cannot read the git config/);
+      });
+    } finally { repo.cleanup(); }
+  });
+}
+
+// Repositories whose config is laid out differently must still pass.
+test('rows work in a linked worktree', () => {
+  const repo = fixtureRepo();
+  const root = tmp('scene-rows-linked-');
+  const linked = path.join(root, 'wt');
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull };
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'src/a.js');
+    const added = spawnSync('git', ['worktree', 'add', '-q', '-b', 'feat/wt', linked], { cwd: repo.dir, env, encoding: 'utf8' });
+    assert.equal(added.status, 0, added.stderr);
+    assert.equal(valueOf(historyRows({ repo: linked, weeks: 2, depth: 1, now: NOW }), 'src', '2026-W42'), 1);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); repo.cleanup(); }
+});
+
+test('rows work inside a submodule checkout', () => {
+  const sub = fixtureRepo();
+  const outer = fixtureRepo();
+  const env = {
+    ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull,
+    GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.com',
+  };
+  const git = (...args) => spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'protocol.file.allow=always', ...args], { cwd: outer.dir, env, encoding: 'utf8' });
+  try {
+    sub.commit('2026-10-14T10:00:00Z', 'lib/x.js');
+    outer.commit('2026-10-14T10:00:00Z', 'src/a.js');
+    const added = git('submodule', 'add', '-q', `file://${sub.dir}`, 'vendor');
+    assert.equal(added.status, 0, added.stderr);
+    assert.equal(git('commit', '-q', '-m', 'add submodule').status, 0);
+    const inner = path.join(outer.dir, 'vendor');
+    assert.ok(fs.statSync(path.join(inner, '.git')).isFile(), 'control: a submodule checkout has a .git file, not a folder');
+    assert.equal(valueOf(historyRows({ repo: inner, weeks: 2, depth: 1, now: NOW }), 'lib', '2026-W42'), 1);
+  } finally { sub.cleanup(); outer.cleanup(); }
+});
+
+test('rows work in a sha256 repository', (t) => {
+  const dir = tmp('scene-rows-sha256-');
+  const env = {
+    ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull,
+    GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.com',
+    GIT_AUTHOR_DATE: '2026-10-14T10:00:00Z', GIT_COMMITTER_DATE: '2026-10-14T10:00:00Z',
+  };
+  const git = (...args) => spawnSync('git', args, { cwd: dir, env, encoding: 'utf8' });
+  try {
+    if (git('init', '-q', '-b', 'main', '--object-format=sha256').status !== 0) return t.skip('this git cannot make a sha256 repository');
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'src', 'a.js'), 'a\n');
+    git('add', '-A');
+    assert.equal(git('commit', '-q', '-m', 'c').status, 0);
+    assert.equal(valueOf(historyRows({ repo: dir, weeks: 2, depth: 1, now: NOW }), 'src', '2026-W42'), 1);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('non-ASCII folder names come back exact in a UTF-8 locale', () => withLocale('en_US.UTF-8', () => {
+  const repo = fixtureRepo();
+  try {
+    repo.commit('2026-10-14T10:00:00Z', 'café/e.js', '日本語/ü.js', 'naïve ✓/x.js');
+    const rows = historyRows({ repo: repo.dir, weeks: 2, depth: 1, now: NOW });
+    assert.deepEqual(groupsOf(rows).sort(), ['café', 'naïve ✓', '日本語']);
+  } finally { repo.cleanup(); }
+}));

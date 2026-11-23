@@ -390,13 +390,14 @@ test('cleanText strips ZWJ and variation selectors only inside emoji sequences',
 });
 
 // The config injectors (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and the KEY_n / VALUE_n pairs) are dropped too: they can set
-// core.fsmonitor or a diff driver from outside the repository (git-hardening.test.mjs). The user's own config files stay.
-test('git env: repo-redirecting and config-injecting GIT_* variables are dropped; GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM and GIT_EXEC_PATH stay', () => {
+// core.fsmonitor or a diff driver from outside the repository (git-hardening.test.mjs). The user's own config files stay, with an
+// absolute path (a relative one names a file inside the repository and is dropped: shared/test/git-run.test.mjs).
+test('git env: repo-redirecting and config-injecting GIT_* variables are dropped; GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM and GIT_EXEC_PATH stay (absolute)', () => {
   const dropped = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_PARAMETERS'];
   const kept = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM', 'GIT_EXEC_PATH', 'GIT_AUTHOR_NAME'];
-  const env = gitEnv({ PATH: '/bin', ...Object.fromEntries([...dropped, ...kept].map((k) => [k, 'v'])) });
+  const env = gitEnv({ PATH: '/bin', ...Object.fromEntries(dropped.map((k) => [k, 'v'])), ...Object.fromEntries(kept.map((k) => [k, '/v'])) });
   for (const k of dropped) assert.ok(!Object.hasOwn(env, k), k);
-  for (const k of kept) assert.equal(env[k], 'v', k);
+  for (const k of kept) assert.equal(env[k], '/v', k);
   assert.equal(env.PATH, '/bin');
   assert.equal(env.GIT_OPTIONAL_LOCKS, '0');
   assert.equal(env.GIT_TERMINAL_PROMPT, '0');
