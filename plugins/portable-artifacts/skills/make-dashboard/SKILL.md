@@ -1,6 +1,6 @@
 ---
 name: make-dashboard
-description: Use when the user wants a dashboard, KPI page or charts built from local data files (CSV, Parquet, JSON, DuckDB, SQLite) or Postgres or MySQL, as one self-contained static HTML page whose charts show their SQL and refresh time. File sources need no network; postgres and mysql sources connect read-only to your database, and the built page makes no requests. Not for a single throwaway chart in a reply, or for a 3D view of data (make-scene).
+description: Use when the user wants a dashboard, KPI page or charts built from local data files (CSV, Parquet, JSON, DuckDB, SQLite) or Postgres or MySQL, as one self-contained static HTML page whose charts show their SQL and refresh time. CSV, Parquet, JSON and DuckDB files need no network, SQLite needs a one-time online extension download, and postgres and mysql sources connect to your database (attached READ_ONLY, which limits DuckDB only, so use a read-only role); the built page makes no requests. Not for a single throwaway chart in a reply, or for a 3D view of data (make-scene).
 argument-hint: what to build, e.g. "revenue by region and monthly trend from data/sales.csv"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: what to build, e.g. "revenue by region and monthly trend from dat
 
 You write one JSON spec (`dashboard.json`: sources, SQL queries, KPIs, charts as kinds or raw Vega-Lite).
 Scripts validate it and build a single offline `index.html`. Every chart card shows its SQL,
-row count and refresh time. No LLM at build time. No network for file sources; postgres and mysql sources connect read-only to the database named by their env variable during `inspect`, `query` and build. The built page makes no requests.
+row count and refresh time. No LLM at build time. No network for CSV, Parquet, JSON and DuckDB files. SQLite, postgres and mysql need a one-time online extension download (`setup.mjs`, below). Postgres and mysql sources connect to the database named by their env variable during `validate`, `inspect`, `query` and build (and `serve --watch` rebuilds); they are attached `READ_ONLY`, which limits DuckDB only, so the real guard is a read-only database role. The built page makes no requests.
 
 ## Director and operator
 

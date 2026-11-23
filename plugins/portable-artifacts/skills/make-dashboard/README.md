@@ -2,9 +2,12 @@
 
 **Prompt → SQL + chart kinds → one static HTML dashboard where every chart shows
 its SQL and when it was refreshed.** Local, open source, and usable by any agent
-that can run shell commands. File sources need no network; Postgres and MySQL
-sources connect, read-only, to the database named by their environment variable
-while you inspect, query and build. The built page makes no requests.
+that can run shell commands. CSV, Parquet, JSON and DuckDB files need no network;
+SQLite needs a one-time online extension download. Postgres and MySQL sources
+connect to the database named by their environment variable while you validate,
+inspect, query and build, and on `serve --watch` rebuilds. They are attached
+`READ_ONLY`, which limits DuckDB only, so use a read-only database role. The built
+page makes no requests.
 
 <img src="../../../../docs/img/portable-artifacts/dashboard-light.jpg" alt="Dashboard with KPI tiles, bar, line and stacked charts; each card has a Query disclosure" width="100%">
 

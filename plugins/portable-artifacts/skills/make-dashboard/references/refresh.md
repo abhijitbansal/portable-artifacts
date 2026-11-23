@@ -18,8 +18,9 @@ For scheduled rebuilds of the file on disk, use the sections below.
 # Scheduled rebuilds
 
 A refresh is `build.mjs` again: it re-runs every query and rewrites `dist/index.html`. No LLM. No network for
-file sources; postgres and mysql sources connect read-only to their database on each run. (sqlite, postgres and
-mysql sources need their extension installed once with `setup.mjs`; see `schema.md`.)
+CSV, Parquet, JSON and DuckDB files; postgres and mysql sources connect to their database on each run, attached
+`READ_ONLY` (that limits DuckDB only, so use a read-only database role). (sqlite, postgres and mysql sources need
+their extension installed once with `setup.mjs`, which is online; see `schema.md`.)
 Use absolute paths in schedules, since cron and launchd start in a bare environment. Replace `<skill-dir>`
 with the folder containing `SKILL.md` and `/abs/dashboard.json` with your spec.
 
