@@ -27,6 +27,11 @@ unless you opt in with `--image-api` (see below).
   takes a `label` of up to 4 words for the contents list; validation warns (never
   fails) over the soft caps: title 8 words, label 4, paragraph 3 sentences or 60
   words, text section 120, card text 30, list item 20, page prose 900 (1,800 on a plan page), tl;dr 3 points.
+  It also warns when three or more sections of one type run in a row (for example five `motion` sections), once per
+  run, at the run's third section: `sections[2]: 5 motion sections in a row (sections 1 to 5); a page of one repeated
+  block reads as a list: merge some, or put a different kind of section between them`. It never blocks a build, and
+  `--strict` does not turn it into an error. A run of `decision`, `approval` or `question` sections is left alone,
+  since a plan puts those in runs.
 - **Simple English**: a text section (`tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`,
   `callout`, `details` or `table`) can carry a `simple` field with the same prose in plainer words: one idea a
   sentence, at most 20 words in steps and 25 elsewhere, active voice, no semicolons. A "Simple English" toggle
@@ -123,7 +128,7 @@ page, so keep the two together.
 | `checklist` | `gather.mjs` facts | one group per area of changed files, a regression group, an intro and "If something fails" |
 | `concept` | an empty skeleton | tl;dr, explanation, cards, steps |
 | `slides` | an empty skeleton | a deck of cover, tl;dr, cards, steps and a closing slide |
-| `plan` | an empty skeleton | explains before it asks: summary, three numbers, a card per workstream, goals, a workstream's tasks as steps, a table of choices already made, a diagram, phases and risks, then a decision, an approval and a question the reviewer answers on the page, review pointers and the verdict with Copy / Download answers; validate warns when a plan asks before it explains; `mono` theme by default; check the answers with `scripts/answers.mjs` |
+| `plan` | an empty skeleton | explains before it asks: summary, three numbers, a card per workstream, goals, every workstream's tasks in one steps section, a table of choices already made, a diagram, phases and risks, then a decision, an approval and a question the reviewer answers on the page, review pointers and the verdict with Copy / Download answers; validate warns when a plan asks before it explains; `mono` theme by default; check the answers with `scripts/answers.mjs` |
 
 ## Tests
 
