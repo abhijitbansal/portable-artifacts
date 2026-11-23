@@ -10,6 +10,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { gatherGit, gitEnv } from '../scripts/lib/git.mjs';
 import { makeRepo, cloneRepo, featureRepo, git } from './helpers/repo.mjs';
+import { withEnv } from '../../../shared/test/helpers/git-plants.mjs';
 
 /** A script that records that it ran: { script, marker } in a folder of its own, outside the repository. */
 function plant() {
@@ -697,17 +698,18 @@ for (const [label, code, output] of [['exits 1 with no output', 1, ''], ['has an
 }
 
 // Repositories whose config is laid out differently must still pass, because make-explainer runs in them every day.
+const noGlobal = (fn) => withEnv({ GIT_CONFIG_GLOBAL: os.devNull }, fn); // the developer's own ignore rules or status settings must not decide
 test('gather works in a linked worktree and measures dirty there', () => {
   const repo = featureRepo();
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-linked-')));
   const linked = path.join(root, 'wt');
   try {
     git(repo.dir, 'worktree', 'add', '-q', '-b', 'feat/wt', linked);
-    const clean = gatherGit({ repo: linked });
+    const clean = noGlobal(() => gatherGit({ repo: linked }));
     assert.equal(clean.branch, 'feat/wt');
     assert.equal(clean.dirty, false);
     fs.writeFileSync(path.join(linked, 'new.txt'), 'x\n');
-    assert.equal(gatherGit({ repo: linked }).dirty, true);
+    assert.equal(noGlobal(() => gatherGit({ repo: linked })).dirty, true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     repo.cleanup();

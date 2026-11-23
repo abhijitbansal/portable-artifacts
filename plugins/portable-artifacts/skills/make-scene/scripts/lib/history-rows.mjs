@@ -73,7 +73,7 @@ function assertFullClone(repo) {
     // Outside a repository the listing succeeds but holds no entry of a repository's own, so that is null too: this throws
     // the usual "not a git repository" error then. Inside one, the config really cannot be read.
     runGit(repo, ['rev-parse', '--git-dir']);
-    throw new UsageError(`cannot read the git config of ${repo} (needs git 2.26 or later, and a config with entries of the repository's own)`);
+    throw new UsageError(`cannot read the git config of ${repo} (needs git 2.26 or later, and a config with entries of the repository's own; an empty .git/config has none)`);
   }
   if (isPartialClone(config)) {
     throw new UsageError('this is a partial clone (its config says missing objects are fetched on demand, which runs the repository\'s own remote settings); run on a full clone, made without --filter');

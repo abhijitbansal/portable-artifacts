@@ -2,11 +2,14 @@
 // plain objects and a fake `spawn`; the tests that run real git on planted repositories are beside each caller.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import {
   hardenedGitEnv, gitBaseArgs, absolutePathEntries, spawnGit, gitErrorMessage, listConfig, REDIRECTING_ENV,
   GIT_TIMEOUT_MS, SCRATCH_TIMEOUT_MS, LISTING_MAX_BUFFER,
 } from '../git-run.mjs';
+import { tmpDir, cleanUp } from './helpers/git-plants.mjs';
 
 test('the limits: 60 s for git calls, 5 s for the scratch note, 16 MiB for a config listing', () => {
   assert.equal(GIT_TIMEOUT_MS, 60000);
@@ -56,10 +59,10 @@ test('PATH keeps only absolute entries: relative ones, empty ones and "." are dr
 });
 
 test('on Windows the variable may be spelled Path, the delimiter is ;, and a drive-relative entry is dropped', () => {
-  const env = hardenedGitEnv({ Path: 'C:\\Windows;.;git\\bin;D:\\Git\\cmd;;C:rel', PATH: 'C:\\other', HOME: 'x' }, { platform: 'win32' });
+  const env = hardenedGitEnv({ Path: 'C:\\Windows;.;git\\bin;D:\\Git\\cmd;;C:rel', PATH: 'C:\\other', HOME: 'C:\\h' }, { platform: 'win32' });
   assert.equal(env.Path, 'C:\\Windows;D:\\Git\\cmd');
   assert.equal(Object.hasOwn(env, 'PATH'), false, 'one spelling survives');
-  assert.equal(env.HOME, 'x');
+  assert.equal(env.HOME, 'C:\\h');
   assert.equal(hardenedGitEnv({ path: '.;sub' }, { platform: 'win32' }).path, '');
 });
 
@@ -121,6 +124,150 @@ test('listConfig asks for the listing once, with the 16 MiB limit, and returns b
   assert.deepEqual(calls[0][1], ['-c', 'x=y', 'config', '--list', '--includes', '--show-scope', '-z']);
   assert.equal(calls[0][2].maxBuffer, 16 * 1024 * 1024);
   assert.equal(calls[0][2].encoding, 'buffer');
+});
+
+// ---- an absolute PATH entry inside the repository git is started in -------------------------------------------------------------
+// <root>/repo (a .git folder; sub/, node_modules/.bin), <root>/repo2/bin (a sibling whose name starts like the repository's),
+// <root>/tools (outside), <root>/plain (no .git anywhere above it).
+function folders() {
+  const root = tmpDir('pa-run-');
+  for (const dir of ['repo/.git', 'repo/sub', 'repo/node_modules/.bin', 'repo2/bin', 'tools', 'plain/bin']) fs.mkdirSync(path.join(root, dir), { recursive: true });
+  return { root, at: (...parts) => path.join(root, ...parts), cleanup: () => cleanUp(root) };
+}
+
+/** The PATH value spawnGit hands to spawn when git is started in `cwd` with these entries. */
+function pathSeen(cwd, entries, extra = {}) {
+  let seen = 'not spawned';
+  const env = { PATH: entries.join(path.delimiter) };
+  const result = spawnGit(cwd, ['log'], { env, timeoutMs: 1, spawn: (_cmd, _args, opts) => { seen = opts.env.PATH; return { status: 0 }; }, ...extra });
+  return { seen, result, env };
+}
+
+test('spawnGit drops an absolute PATH entry inside the repository, from its root and from a subfolder, and keeps the others', () => {
+  const f = folders();
+  try {
+    const entries = [f.at('repo', 'node_modules', '.bin'), f.at('tools'), f.at('repo', 'sub')];
+    for (const cwd of [f.at('repo'), f.at('repo', 'sub')]) assert.equal(pathSeen(cwd, entries).seen, f.at('tools'), cwd);
+    assert.equal(pathSeen(f.at('repo'), [f.at('repo')]).result.error.code, 'ENOENT', 'the repository folder itself is inside it');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit finds the repository root by a .git file too (linked worktree, submodule checkout)', () => {
+  const f = folders();
+  try {
+    fs.rmSync(f.at('repo', '.git'), { recursive: true });
+    fs.writeFileSync(f.at('repo', '.git'), 'gitdir: /elsewhere\n');
+    assert.equal(pathSeen(f.at('repo', 'sub'), [f.at('repo', 'node_modules', '.bin'), f.at('tools')]).seen, f.at('tools'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit with no .git above the folder takes the folder itself as the root', () => {
+  const f = folders();
+  try {
+    assert.equal(pathSeen(f.at('plain'), [f.at('plain', 'bin'), f.at('tools')]).seen, f.at('tools'));
+    assert.equal(pathSeen(f.at('plain'), [f.at('repo', 'node_modules', '.bin')]).seen, f.at('repo', 'node_modules', '.bin'), 'a folder beside it is not inside it');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit compares on a path-segment boundary: /repo2 is not inside /repo', () => {
+  const f = folders();
+  try {
+    assert.equal(pathSeen(f.at('repo'), [f.at('repo2', 'bin'), f.at('repo', 'node_modules', '.bin')]).seen, f.at('repo2', 'bin'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit compares real paths: a symlink that resolves into the repository is dropped, one that resolves out of it is kept', () => {
+  const f = folders();
+  try {
+    fs.symlinkSync(f.at('repo', 'node_modules', '.bin'), f.at('tools', 'in'));
+    fs.symlinkSync(f.at('tools'), f.at('repo', 'out'));
+    assert.equal(pathSeen(f.at('repo'), [f.at('tools', 'in'), f.at('repo', 'out')]).seen, f.at('repo', 'out'));
+    assert.equal(pathSeen(f.at('repo'), [f.at('tools', 'in')]).result.error.code, 'ENOENT');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit compares a folder that does not exist by its path, and resolves a repository reached through a symlink', () => {
+  const f = folders();
+  try {
+    assert.equal(pathSeen(f.at('repo'), [f.at('repo', 'not', 'yet', 'bin'), f.at('nowhere', 'bin')]).seen, f.at('nowhere', 'bin'));
+    fs.symlinkSync(f.at('repo'), f.at('tools', 'via'));
+    assert.equal(pathSeen(f.at('tools', 'via', 'sub'), [f.at('repo', 'node_modules', '.bin'), f.at('tools')]).seen, f.at('tools'), 'the cwd is a path through a symlink');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit with nothing left reports git as not found, runs nothing, and leaves the caller\'s environment alone', () => {
+  const f = folders();
+  try {
+    const env = { PATH: f.at('repo', 'node_modules', '.bin') };
+    const r = spawnGit(f.at('repo'), ['log'], { env, timeoutMs: 1, spawn: () => assert.fail('spawned') });
+    assert.equal(r.error.code, 'ENOENT');
+    assert.deepEqual(env, { PATH: f.at('repo', 'node_modules', '.bin') });
+    assert.match(gitErrorMessage(r.error, { cwd: f.at('repo'), timeoutMs: 1 }), /git is not installed or not on PATH/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit leaves an environment with no PATH alone (the system default applies)', () => {
+  const f = folders();
+  try {
+    let seen;
+    spawnGit(f.at('repo'), ['log'], { env: { HOME: '/h' }, timeoutMs: 1, spawn: (_c, _a, opts) => { seen = opts.env; return { status: 0 }; } });
+    assert.deepEqual(seen, { HOME: '/h' });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('spawnGit drops a PATH entry spelled in another letter case where the file system ignores case', (t) => {
+  const f = folders();
+  try {
+    if (!fs.existsSync(f.at('REPO'))) return t.skip('this file system is case-sensitive');
+    assert.equal(pathSeen(f.at('repo'), [f.at('REPO', 'node_modules', '.bin'), f.at('tools')]).seen, f.at('tools'));
+    assert.equal(pathSeen(f.at('REPO', 'sub'), [f.at('repo', 'node_modules', '.bin'), f.at('tools')]).seen, f.at('tools'), 'and the folder git starts in');
+  } finally {
+    f.cleanup();
+  }
+});
+
+// ---- variables that name a place git reads config or programs from: a relative value is the repository --------------------------
+const SEARCH_PLACES = ['HOME', 'XDG_CONFIG_HOME', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_EXEC_PATH'];
+
+test('a relative HOME, XDG_CONFIG_HOME, GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM or GIT_EXEC_PATH is dropped; an absolute one is kept', () => {
+  for (const key of SEARCH_PLACES) {
+    for (const relative of ['.', '.config', 'gc', '../x']) assert.equal(Object.hasOwn(hardenedGitEnv({ PATH: '/usr/bin', [key]: relative }), key), false, `${key}=${relative}`);
+    assert.equal(hardenedGitEnv({ PATH: '/usr/bin', [key]: '/abs/x' })[key], '/abs/x', key);
+  }
+});
+
+test('an empty GIT_CONFIG_GLOBAL or GIT_CONFIG_SYSTEM means "no file" to git, so it becomes the null device; the other empty ones are dropped', () => {
+  const env = hardenedGitEnv({ PATH: '/usr/bin', GIT_CONFIG_GLOBAL: '', GIT_CONFIG_SYSTEM: '', HOME: '', XDG_CONFIG_HOME: '', GIT_EXEC_PATH: '' });
+  assert.deepEqual([env.GIT_CONFIG_GLOBAL, env.GIT_CONFIG_SYSTEM], [os.devNull, os.devNull]);
+  for (const key of ['HOME', 'XDG_CONFIG_HOME', 'GIT_EXEC_PATH']) assert.equal(Object.hasOwn(env, key), false, key);
+  const nulled = hardenedGitEnv({ PATH: '/usr/bin', GIT_CONFIG_GLOBAL: 'gc', GIT_CONFIG_SYSTEM: '' }, { nullUserConfig: true });
+  assert.deepEqual([nulled.GIT_CONFIG_GLOBAL, nulled.GIT_CONFIG_SYSTEM], [os.devNull, os.devNull], 'make-scene\'s null user config still wins');
+});
+
+test('on Windows variable names are compared in capitals: GIT_DIR, the config pairs and the pathspec switches in any spelling are dropped', () => {
+  const source = { Git_Dir: 'C:\\x', git_config_key_1: 'k', Git_Config_Value_1: 'v', git_literal_pathspecs: '1', Home: 'rel', Git_Exec_Path: 'bin', GIT_AUTHOR_NAME: 'A', Path: 'C:\\Windows' };
+  assert.deepEqual(hardenedGitEnv(source, { platform: 'win32' }).GIT_AUTHOR_NAME, 'A');
+  const names = Object.keys(hardenedGitEnv(source, { platform: 'win32' })).filter((k) => /^(git_dir|git_config_|git_literal|home|git_exec)/i.test(k));
+  assert.deepEqual(names, []);
+  assert.equal(Object.hasOwn(hardenedGitEnv(source, { platform: 'linux' }), 'Git_Dir'), true, 'elsewhere names are case-sensitive');
+  assert.equal(hardenedGitEnv({ Git_Config_Global: '' }, { platform: 'win32' }).GIT_CONFIG_GLOBAL, os.devNull);
+  assert.equal(hardenedGitEnv({ Home: 'C:\\h' }, { platform: 'win32' }).HOME, 'C:\\h', 'an absolute one is kept, under its capitals');
 });
 
 test('listConfig reports a timeout, an over-size listing and a missing git as themselves', () => {

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { REDIRECTING_ENV, CONFIG_PAIR_ENV, PATHSPECS_ENV } from '../../git-run.mjs';
 
 const IDENTITY = {
   GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull,
@@ -15,9 +16,18 @@ export const tmpDir = (prefix) => fs.realpathSync(fs.mkdtempSync(path.join(os.tm
 export const cleanUp = (...dirs) => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); };
 export const mkfifo = (file) => spawnSync('mkfifo', [file]).status === 0;
 
-/** Plain git (the control): the user's environment plus null config files and a fixed identity. -> { status, out, err, error }. */
-export function plainGit(cwd, args, { env = {}, timeout = 15000 } = {}) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...IDENTITY, ...env }, timeout, killSignal: 'SIGKILL' });
+/** The environment of a test's own git: the developer's, without the variables that redirect git (a hook or `git rebase --exec` exports GIT_DIR and friends). */
+const withoutRedirects = (source) => Object.fromEntries(Object.entries(source)
+  .filter(([key]) => !REDIRECTING_ENV.has(key) && !CONFIG_PAIR_ENV.test(key) && !PATHSPECS_ENV.test(key)));
+
+/**
+ * Plain git (the control): the developer's environment (minus the redirecting GIT_ variables) plus null config files and a fixed
+ * identity; an `env` value of undefined removes the variable. `input` goes to stdin. -> { status, out, err, error }.
+ */
+export function plainGit(cwd, args, { env = {}, timeout = 15000, input } = {}) {
+  const merged = Object.entries({ ...withoutRedirects(process.env), ...IDENTITY, ...env }).filter(([, value]) => value !== undefined);
+  // maxBuffer: spawnSync's default 1 MiB cuts the output of a long listing (and with GIT_TRACE set the cut lands under 1 MiB).
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: Object.fromEntries(merged), timeout, killSignal: 'SIGKILL', input, maxBuffer: 64 * 1024 * 1024 });
   return { status: r.status, out: r.stdout ?? '', err: r.stderr ?? '', error: r.error };
 }
 
@@ -123,3 +133,55 @@ export const RELATIVE_PATHS = [
   { label: 'a node_modules/.bin entry', rel: 'node_modules/.bin', path: (real) => `node_modules/.bin${path.delimiter}${real}` },
 ];
 export const realPath = () => process.env.PATH.split(path.delimiter).filter((e) => path.isAbsolute(e)).join(path.delimiter);
+
+/** How an absolute PATH entry can name a folder inside the repository: directly, or through a symlink that lives outside it. */
+export const IN_REPO_ENTRIES = [
+  { label: 'an absolute node_modules/.bin entry', symlink: false },
+  { label: 'a symlinked entry that resolves to node_modules/.bin', symlink: true },
+];
+
+/**
+ * A `git` planted at <repo>/node_modules/.bin and the PATH that reaches it (first) before the real one. `ranFrom(cwd)` is the
+ * control: it starts git by name with that PATH in `cwd`, then reports whether the planted one ran (and clears the record).
+ * -> { planted, PATH, ranFrom, cleanup }.
+ */
+export function plantedPath(repoDir, { symlink = false } = {}) {
+  const rel = 'node_modules/.bin';
+  const planted = plantGitAt(repoDir, rel);
+  const holder = symlink ? tmpDir('pa-link-') : null;
+  const entry = symlink ? path.join(holder, 'bin') : path.join(repoDir, rel);
+  if (symlink) fs.symlinkSync(path.join(repoDir, rel), entry);
+  const PATH = `${entry}${path.delimiter}${realPath()}`;
+  const ranFrom = (cwd) => {
+    spawnSync('git', ['--version'], { cwd, env: { ...process.env, PATH }, timeout: 15000, killSignal: 'SIGKILL' });
+    const ran = planted.ran();
+    fs.rmSync(planted.marker, { force: true });
+    return ran;
+  };
+  return { planted, PATH, ranFrom, cleanup: () => { if (holder) cleanUp(holder); } };
+}
+
+/**
+ * Makes a commit on top of HEAD that carries a `gpgsig` header (git never checks it unless something asks), moves the checked-out
+ * branch to it, and returns its sha. With log.showSignature=true, `git log` would then run gpg.program to verify it.
+ * `file` (a name in the folder) is written and committed with it, so the commit changes something.
+ */
+export function signedCommit(dir, subject = 'signed', file = null) {
+  if (file) {
+    fs.writeFileSync(path.join(dir, file), `${subject}\n`);
+    mustGit(dir, 'add', file);
+  }
+  const tree = file ? mustGit(dir, 'write-tree') : mustGit(dir, 'rev-parse', 'HEAD^{tree}');
+  const parent = mustGit(dir, 'rev-parse', 'HEAD');
+  const now = Math.floor(Date.now() / 1000);
+  const person = `T <t@example.com> ${now} +0000`;
+  const body = `tree ${tree}\nparent ${parent}\nauthor ${person}\ncommitter ${person}\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n aGVsbG8=\n -----END PGP SIGNATURE-----\n\n${subject}\n`;
+  const made = plainGit(dir, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: body });
+  if (made.status !== 0) throw new Error(`hash-object failed: ${made.err}`);
+  const sha = made.out.trim();
+  mustGit(dir, 'reset', '-q', '--hard', sha);
+  return sha;
+}
+
+/** Config that makes git verify signatures on `git log` with the planted script as gpg.program. Append to <repo>/.git/config. */
+export const showSignatureConfig = (script) => `[log]\n\tshowSignature = true\n[gpg]\n\tprogram = ${script}\n`;

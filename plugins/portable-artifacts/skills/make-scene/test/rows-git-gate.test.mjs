@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { historyRows, gitEnv } from '../scripts/lib/history-rows.mjs';
 import {
   plant, plainGit, mustGit, plantGitAt, withEnv, withGitStub, RELATIVE_PATHS, realPath, cleanUp, tmpDir,
+  IN_REPO_ENTRIES, plantedPath, signedCommit, showSignatureConfig,
 } from '../../../shared/test/helpers/git-plants.mjs';
 
 const rows = (repo, extra = {}) => historyRows({ repo, weeks: 2, depth: 1, ...extra });
@@ -63,6 +64,67 @@ test('rows git: a PATH with no absolute entry reports git as not found, and runs
   }
 });
 
+// ---- an absolute PATH entry that lies inside the repository (npm run and direnv put <repo>/node_modules/.bin on PATH) ---------
+for (const { label, symlink } of IN_REPO_ENTRIES) {
+  for (const where of ['', 'src']) {
+    test(`rows git: ${label} never runs a git planted in the repository, from ${where === '' ? 'its root' : 'a subfolder'}`, () => {
+      const repo = fixture();
+      const plan = plantedPath(repo.dir, { symlink });
+      const folder = path.join(repo.dir, where);
+      try {
+        assert.equal(plan.ranFrom(folder), true, 'control: the planted git is what that PATH finds');
+        const list = withEnv({ PATH: plan.PATH }, () => rows(folder));
+        assert.equal(total(list), 1, 'the real git still answers through the other entries');
+        assert.equal(plan.planted.ran(), false, 'rows git ran the git planted in the repository');
+      } finally {
+        plan.cleanup();
+        repo.cleanup();
+      }
+    });
+  }
+}
+
+test('rows git: a PATH whose only entry lies inside the repository reports git as not found, and runs nothing', () => {
+  const repo = fixture();
+  const plan = plantedPath(repo.dir);
+  try {
+    withEnv({ PATH: path.join(repo.dir, 'node_modules', '.bin') }, () => assert.throws(() => rows(repo.dir), /git is not installed or not on PATH/));
+    assert.equal(plan.planted.ran(), false, 'rows git ran the git planted in the repository');
+  } finally {
+    repo.cleanup();
+  }
+});
+
+// ---- log.showSignature: a signed commit is only checked when something asks, and the check runs gpg.program ---------------------
+test('a repository with log.showSignature=true, a gpg.program and a commit with a gpgsig header never runs the program during rows git', () => {
+  const repo = fixture();
+  const p = plant('exit 1');
+  try {
+    signedCommit(repo.dir, 'signed', 'src/b.js');
+    fs.appendFileSync(path.join(repo.dir, '.git', 'config'), showSignatureConfig(p.script));
+    plainGit(repo.dir, ['log', '-1']);
+    assert.equal(p.ran(), true, 'control: plain git log verifies the signature through gpg.program');
+    p.clear();
+    assert.equal(total(rows(repo.dir)), 2, 'both commits are counted');
+    assert.equal(p.ran(), false, 'rows git ran the repository\'s gpg.program');
+  } finally {
+    p.cleanup();
+    repo.cleanup();
+  }
+});
+
+// ---- an empty .git/config is one cause of "cannot read the git config" -------------------------------------------------------------
+test('an empty .git/config is refused, and the message names it as a cause', () => {
+  const repo = fixture();
+  try {
+    fs.writeFileSync(path.join(repo.dir, '.git', 'config'), '');
+    assert.equal(plainGit(repo.dir, ['log', '-1', '--format=%s']).status, 0, 'control: plain git reads the repository');
+    assert.throws(() => rows(repo.dir), /cannot read the git config.*an empty \.git\/config/);
+  } finally {
+    repo.cleanup();
+  }
+});
+
 // ---- F18 and F12 ------------------------------------------------------------------------------------------------------------
 test('the git environment drops the variables that point git at other files or change pathspec matching', () => {
   const dropped = ['GIT_SHALLOW_FILE', 'GIT_GRAFT_FILE', 'GIT_REPLACE_REF_BASE', 'GIT_ATTR_SOURCE', 'GIT_REFERENCE_BACKEND', 'GIT_IMPLICIT_WORK_TREE',
@@ -112,7 +174,7 @@ test('a config listing that times out is reported as a timeout, with no second g
   const repo = fixture();
   try {
     withGitStub(both(logCalls, onNth('--show-scope', 1, 'exec sleep 20')), (dir) => {
-      assert.throws(() => rows(repo.dir, { _test: { timeoutMs: 500 } }), /git did not finish within 0\.5 seconds/);
+      assert.throws(() => rows(repo.dir, { _test: { timeoutMs: 2000 } }), /git did not finish within 2 seconds/);
       assert.match(readCalls(dir).at(-1), /--show-scope/, 'no rev-parse follows the timeout');
     });
   } finally {

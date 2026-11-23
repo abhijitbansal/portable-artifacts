@@ -26,10 +26,19 @@ hostile repository safe, and a sandbox is still the right place for a repository
 - **On macOS and Linux, a relative PATH entry could pick a `git` inside the repository.** git is started with the
   repository as its folder, so a PATH entry such as `.`, an empty one (a leading or trailing `:`) or `node_modules/.bin`
   finds a program of the repository's before the real one (run on macOS). By reading the code, 2.4.0 started git the same
-  way. The git environment of `gather`, `rows.mjs git` and the page builders now keeps only the absolute PATH entries;
-  with none left, git is reported as not installed instead of being looked up in the repository. The Windows spelling
+  way. The git environment of `gather`, `rows.mjs git` and the page builders now keeps only the absolute PATH entries
+  outside the repository (so the `<repo>/node_modules/.bin` that `npm run` puts on PATH is dropped too, by its real path).
+  A work tree that holds your own tools (a dotfiles repository at your home folder) loses those entries; if git is then not
+  found, it is reported as not found, instead of being looked up in the repository. The Windows spelling
   (`Path`) and the `;` delimiter are handled and unit-tested through a platform option, not run on Windows; see the
   Windows limit below.
+- **A relative `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH`** named a place inside
+  the repository, which git read as your own config. These variables now reach git only with an absolute value.
+- **`gather` counted untracked files only if the config let it.** `status.showUntrackedFiles=no`, in the repository's config
+  or in yours, made new files read as clean. `git status` now runs with `--untracked-files=normal`.
+- **`gather` refuses a repository whose work tree does not contain the folder you gave it.** `core.worktree` can name any
+  folder, and `gather` then reported that other folder's history. Linked worktrees, submodule checkouts, subfolders and
+  symlinked paths work as before. `rows.mjs git` reads commits only and is not affected (checked).
 - **`gather` and `rows.mjs git` now read the repository's git config as raw bytes, and a config they cannot read counts
   as untrusted.** Before, they asked git to search the config for risky settings, and in a UTF-8 locale (the usual one) git
   fails that search without any output when a setting's name contains bytes that are not valid text. The 2.4.0 check
@@ -38,23 +47,21 @@ hostile repository safe, and a sandbox is still the right place for a repository
   repository's own remote settings (that route needs a git that ignores `GIT_NO_LAZY_FETCH`, see the correction below).
   Anyone who ran `gather` or `rows.mjs git` on an untrusted repository with 2.4.0 was
   exposed (versions before 2.4.0 had no check at all). Now:
-  - the whole config is listed (one call, at most 16 MiB) and checked in Node, never matched by git. A listing that fails,
-    is malformed or holds no entry of a repository of its own makes `gather` and `rows.mjs git` refuse ("cannot read the
-    git config"), and makes the dirty check skip (`dirty` is `null`, with a warning) where it would otherwise have run. A
-    repository config without `core.repositoryformatversion` is read, as in 2.4.0. A listing over 16 MiB, a git call that
+  - the whole config is listed (at most 16 MiB a call; `gather` makes two listing calls, `rows.mjs git` one) and checked
+    in Node, never matched by git. A listing that fails, is malformed or holds no entry of a repository of its own
+    (an empty `.git/config` is one cause, and the message says so) makes `gather` and `rows.mjs git` refuse ("cannot read
+    the git config"), and makes the dirty check skip (`dirty` is `null`, with a warning) where it would otherwise have run.
+    A repository config without `core.repositoryformatversion` is read, as in 2.4.0. A listing over 16 MiB, a git call that
     times out and a missing git are each reported as themselves, and no second git call follows a timeout;
   - the uncommitted-changes check is skipped when the repository's own config defines a filter driver, a git-lfs extension
     (`lfs.extension.<name>`, in any letter case) or a hook (`hook.<name>`; a defence in depth, see below), when it holds
-    a value whose second or later line starts with `lfs.` (git-lfs reads `git config -l` line by line, so such a value can
-    forge a line), when it holds an `lfs.` key with a byte above 0x7f (by reading the git-lfs source, not run: git-lfs 2.4.2
-    and 2.5.0 fold key case with Unicode rules, which could turn such a key into an extension), or when
-    the work tree or HEAD has a `.lfsconfig`. An ordinary value with a line break, such as the description
-    `git branch --edit-description` writes, no longer skips it;
+    a value or a key that git-lfs could read as an extension, or when the work tree or HEAD has a `.lfsconfig`. An
+    ordinary value with a line break, such as the description `git branch --edit-description` writes, no longer skips it;
   - when `git status` fails or is stopped, or `git ls-tree` fails, `dirty` is `null` with a warning that says the check
     did not run. In 2.4.0 a failed `git status` gave `dirty: false`;
-  - your global and system config still do not count, so a git-lfs repository set up with the default global
-    `git lfs install` is unaffected; linked worktrees, submodule checkouts, `extensions.worktreeConfig` and sha256
-    repositories still work.
+  - your global and system config still do not count (git-lfs itself was not run against this release, so a repository set
+    up with the default global `git lfs install` is untested); linked worktrees, submodule checkouts,
+    `extensions.worktreeConfig` and sha256 repositories still work.
 - **Every git call now runs with `LC_ALL=C` (except `git status`, which keeps your locale for your own global filters),
   `core.fsmonitor=false`, the repository's hooks off (`core.hooksPath` at the null device), no optional locks and no lazy
   fetches.** The hook and `hook.<name>` rules are defence in depth: git runs hooks only when it rewrites the index or
@@ -68,6 +75,12 @@ hostile repository safe, and a sandbox is still the right place for a repository
 
 ### Known limits kept in this release
 
+- Your own global filter drivers still run on the files a repository's attributes select, in that repository's folder, so
+  a filter that loads code or finds programs from the current folder can load the repository's.
+- The PATH rule covers git only. make-motion's `ffmpeg` and the doctor look programs up on your PATH as it is, so do not
+  keep `.` or a relative entry on PATH.
+- A folder whose name ends in a space is not handled.
+- The time limit stops git; a filter it started may run on.
 - A second process that writes into the repository between `gather`'s config check and its `git status` is not guarded
   against.
 - A `.lfsconfig` that exists only in the index is not seen by the skip rule.

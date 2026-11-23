@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
 import { repoOwnedConfig, isPartialClone, skipsDirtyCheck } from '../../shared/git-config.mjs';
-import { GIT_TIMEOUT_MS, hardenedGitEnv, gitBaseArgs, spawnGit, gitErrorMessage, listConfig } from '../../shared/git-run.mjs';
+import { GIT_TIMEOUT_MS, hardenedGitEnv, gitBaseArgs, spawnGit, gitErrorMessage, listConfig, realOrResolved, isInside } from '../../shared/git-run.mjs';
 
 const MAX_BUFFER = 256 * 1024 * 1024;
 // Test seams, set only by gatherGit({ _test }): a shorter time limit (a git call that has not finished in the limit is stopped:
@@ -55,6 +55,14 @@ function run(cwd, args, { raw = false, keepLocale = false, soft = false } = {}) 
 
 const nulFields = (text) => text.split('\0').filter((f) => f !== '');
 
+// core.worktree in a repository's own config can name any folder, so the top level git reports may be another repository, or a
+// folder inside one, with the folder asked for outside it. Both sides go through the same real path, so a symlinked path or a
+// folder typed in another letter case still matches; a linked worktree or a submodule checkout reports its own root.
+function assertContains(dir, top) {
+  if (isInside(realOrResolved(dir), realOrResolved(top))) return top;
+  throw new UsageError(`the work tree git reports for ${dir} is ${top}, which does not contain it (the repository's config may name another folder as its work tree with core.worktree); pass --repo <the checked-out folder>`);
+}
+
 /** The repository's work-tree root for a folder inside it. */
 export function repoRoot(dir) {
   let stat;
@@ -65,7 +73,7 @@ export function repoRoot(dir) {
   }
   if (!stat.isDirectory()) throw new UsageError(`--repo ${dir}: not a folder; pass a folder inside a git repository`);
   const top = run(dir, ['rev-parse', '--show-toplevel']);
-  if (top.ok) return top.out.trim();
+  if (top.ok) return assertContains(dir, top.out.trim());
   // With safe.bareRepository=explicit git refuses a bare repository by name ("cannot use bare repository", measured on git
   // 2.54; LC_ALL=C keeps the text English). A git without that setting finds the bare repository, and `inGitDir.ok` covers it.
   const inGitDir = run(dir, ['rev-parse', '--git-dir']);
@@ -253,7 +261,7 @@ function repoConfig(root) {
 // git wrote extensions.partialclone: all three count.
 function assertFullClone(root) {
   const config = repoConfig(root);
-  if (config === null) throw new UsageError(`cannot read the git config of ${root} (gather needs git 2.26 or later, and a config with entries of the repository's own); check \`git config --list --show-scope\` there`);
+  if (config === null) throw new UsageError(`cannot read the git config of ${root} (gather needs git 2.26 or later, and a config with entries of the repository's own; an empty .git/config has none); check \`git config --list --show-scope\` there`);
   if (isPartialClone(config)) throw new UsageError('this is a partial clone (its config says missing objects are fetched on demand, which runs the repository\'s own remote settings); run gather on a full clone, made without --filter');
 }
 
@@ -277,11 +285,12 @@ function repoRunsCommandsToCompare(root) {
 // when the check did not run, and `why` says which: 'config' (skipped, see repoRunsCommandsToCompare) or 'failed' (git status
 // failed or was stopped: never read as clean). --ignore-submodules=all: a submodule's own config and .gitattributes (under
 // .git/modules) would be read by the status git starts inside it, past the check above, so edits inside a submodule are not
-// counted. status keeps the user's locale: it may run the user's own global filters, which can depend on it.
+// counted. --untracked-files=normal: a status.showUntrackedFiles=no (the repository's own, or the user's) must not make new
+// files read as clean. status keeps the user's locale: it may run the user's own global filters, which can depend on it.
 // Known limit: a second process that writes into the repository between the config check and status is not guarded against.
 function isDirty(root) {
   if (repoRunsCommandsToCompare(root)) return { dirty: null, why: 'config' };
-  const status = run(root, ['status', '--porcelain', '--ignore-submodules=all'], { keepLocale: true, soft: true });
+  const status = run(root, ['status', '--porcelain', '--ignore-submodules=all', '--untracked-files=normal'], { keepLocale: true, soft: true });
   return status.ok ? { dirty: status.out.trim() !== '', why: null } : { dirty: null, why: 'failed' };
 }
 

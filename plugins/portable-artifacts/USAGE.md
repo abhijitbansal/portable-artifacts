@@ -334,13 +334,22 @@ your project folder):
    not run commands from the repository's own git config, so it refuses a
    partial clone (made with `--filter`; use a full clone) and needs git 2.26
    or later. When that config defines a filter driver, a git-lfs extension or a
-   hook (a hook only as defence in depth), holds a value that forges an `lfs.`
-   line, holds an `lfs.` key with a non-ASCII byte, or cannot be read, or the
-   work tree has a `.lfsconfig`, it skips the uncommitted-changes check (`dirty`
-   is `null`, with a warning); the same when `git status` itself fails. It reads
-   that config as raw bytes, so a name that is not valid text cannot hide a
-   setting. Each git call runs with `core.fsmonitor` and the repository's hooks
-   off, only the absolute entries of your PATH, and is stopped after 60 seconds.
+   hook (a hook only as defence in depth), holds a value or a key that git-lfs
+   could read as an extension, or cannot be read (an empty `.git/config` is one
+   cause), or the work tree has a `.lfsconfig`, it skips the
+   uncommitted-changes check (`dirty` is `null`, with a warning); the same when
+   `git status` itself fails. It reads that config as raw bytes, so a name that
+   is not valid text cannot hide a setting. It refuses a repository whose work
+   tree does not contain the folder you gave, and counts untracked files
+   whatever the config says. Each git call runs with `core.fsmonitor` and the
+   repository's hooks off, only the absolute entries of your PATH that lie
+   outside the repository, and a relative `HOME`, `XDG_CONFIG_HOME`,
+   `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` or `GIT_EXEC_PATH` dropped; git is
+   stopped after 60 seconds (a filter it started may run on). Your own global
+   filter drivers still run on the files the repository's attributes select, in
+   that repository's folder. The PATH rule covers git only: make-motion's ffmpeg
+   and the doctor look programs up on your PATH as it is, so do not keep `.` or
+   a relative entry on PATH. A folder whose name ends in a space is not handled.
    This lowers the risk; run a repository you expect to be hostile in a sandbox.
 2. `scaffold.mjs recap --facts facts.json --out explainer.json` writes a starter
    file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
@@ -581,8 +590,9 @@ make-motion 2 reads version 2 films only: a script of shots in one JSON file, `f
    with `columns`; for git history, `rows.mjs git --weeks 12` writes
    `scene-rows.json` (commits per top-level folder per ISO week), which the spec
    reads as `data.file`. Like `gather.mjs`, it refuses a partial clone and an
-   older git than 2.26, uses only the absolute entries of your PATH, and stops a
-   git call after 60 seconds. It reads a bare or mirror clone you name.
+   older git than 2.26, uses only the absolute entries of your PATH that lie
+   outside the repository, and stops git after 60 seconds (a filter it started
+   may run on). It reads a bare or mirror clone you name.
 2. Writes `scene.json`: a title, `data` (rows of `group`, `t`, `value`) or a
    `lift`, an optional `world` and a `tour` of up to 12 camera stops. It copies
    the closest file in `references/examples/`.

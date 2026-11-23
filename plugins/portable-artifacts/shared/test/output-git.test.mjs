@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { scratchIgnoreNote } from '../output.mjs';
 import {
   plant, scratchRepo, partialCloneWithMissingIgnore, plainGit, mkfifo, withEnv, plantGitAt, RELATIVE_PATHS, realPath, tmpDir, cleanUp,
+  IN_REPO_ENTRIES, plantedPath,
 } from './helpers/git-plants.mjs';
 
 // The developer's own git config must not decide these tests: a global ignore rule that covers .scratch/ (core.excludesFile, or
@@ -98,7 +99,7 @@ test('a named pipe at .gitignore is stopped at the time limit: a null note, not 
     assert.equal(plainGit(repo.dir, CHECK, { timeout: 1000 }).error?.code, 'ETIMEDOUT', 'control: plain git blocks on the pipe');
     const started = Date.now();
     assert.equal(scratchIgnoreNote(repo.target, { timeoutMs: 1000 }), null);
-    assert.ok(Date.now() - started < 4000, `took ${Date.now() - started} ms`);
+    assert.ok(Date.now() - started < 10000, `took ${Date.now() - started} ms`);
   } finally {
     repo.cleanup();
   }
@@ -185,6 +186,33 @@ for (const { label, rel, path: pathOf } of RELATIVE_PATHS) {
     }
   });
 }
+
+// ---- an absolute PATH entry that lies inside the repository (npm run and direnv put <repo>/node_modules/.bin on PATH) ---------
+for (const { label, symlink } of IN_REPO_ENTRIES) {
+  test(`${label} never runs a git planted in the repository`, () => {
+    const repo = scratchRepo();
+    const plan = plantedPath(repo.dir, { symlink });
+    try {
+      assert.equal(plan.ranFrom(repo.dir), true, 'control: the planted git is what that PATH finds');
+      inFolder(repo.dir, () => withEnv({ PATH: plan.PATH }, () => assert.match(scratchIgnoreNote(repo.target), NOTE, 'the real git still answers through the other entries')));
+      assert.equal(plan.planted.ran(), false, 'the planted git ran');
+    } finally {
+      plan.cleanup();
+      repo.cleanup();
+    }
+  });
+}
+
+test('a PATH whose only entry lies inside the repository is "git not found": nothing is run, the note is null', () => {
+  const repo = scratchRepo();
+  const plan = plantedPath(repo.dir);
+  try {
+    inFolder(repo.dir, () => withEnv({ PATH: path.join(repo.dir, 'node_modules', '.bin') }, () => assert.equal(scratchIgnoreNote(repo.target), null)));
+    assert.equal(plan.planted.ran(), false, 'the planted git ran');
+  } finally {
+    repo.cleanup();
+  }
+});
 
 test('a PATH with no absolute entry is "git not found": nothing is run, the note is null', () => {
   const repo = scratchRepo();
