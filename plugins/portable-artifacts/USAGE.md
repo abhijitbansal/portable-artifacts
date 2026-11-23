@@ -334,11 +334,14 @@ your project folder):
    not run commands from the repository's own git config, so it refuses a
    partial clone (made with `--filter`; use a full clone) and needs git 2.26
    or later. When that config defines a filter driver, a git-lfs extension or a
-   hook, holds a value with a line break, or cannot be read, or the work tree
-   has a `.lfsconfig`, it skips the uncommitted-changes check (`dirty` is
-   `null`, with a warning). It reads that config as raw bytes, so a name that
-   is not valid text cannot hide a setting. Each git call runs with the
-   repository's hooks off and is stopped after 60 seconds.
+   hook (a hook only as defence in depth), holds a value that forges an `lfs.`
+   line, holds an `lfs.` key with a non-ASCII byte, or cannot be read, or the
+   work tree has a `.lfsconfig`, it skips the uncommitted-changes check (`dirty`
+   is `null`, with a warning); the same when `git status` itself fails. It reads
+   that config as raw bytes, so a name that is not valid text cannot hide a
+   setting. Each git call runs with `core.fsmonitor` and the repository's hooks
+   off, only the absolute entries of your PATH, and is stopped after 60 seconds.
+   This lowers the risk; run a repository you expect to be hostile in a sandbox.
 2. `scaffold.mjs recap --facts facts.json --out explainer.json` writes a starter
    file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
    The numbers, file list, timeline and checklist groups are filled in; every
@@ -578,7 +581,8 @@ make-motion 2 reads version 2 films only: a script of shots in one JSON file, `f
    with `columns`; for git history, `rows.mjs git --weeks 12` writes
    `scene-rows.json` (commits per top-level folder per ISO week), which the spec
    reads as `data.file`. Like `gather.mjs`, it refuses a partial clone and an
-   older git than 2.26, and stops a git call after 60 seconds.
+   older git than 2.26, uses only the absolute entries of your PATH, and stops a
+   git call after 60 seconds. It reads a bare or mirror clone you name.
 2. Writes `scene.json`: a title, `data` (rows of `group`, `t`, `value`) or a
    `lift`, an optional `world` and a `tour` of up to 12 camera stops. It copies
    the closest file in `references/examples/`.
@@ -755,7 +759,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `… is installed but its dependencies are missing` | Run `npm ci --ignore-scripts --omit=dev` inside the named sibling skill's folder |
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
-| `gather.mjs` or `rows.mjs git` prints `this is a partial clone …` or `cannot read the git config of … (needs git 2.26 or later)` | Run it on a full clone (made without `--filter`) and update git to 2.26 or later. A git call over 60 seconds stops with its own one-line error |
+| `gather.mjs` or `rows.mjs git` prints `this is a partial clone …` or `cannot read the git config of … (needs git 2.26 or later, …)` | Run it on a full clone (made without `--filter`) and update git to 2.26 or later; a folder that holds no repository config of its own is refused the same way. A git call over 60 seconds stops with its own one-line error |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
 | `check: skipped (no browser: …)` from any skill's `check.mjs` (make-scene also skips when the browser has no WebGL) | Expected without Playwright or Chromium; the page is still built. A skipped check is not a pass: `--json` carries `"skipped": true`. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci --ignore-scripts` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |

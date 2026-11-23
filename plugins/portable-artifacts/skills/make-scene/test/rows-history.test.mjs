@@ -580,7 +580,8 @@ function withGitStub(before, fn) {
 // A `git config --show-scope` call prints `output` (a printf format) and exits with `code`; other calls run the real git.
 const brokenListing = (code, output = '') => () => `case "$*" in *--show-scope*) printf '${output}'; exit ${code};; esac`;
 
-test('every git call carries -c core.hooksPath=/dev/null and -c safe.bareRepository=explicit', () => {
+// safe.bareRepository=explicit is not set here: rows git may be pointed at a bare or mirror clone (rows-git-gate.test.mjs).
+test('every git call carries -c core.hooksPath=/dev/null and -c core.fsmonitor=false', () => {
   const repo = fixtureRepo();
   try {
     repo.commit('2026-10-14T10:00:00Z', 'src/a.js');
@@ -590,7 +591,8 @@ test('every git call carries -c core.hooksPath=/dev/null and -c safe.bareReposit
       assert.ok(calls.length >= 3, `only ${calls.length} git calls were seen`);
       for (const call of calls) {
         assert.ok(call.includes(`-c core.hooksPath=${os.devNull}`), `no hooksPath override: ${call}`);
-        assert.ok(call.includes('-c safe.bareRepository=explicit'), `no bareRepository override: ${call}`);
+        assert.ok(call.includes('-c core.fsmonitor=false'), `no fsmonitor override: ${call}`);
+        assert.ok(!call.includes('safe.bareRepository'), `a bare repository could not be opened: ${call}`);
       }
     });
   } finally { repo.cleanup(); }
@@ -599,7 +601,7 @@ test('every git call carries -c core.hooksPath=/dev/null and -c safe.bareReposit
 // Fail closed: a listing that cannot be read is never "no match".
 for (const [label, code, output] of [
   ['exits 1 with no output (what the matcher failure looked like)', 1, ''],
-  ['is well formed but has no core.repositoryformatversion of its own', 0, 'local\\0user.name\\nx\\0global\\0core.repositoryformatversion\\n0\\0'],
+  ['is well formed but has no entry of a repository of its own', 0, 'global\\0user.name\\nx\\0system\\0core.repositoryformatversion\\n0\\0'],
   ['has an odd field count', 0, 'junk\\0'],
 ]) {
   test(`a config listing that ${label} is refused, not read as no match`, () => {
@@ -627,7 +629,7 @@ test('rows work in a linked worktree', () => {
   } finally { fs.rmSync(root, { recursive: true, force: true }); repo.cleanup(); }
 });
 
-test('rows work inside a submodule checkout (safe.bareRepository=explicit does not touch it)', () => {
+test('rows work inside a submodule checkout', () => {
   const sub = fixtureRepo();
   const outer = fixtureRepo();
   const env = {

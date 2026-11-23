@@ -317,8 +317,8 @@ test('control for the lfs case: the same repository without the extension key me
   }
 });
 
-// git-lfs also reads .lfsconfig from the root of the work tree (or HEAD). Its documentation limits the keys read from
-// there to a safe subset, but extensions are not named in it and this is from memory, so the file's presence alone skips the check.
+// git-lfs also reads .lfsconfig from the work tree root, the index and HEAD (3.7.1 source read, not run) and limits the keys read
+// from there to a safe subset; the file's presence in the work tree or HEAD alone skips the check (an index-only one is a known limit).
 test('a .lfsconfig in the work tree, or only in HEAD, skips the dirty check', () => {
   const inTree = lfsRepo((r) => r.write('.lfsconfig', '[lfs]\n\turl = https://example.invalid/lfs\n'));
   const inHead = makeRepo();
@@ -524,9 +524,9 @@ function hookCase(title, name, route) {
     const notes = path.join(repo.dir, 'notes.txt');
     const touch = (seconds) => fs.utimesSync(notes, Date.now() / 1000 + seconds, Date.now() / 1000 + seconds);
     try {
-      // `git status` rewrites the index when only a file's stat data changed, which runs post-index-change. The control is a
-      // plain spawn (the test helper passes core.hooksPath=/dev/null, which would switch the plant off). A git that has no
-      // hook.<name>.command (before 2.54) does not run it: the control is asserted only where this git has the feature.
+      // Plain `git status` rewrites the index when only a file's stat data changed, which runs post-index-change; gather runs with
+      // GIT_OPTIONAL_LOCKS=0 and rewrites nothing, so the marker below cannot fail by itself: dirty === null is what is checked
+      // (hook.* is skipped as defence in depth). git-gate.test.mjs proves the real hook file and the index bytes.
       touch(60);
       spawnSync('git', ['status', '--porcelain'], { cwd: repo.dir, env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull } });
       if (gitHasHookConfig()) assert.equal(fs.existsSync(marker), true, 'control: plain git status runs the planted hook command');
@@ -672,10 +672,10 @@ test('a config listing that exits 1 with no output (what the matcher failure loo
   }
 });
 
-test('a well-formed config listing with no core.repositoryformatversion of its own is refused', () => {
+test('a well-formed config listing with no entry of a repository of its own is refused', () => {
   const repo = featureRepo();
   try {
-    withGitStub(brokenListing(1, 0, 'local\\0user.name\\nx\\0global\\0core.repositoryformatversion\\n0\\0'), () => assert.throws(() => gatherGit({ repo: repo.dir }), /cannot read the git config/));
+    withGitStub(brokenListing(1, 0, 'global\\0user.name\\nx\\0system\\0core.repositoryformatversion\\n0\\0'), () => assert.throws(() => gatherGit({ repo: repo.dir }), /cannot read the git config/));
   } finally {
     repo.cleanup();
   }

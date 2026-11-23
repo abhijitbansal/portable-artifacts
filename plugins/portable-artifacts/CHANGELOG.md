@@ -8,12 +8,28 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [2.4.1] - 2026-11-23
 
-A security patch for make-explainer `gather` and make-scene `rows.mjs git`. If you run either one on a repository you did
-not make yourself (a download, an unpacked archive, a shared checkout, a pull-request branch), upgrade to 2.4.1. Until you
-do, do not run them on a repository you do not trust. Nothing else changes; pages build the same.
+A security patch for the page builders of make-diagram, make-explainer and make-scene, for make-explainer `gather` and for
+make-scene `rows.mjs git`. If you run any of them on a repository you did not make yourself (a download, an unpacked
+archive, a shared checkout, a pull-request branch), upgrade to 2.4.1 first. This lowers the risk; it does not make a
+hostile repository safe, and a sandbox is still the right place for a repository you expect to be hostile.
 
 ### Behaviour changes to know about
 
+- **The page builders ran the repository's own `core.fsmonitor` command.** When a page is built into
+  `<git root>/.scratch` (the default whenever the spec sits in a git repository), `build.mjs` and `make.mjs` of make-diagram,
+  make-explainer and make-scene ask git whether that folder is ignored, to print a one-line note. They asked with the
+  repository's own config in force, so its `core.fsmonitor` command ran, a missing `.gitignore` blob in a partial clone
+  could start a lazy fetch through the repository's remote settings, and a named pipe at `.gitignore` hung the build. By
+  reading the code, this has been so since 2.1.0 (not run on earlier versions). It was also the next step of the documented
+  recap flow, after `gather`. Now the question is asked with `--no-index`, `core.fsmonitor=false`, the repository's hooks off,
+  no lazy fetch, and a 5 second limit; a repository that cannot answer in time, or at all, gets no note.
+- **On macOS and Linux, a relative PATH entry could pick a `git` inside the repository.** git is started with the
+  repository as its folder, so a PATH entry such as `.`, an empty one (a leading or trailing `:`) or `node_modules/.bin`
+  finds a program of the repository's before the real one (run on macOS). By reading the code, 2.4.0 started git the same
+  way. The git environment of `gather`, `rows.mjs git` and the page builders now keeps only the absolute PATH entries;
+  with none left, git is reported as not installed instead of being looked up in the repository. The Windows spelling
+  (`Path`) and the `;` delimiter are handled and unit-tested through a platform option, not run on Windows; see the
+  Windows limit below.
 - **`gather` and `rows.mjs git` now read the repository's git config as raw bytes, and a config they cannot read counts
   as untrusted.** Before, they asked git to search the config for risky settings, and in a UTF-8 locale (the usual one) git
   fails that search without any output when a setting's name contains bytes that are not valid text. The 2.4.0 check
@@ -22,18 +38,46 @@ do, do not run them on a repository you do not trust. Nothing else changes; page
   repository's own remote settings (that route needs a git that ignores `GIT_NO_LAZY_FETCH`, see the correction below).
   Anyone who ran `gather` or `rows.mjs git` on an untrusted repository with 2.4.0 was
   exposed (versions before 2.4.0 had no check at all). Now:
-  - the whole config is listed and checked in Node, never matched by git, and a listing that fails, is malformed or does
-    not contain the repository's own settings makes `gather` and `rows.mjs git` refuse ("cannot read the git config"),
-    and makes the dirty check skip (`dirty` is `null`, with a warning) where it would otherwise have run;
-  - the uncommitted-changes check is also skipped when the repository's own config defines a hook (`hook.<name>`) or holds
-    any value with a line break (git-lfs reads `git config -l` line by line, so such a value can forge an
-    `lfs.extension` line), and the match on filter and `lfs.extension` names no longer depends on letter case;
+  - the whole config is listed (one call, at most 16 MiB) and checked in Node, never matched by git. A listing that fails,
+    is malformed or holds no entry of a repository of its own makes `gather` and `rows.mjs git` refuse ("cannot read the
+    git config"), and makes the dirty check skip (`dirty` is `null`, with a warning) where it would otherwise have run. A
+    repository config without `core.repositoryformatversion` is read, as in 2.4.0. A listing over 16 MiB, a git call that
+    times out and a missing git are each reported as themselves, and no second git call follows a timeout;
+  - the uncommitted-changes check is skipped when the repository's own config defines a filter driver, a git-lfs extension
+    (`lfs.extension.<name>`, in any letter case) or a hook (`hook.<name>`; a defence in depth, see below), when it holds
+    a value whose second or later line starts with `lfs.` (git-lfs reads `git config -l` line by line, so such a value can
+    forge a line), when it holds an `lfs.` key with a byte above 0x7f (by reading the git-lfs source, not run: git-lfs 2.4.2
+    and 2.5.0 fold key case with Unicode rules, which could turn such a key into an extension), or when
+    the work tree or HEAD has a `.lfsconfig`. An ordinary value with a line break, such as the description
+    `git branch --edit-description` writes, no longer skips it;
+  - when `git status` fails or is stopped, or `git ls-tree` fails, `dirty` is `null` with a warning that says the check
+    did not run. In 2.4.0 a failed `git status` gave `dirty: false`;
   - your global and system config still do not count, so a git-lfs repository set up with the default global
     `git lfs install` is unaffected; linked worktrees, submodule checkouts, `extensions.worktreeConfig` and sha256
     repositories still work.
-- **Every git call now runs with `LC_ALL=C`, the repository's hooks off (`core.hooksPath` at the null device) and
-  `safe.bareRepository=explicit`** (a git too old to have that setting ignores it), so a bare repository planted inside
-  the folder is not picked up. File names and commit subjects still come back exact.
+- **Every git call now runs with `LC_ALL=C` (except `git status`, which keeps your locale for your own global filters),
+  `core.fsmonitor=false`, the repository's hooks off (`core.hooksPath` at the null device), no optional locks and no lazy
+  fetches.** The hook and `hook.<name>` rules are defence in depth: git runs hooks only when it rewrites the index or
+  updates a ref, which these read-only calls do not do. The git environment also drops `GIT_SHALLOW_FILE`,
+  `GIT_GRAFT_FILE`, `GIT_REPLACE_REF_BASE`, `GIT_ATTR_SOURCE`, `GIT_REFERENCE_BACKEND`, `GIT_IMPLICIT_WORK_TREE`, `GIT_PREFIX`
+  and the `GIT_*_PATHSPECS` switches, which point git at other files or change how paths match.
+- **`gather` runs with `safe.bareRepository=explicit`** (a git too old to have that setting ignores it), so a bare
+  repository planted inside the folder is not picked up. `rows.mjs git` does not set it: it reads the repository you name,
+  so a bare or mirror clone works as in 2.4.0, and it runs only `config --list`, `rev-parse` and `log`. File names and commit subjects
+  still come back exact.
+
+### Known limits kept in this release
+
+- A second process that writes into the repository between `gather`'s config check and its `git status` is not guarded
+  against.
+- A `.lfsconfig` that exists only in the index is not seen by the skip rule.
+- `lfs.storage` in the repository's config can name where a global git-lfs filter stores objects.
+- Files git opens before the config check (`include.path` files, attribute and ignore files, the alternates): a named pipe
+  is stopped at the time limit; a network path would be opened (Windows UNC paths, Linux autofs mounts; not run).
+- On Windows, git is started by the name `git`, and Node's program lookup there is believed to start in the folder the
+  process is started in (from memory of libuv, not verified, not run on Windows), so a `git.exe` in the repository may be
+  found before PATH is consulted. The PATH rule above would not close that. Treat the PATH fix as macOS and Linux only,
+  and run a repository you do not trust on Windows in a sandbox.
 
 ### Correction to the 2.4.0 notes
 

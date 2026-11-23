@@ -57,12 +57,17 @@ test('repoOwnedConfig drops global, system and command entries and keeps the res
 });
 
 // Fail closed: null means "cannot tell", and both tools treat it as a hit.
-test('a failed git (null), an empty listing and a listing with no repository of its own are all null', () => {
+test('a failed git (null), an empty listing and a listing with no entry of a repository of its own are all null', () => {
   assert.equal(repoOwnedConfig(null), null);
   assert.equal(repoOwnedConfig(Buffer.alloc(0)), null);
   assert.equal(repoOwnedConfig(listing(['global', 'core.repositoryformatversion', '0'])), null, 'a global file is not the repository');
-  assert.equal(repoOwnedConfig(listing(['worktree', 'core.repositoryformatversion', '0'], ['local', 'user.name', 'x'])), null);
-  assert.equal(repoOwnedConfig(listing(['local', 'user.name', 'x'])), null);
+  assert.equal(repoOwnedConfig(listing(['system', 'user.name', 'x'], ['command', 'core.x', 'y'], ['unknown', 'credential.helper', 'osxkeychain'])), null, 'Apple git lists unknown-scope entries outside a repository');
+});
+
+test('any entry in scope local or worktree marks a repository: core.repositoryformatversion is not required', () => {
+  assert.deepEqual(keysOf(repoOwnedConfig(listing(['local', 'user.name', 'x']))), ['user.name']);
+  assert.deepEqual(keysOf(repoOwnedConfig(listing(['worktree', 'user.name', 'x']))), ['user.name']);
+  assert.deepEqual(keysOf(repoOwnedConfig(listing(['global', 'core.repositoryformatversion', '0'], ['local', 'core.bare', 'false']))), ['core.bare']);
 });
 
 test('an odd field count, a missing final NUL, an empty key or an odd scope is null', () => {
@@ -105,12 +110,30 @@ test('skips the dirty check for filter., lfs.extension. and hook. keys, in any c
   assert.equal(skips(['local', 'hook.\xff.command', 'x']), true);
 });
 
-test('skips the dirty check for any repository-owned value with a newline', () => {
+test('skips the dirty check for a repository-owned value with a line, after its first, that starts with lfs.', () => {
   const skips = (...rows) => skipsDirtyCheck(repoOwnedConfig(listing(VERSION, ...rows)));
   assert.equal(skips(['local', 'core.x', 'a\nlfs.extension.evil.clean=/bin/x']), true);
-  assert.equal(skips(['local', 'core.x', '\n']), true);
+  assert.equal(skips(['local', 'core.x', 'a\rlfs.extension.evil.clean=/bin/x']), true, 'a CR starts a line too');
+  assert.equal(skips(['local', 'core.x', 'a\r\n  \tLFS.Url=x']), true, 'trimmed and ASCII-lowercased');
+  assert.equal(skips(['local', 'core.x', 'a\nb\nlfs.x=1']), true, 'any later line');
+  assert.equal(skipsDirtyCheck(repoOwnedConfig(listing(VERSION, ['global', 'core.x', 'a\nlfs.extension.e.clean=1']))), false, 'the user\'s own file is not counted');
+});
+
+test('an ordinary value with a line break does not skip the dirty check (git branch --edit-description writes one)', () => {
+  const skips = (...rows) => skipsDirtyCheck(repoOwnedConfig(listing(VERSION, ...rows)));
+  assert.equal(skips(['local', 'branch.main.description', 'what it is for\n\n']), false);
+  assert.equal(skips(['local', 'core.x', '\n']), false);
   assert.equal(skips(['local', 'core.x', 'one line']), false);
-  assert.equal(skipsDirtyCheck(repoOwnedConfig(listing(VERSION, ['global', 'core.x', 'a\nb']))), false, 'the user\'s own file is not counted');
+  assert.equal(skips(['local', 'core.x', 'lfs.extension.e.clean=1']), false, 'the first line is the key\'s own value');
+  assert.equal(skips(['local', 'core.x', 'a\nnot lfs.extension.x\nxlfs.y']), false, 'the line must start with lfs.');
+});
+
+test('an lfs. key with a byte above 0x7f skips the dirty check; the same bytes outside lfs. do not', () => {
+  const skips = (...rows) => skipsDirtyCheck(repoOwnedConfig(listing(VERSION, ...rows)));
+  assert.equal(skips(['local', 'lfs.extens\xc4\xb0on.evil.clean', 'x']), true);
+  assert.equal(skips(['local', 'LFS.\xff.x', 'x']), true);
+  assert.equal(skips(['local', 'core.\xc4\xb0', 'x']), false);
+  assert.equal(skips(['local', 'lfs.url', 'https://x.invalid/\xc3\xa9']), false, 'a high byte in a value is fine');
 });
 
 test('ordinary local keys, including lfs ones, do not skip the dirty check', () => {

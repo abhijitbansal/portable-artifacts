@@ -56,8 +56,11 @@ warnings (a link a city does not draw, a blank title) without failing.
   chart needs make-dashboard. Plain worlds need neither.
 - `rows.mjs git` needs `git` 2.26 or later. It runs no command from the
   repository's own git config: it refuses a partial clone (use a full clone,
-  made without `--filter`) and stops a git call after 60 seconds. It reads that
-  config as raw bytes, so a name that is not valid text cannot hide a setting.
+  made without `--filter`), uses only the absolute entries of your PATH and
+  stops a git call after 60 seconds. It reads that config as raw bytes, so a
+  name that is not valid text cannot hide a setting. A bare or mirror clone you
+  name works. This lowers the risk; a sandbox is still the right place for a
+  repository you expect to be hostile.
 - **No browser is needed to validate or build.** Only `scripts/check.mjs` and
   the browser tests use one (Playwright and Chromium; without them they skip
   cleanly). To enable: `node scripts/doctor.mjs --for check --fix dev_deps,chromium`.

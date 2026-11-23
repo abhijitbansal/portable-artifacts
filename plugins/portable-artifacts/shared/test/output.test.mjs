@@ -49,7 +49,8 @@ test('scratchIgnoreNote: one line when the default folder is not ignored, nothin
   const note = scratchIgnoreNote(target, { exists, run: run(1) });
   assert.match(note, /^note: \.scratch\/ is not gitignored in /);
   assert.ok(!note.includes('\n'));
-  assert.deepEqual(calls[0].slice(0, 4), ['git', '-C', path.resolve('/repo'), 'check-ignore']);
+  assert.equal(calls[0][0], 'git');
+  assert.deepEqual(calls[0].slice(-5), ['check-ignore', '--no-index', '-q', '--', path.join('.scratch', 't.html')]);
   assert.equal(scratchIgnoreNote(target, { exists, run: run(0) }), null, 'ignored');
   assert.equal(scratchIgnoreNote(target, { exists, run: run(128) }), null, 'git failed: stay quiet');
   assert.equal(scratchIgnoreNote(target, { exists, run: () => ({ error: new Error('ENOENT') }) }), null, 'no git binary');

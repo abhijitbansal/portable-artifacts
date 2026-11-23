@@ -323,15 +323,22 @@ Each skill folder also has its own README.
   and the CLIs that print such text to the agent escape invisible characters
   (bidi controls, zero-width and Tag characters) as `\u{XXXX}` and cap long
   values.
-- **`gather.mjs` and `rows.mjs git` do not run commands from a repository's own
-  git config.** They refuse a partial clone and git older than 2.26, skip
-  `gather`'s uncommitted-changes check when that config defines a filter, a
-  git-lfs extension or a hook, or holds a value with a line break (or the work
-  tree has a `.lfsconfig`), and stop a git call after 60 seconds. They read that
-  config as raw bytes, so a name that is not valid text cannot hide a setting,
-  and a config they cannot read is refused or skipped, never taken as clean.
-  Every git call also runs with `LC_ALL=C`, the repository's hooks off and
-  bare-repository discovery off.
+- **`gather.mjs`, `rows.mjs git` and the page builders do not run commands from
+  a repository's own git config.** `gather` and `rows.mjs git` refuse a partial
+  clone and git older than 2.26, skip `gather`'s uncommitted-changes check when
+  that config defines a filter, a git-lfs extension or a hook (a hook as defence
+  in depth), holds a value that forges an `lfs.` line (or an `lfs.` key with a
+  non-ASCII byte), or the work tree has a `.lfsconfig`, and stop a git call after
+  60 seconds. They read that config as raw bytes, so a name that is not valid
+  text cannot hide a setting, and a config they cannot read, or a `git status`
+  that fails, is refused or skipped, never taken as clean. Every git call runs
+  with `core.fsmonitor` off, the repository's hooks off, no lazy fetch and a
+  PATH of absolute entries only (on macOS and Linux a `.` or empty entry cannot
+  pick a `git` inside the repository; on Windows, not run or closed here, use a
+  sandbox); `gather` also turns bare-repository discovery off. The page
+  builders' "is `.scratch/` ignored" note is asked the same way, with
+  `--no-index` and a 5 second limit. This lowers the risk; a sandbox is still
+  the right place for a repository you expect to be hostile.
 - **No network from specs.** Chart `url`/`data`/`usermeta` keys are rejected at
   any depth; a make-motion film can't name a remote URL or a file outside its folder; pages run under a CSP without
   `unsafe-eval`; the renderer aborts any non-local request; local servers bind

@@ -17,9 +17,11 @@ export const CONFIG_LIST_ARGS = ['config', '--list', '--includes', '--show-scope
 // .git/config, its config.worktree, a file either includes, an unknown scope) is the repository's own.
 const USER_SCOPES = new Set(['global', 'system', 'command']);
 const SCOPE = /^[a-z]+$/;
-// Every repository has this key in its own config (linked worktrees and submodule checkouts read the shared or the
-// module's config, still scope `local`); a listing without it is not a listing of a repository, so it is unreadable.
-const REPO_MARKER = 'core.repositoryformatversion';
+// The marker that the listing is of a repository: any entry in scope `local` (the repository's own config; linked worktrees and
+// submodule checkouts read the shared or the module's config, still `local`) or `worktree` (config.worktree). A folder that is
+// not a repository lists only global, system, command and, on Apple git, `unknown` scopes, so it is unreadable here.
+// Not core.repositoryformatversion: git accepts a config without it (very old repositories, some non-git writers).
+const REPO_SCOPES = new Set(['local', 'worktree']);
 
 // ASCII only: a latin1 `toLowerCase` would fold high bytes (0xC3 to 0xE3) and change what a name is.
 const lowerAscii = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
@@ -50,14 +52,14 @@ export function parseConfigList(stdout) {
 
 /**
  * The entries the repository owns (every scope but global, system and command), from the stdout of the listing; pass null
- * when git failed or could not run. Null when the config cannot be read (a failure, a malformed listing, or no repository
- * of its own in it): treat it as a hit.
+ * when git failed or could not run. Null when the config cannot be read (a failure, a malformed listing, or no entry of a
+ * repository of its own in it): treat it as a hit.
  */
 export function repoOwnedConfig(stdout) {
   if (stdout === null || stdout === undefined) return null;
   const entries = parseConfigList(stdout);
   if (entries === null) return null;
-  if (!entries.some((e) => e.scope === 'local' && e.key === REPO_MARKER)) return null;
+  if (!entries.some((e) => REPO_SCOPES.has(e.scope))) return null;
   return entries.filter((e) => !USER_SCOPES.has(e.scope));
 }
 
@@ -71,13 +73,21 @@ export function isPartialClone(entries) {
     || (key.startsWith('remote.') && (key.endsWith('.promisor') || key.endsWith('.partialclonefilter'))));
 }
 
+const HIGH_BYTE = /[\x80-\xff]/;
+
+// git-lfs reads `git config -l` line by line, so a value can forge a line. Only a line after the value's first (split on LF or
+// CR), trimmed and ASCII-lowercased, that starts with `lfs.` is a forged lfs key; the first line is the real key's own, and
+// an ordinary value with a line break (git branch --edit-description writes one) is not a forgery.
+const forgesLfsLine = (value) => value !== null && value.split(/[\n\r]/).slice(1).some((line) => lowerAscii(line.trim()).startsWith('lfs.'));
+
 /**
  * True when the repository's own config holds something git or git-lfs would run while comparing files: a filter driver
- * (`filter.<name>.*`), a git-lfs extension (`lfs.extension.<name>.*`), a hook (`hook.<name>.*`), or any value with a
- * line break (git-lfs reads `git config -l` line by line, so a value can forge a line that names an extension).
- * Ordinary local lfs keys (`lfs.repositoryformatversion`, `lfs.url`) do not count.
+ * (`filter.<name>.*`), a git-lfs extension (`lfs.extension.<name>.*`), a value that forges an `lfs.` line (above), an `lfs.`
+ * key with a byte above 0x7f (by reading the git-lfs source, not run: 2.4.2 and 2.5.0 fold case with Unicode rules, which
+ * could turn such a key into `lfs.extension.`), or a hook (`hook.<name>.*`; defence in depth: git runs hooks only when it rewrites the index or updates a
+ * ref, which the read-only calls here do not). Ordinary local lfs keys (`lfs.repositoryformatversion`, `lfs.url`) do not count.
  */
 export function skipsDirtyCheck(entries) {
   return entries.some(({ key, value }) => key.startsWith('filter.') || key.startsWith('lfs.extension.') || key.startsWith('hook.')
-    || (value !== null && value.includes('\n')));
+    || (key.startsWith('lfs.') && HIGH_BYTE.test(key)) || forgesLfsLine(value));
 }

@@ -4,36 +4,21 @@
 // user can fix (not a repository, a base that does not exist, no commits, no shared
 // history) is a UsageError that names the fix.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { UsageError } from '../../shared/cli.mjs';
-import { CONFIG_LIST_ARGS, repoOwnedConfig, isPartialClone, skipsDirtyCheck } from '../../shared/git-config.mjs';
+import { repoOwnedConfig, isPartialClone, skipsDirtyCheck } from '../../shared/git-config.mjs';
+import { GIT_TIMEOUT_MS, hardenedGitEnv, gitBaseArgs, spawnGit, gitErrorMessage, listConfig } from '../../shared/git-run.mjs';
 
 const MAX_BUFFER = 256 * 1024 * 1024;
-// A git call that has not finished in this long is stopped: a named pipe where git reads .gitattributes or an ignore file
-// would otherwise block gather for good.
-const GIT_TIMEOUT_MS = 60 * 1000;
-// Test seams, set only by gatherGit({ _test }): a shorter time limit, and the environment of a git that ignores
-// GIT_NO_LAZY_FETCH (before 2.45.0, or 2.44.0), so the config check alone is proved to keep a partial clone out.
+// Test seams, set only by gatherGit({ _test }): a shorter time limit (a git call that has not finished in the limit is stopped:
+// a named pipe where git reads .gitattributes or an ignore file would otherwise block gather for good), and the environment of a
+// git that ignores GIT_NO_LAZY_FETCH (before 2.45.0, or 2.44.0), so the config check alone is proved to keep a partial clone out.
 const seams = { timeoutMs: GIT_TIMEOUT_MS, omitLazyFetchEnv: false };
 const BASE_NAMES = ['main', 'master'];
 const SHOWN_BRANCHES = 10;
 const SHORT_SHA = 7;
 // A copy (C) is a new file that remembers its source; scaffold notes it like a rename.
 const CHANGES = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'added', T: 'modified' };
-// These GIT_* variables point git at a different repository, object store, index or discovery root than
-// --repo names, so the child gets none of them; nor the config injectors (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and
-// the GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n pairs), which can set core.fsmonitor or a diff driver from outside the repo;
-// nor the legacy GIT_CONFIG, which makes `git config` read another file than the repository's (the config check below).
-// Everything else (GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM, which are the user's own files and hold safe.directory,
-// GIT_EXEC_PATH, identity, GIT_EXTERNAL_DIFF, ...) passes through: --no-ext-diff and --no-pager keep the output free of helpers.
-const REDIRECTING_ENV = new Set([
-  'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-  'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
-  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG',
-]);
-const CONFIG_PAIR_ENV = /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/;
 
 // A test file is code that lives in a test folder or has a test-shaped name. Fixtures, goldens,
 // helpers and snapshots inside a test folder support the tests; data and docs are not tests.
@@ -45,42 +30,25 @@ const TEST_NAME = /(^|\/)test_[^/]*$|[._-]tests?\.[A-Za-z0-9]+$|[._-]spec\.[A-Za
 const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
- * The environment git runs in: `source` without the repo-redirecting variables, and no prompts, optional locks or lazy
- * fetches. A partial clone would otherwise fetch missing objects through the repository's own remote.<name>.uploadpack,
- * core.sshCommand or credential helper (git 2.45.0 honours GIT_NO_LAZY_FETCH, as do the backports 2.39.4, 2.43.4 and
- * 2.44.1 among others; 2.44.0 and older releases without the backport ignore it). LC_ALL=C: git's own text and key
- * matching must not depend on the user's locale (`config --get-regexp` fails on bytes that are not valid UTF-8 in a UTF-8
- * locale); the config check below does not use git's matcher either.
+ * The environment git runs in (see hardenedGitEnv in shared/git-run.mjs): no variable that redirects git, no prompts, optional
+ * locks or lazy fetches, a PATH of absolute entries only, and LC_ALL=C. `keepLocale` leaves the user's locale for the one call
+ * (`status`) that may run the user's own global filters, which can depend on it. The user's own git config stays readable
+ * (safe.directory lives there).
  */
-export function gitEnv(source) {
-  const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
-  env.LC_ALL = 'C';
-  env.GIT_OPTIONAL_LOCKS = '0';
-  env.GIT_TERMINAL_PROMPT = '0';
-  if (!seams.omitLazyFetchEnv) env.GIT_NO_LAZY_FETCH = '1';
-  else delete env.GIT_NO_LAZY_FETCH;
-  return env;
+export function gitEnv(source, { keepLocale = false } = {}) {
+  return hardenedGitEnv(source, { omitLazyFetchEnv: seams.omitLazyFetchEnv, keepLocale });
 }
 
-// git only, an argv array, no shell. `-c core.fsmonitor=false`: `git status` would otherwise run the command a
-// repository's own config names there. `-c core.hooksPath=<null device>`: no hook of the repository (a .git/hooks file or
-// a hooksPath in its config) can run. `-c safe.bareRepository=explicit`: git does not discover a bare repository from
-// the folder it starts in (one planted inside a work tree); a linked worktree or a submodule checkout is not bare and is
-// unaffected. Other commands a repository's config can name (filter drivers, hook.<name>.command, a remote's uploadpack
-// through a lazy fetch) are handled where they would run: isDirty and gitEnv. `raw` returns stdout as a Buffer.
-function run(cwd, args, { raw = false } = {}) {
+// git only, an argv array, no shell; the guards (config overrides, environment, PATH, limits) are in shared/git-run.mjs.
+// `raw` returns stdout as a Buffer. `soft`: a spawn error (timeout, output over the limit) comes back as { ok: false } instead of
+// a UsageError, for the one call whose failure is told to the reader as a skipped check (status).
+function run(cwd, args, { raw = false, keepLocale = false, soft = false } = {}) {
   // log.mailmap=false: git reads .mailmap from the work tree, and a named pipe there would block `git log` (names are not used).
-  const base = [
-    '--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'log.mailmap=false', '-c', 'core.fsmonitor=false',
-    '-c', `core.hooksPath=${os.devNull}`, '-c', 'safe.bareRepository=explicit',
-  ];
-  const r = spawnSync('git', [...base, ...args], {
-    cwd, encoding: raw ? 'buffer' : 'utf8', env: gitEnv(process.env), maxBuffer: MAX_BUFFER, timeout: seams.timeoutMs, killSignal: 'SIGKILL',
-  });
+  const base = [...gitBaseArgs(), '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'log.mailmap=false'];
+  const r = spawnGit(cwd, [...base, ...args], { env: gitEnv(process.env, { keepLocale }), timeoutMs: seams.timeoutMs, maxBuffer: MAX_BUFFER, raw });
   if (r.error) {
-    if (r.error.code === 'ETIMEDOUT') throw new UsageError(`git did not finish within ${seams.timeoutMs / 1000} seconds in ${cwd} and was stopped; look for a named pipe or another file git cannot read (.gitattributes, .gitignore, .mailmap) in the repository`);
-    if (r.error.code === 'ENOENT') throw new UsageError('git is not installed or not on PATH; install it, then retry');
-    throw new UsageError(`cannot run git: ${r.error.code ?? r.error.message}`);
+    if (soft) return { ok: false, status: null, out: '', err: gitErrorMessage(r.error, { cwd, timeoutMs: seams.timeoutMs, bufferText: '' }) };
+    throw new UsageError(gitErrorMessage(r.error, { cwd, timeoutMs: seams.timeoutMs, bufferText: `git output in ${cwd} is over 256 MiB; pass a --base nearer this branch` }));
   }
   return { ok: r.status === 0, status: r.status, out: r.stdout, err: r.stderr.toString('utf8').trim() };
 }
@@ -253,7 +221,7 @@ function gatherFacts(dir, base) {
   const tip = run(root, ['log', '-1', '--format=%cs', 'HEAD', '--']);
   const current = currentBranch(root);
   const commits = readCommits(root, `${mergeBase}..HEAD`);
-  const dirty = isDirty(root);
+  const { dirty, why } = isDirty(root);
   return {
     repo: path.basename(root),
     ...current,
@@ -264,18 +232,18 @@ function gatherFacts(dir, base) {
     tests: files.filter((f) => f.change !== 'deleted' && isTestPath(f.path)).map((f) => f.path),
     date: tip.out.trim(),
     dirty,
-    warnings: factWarnings({ branch: current.branch, baseRef, commits, dirty }),
+    warnings: factWarnings({ branch: current.branch, baseRef, commits, dirty, why }),
   };
 }
 
 // The entries of the repository's own config (not global, system or command-line), or null when the config cannot be read
 // (fail closed: the caller treats null as a hit). The whole listing is read as bytes and decided in shared/git-config.mjs,
 // never matched by git: `config --get-regexp` fails with no output on a key that is not valid UTF-8, which looked like "no
-// match". Reading config runs nothing. Any failure, a malformed listing, or a listing with no repository of its own in it
-// is null. The listing includes include.path files and config.worktree. Needs git 2.26 or later; older git fails closed.
+// match". Reading config runs nothing. Any failure, a malformed listing, or a listing with no entry of a repository of its
+// own is null; a timeout or a listing over 16 MiB is an error in its own words (listConfig throws). The listing includes
+// include.path files and config.worktree. Needs git 2.26 or later; older git fails closed.
 function repoConfig(root) {
-  const listed = run(root, CONFIG_LIST_ARGS, { raw: true });
-  return repoOwnedConfig(listed.ok ? listed.out : null);
+  return repoOwnedConfig(listConfig(root, { base: gitBaseArgs(), env: gitEnv(process.env), timeoutMs: seams.timeoutMs }));
 }
 
 // A partial clone fetches missing objects on demand, and that fetch runs the repository's own remote.<name>.uploadpack,
@@ -285,36 +253,43 @@ function repoConfig(root) {
 // git wrote extensions.partialclone: all three count.
 function assertFullClone(root) {
   const config = repoConfig(root);
-  if (config === null) throw new UsageError(`cannot read the git config of ${root} (gather needs git 2.26 or later); check \`git config --list --show-scope\` there`);
+  if (config === null) throw new UsageError(`cannot read the git config of ${root} (gather needs git 2.26 or later, and a config with entries of the repository's own); check \`git config --list --show-scope\` there`);
   if (isPartialClone(config)) throw new UsageError('this is a partial clone (its config says missing objects are fetched on demand, which runs the repository\'s own remote settings); run gather on a full clone, made without --filter');
 }
 
 // True when the repository's own config defines something git or git-lfs would run to compare files, or when that cannot
-// be told: a filter driver, a git-lfs extension, a hook.<name> command, or a value with a line break. `git status` runs a
-// driver's clean command on every tracked file whose stat data differs from the index, which an unpacked archive makes all
-// of them. A git-lfs filter, even a global one, runs the repository's lfs.extension.<name>.clean itself, so those keys
-// count too, and git-lfs reads `git config -l` line by line, so a value with a line break can forge one. git-lfs also reads
-// .lfsconfig from the work tree root or HEAD; its documentation limits that file to a safe subset of keys but this is from
-// memory, so the file's presence alone counts. Global and system drivers are the user's own: they stay active and are not counted.
+// be told: a filter driver, a git-lfs extension, a value that forges an lfs. line (skipsDirtyCheck), or, as defence in depth, a
+// hook.<name> command. `git status` runs a driver's clean command on every tracked file whose stat data differs from the
+// index, which an unpacked archive makes all of them. A git-lfs filter, even a global one, runs the repository's
+// lfs.extension.<name>.clean itself, so those keys count too. git-lfs 3.7.1 also reads .lfsconfig from the work tree root, then
+// from the index, then from HEAD (source read, not run); its OnlySafeKeys limits that file to a safe subset, but the file's
+// presence alone counts here. An index-only .lfsconfig is not seen: a known limit. A failed ls-tree counts as a hit.
+// Global and system drivers are the user's own: they stay active and are not counted.
 function repoRunsCommandsToCompare(root) {
   const config = repoConfig(root);
   if (config === null || skipsDirtyCheck(config)) return true;
   if (fs.lstatSync(path.join(root, '.lfsconfig'), { throwIfNoEntry: false }) !== undefined) return true;
-  return run(root, ['ls-tree', '--name-only', 'HEAD', '.lfsconfig']).out.trim() !== '';
+  const tree = run(root, ['ls-tree', '--name-only', 'HEAD', '.lfsconfig']);
+  return !tree.ok || tree.out.trim() !== '';
 }
 
-// Uncommitted work: a modified or staged tracked file, or an untracked one that is not ignored. null when the check was
-// skipped. --ignore-submodules=all: a submodule's own config and .gitattributes (under .git/modules) would be read by the
-// status git starts inside it, past the check above, so edits inside a submodule are not counted.
+// Uncommitted work: a modified or staged tracked file, or an untracked one that is not ignored. -> { dirty, why }: dirty is null
+// when the check did not run, and `why` says which: 'config' (skipped, see repoRunsCommandsToCompare) or 'failed' (git status
+// failed or was stopped: never read as clean). --ignore-submodules=all: a submodule's own config and .gitattributes (under
+// .git/modules) would be read by the status git starts inside it, past the check above, so edits inside a submodule are not
+// counted. status keeps the user's locale: it may run the user's own global filters, which can depend on it.
+// Known limit: a second process that writes into the repository between the config check and status is not guarded against.
 function isDirty(root) {
-  if (repoRunsCommandsToCompare(root)) return null;
-  return run(root, ['status', '--porcelain', '--ignore-submodules=all']).out.trim() !== '';
+  if (repoRunsCommandsToCompare(root)) return { dirty: null, why: 'config' };
+  const status = run(root, ['status', '--porcelain', '--ignore-submodules=all'], { keepLocale: true, soft: true });
+  return status.ok ? { dirty: status.out.trim() !== '', why: null } : { dirty: null, why: 'failed' };
 }
 
 // What a script cannot fix but the reader should know before trusting the facts.
-function factWarnings({ branch, baseRef, commits, dirty }) {
+function factWarnings({ branch, baseRef, commits, dirty, why }) {
   const out = [];
-  if (dirty === null) out.push('this repository\'s own git config defines a filter driver or a git-lfs extension (or a hook, a value with a line break, a config that cannot be read, or the work tree has a .lfsconfig); skipped the uncommitted-changes check (dirty is unknown), because git would run that command to compare files');
+  if (why === 'config') out.push('this repository\'s own git config defines a filter driver or a git-lfs extension (or a value that forges an lfs. line, a hook as defence in depth, a config that cannot be read, or the work tree has a .lfsconfig); skipped the uncommitted-changes check (dirty is unknown), because git or git-lfs may run a command from it to compare files');
+  if (why === 'failed') out.push('git status failed or was stopped, so the uncommitted-changes check did not run (dirty is unknown); run `git status` there to see why');
   if (commits.length === 0) out.push(`no commits on ${branch} beyond ${baseRef}, so a recap would be empty; check out the feature branch, or pass --base <the branch it started from>`);
   if (dirty) out.push('the work tree has uncommitted changes; these facts cover committed work only, so commit them first if the recap should include them');
   return out;

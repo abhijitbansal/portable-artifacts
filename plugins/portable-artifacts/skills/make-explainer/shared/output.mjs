@@ -1,11 +1,12 @@
 // Where a built page goes. In order: --out (file or directory); $PA_OUTPUT_DIR; <git root>/.scratch/<slug>.html when
 // the spec sits inside a git repo; else ~/.agent/diagrams/<slug>.html. Never anywhere implicit but those.
-// Shared by every skill that writes a page. Node built-ins only.
+// Shared by every skill that writes a page. Node built-ins and shared/git-run.mjs only.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { SCRATCH_TIMEOUT_MS, hardenedGitEnv, gitBaseArgs, spawnGit } from './git-run.mjs';
 
 const MAX_SLUG = 60;
 const DEFAULT_FALLBACK = 'diagram';
@@ -46,14 +47,19 @@ export function resolveOutput({ out, title, fallback = DEFAULT_FALLBACK, specPat
 
 /**
  * One line to print after a build into <git root>/.scratch when git does not ignore that folder, else null.
- * Silent when the target is elsewhere, when git is missing, or when git cannot answer.
+ * Silent when the target is elsewhere, when git is missing, or when git cannot answer (an error, a timeout, any status but 1).
+ * The repository may not be the user's own, so the question must not let it run anything (shared/git-run.mjs): `--no-index`
+ * (the index is not read, so no fsmonitor query and no lazy fetch of a blob that is missing), the hardened environment and
+ * config overrides, and a short time limit (a named pipe at .gitignore would block git for good). `run` and `timeoutMs` are
+ * test seams.
  */
-export function scratchIgnoreNote(target, { exists = fs.existsSync, run = spawnSync } = {}) {
+export function scratchIgnoreNote(target, { exists = fs.existsSync, run = spawnSync, timeoutMs = SCRATCH_TIMEOUT_MS } = {}) {
   const scratch = path.dirname(path.resolve(target));
   if (path.basename(scratch) !== SCRATCH_DIR) return null;
   const root = path.dirname(scratch);
   if (!exists(path.join(root, '.git'))) return null;
-  const result = run('git', ['-C', root, 'check-ignore', '-q', '--', path.join(SCRATCH_DIR, path.basename(target))], { stdio: 'ignore' });
+  const args = [...gitBaseArgs(), 'check-ignore', '--no-index', '-q', '--', path.join(SCRATCH_DIR, path.basename(target))];
+  const result = spawnGit(root, args, { env: hardenedGitEnv(process.env), timeoutMs, spawn: run });
   if (result.error || result.status !== 1) return null;
   return `note: ${SCRATCH_DIR}/ is not gitignored in ${root}; add ${SCRATCH_DIR}/ to .gitignore (or .git/info/exclude) so built pages stay out of commits`;
 }
