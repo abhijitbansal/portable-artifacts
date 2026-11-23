@@ -3,7 +3,7 @@
 // Prints the facts of the checked-out branch as JSON: branch, base, merge base, commits,
 // changed files (with +/- counts, renames and binaries), test files, date. Committed work
 // only (a warning on stderr says when there are none or when the work tree has uncommitted changes; the facts
-// carry `dirty` (null when skipped) and `warnings` too); nothing is written except the --out file. Feed the output to scaffold.mjs --facts.
+// carry `dirty` (null when skipped) and `warnings` too; a partial clone is refused); nothing is written except the --out file. Feed the output to scaffold.mjs --facts.
 // exit 0 ok, 2 usage / not a repository / no such base
 import { gatherGit } from './lib/git.mjs';
 import { emit } from './lib/write-out.mjs';

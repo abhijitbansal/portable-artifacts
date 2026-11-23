@@ -9,6 +9,12 @@ import { spawnSync } from 'node:child_process';
 import { UsageError } from '../../shared/cli.mjs';
 
 const MAX_BUFFER = 256 * 1024 * 1024;
+// A git call that has not finished in this long is stopped: a named pipe where git reads .gitattributes or an ignore file
+// would otherwise block gather for good.
+const GIT_TIMEOUT_MS = 60 * 1000;
+// Test seams, set only by gatherGit({ _test }): a shorter time limit, and the environment of a git that ignores
+// GIT_NO_LAZY_FETCH (before 2.44), so the config check alone is proved to keep a partial clone out.
+const seams = { timeoutMs: GIT_TIMEOUT_MS, omitLazyFetchEnv: false };
 const BASE_NAMES = ['main', 'master'];
 const SHOWN_BRANCHES = 10;
 const SHORT_SHA = 7;
@@ -45,7 +51,8 @@ export function gitEnv(source) {
   const env = Object.fromEntries(Object.entries(source).filter(([k]) => !REDIRECTING_ENV.has(k) && !CONFIG_PAIR_ENV.test(k)));
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
-  env.GIT_NO_LAZY_FETCH = '1';
+  if (!seams.omitLazyFetchEnv) env.GIT_NO_LAZY_FETCH = '1';
+  else delete env.GIT_NO_LAZY_FETCH;
   return env;
 }
 
@@ -53,9 +60,13 @@ export function gitEnv(source) {
 // repository's own config names there. Other commands a repository's config can name (filter drivers, a remote's
 // uploadpack through a lazy fetch) are handled where they would run: isDirty and gitEnv.
 function run(cwd, args) {
-  const base = ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'core.fsmonitor=false'];
-  const r = spawnSync('git', [...base, ...args], { cwd, encoding: 'utf8', env: gitEnv(process.env), maxBuffer: MAX_BUFFER });
+  // log.mailmap=false: git reads .mailmap from the work tree, and a named pipe there would block `git log` (names are not used).
+  const base = ['--no-pager', '-c', 'core.quotepath=off', '-c', 'log.showSignature=false', '-c', 'log.mailmap=false', '-c', 'core.fsmonitor=false'];
+  const r = spawnSync('git', [...base, ...args], {
+    cwd, encoding: 'utf8', env: gitEnv(process.env), maxBuffer: MAX_BUFFER, timeout: seams.timeoutMs, killSignal: 'SIGKILL',
+  });
   if (r.error) {
+    if (r.error.code === 'ETIMEDOUT') throw new UsageError(`git did not finish within ${seams.timeoutMs / 1000} seconds in ${cwd} and was stopped; look for a named pipe or another file git cannot read (.gitattributes, .gitignore, .mailmap) in the repository`);
     if (r.error.code === 'ENOENT') throw new UsageError('git is not installed or not on PATH; install it, then retry');
     throw new UsageError(`cannot run git: ${r.error.code ?? r.error.message}`);
   }
@@ -201,8 +212,20 @@ export function isTestPath(p) {
  * -> { repo, branch, detached, base, mergeBase, commits: [{ sha, date, subject }],
  *      files: [{ path, oldPath?, change, add, del, binary }], tests: [path], date, dirty (null: check skipped, see isDirty), warnings: [text] }
  */
-export function gatherGit({ repo: dir = '.', base } = {}) {
+export function gatherGit({ repo: dir = '.', base, _test = {} } = {}) {
+  seams.timeoutMs = _test.timeoutMs ?? GIT_TIMEOUT_MS;
+  seams.omitLazyFetchEnv = _test.omitLazyFetchEnv === true;
+  try {
+    return gatherFacts(dir, base);
+  } finally {
+    seams.timeoutMs = GIT_TIMEOUT_MS;
+    seams.omitLazyFetchEnv = false;
+  }
+}
+
+function gatherFacts(dir, base) {
   const root = repoRoot(path.resolve(dir));
+  assertFullClone(root);
   if (!commitExists(root, 'HEAD')) throw new UsageError(`${root} has no commits yet; commit something, then retry`);
   const baseRef = resolveBase(root, base);
   const merge = run(root, ['merge-base', baseRef, 'HEAD']);
@@ -234,16 +257,38 @@ export function gatherGit({ repo: dir = '.', base } = {}) {
 // either pulls in) is the repository's own, and a filter driver there is a command the repository chooses.
 const USER_SCOPES = new Set(['global', 'system']);
 
-// True when the repository's own config defines any filter driver, or when that cannot be told (fail closed).
+// The config keys matching `pattern` that the repository owns (not global or system), or null when the config cannot be
+// listed (fail closed: the caller treats null as a hit). Reading config runs nothing. --show-scope also marks config.worktree,
+// which `--local` misses, and --includes follows include.path and includeIf. Exit 1 with no output is "no match". A name
+// cannot forge the scope: it is the first tab-separated field, printed by git. Needs git 2.26 or later; older git fails closed.
+function repoOwnedKeys(root, pattern) {
+  const listed = run(root, ['config', '--includes', '--show-scope', '--name-only', '--get-regexp', pattern]);
+  if (listed.status === 1 && listed.out === '') return [];
+  if (!listed.ok) return null;
+  return listed.out.split('\n').filter((line) => line !== '' && !USER_SCOPES.has(line.split('\t')[0]));
+}
+
+// A partial clone fetches missing objects on demand, and that fetch runs the repository's own remote.<name>.uploadpack,
+// core.sshCommand, credential helper or transport. GIT_NO_LAZY_FETCH stops it on git 2.44 and later only, and gather reads
+// objects (diff, log) before anything else, so the config is checked first, on any git version. A clone made with a filter
+// writes remote.<name>.promisor (and partialclonefilter); an older git wrote extensions.partialclone: all three count.
+function assertFullClone(root) {
+  const keys = repoOwnedKeys(root, '^(extensions\\.partialclone|remote\\..*\\.(promisor|partialclonefilter))$');
+  if (keys === null) throw new UsageError(`cannot read the git config of ${root} (gather needs git 2.26 or later); check \`git config --list --show-scope\` there`);
+  if (keys.length > 0) throw new UsageError('this is a partial clone (its config says missing objects are fetched on demand, which runs the repository\'s own remote settings); run gather on a full clone, made without --filter');
+}
+
+// True when the repository's own config defines a filter driver or a git-lfs extension, or when that cannot be told.
 // `git status` runs a driver's clean command on every tracked file whose stat data differs from the index, which an
-// unpacked archive makes all of them. Reading config runs nothing. --show-scope also marks config.worktree, which
-// `--local` misses, and --includes follows include.path and includeIf. Global and system drivers (git-lfs) are the
-// user's own: they stay active and are not counted.
+// unpacked archive makes all of them. A git-lfs filter, even a global one, runs the repository's lfs.extension.<name>.clean
+// itself, so those keys count too. git-lfs also reads .lfsconfig from the work tree root or HEAD; its documentation
+// limits that file to a safe subset of keys but this is from memory, so the file's presence alone counts. Global and system
+// drivers are the user's own: they stay active and are not counted.
 function repoDefinesFilter(root) {
-  const listed = run(root, ['config', '--includes', '--show-scope', '--name-only', '--get-regexp', '^filter\\.']);
-  if (listed.status === 1 && listed.out === '') return false;
-  if (!listed.ok) return true;
-  return listed.out.split('\n').some((line) => line !== '' && !USER_SCOPES.has(line.split('\t')[0]));
+  const keys = repoOwnedKeys(root, '^(filter\\.|lfs\\.extension\\.)');
+  if (keys === null || keys.length > 0) return true;
+  if (fs.lstatSync(path.join(root, '.lfsconfig'), { throwIfNoEntry: false }) !== undefined) return true;
+  return run(root, ['ls-tree', '--name-only', 'HEAD', '.lfsconfig']).out.trim() !== '';
 }
 
 // Uncommitted work: a modified or staged tracked file, or an untracked one that is not ignored. null when the check was
@@ -257,7 +302,7 @@ function isDirty(root) {
 // What a script cannot fix but the reader should know before trusting the facts.
 function factWarnings({ branch, baseRef, commits, dirty }) {
   const out = [];
-  if (dirty === null) out.push('this repository\'s own git config defines a filter driver; skipped the uncommitted-changes check (dirty is unknown), because git would run that command to compare files');
+  if (dirty === null) out.push('this repository\'s own git config defines a filter driver or a git-lfs extension (or the work tree has a .lfsconfig); skipped the uncommitted-changes check (dirty is unknown), because git would run that command to compare files');
   if (commits.length === 0) out.push(`no commits on ${branch} beyond ${baseRef}, so a recap would be empty; check out the feature branch, or pass --base <the branch it started from>`);
   if (dirty) out.push('the work tree has uncommitted changes; these facts cover committed work only, so commit them first if the recap should include them');
   return out;
