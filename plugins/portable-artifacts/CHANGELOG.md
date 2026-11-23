@@ -6,6 +6,10 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-11-23
+
+- The vertical showreel now plays one whoosh per cut, where it played several.
+
 ## [2.3.0] - 2026-11-22
 
 A make-motion release: films are tagged and converted as BT.709, the review says more about how a frame is composed and

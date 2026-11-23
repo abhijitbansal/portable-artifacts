@@ -8,6 +8,15 @@
   "music": { "bed": "pulse", "bpm": 124 },
   "captions": true,
   "overlays": { "progress": true },
+  "cues": [
+    { "at": "sentence:2", "cue": "whoosh" },
+    { "at": "sentence:3", "cue": "whoosh" },
+    { "at": "sentence:4", "cue": "whoosh" },
+    { "at": "sentence:5", "cue": "whoosh" },
+    { "at": "sentence:6", "cue": "whoosh" },
+    { "at": "sentence:8", "cue": "whoosh" },
+    { "at": "sentence:10", "cue": "whoosh" }
+  ],
   "generatedBy": { "model": "claude-sonnet-5-5", "effort": "high", "agent": "Claude Code" },
   "shots": [
     {

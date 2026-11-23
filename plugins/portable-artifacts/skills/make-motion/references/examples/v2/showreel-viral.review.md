@@ -1,6 +1,6 @@
 # showreel-viral: director's notes (F1b, the showreel shows what is new in the vertical film)
 
-Film: `showreel-viral.json` (viral, `pop`, 9:16, voiced `af_heart`, `pulse` bed at 124, cues on by default, `"captions": true`, overlay: progress bar). Rewritten on 2026-11-22 from the 2026-11-18 film (revision round 3). Draft build (no `SOURCE_DATE_EPOCH`) with `make.mjs --json --subtitles vtt --subtitle-words`; all 8 shot sheets and 7 cut strips of the final build were opened. Nobody has listened to this film.
+Film: `showreel-viral.json` (viral, `pop`, 9:16, voiced `af_heart`, `pulse` bed at 124, seven own `cues` (one `whoosh` per cut, on `sentence:<n>`; 2.3.1: the designed cues played 14, nine of them a whoosh), `"captions": true`, overlay: progress bar). Rewritten on 2026-11-22 from the 2026-11-18 film (revision round 3). Draft build (no `SOURCE_DATE_EPOCH`) with `make.mjs --json --subtitles vtt --subtitle-words`; all 8 shot sheets and 7 cut strips of the final build were opened. Nobody has listened to this film.
 
 ## Each shot, as a stranger sees it
 
@@ -45,7 +45,7 @@ None: the final draft report has 0 findings. Two earlier drafts carried `overlay
 
 - `ok`: true; findings: 0.
 - `frames`: 713 (23.77 s at 30 fps; the 2026-11-18 film was 22.73 s, +4.6 percent; the mode's own limit is 60 s); `captured`: 713 (the progress bar makes every frame a fresh capture); render `seconds`: 44.8; `msPerFrame`: 62.8; `bytes`: 10,697,805; `mbps`: 3.60. `timed`: measured, voice `af_heart` (model commit `dd4401a9`).
-- `audio.lufs`: -14.0; `audio.truePeakDb`: -3.2; cues: 14. Bed `pulse`, fitted 122.95 bpm (asked 124), 5 of 7 cuts landed on a beat.
+- `audio.lufs`: -14.1; `audio.truePeakDb`: -3.5; cues: 7 (2.3.1 rebuild, one whoosh per cut; the 2.3.0 build planned 14). Bed `pulse`, fitted 122.95 bpm (asked 124), 5 of 7 cuts landed on a beat.
 - `subtitles`: `{ format: "vtt", level: "word", timed: "measured" }`.
 
 ## Sync

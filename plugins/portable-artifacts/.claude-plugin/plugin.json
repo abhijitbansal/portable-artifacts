@@ -1,7 +1,7 @@
 {
   "name": "portable-artifacts",
   "description": "Dashboards, diagrams, explainer pages, 3D scenes and MP4 films from one small JSON spec, built offline on your machine by any coding agent: Claude Code, Codex, Copilot or Gemini CLI. Five skills: make-dashboard, make-diagram, make-explainer, make-motion and make-scene.",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "author": {
     "name": "Abhijit Bansal",
     "url": "https://github.com/abhijitbansal"
