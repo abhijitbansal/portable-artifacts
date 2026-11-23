@@ -77,3 +77,16 @@ Each finding is a true one: a run of one kind. The films are left as they are, a
 - Two small far-apart elements in one group union into one large box; measured on 415 elements, it moved no threshold.
 - `SAME_RUN` 3 was kept although both showreels once ran 5 shots of one kind: raising it to 6 would have flagged only `whats-new` (1 of 29), 8 none. The showreels were a demonstration of one picture kind on five pictures, which is the case the rule exists to ask about, and they were rewritten to answer it instead of the rule being loosened.
 - `cut-variety` has never fired on a shipped film, so its 2/3 share is the plan's number, tested only on built films.
+
+## Outside numbers, for comparison only
+
+Six figures from two other tools' briefs for product promo films: video-shotcraft's polish brief and motionmaxxing's layout rules. They are two authors' statements with no measurement behind them that we know of. They never enter the arithmetic of a rule and trigger nothing; the table lets a reader see how far our thresholds sit from two other tools'. The bases differ, and the last column says how.
+
+| Outside figure | From | Our nearest number | The difference of basis |
+|---|---|---|---|
+| The main subject takes 50 to 75% of the frame's width | video-shotcraft | `hero` 0.50 (`DEFAULT_FILL.hero`; `ledger` 0.45; the `ledger` `year` shot that reads as filled sits at 0.466) | Our `extent` is the hero's larger side over the matching side of the safe rectangle (1800 by 960 on a 1920 by 1080 frame), and the hero may be type. Theirs is a product screenshot's width over the whole frame. On the width, our 0.50 of 1800 px is 0.47 of the 1920 px frame. |
+| A safe margin of at least 96 px at 1080 | video-shotcraft | the 60 px margin of the safe rectangle at 1080 | Same frame height, so the two compare directly: our margin is the smaller. Ours is where the review rules judge text and the composition rules count elements; theirs is a layout brief. |
+| Headline to body size about 3 to 1 | video-shotcraft | `MIN_HERO_RATIO` 3 (`engine/review/frame.mjs`) | The same number on a different basis: ours is a floor, the `hero` finding fires under 3 times the smallest text on the frame, and it compares the hero with the smallest text, not with the body. Theirs is a target for headline over body. |
+| A picture fragment takes at least 0.55 of the frame's width, or is cropped by an edge of the frame | motionmaxxing | none: no rule of ours judges a picture's width | The nearest is the hero `extent` above, which covers type as well as pictures, over the safe rectangle. |
+| Readable text inside a picture is at least 0.04 of the frame's height | motionmaxxing | `min-size` 28 units, 0.026 of the short side (one unit is the short side over 1080) | Ours applies to every text on the frame, not only text in a picture. Theirs is 43 px at 1080: about half as large again. `min-size` is `unmeasured` in `rules.md`. |
+| Two panels only when one has twice the other's area | motionmaxxing | none: no rule of ours judges panel areas | Not applied to `compare` shots, which are two equal panels by design. |

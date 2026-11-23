@@ -54,6 +54,12 @@ make-diagram or make-scene changes, apart from the agent-file item their doctors
   Code once you agree, and rewrites an older copy of ours only after copying it to `motion-reviewer.md.bak`. A file you
   wrote, a newer one, or a symbolic link is left alone, and `install.mjs --force` never replaces one of those unless you
   also pass `--replace-foreign`.
+- **make-motion: a picture the browser cannot decode now exits 1, not 2.** It used to stop the run as machine trouble
+  (exit 2, with a hint to replace the file with a PNG). It is now a `mechanical` finding at the path that names the
+  picture (`shots[i].src`, `overlays.logo.src` and the like), so the report has `ok: false` and the exit code is 1, as for
+  a picture that is missing or outside the film's folder. The message says to replace it with a PNG, JPEG, WebP or GIF.
+  A picture the preview server fails to serve (`HTTP <n>`) is still exit 2. A script that treats exit 2 as "the machine,
+  retry" and exit 1 as "fix the film" now fixes the film for this case.
 
 ### New in make-motion
 
@@ -69,7 +75,7 @@ make-diagram or make-scene changes, apart from the agent-file item their doctors
   the voice starts before the shot's picture, or runs into the next one, and the cut moves, not the sound; captions follow
   what is heard. A cut's `at` (`iris`, `zoom` and the new `flood`) opens from a named part of the shot it leaves, such as the
   button just clicked, instead of the centre. `flood` paints a colour as a growing circle over the outgoing shot, then opens
-  the next shot from the same point (`pop` and `poster`).
+  the next shot from the same point. Every look accepts it; only `pop` and `poster` list it among their preferred cuts.
 - **Inspection tools (W3).** `references/rules.md` is the one list of every rule, kept equal to the code by a test.
   Film time names a moment (`2.5`, `rows`, `rows@end-0.5`, `rows@word:0`, `word:12`, `end-1`) and `--poster` reads it.
   `--inspect <film time>` writes one frame as a PNG and a JSON dump of its nodes. `--shot <id>` and `--range
