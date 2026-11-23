@@ -491,3 +491,18 @@ which replaces it without a backup, so a user's own edits to that file are lost.
 - **A (default, shipped):** keep it: the file is generated, and the doctor's note names the `--force` command.
 - **B:** make `install --force` keep a `.bak` of the replaced file, or have the doctor rewrite only a file whose bytes
   match a known earlier version.
+
+## gather and history rows: the new refusals (fix/skills-security-scan, 2026-11-23)
+
+2.4.0 makes make-explainer `gather` and make-scene `rows.mjs git` fail closed on repo config they cannot trust. Each
+refusal blocks something legitimate:
+
+- **Partial clones** (`--filter=blob:none`, promisor remotes) are refused outright, because a lazy fetch runs the
+  repo's own remote config. **A (shipped):** refuse, say "use a full clone". **B:** allow when every promisor remote
+  URL matches an allow-list the user sets.
+- **git older than 2.26** is refused (the config check needs `--show-scope`). **A (shipped):** refuse. **B:** fall back
+  to `--local`/`--worktree` reads on older git.
+- **A `.lfsconfig` in the tree** skips the uncommitted-changes check, though git-lfs is believed not to read extension
+  commands from it (unverified). **A (shipped):** skip. **B:** read `.lfsconfig` with `git config -f` and skip only when
+  it defines `lfs.extension.*`.
+- **The 60 s git limit** has no override. **A (shipped):** fixed. **B:** a `PA_GIT_TIMEOUT` variable.

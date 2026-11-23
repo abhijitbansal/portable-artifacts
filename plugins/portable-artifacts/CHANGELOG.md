@@ -54,7 +54,7 @@ Socket, Snyk) flag. No spec changes; pages build the same.
   DuckDB extension download is named, and `references/refresh.md` keeps the connection string in a `chmod 600` env
   file instead of crontab or a plist.
 - make-explainer names the `--image-api` request; make-motion names both model downloads (voice and cutout), their
-  cache folder, and `--ignore-scripts` on the optional installs. Every write outside the project is named.
+  cache folder, and `--ignore-scripts` on the optional installs. The skills' own writes outside the project are named (the agent files, model and extension caches, the `~/.agent/diagrams` fallback); Playwright's browser download and npm's cache belong to those tools.
 - Large reference files gain a contents list.
 
 ### Code hygiene a scanner reads
