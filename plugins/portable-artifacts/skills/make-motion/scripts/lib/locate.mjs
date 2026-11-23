@@ -29,13 +29,14 @@ const COLOURS = Object.freeze({ line: [255, 0, 255], strip: [255, 190, 0], ink: 
 
 // What ffmpeg may open a picture with (its own names). `png.mjs` reads PNGs itself; these are the formats it falls back to.
 // ffmpeg sniffs content, so a playlist or a script renamed to .png must not reach a demuxer or a decoder outside these lists.
-export const PICTURE_DEMUXERS = Object.freeze(['image2', 'png_pipe', 'jpeg_pipe', 'webp_pipe', 'gif', 'bmp_pipe', 'tiff_pipe']);
-export const PICTURE_DECODERS = Object.freeze(['png', 'mjpeg', 'webp', 'gif', 'bmp', 'tiff']);
+// Pipe demuxers only (they sniff the content): image2 would read a `%d` in the file name as a numbered sequence.
+export const PICTURE_DEMUXERS = Object.freeze(['png_pipe', 'jpeg_pipe', 'webp_pipe', 'gif', 'bmp_pipe']);
+export const PICTURE_DECODERS = Object.freeze(['png', 'mjpeg', 'webp', 'gif', 'bmp']);
 
 /** A picture as an ffmpeg input: the file protocol only, the picture demuxers only, and the picture decoders only. */
 export const pictureInput = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', PICTURE_DEMUXERS.join(','), '-codec_whitelist', PICTURE_DECODERS.join(','), '-i', file];
 
-const outsideRange =(flag, what, max, got) => new UsageError(`${flag}: ${what} run from 1 to ${max}, got ${got}`);
+const outsideRange = (flag, what, max, got) => new UsageError(`${flag}: ${what} run from 1 to ${max}, got ${got}`);
 
 // [first, last] of whole numbers in 1..max with first <= last, or a UsageError that names the accepted values.
 function checkPair(flag, what, max, pair) {

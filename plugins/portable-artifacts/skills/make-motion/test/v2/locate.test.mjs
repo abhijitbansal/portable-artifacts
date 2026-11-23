@@ -289,7 +289,8 @@ function assertWhitelistedPicture(calls, file) {
   assert.deepEqual(argv[at - 3].split(',').sort(), [...PICTURE_DEMUXERS].sort(), 'the picture demuxers only');
   assert.equal(argv[at - 2], '-codec_whitelist');
   assert.deepEqual(argv[at - 1].split(',').sort(), [...PICTURE_DECODERS].sort(), 'the picture decoders only');
-  for (const refused of ['hls', 'concat', 'lavfi', 'mov', 'matroska', 'sdp', 'rtsp']) assert.ok(!argv[at - 3].split(',').includes(refused), `${refused} is no picture demuxer`);
+  for (const refused of ['hls', 'concat', 'lavfi', 'mov', 'matroska', 'sdp', 'rtsp', 'image2', 'tiff_pipe']) assert.ok(!argv[at - 3].split(',').includes(refused), `${refused} is no picture demuxer`);
+  assert.ok(!argv[at - 1].split(',').includes('tiff'), 'tiff is no picture decoder');
   assert.equal(argv[at + 1], file, 'the file by its real absolute path');
   assert.ok(path.isAbsolute(argv[at + 1]));
 }
@@ -339,6 +340,33 @@ test('a playlist named .png is not decoded, and a GIF and a BMP still are', { sk
     assert.equal(r.status, 0, `${ext}: ${r.stderr}`);
     assert.ok(existsSync(path.join(dir, `o-${ext}`, 'strips-cols.png')), ext);
   }
+});
+
+test('a picture whose name holds %d opens as itself, not as a numbered neighbour', { skip: !hasFfmpeg && 'no ffmpeg' }, () => {
+  const dir = scratch();
+  const make = (name, fn) => {
+    writeFileSync(path.join(dir, 'src.png'), pngOf(64, 48, fn));
+    const made = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', path.join(dir, 'src.png'), path.join(dir, name)]);
+    assert.equal(made.status, 0, String(made.stderr));
+  };
+  make('shot%d.gif', (x, y) => [x * 3, y * 4, 90]);
+  make('shot1.gif', (x, y) => [250 - x * 3, 20, y * 4]); // the neighbour a pattern would pick
+  make('plain.gif', (x, y) => [x * 3, y * 4, 90]); // the same picture as shot%d.gif
+  const named = run([path.join(dir, 'shot%d.gif'), '--out', path.join(dir, 'o-named')]);
+  assert.equal(named.status, 0, named.stderr);
+  const plain = run([path.join(dir, 'plain.gif'), '--out', path.join(dir, 'o-plain')]);
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.deepEqual(readFileSync(path.join(dir, 'o-named', 'strips-cols.png')), readFileSync(path.join(dir, 'o-plain', 'strips-cols.png')));
+});
+
+test('a TIFF is not a picture locate reads: ffmpeg is not asked to decode it', { skip: !hasFfmpeg && 'no ffmpeg' }, () => {
+  const dir = scratch();
+  writeFileSync(path.join(dir, 'p.png'), pngOf(64, 48, (x, y) => [x * 3, y * 4, 90]));
+  const made = spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', path.join(dir, 'p.png'), path.join(dir, 'p.tiff')]);
+  assert.equal(made.status, 0, String(made.stderr));
+  const r = run([path.join(dir, 'p.tiff'), '--out', path.join(dir, 'o')]);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /ffmpeg could not read p\.tiff as a picture/);
 });
 
 test('a JPEG is decoded by ffmpeg when it is there', { skip: !hasFfmpeg && 'no ffmpeg' }, () => {
