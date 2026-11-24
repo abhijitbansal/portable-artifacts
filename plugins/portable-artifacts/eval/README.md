@@ -112,6 +112,28 @@ or `-` when it wrote none. It is what the agent self-reported, not a check
 of which model ran. (The harness rebuilds each page from the spec without
 `--model`, so the page carries nothing the spec does not.)
 
+## The `claude-stream` host and the arms driver
+
+`claude-stream` is the `claude-director` command without the agent tools, the subagent and hook flags and the agent file, at
+effort high, with `--model` and `--budget`; its stream is read for cost, calls, pictures, renders, drafts and tokens, so its
+console line has no "delegated" fragment. `run-arms.mjs` runs one prompt set through several copies of a skill ("arms", each
+an `--arm name=<skill folder>`), one session at a time, under one spend ceiling: `--budget` caps a case, `--max-total` caps the
+run, and a case starts only if the spend so far plus `--budget` fits (a case whose stream has no cost event is charged the whole
+budget). Each finished case is appended to `<out>/cases.jsonl` and its files kept in `<out>/cases/<prompt>/<arm>/` (the run's prompts and
+arms go to `<out>/plan.json`, so a verdict counts a prompt that never started as missing); `--resume`
+skips the finished ones and counts their spend; `--dry-run` starts nothing; the exit code is 0 when every case ran (whatever its
+result), 2 for a usage error and 3 when the ceiling stopped the run. The driver scores with the repository's own skill folder, not
+the arm's copy. `--packets` writes blind sheet packets and `key.json` from the finished cases, and `--verdict` applies the pass rule
+(spec 5.4) to the cases and the readers' replies (`<prompt>.<reader>.json`, one per reader per prompt, holding the reply text with its
+`{ "ranks": { "<name>": 1 } }`) and writes `verdict.md`. BILLED: one session per case, up to `--budget` each.
+
+```bash
+node run-arms.mjs --skill motion --set budget --host claude-stream --model sonnet --arm A=<folder> --arm D=<folder> --arm C=<folder> \
+  --budget 1.00 --max-total 20 --timeout 1800 --out <dir> [--resume] [--limit n] [--dry-run]
+node run-arms.mjs --packets --skill motion --set budget --out <dir>
+node run-arms.mjs --verdict --out <dir> --ratings <dir>
+```
+
 ## What a run does
 
 1. Copies the skill (with a `node_modules` folder of links back to the
@@ -273,7 +295,8 @@ needs no LLM. `test/lib.test.mjs` covers scoring, the prompt files (every block,
 prompt that expects it) and the run-eval flags; `test/session.test.mjs` and `test/director-host.test.mjs` cover the stream
 parser, the `claude-director` host, `--budget` and the new columns on synthetic streams (a fake `claude` prints one); `test/validate-fuzz.test.mjs` runs the four `validate.mjs` scripts on specs
 whose keys and lookup values are `constructor`, `__proto__` and `toString`, and shows it catches a scratch validator
-that accepts them; `test/docs-facts.test.mjs` ties the plugin README and USAGE to the code. They need each skill's
+that accepts them; `test/arms-lib.test.mjs`, `test/arms-packets.test.mjs` and `test/run-arms.test.mjs` cover the arms driver, the blind
+packets and the pass rule with a fake `claude` and a fake skill (no billed run); `test/docs-facts.test.mjs` ties the plugin README and USAGE to the code. They need each skill's
 `node_modules` installed, and none opens a browser or calls a model.
 
 ## Caveats

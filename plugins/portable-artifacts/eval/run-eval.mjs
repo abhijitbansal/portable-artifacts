@@ -147,7 +147,7 @@ for (const p of prompts) {
   }
   fs.rmSync(work, { recursive: true, force: true }); // artifacts already copied; rmSync does not follow the node_modules symlink
   const tri = (x) => (x === null ? '-' : x ? '✓' : '✗');
-  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  check ${tri(row.checkOk)}  feature ${tri(row.featureOk)}  ${row.seconds.toFixed(0)}s  model ${row.model}${row.aborted ? '  (aborted: no spec)' : ''}${session ? `  delegated ${session.readable ? (session.delegated ? '✓' : 'no (director ran it)') : 'unreadable'}` : ''}\n`);
+  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  check ${tri(row.checkOk)}  feature ${tri(row.featureOk)}  ${row.seconds.toFixed(0)}s  model ${row.model}${row.aborted ? '  (aborted: no spec)' : ''}${session && host.agentFile ? `  delegated ${session.readable ? (session.delegated ? '✓' : 'no (director ran it)') : 'unreadable'}` : ''}\n`);
 }
 
 fs.writeFileSync(path.join(resultsDir, 'results.json'), `${JSON.stringify({ host: opts.host, skill: opts.skill, model: opts.model ?? null, agent: opts.agent ?? null, budget: opts.budget ?? null, rows }, null, 2)}\n`);

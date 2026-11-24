@@ -24,6 +24,9 @@ export const SKILLS = {
     validateCmd: (skill, spec) => [path.join(skill, 'scripts/make.mjs'), spec, '--outline', '--json'],
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/make.mjs'), spec, '--sheets-only', '--json', '--out', path.join(work, 'out/film.mp4')],
     artifacts: ['out/film.sheets'],
+    // Files a driver keeps beside the artifacts when the session wrote them. Never part of outputOk: a missing MP4 is read by the
+    // driver (run-arms.mjs records `mp4`), not by the scoring.
+    keepFiles: ['out/film.mp4'],
     // No separate check: the review runs inside make.mjs, and the check column reads the `ok` of its report.
     checkFromOutput: true,
   },

@@ -317,6 +317,7 @@ test('run-eval: a claude-director case passes the cap and the stream flags, find
   const out = tmp();
   const r = evalWith(bin, ['--host', 'claude-director', '--only', 'rev-by-region', '--budget', '2', '--out', out]);
   assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /delegated ✓/, 'a host with an agent file still says whether the director delegated');
   const call = JSON.parse(fs.readFileSync(marker, 'utf8').trim());
   assert.equal(call.agentFile, true, 'the agent file sits in the workdir when the host starts');
   const at = (flag) => call.argv.indexOf(flag);
@@ -358,6 +359,7 @@ test('run-eval: claude-stream needs --budget and takes --model; its case records
   const out = tmp();
   const r = evalWith(bin, ['--host', 'claude-stream', '--only', 'rev-by-region', '--model', 'sonnet', '--budget', '1', '--out', out], MODEL_ENV);
   assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /delegated/, 'a streamed host with no agent file has nobody to delegate to: its console line has no "delegated" fragment');
   const call = JSON.parse(fs.readFileSync(marker, 'utf8').trim());
   assert.equal(call.agentFile, false, 'no agent file in the workdir');
   assert.deepEqual(call.argv.slice(-4), ['--model', 'sonnet', '--max-budget-usd', '1']);
