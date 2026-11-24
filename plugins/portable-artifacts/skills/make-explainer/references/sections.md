@@ -52,7 +52,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 
 `checklist`: `key`*, `groups[]`* (at least 1): `title`*, `intro`, `items[]`* (at least 1): `text`*, `tag` (`regression` `device` `manual` `visual`), `tags[]` (at most 4 free labels of 24 characters), `note`, `steps[]` (at most 12 short sentences), `expect`; `intro`; `onFail`.
 
-- Ticks are saved in the reader's browser under `key` (unique in the file; lowercase letters, digits, `.`, `-`, `_`). Blocked storage is tolerated and the page says progress will not be saved.
+- Ticks are saved in the reader's browser under `key` (unique in the file; lowercase letters, digits, `.`, `-`, `_`). Blocked storage is tolerated and the page says progress will not be saved. A full store still shows the ticks already saved, and a tick that cannot be saved never replaces them: it stays on the page and the next save that holds carries it.
 - A tick follows its item when items are reordered. Changing an item's `text` or its group's `title` resets that item.
 - Two equal items in groups with the same title are an error: reword one.
 - `intro` (markdown-lite) is shown open at the top as "What's in this branch": list every feature and every review-cycle fix the branch delivers, and what automated tests already cover. With `preset: "checklist"`, leaving it out is a validate warning.
@@ -76,7 +76,7 @@ Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md
 | `review` | `items[]`* (1-5): `point`*, `why`*, `target` | "Review these first": the places to look hardest. `target` is the explicit `id` of the section it points at (not this review); the page links to it. Not answered. |
 | `verdict` | `text` | The overall control: Approve, Approve with changes or Not yet, the reviewer's name, and the Copy answers and Download `plan-answers.json` buttons. (The page also gets a Save as HTML button in the sticky contents menu; it is not a section.) At most one, and it must be the last section. Give it an `id`, a `title` and a `label` (the scaffold uses `verdict` and "Your verdict") so it is listed in the contents and has a stable link. |
 
-- Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the answers were saved shows a notice and no saved answers; the first new answer replaces the old entry. Blocked storage is tolerated and stated.
+- Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the answers were saved shows a notice and no saved answers; the first new answer saved in a tab replaces the old entry and hides the notice in that tab. Blocked storage is tolerated and stated. A full store still shows the saved answers, and a tab that loaded them receives answers another tab saves, except for items changed there and not saved yet; an answer that cannot be saved stays on the page and the next save that holds carries it, and a note says answers will not be saved.
 - In a deck the controls do not run: a slide shows the question, the options with the recommendation, and a note that answers are collected in the page version.
 - Limits on a plan page: 2-5 options per decision, 1-5 review items.
 - A plan needs the plan itself: at least one `steps`, `cards`, `table`, `files` or `text` section anywhere is an error to leave out, and one that comes only after the first question is a warning ("a plan asks before it explains").

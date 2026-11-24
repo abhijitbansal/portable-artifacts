@@ -404,7 +404,13 @@ asks for changes or rejects each approval, answers each question, gives an
 overall verdict and a name, then presses Copy answers or Download
 `plan-answers.json`, or Save as HTML. Answers are saved in the reviewer's browser, keyed by the
 plan's `key` and a hash of its content, so answers to an edited plan are
-flagged instead of reused. **Save as HTML** is a button in the sticky contents
+flagged instead of reused. If the browser's storage is full, saved answers still appear and can be exported (a
+checklist's saved ticks still appear too), and the not-saved warning shows. A change that cannot be saved stays on the
+page, and the next save that works carries it and clears the warning. A tab that loaded saved answers from a full store
+receives answers another tab saves, except for items you changed there and have not saved yet. Pages built before
+2.4.2, and files already downloaded with Save as HTML, keep the old behaviour; rebuild the page, then open it at the
+same address in the browser that still holds your answers, or enter them again.
+**Save as HTML** is a button in the sticky contents
 menu on the left (a corner button on a phone, or on a page too short for a
 menu): it downloads `<key>-answered.html`, this same page with the answers put
 inside it. Opening that file shows the answers again, in any browser, with no

@@ -8,8 +8,11 @@
 //   answering different items keep both. When another tab saves, its answers are put on this page (stored wins),
 //   except for an item being typed in right now.
 // - A stored entry for a different plan hash is not applied and is not wiped on load: a notice says the plan
-//   changed, and the reader's first change replaces the old entry.
+//   changed, and the reader's first change replaces the old entry (a write that holds hides the notice).
 // - Storage that is missing or refuses writes: answering works for this visit and a note says it is not saved.
+//   A full store still reads: saved answers for this plan show on load, and a tab that loaded them receives answers
+//   another tab saves, except for items changed here and not saved yet. What failed to save stays marked, and the
+//   next write that holds carries it and clears the note.
 (function () {
   var PA = window.PA;
   var root = document.documentElement;
@@ -96,7 +99,8 @@
 
   // ---- saved answers ------------------------------------------------------------
   // { hash, answers: { [id]: { choice?, text?, comment? } }, verdict, reviewer }. Storage can be missing or
-  // refuse writes; then answering still works for this visit and a note says so.
+  // refuse writes; then answering still works for this visit and a note says so. A full store refuses writes but
+  // still reads, so saved answers are restored even when the startup write probe fails.
   var unsaved = part(verdictBox, 'data-plan-unsaved');
   var stale = part(verdictBox, 'data-plan-stale');
   function show(note) { if (note) note.hidden = false; }
@@ -134,7 +138,6 @@
   var dirtyIds = Object.create(null);
   var dirtyVerdict = false;
   var saveTimer = 0;
-  var canSave = false;
   // Answers put on the form from a saved page are not written to storage until the reader changes something (their
   // earlier answers here are never replaced just by opening a file), and that first write carries the whole form.
   var adoptPending = false;
@@ -180,7 +183,8 @@
       adoptPending = false;
       dirtyIds = Object.create(null);
       dirtyVerdict = false;
-      if (canSave) hide(unsaved);
+      hide(unsaved);
+      hide(stale);
     } else {
       show(unsaved);
     }
@@ -215,8 +219,9 @@
     if (!payload || payload.schema !== 'plan-saved/1' || typeof payload.savedAt !== 'number') return null;
     return isObject(payload.entry) && payload.entry.hash === planHash ? payload : null;
   }
-  canSave = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
-  var data = canSave ? parseStored(PA.readStore(local, storeKey)) : null;
+  var canSave = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
+  // A full store can still be read. The write probe controls the warning, not answer restoration.
+  var data = parseStored(PA.readStore(local, storeKey));
   var current = data && data.hash === planHash ? data : null;
   var shipped = shippedAnswers();
   if (!canSave) show(unsaved);
@@ -250,7 +255,7 @@
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
   // Another tab (or page) saved this plan's answers: take them.
   window.addEventListener('storage', function (event) {
-    if (!canSave || event.storageArea !== local || (event.key !== null && event.key !== storeKey)) return;
+    if (!local || event.storageArea !== local || (event.key !== null && event.key !== storeKey)) return;
     var entry = freshEntry();
     if (entry) apply(entry);
   });

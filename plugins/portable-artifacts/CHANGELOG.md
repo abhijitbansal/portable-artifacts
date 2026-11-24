@@ -6,6 +6,23 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-11-24
+
+- **Plan pages show saved answers when browser storage is full.** Answers, comments, the reviewer name and verdict
+  still appear and can be exported. A change that cannot be saved stays on the page, and the next save that works
+  carries it and clears the warning. A tab that loaded saved answers from a full store receives answers another tab
+  saves, except for items you changed there and have not saved yet.
+- **The "plan changed" note goes after a save.** When a plan was edited after answers were saved, the first new
+  answer saved in that tab replaces the old entry, and the note in that tab now disappears with it.
+- **Checklists keep saved ticks when browser storage is full.** With ticks saved and a full store, a checklist
+  used to show none, and the next tick that fit replaced the page's saved ticks. Now saved ticks show, a tick that
+  cannot be saved waits for that checklist's next save that works, and its "won't be saved" note clears after that
+  save. Another tab's ticks still arrive, except for ticks you changed here and have not saved yet.
+- **Rebuild to get the fix.** A page carries its runtime inside the file, so pages built with an earlier version
+  keep the old behaviour until you build them again from the same spec. A page already downloaded with Save as HTML
+  also keeps its old runtime. To carry its answers into a rebuilt page, open the rebuilt page at the same address in
+  the browser that still holds those answers for the same plan; otherwise enter them again.
+
 ## [2.4.0] - 2026-11-23
 
 A security pass over all five skills, against prompt injection and what the skills.sh scanners (Gen Agent Trust Hub,
