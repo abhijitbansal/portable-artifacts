@@ -1,6 +1,6 @@
 # Design: make-motion token budget
 
-Date 2026-11-23. Status: approved by the owner on 2026-11-24 (section 10 answered). The owner approved the plan this is built from (plan page
+Date 2026-11-23. Status: approved by the owner on 2026-11-24 (section 10 answered); **stopped the same day after Phase 1: the paired test's verdict was none, Phase 2 and 3 are not built.** Why, and the next steps: `plugins/portable-artifacts/eval/README.md`, "Token budget work: where it stopped". The owner approved the plan this is built from (plan page
 `token-budget-plan-nov-2026`, verdict approve) with: skill only, paired test first, 2 polish rounds and a hard stop at 6,
 release orchestration left out. Lines marked **[call]** are the author's choices, made while turning the plan into a
 design; the owner has not answered them.

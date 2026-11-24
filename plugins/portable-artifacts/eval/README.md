@@ -155,6 +155,65 @@ node run-arms.mjs --packets --skill motion --set budget --out <dir>
 node run-arms.mjs --verdict --out <dir> --ratings <dir>
 ```
 
+## Token budget work: where it stopped (2026-11-24)
+
+**Status: stopped after the measurement. No skill changed.** The branch `feat/motion-token-budget` holds the design
+([`2026-11-23-motion-token-budget-design.md`](../../../docs/superpowers/specs/2026-11-23-motion-token-budget-design.md)), the Phase 1
+plan ([`2026-11-24-motion-token-budget-p1.md`](../../../docs/superpowers/plans/2026-11-24-motion-token-budget-p1.md)), the arms driver, the
+`budget` prompt set and the result
+([`summary-motion-token-budget-2026-11-24.md`](results/summary-motion-token-budget-2026-11-24.md)). Phase 2 (the short path, `--draft`,
+`start.mjs`, skipping an unchanged render) was gated on that result and is not built.
+
+**Why it stopped.** The rule, written before the run, was a median cost at most 0.80 of today's skill and a film rated worse on at
+most 2 of 10 prompts. Neither shorter version met either part:
+
+| Version | Median cost against today | Total, 10 films | Rated worse | Mean rank (1 best) |
+|---|---|---|---|---|
+| A, today's skill | 1.00 | $3.67 | - | 1.77 |
+| D, short path over existing commands | 0.98 | $3.53 | 6 of 10 | 1.93 |
+| C, short path with two merged commands | 0.87 | $2.99 | 6 of 10 | 2.17 |
+
+- The worse-rating limit is strict: an arm exactly as good as A passes it about 5% of the time (binomial, p = 0.5). Read D as about level
+  and C as somewhat worse. Both miss the cost limit whatever the ratings say.
+- An earlier single-run spike had C 30% cheaper. It did not replicate.
+- D and C also told the agent to give every shot a designed cut, which A does not, so the rating drop cannot be put on the shorter path.
+- Renders fell from 21 to 10 (D) and 12 (C), and pictures opened from 59 to 44 and 33, but 61 to 63% of every bill is newly written
+  context, so fewer calls save little. Reference text and lists were the median 47,000 (A) to 57,000 (D) characters of tool results a film.
+- A film cost $0.19 to $0.66 here. The expensive showreels came from long sessions (lead sessions and advisor calls), which a skill file
+  cannot change.
+- Limits: one model (Sonnet, high effort), one host, one machine, ten prompts, one run each; three Opus readers judged montages of stills,
+  all ten prompts in one session each, which is a deviation from the protocol.
+
+Two facts found on the way: a smoke run was thrown away because the first arm's session had loaded 13 account MCP servers and 147
+tools and the others none (`claude-stream` now passes `--strict-mcp-config`); and a Copilot CLI probe saw shell output whole at 18 KB and
+cut to a saved file at 24 KB, so any one-call text dump must stay under 18,000 characters.
+
+**Known faults in the arms driver (open).** A second review found six, all rated high, in rare paths. It is fit for an attended run and
+not for an unattended one. Read the sentences above about crash safety and the ceiling with these in mind.
+
+1. Only SIGINT and SIGTERM stop the host. A closed terminal (SIGHUP), a failed log write or a killed driver leaves the host running and
+   billing, and a resume does not see it.
+2. A host that cannot be spawned crashes the driver (exit 1) instead of being a host fault (exit 4).
+3. `--retry` can pay again for a session that finished: a driver killed during scoring, or a scoring error, or a capped or timed-out case that
+   was also interrupted. The finished film is not rescored.
+4. `--max-total` is not a guarantee: a case with no cost event is charged its budget and the 10% reserve does not bound one call's overshoot.
+5. After a plain `--resume`, a host fault still counts as that arm's failure in the verdict.
+6. A good film whose stream has no result event has no cost, so the verdict stays inconclusive, and `--retry` refuses it.
+
+Until they are fixed: do not close the terminal, check that no `claude` host is alive before a resume, and after a host fault use
+`--resume --retry <prompt>:<arm>`.
+
+**Next steps, none started.** Each is a decision for the owner; the billed ones need a new yes.
+
+1. Fix the six faults above, then open the PR for the driver with a `plugin.json` bump and a `CHANGELOG.md` heading, or
+   `[skip-plugin-bump]` in a commit message since nothing ships to users.
+2. The board fix alone (design 6.1): keep the overview picture after the final render, so `review.md` cites a file that exists. It saves no tokens.
+3. A new short-path test with one change at a time, above all without the designed-cut instruction (about 20 billed runs).
+4. Cut what is written into the context (`story.md`, the kinds list, the type guides), the largest share of the bill, as a new design with its own test.
+5. Long jobs: measure a whole session in a fresh conversation, a large one and a subagent before building any agent (design non-goals, plan Part 2).
+
+The arms, raw transcripts and readers' files are local only (gitignored `.scratch/token-budget/`) and can be lost; the numbers above and in the summary are what is kept.
+
 ## What a run does
 
 1. Copies the skill (with a `node_modules` folder of links back to the
