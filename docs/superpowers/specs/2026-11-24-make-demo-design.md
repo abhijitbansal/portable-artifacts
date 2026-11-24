@@ -1,6 +1,6 @@
 # Design: make-demo
 
-Date 2026-11-24. Status: **draft, waiting for the owner's approval.** Branch `feat/make-demo`, from `origin/main`.
+Date 2026-11-24. Status: **approved by the owner on 2026-11-24** (sites for phase 0 left to the author). Branch `feat/make-demo`, from `origin/main`.
 Lines marked **[call]** are the author's choices; the owner has not answered them.
 
 ## 1. Intent
@@ -240,7 +240,7 @@ One branch, one PR. Each phase: a plan, tests first, a fresh reviewer (security 
 
 | Phase | Delivers | The owner can try |
 |---|---|---|
-| 0 | Fixture sites (plain, single-page app, slow, canvas, login, hostile text, dangerous buttons), all on loopback; a feasibility run of frame-by-frame on five public sites the owner names | the numbers |
+| 0 | Fixture sites (plain, single-page app, slow, canvas, login, hostile text, dangerous buttons), all on loopback; a feasibility run of frame-by-frame on five public sites (the owner left the choice to the author) | the numbers |
 | 1 | Skill skeleton, schema, doctor, scout, effect classes, click plan, sessions | a click plan for a real site |
 | 2 | Take, masking, both capture modes, report | a take folder and its contact sheet |
 | 3 | make-motion `walk`: timing, camera, cursor, lift, findings; `keynote` and `desk` | a film from a fixture take |
