@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A link the stepped run never shows</title></head>
+<body style="font: 20px system-ui; margin: 24px">
+<h1>Items in your account</h1>
+<div id="slot"></div>
+<script>
+if (performance.now.toString().includes('native')) document.getElementById('slot').innerHTML = '<a href="#item">Open item</a>';
+</script>
+</body>
+</html>

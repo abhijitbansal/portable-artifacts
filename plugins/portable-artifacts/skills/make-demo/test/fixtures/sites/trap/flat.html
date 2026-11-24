@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A flat brightness shift</title></head>
+<body style="margin: 0; min-height: 100vh">
+<script>
+// A near-equal ground: grey 200 in real time, grey 237 in the stepped run. A mean SSIM over the whole page passes this.
+document.body.style.background = performance.now.toString().includes('native') ? 'rgb(200,200,200)' : 'rgb(237,237,237)';
+</script>
+</body>
+</html>

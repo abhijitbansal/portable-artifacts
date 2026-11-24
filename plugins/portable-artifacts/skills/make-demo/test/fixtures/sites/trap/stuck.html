@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Still loading after the cap</title>
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { width: 40px; height: 40px; border: 5px solid #d8deea; border-top-color: #1b5fd1; border-radius: 50%; animation: spin 1s linear infinite; }
+</style>
+</head>
+<body style="font: 20px system-ui; margin: 24px">
+<h1>Loading the quarterly report</h1>
+<div class="spin" role="status" aria-label="Loading"></div>
+<script>
+// A spinner for far longer than the probe runs (each settle gives up at 8 s), then the real content: nobody ever sees it.
+setTimeout(() => { document.body.innerHTML = '<h1>Arrived</h1><p>The report is ready, long after the cap.</p>'; }, 60000);
+</script>
+</body>
+</html>

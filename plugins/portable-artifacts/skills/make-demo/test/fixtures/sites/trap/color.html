@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Same brightness, other colour</title></head>
+<body style="margin: 0">
+<div id="field" style="width: 1200px; height: 600px"></div>
+<script>
+// rgb(255,0,0) and rgb(0,131,0) have the same luma (76): a brightness-only comparison cannot tell them apart.
+document.getElementById('field').style.background = performance.now.toString().includes('native') ? 'rgb(255,0,0)' : 'rgb(0,131,0)';
+</script>
+</body>
+</html>

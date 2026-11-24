@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>One digit differs</title></head>
+<body style="font: 28px system-ui; margin: 24px">
+<h1 id="total">Total 247 units</h1>
+<p>The stepped run shows 241. Real time shows 247.</p>
+<script>
+// Real time has the native performance.now; the stepped run has the fake one.
+if (!performance.now.toString().includes('native')) document.getElementById('total').textContent = 'Total 241 units';
+</script>
+</body>
+</html>

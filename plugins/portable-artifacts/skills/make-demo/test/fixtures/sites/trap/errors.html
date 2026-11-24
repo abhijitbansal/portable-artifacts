@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Errors only the stepped run has</title></head>
+<body style="font: 20px system-ui; margin: 24px">
+<h1>Errors only the stepped run has</h1>
+<script>
+if (!performance.now.toString().includes('native')) {
+  setTimeout(() => { throw new Error('boom 123456'); }, 50);
+  console.error('hydration mismatch at 45');
+  fetch('/trap/missing-file').catch(() => {});
+}
+</script>
+</body>
+</html>

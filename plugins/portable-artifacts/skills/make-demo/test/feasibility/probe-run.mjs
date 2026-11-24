@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { installStepper, scrollTo } from '../../scripts/lib/stepper.mjs';
 import { frameStore } from '../../scripts/lib/frames.mjs';
-import { wallReason } from './compare.mjs';
+import { treeLines, wallProbe, wallReason, errorKey } from './signals.mjs';
 import { openGuardedContext, watchPages, endLoad } from './probe-guard.mjs';
 
 export const FPS = 30;
@@ -16,38 +16,37 @@ const HOLD_FRAMES = 15;
 const FRAME_JPEG_QUALITY = 95;
 const GOTO_MS = 30000;
 const ACTION_TIMEOUT_MS = 10000;
+const SNAPSHOT_TIMEOUT_MS = 10000;
+const MAX_FRAME_SNAPSHOTS = 8;
 const REAL_POLL_MS = 200;
-const REAL_STILL_POLLS = 3;
+const REAL_STILL_POLLS = 5; // 1 s still, as the stepped settle
 const REAL_SETTLE_MS = 8000;
 const REAL_SCROLL_PAD_MS = 150;
 const REAL_ACT_PAD_MS = 500;
 const SETTLE_SHOT = { type: 'jpeg', quality: 70, scale: 'css' };
-const CONTROL_ROLES = new Set(['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'tab', 'menuitem', 'switch', 'searchbox', 'slider', 'spinbutton', 'option', 'treeitem']);
-const ROLE_LINE = /^\s*- ([a-z]+) "((?:[^"\\]|\\.)*)"/;
-
-/** Controls (role and name) and headings out of an ariaSnapshot. */
-export function parseSnapshot(text) {
-  const controls = [];
-  const headings = [];
-  for (const line of text.split('\n')) {
-    const m = ROLE_LINE.exec(line);
-    if (!m) continue;
-    if (m[1] === 'heading') headings.push(m[2]);
-    else if (CONTROL_ROLES.has(m[1])) controls.push(`${m[1]} ${m[2]}`);
-  }
-  return { controls, headings };
-}
+const BLOCKED_BY_US = /BLOCKED_BY_CLIENT/;
 
 function watchRun(page, run) {
-  page.on('pageerror', (e) => run.errors.push(String(e.message)));
+  page.on('pageerror', (e) => run.errors.push(errorKey('pageerror', e.message)));
+  page.on('console', (m) => { if (m.type() === 'error') run.errors.push(errorKey('console', m.text())); });
+  page.on('crash', () => { run.crashed = true; });
   page.on('request', (r) => run.pending.add(r));
   page.on('requestfinished', (r) => run.pending.delete(r));
-  page.on('requestfailed', (r) => run.pending.delete(r));
+  page.on('requestfailed', (r) => {
+    run.pending.delete(r);
+    const reason = r.failure()?.errorText ?? 'failed';
+    if (!BLOCKED_BY_US.test(reason)) run.errors.push(errorKey('request', `${r.method()} ${new URL(r.url()).pathname} ${reason}`));
+  });
+  page.on('response', (r) => {
+    const request = r.request();
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) run.statuses.push(r.status());
+    else if (r.status() >= 400) run.errors.push(errorKey('request', `${r.status()} ${new URL(r.url()).pathname}`));
+  });
 }
 
 async function openRun(browser, entry, stepped) {
   const { context, run: guard } = await openGuardedContext(browser, { origin: new URL(entry.url).origin, viewport: VIEWPORT, deviceScaleFactor: DEVICE_SCALE });
-  const run = { context, guard, errors: [], pending: new Set(), stepper: null, page: null };
+  const run = { context, guard, errors: [], statuses: [], crashed: false, pending: new Set(), stepper: null, page: null };
   try {
     run.page = await context.newPage();
     watchPages(context, guard, run.page);
@@ -71,17 +70,37 @@ async function settleReal(run) {
     const shot = await run.page.screenshot(SETTLE_SHOT);
     equal = previous && shot.equals(previous) && run.pending.size === 0 ? equal + 1 : 0;
     previous = shot;
-    if (equal >= REAL_STILL_POLLS) return { frames: polls, capped: false, reason: 'still' };
+    if (equal >= REAL_STILL_POLLS) return { frames: polls, capped: false, reason: 'still', pendingRequests: run.pending.size };
   }
-  return { frames: polls, capped: true, reason: 'time' };
+  return { frames: polls, capped: true, reason: 'time', pendingRequests: run.pending.size };
 }
 
-async function recordStep(run, out, label) {
+const headingsOf = (nodes) => (nodes ?? []).flatMap((n) => [...(n.role === 'heading' && n.name ? [n.name] : []), ...headingsOf(n.children)]);
+
+/** The accessible tree of the whole body, and of each child frame under its address, as ordered lines. */
+async function snapshotTree(page) {
+  const body = await page.locator('body').ariaSnapshotJSON({ timeout: SNAPSHOT_TIMEOUT_MS });
+  const lines = treeLines(body);
+  const headings = headingsOf(body);
+  for (const frame of page.frames().filter((f) => f !== page.mainFrame() && !f.isDetached()).slice(0, MAX_FRAME_SNAPSHOTS)) {
+    const nodes = await frame.locator('body').ariaSnapshotJSON({ timeout: SNAPSHOT_TIMEOUT_MS });
+    lines.push(`frame ${new URL(frame.url(), 'about:blank').pathname || frame.url()}`, ...treeLines(nodes, 1));
+    headings.push(...headingsOf(nodes));
+  }
+  return { lines, headings };
+}
+
+async function recordStep(run, out, label, requestedUrl) {
   const settle = run.stepper ? await run.stepper.settle() : await settleReal(run);
+  if (run.crashed) throw new Error('the page crashed');
   const png = await run.page.screenshot({ type: 'png', scale: 'css' });
-  const { controls, headings } = parseSnapshot(await run.page.locator('body').ariaSnapshot());
-  out.steps.push({ label, png, controls, headings, settle });
-  out.wall ??= wallReason({ title: await run.page.title(), headings });
+  const { lines, headings } = await snapshotTree(run.page);
+  const probe = await run.page.evaluate(wallProbe);
+  const frameUrls = run.page.frames().map((f) => f.url());
+  const wall = wallReason({ statuses: run.statuses, title: await run.page.title(), headings, probe, frameUrls, finalUrl: run.page.url(), requestedUrl });
+  const previous = out.steps.at(-1);
+  out.steps.push({ label, png, tree: lines, settle, same: Boolean(previous && previous.png.equals(png) && previous.tree.join('\n') === lines.join('\n')) });
+  out.wall ??= wall;
 }
 
 async function captureFrames(run, out, count) {
@@ -110,32 +129,36 @@ async function applyStep(run, step) {
   return { frames: ACTION_FRAMES, pad: REAL_ACT_PAD_MS };
 }
 
-async function runStep(run, out, step, index) {
+async function runStep(run, out, step, index, entry) {
   const applied = await applyStep(run, step);
   if (applied.problem) return applied.problem;
   if (run.stepper) await captureFrames(run, out, applied.frames + HOLD_FRAMES);
   else await run.page.waitForTimeout(applied.pad);
-  await recordStep(run, out, `${index + 1}: ${step.do}`);
+  await recordStep(run, out, `${index + 1}: ${step.do}`, entry.url);
   return null;
 }
 
 async function walk(run, out, entry) {
-  const response = await run.page.goto(entry.url, { waitUntil: 'load', timeout: GOTO_MS });
+  await run.page.goto(entry.url, { waitUntil: 'load', timeout: GOTO_MS });
   endLoad(run.guard);
-  out.status = response?.status() ?? 0;
-  await recordStep(run, out, 'load');
-  out.wall = wallReason({ status: out.status, title: await run.page.title(), headings: out.steps[0].headings }) ?? out.wall;
+  out.status = run.statuses[0] ?? 0;
+  await recordStep(run, out, 'load', entry.url);
   for (const [index, step] of (out.wall ? [] : entry.steps).entries()) {
-    out.problem = await runStep(run, out, step, index);
+    out.problem = await runStep(run, out, step, index, entry);
     if (out.problem || out.wall) break;
   }
   out.finalUrl = run.page.url();
+  if (run.stepper) {
+    out.realTime = await run.stepper.report();
+    // The fake clock swallows what a timer callback throws, so real time's page error is the stepped run's timer error.
+    out.errors.push(...run.stepper.timerErrors().map((m) => errorKey('pageerror', m)));
+  }
 }
 
 /** Open the site and walk its steps once. The result never throws for a site's own trouble: `problem` says what stopped it. */
 export async function captureRun(browser, entry, { stepped, label }) {
   const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'make-demo-frames-'));
-  const out = { label, steps: [], wall: null, status: 0, problem: null, traffic: null, film: { frames: 0, rawBytes: 0, wallMs: 0, bytes: 0, store: frameStore(framesDir) } };
+  const out = { label, stepped, steps: [], wall: null, status: 0, problem: null, traffic: null, errors: [], realTime: null, film: { frames: 0, rawBytes: 0, wallMs: 0, bytes: 0, store: frameStore(framesDir) } };
   let run = null;
   try {
     run = await openRun(browser, entry, stepped);
@@ -152,6 +175,5 @@ export async function captureRun(browser, entry, { stepped, label }) {
       fs.rmSync(framesDir, { recursive: true, force: true });
     }
   }
-  out.errors ??= [];
   return out;
 }

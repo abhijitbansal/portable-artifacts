@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Never still</title></head>
+<body style="font: 20px system-ui; margin: 24px">
+<h1>Loading the report</h1>
+<p>This block never stops moving, so the page never settles.</p>
+<div id="mover" style="width: 40px; height: 40px; background: #c0392b"></div>
+<script>
+setInterval(() => { document.getElementById('mover').style.marginLeft = `${Math.random() * 400}px`; }, 30);
+</script>
+</body>
+</html>

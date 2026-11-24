@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Six rows against one</title></head>
+<body style="font: 20px system-ui; margin: 24px">
+<h1>Rows</h1>
+<div id="rows"></div>
+<script>
+// Real time lists six Edit buttons, the stepped run one. A set of names cannot tell.
+const count = performance.now.toString().includes('native') ? 6 : 1;
+for (let i = 0; i < count; i += 1) document.getElementById('rows').insertAdjacentHTML('beforeend', '<div><button type="button">Edit</button></div>');
+</script>
+</body>
+</html>

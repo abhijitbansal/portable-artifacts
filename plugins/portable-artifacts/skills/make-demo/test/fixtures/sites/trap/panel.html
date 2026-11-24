@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A panel is missing</title></head>
+<body style="font: 16px system-ui; margin: 24px">
+<p>Intro paragraph with a lot of text that stays the same in every run.</p>
+<div id="slot"></div>
+<script>
+// Real time shows a 260 x 60 panel; the stepped run does not.
+if (performance.now.toString().includes('native')) {
+  document.getElementById('slot').innerHTML = '<div style="width:260px;height:60px;background:#1b5fd1;color:#fff;font-size:20px;line-height:60px;text-align:center">Balance 900</div>';
+}
+</script>
+</body>
+</html>

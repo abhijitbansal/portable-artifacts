@@ -6,15 +6,17 @@
 <style>html { scroll-behavior: smooth; } body { margin: 0; height: 3000px; }</style>
 </head>
 <body>
-<h1>Real-time things</h1>
-<svg width="40" height="40" aria-hidden="true"><rect width="20" height="20"><animate attributeName="x" from="0" to="20" dur="2s" repeatCount="indefinite"/></rect></svg>
+<h1>Things that run in real time</h1>
+<svg width="40" height="40" aria-hidden="true"><rect width="20" height="20"><animate attributeName="x" from="0" to="20" dur="0.2s" fill="freeze"/></rect></svg>
 <img alt="" width="8" height="8" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
 <video id="clip" muted width="10" height="10"></video>
 <script>
 // A video that reports it is playing: the probe counts what the page says, so no media file is needed.
 Object.defineProperty(document.getElementById('clip'), 'paused', { value: false });
 new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(1), 100);'])));
-document.body.attachShadow({ mode: 'closed' });
+const host = document.createElement('div');
+document.body.append(host);
+host.attachShadow({ mode: 'closed' });
 window.scrollTo({ top: 100, behavior: 'smooth' });
 </script>
 </body>

@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Same picture, other accessible name</title></head>
+<body style="font: 20px system-ui; margin: 24px">
+<h1>Same picture, other accessible name</h1>
+<button id="b" type="button" aria-label="Save">&#9873;</button>
+<script>
+// The picture is identical in every run; only the accessible name differs when the clock is stepped.
+if (!performance.now.toString().includes('native')) document.getElementById('b').setAttribute('aria-label', 'Store');
+</script>
+</body>
+</html>

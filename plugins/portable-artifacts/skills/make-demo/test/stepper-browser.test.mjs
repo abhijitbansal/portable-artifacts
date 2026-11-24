@@ -423,6 +423,18 @@ test('report() names what still runs in real time (C7)', async () => {
   await context.close();
 });
 
+test('an exception a page timer throws does not stop the film, and timerErrors() names it (B8)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await page.evaluate(() => { setTimeout(() => { throw new Error('boom 123'); }, 50); });
+  await stepper.step(3);
+  assert.equal(stepper.now(), 100);
+  assert.equal(stepper.timerErrors().length, 1);
+  assert.match(stepper.timerErrors()[0], /boom 123/);
+  await stepper.step(2);
+  assert.equal(stepper.timerErrors().length, 1, 'the next steps add none');
+  await context.close();
+});
+
 test('report() on a plain page is empty', async () => {
   const { context, stepper } = await open('/plain/');
   const report = await stepper.report();
