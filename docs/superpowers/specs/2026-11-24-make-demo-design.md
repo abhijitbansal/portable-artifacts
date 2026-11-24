@@ -249,7 +249,7 @@ One branch, one PR. Each phase: a plan, tests first, a fresh reviewer (security 
 | 6 | Recordings: import, moments, panels, words, compare page | a film over an old recording |
 | 7 | Haiku gate, eval set, docs, gallery, sibling-skill checklist, version and changelog | the release |
 
-Phase 0 is a stop rule. A site can be stepped when, after each step of a short `look`-only script, the stepped and the real-time settled screenshots match at SSIM 0.98 or more outside regions that differ between two real-time runs, the control lists are equal, and the stepped run adds no page error. If fewer than three of five pass, the owner is
+Phase 0 is a stop rule. A site can be stepped when a stepped run of a scroll and hover script matches three real-time runs: no group of wrong pixels where those three agree, the same accessible text and controls, no new errors, and every run settles (the exact rule is in the phase 0 plan, fix round 1; an SSIM bar was dropped after review showed it misses colour, a wrong digit and a missing panel). If fewer than three of five pass, the owner is
 shown a real-time film with 3x settle stills before phase 1, and decides. Phase 0 also measures bytes a second with repeats stored once, and time per second of film.
 
 ## 8. Constraints
