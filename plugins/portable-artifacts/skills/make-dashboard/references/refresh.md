@@ -25,7 +25,17 @@ Use absolute paths in schedules, since cron and launchd start in a bare environm
 with the folder containing `SKILL.md` and `/abs/dashboard.json` with your spec.
 
 A scheduled dashboard reruns its queries under the same titles, so a finding title ("North drives half of revenue")
-goes stale on the next refresh. Give a scheduled dashboard neutral titles that stay true ("Revenue by region").
+can go stale on refresh. Prefer neutral titles that stay true ("Revenue by region"). For a single-series bar chart
+whose finding is a unique maximum, an optional `"assert": { "type": "max", "category": "North" }` checks that North
+still has the highest `y` among the query's categories. See [Data assertions](schema.md#data-assertions) for supported
+values and query-scope limits. Other findings still need editorial review.
+
+A failed assertion exits 1 before replacing the saved page. Watch mode shows the error and serves the last good page;
+new or reconnecting viewers receive the error too, until a successful rebuild clears it. A viewer that misses a
+successful rebuild reloads when its event stream reconnects. On a schedule, monitor the exit status or build log:
+the static page retains its old refresh time and has no live banner. Inspect the new rows with
+`query.mjs <spec> --chart <id>` (rows and diagnostics remain available on an assertion failure, with exit status 1)
+before updating the title and assertion; don't automatically change the expected winner just to pass the check.
 
 Find your node path first: `command -v node`.
 

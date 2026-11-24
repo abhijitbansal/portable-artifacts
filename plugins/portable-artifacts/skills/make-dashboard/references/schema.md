@@ -42,12 +42,49 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 | `format` | kind charts | `number`, `currency`, `percent`, `compact`; formats numeric axes, legends and tooltips |
 | `views` | kind charts | Alternate view names for the kind (e.g. `["sorted", "table"]`), at most 6, unique. Narrows and reorders the defaults; `table` is always available and last |
 | `pair` | kind charts | `true` shows the primary view and the next view side by side and forces `width: full`; the right pane has tabs over the remaining views (Table included). A pair card's PNG/SVG export is the left pane |
+| `assert` | `bar` only | Optional `{ "type": "max", "category": "East" }`: require that category to have the unique highest `y` value in the chart query. See "Data assertions" below |
 | `vegaLite` | raw charts | A Vega-Lite spec without `data` (next section) |
 
-Exactly one of `kind` / `vegaLite` per chart. `x`, `y`, `color`, `size`, `value`, `views`, `format` and `pair` on a raw `vegaLite` chart are errors
+Exactly one of `kind` / `vegaLite` per chart. `x`, `y`, `color`, `size`, `value`, `views`, `format`, `pair` and `assert` on a raw `vegaLite` chart are errors
 (`<key> needs kind (raw vegaLite charts ignore it)`). Every kind chart also gets tooltips, a sortable Table view (first 500 rows shown)
 and an Export menu: PNG and SVG (filled with the theme surface) and CSV (all embedded rows; formula-like text, starting with `=`, `+`, `-`, `@`, tab or CR, is prefixed with `'`).
-A query with zero rows shows "No rows returned" and still offers the Table view.
+A query with zero rows shows "No rows returned" and still offers the Table view, unless an assertion requires a maximum.
+
+## Data assertions
+
+A finding title can become false when data refreshes. For a single-series bar chart, make a maximum claim explicit:
+
+```json
+{
+  "id": "revenue", "title": "East earns the most revenue", "query": "by_region",
+  "kind": "bar", "x": "region", "y": "revenue",
+  "assert": { "type": "max", "category": "East" }
+}
+```
+
+`max` requires the named `x` category to have the **unique highest `y`** in the query result. Category matching is exact
+and case-sensitive. The query must return one row per string category; aggregate in SQL if needed. Negative values and
+zero work. Ties at the maximum, a missing category, empty or `maxRows`-truncated results, duplicate or null categories,
+and null/nonfinite values fail at `charts[n].assert`. Temporal axes, other chart kinds and `color` are unsupported.
+Wide integers and high-precision decimals preserved as strings, and integer numbers outside JavaScript's safe range,
+are refused rather than rounded for comparison. The rule compares finite numeric values as returned; it has no rounding
+tolerance. It does not add aggregation or change the chart, its highlighting, or its alternate views.
+
+`validate.mjs` (full validation), `build.mjs`, live rebuilds and dashboard-chart embedding enforce the rule on the same
+materialized results that feed the chart. `--bind-only` and static validation check the spec, not the assertion's truth.
+On failure the build exits 1 before writing the page. A live server keeps the last good page and shows its error banner,
+including to new viewers; a successful rebuild clears the error. A disconnected viewer catches up on reconnect.
+Fix the data, or review the new result and update both
+the finding title and its assertion. Removing the assertion opts out of this check.
+
+Use `query.mjs <spec> --chart <id>` to inspect the new rows even when that chart's assertion fails. It prints the rows
+and diagnostic and exits 1. With `--json`, the response includes `ok: false`, `errors` and the usual rows/counts;
+successful inspection retains `ok: true`. This inspection command produces no chart or page.
+
+This checks the declared comparison, **not arbitrary title prose or source completeness**. SQL `WHERE`, joins and
+`LIMIT` define the rows being compared; a query-level limit is not detected as `maxRows` truncation. Keep that scope
+clear in the title. A saved HTML file is a static snapshot, with no ongoing assertion check. Specs without `assert`
+retain their existing behavior.
 
 ## Source types
 

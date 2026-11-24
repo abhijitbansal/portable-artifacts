@@ -305,6 +305,18 @@ dtest('chartData errors are re-pathed under lift.dashboard and name the file', a
   await assert.rejects(() => buildScene(spec, { dir, theme: THEME }), (err) => err instanceof SceneError && err.errors[0].path === 'lift.dashboard.charts[0].x');
 });
 
+dtest('a contradicted dashboard assertion stops scene validation and rendering', async (t) => {
+  const dir = dashboardIn(t, { q: "SELECT * FROM (VALUES ('East', 10), ('West', 90)) AS t(region, revenue)" }, [
+    { id: 'c', title: 'East leads', query: 'q', kind: 'bar', x: 'region', y: 'revenue', assert: { type: 'max', category: 'East' } },
+  ]);
+  const spec = { title: 'T', lift: { dashboard: DASHBOARD, chart: 'c' } };
+  const checked = await validateSpec(spec, { dir });
+  assert.equal(checked.ok, false);
+  const error = errorAt(checked, 'lift.dashboard.charts[0].assert');
+  assert.match(error.message, /East.*10.*West.*90.*dashboard\.json/);
+  await assert.rejects(() => buildScene(spec, { dir, theme: THEME }), (err) => err instanceof SceneError && err.errors[0].path === error.path);
+});
+
 dtest('a dashboard that is not JSON is a lift.dashboard error, never a stack', async (t) => {
   const dir = dashboardIn(t, { q: 'SELECT 1 AS n' }, []);
   fs.writeFileSync(path.join(dir, DASHBOARD), '{ "title": ');

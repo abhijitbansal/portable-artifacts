@@ -6,6 +6,23 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-23
+
+- **Optional dashboard data assertions.** Add `"assert": { "type": "max", "category": "East" }` to a single-series
+  `bar` chart to require East to have the unique highest `y` in that chart's query result. Full validation, builds,
+  live refresh and dashboard-chart embedding check the same rows used for rendering. A contradiction reports the
+  expected category and actual winner at `charts[n].assert`, before any page is replaced. Ties, missing/duplicate
+  categories, empty/truncated results, nulls and unsupported numeric precision fail explicitly. This checks a declared
+  comparison within the query's scope, not arbitrary prose; specs without an assertion work as before.
+- **Live rebuild errors survive reconnects.** New and reconnecting viewers of a retained last-good page now see the
+  failed-build banner too. A successful rebuild clears the remembered failure; viewers that missed it catch up
+  when their event stream reconnects. If a validated source path changes before an assertion fails, watch mode
+  follows the new file so its next edit can recover the page.
+- **Inspect a failed finding.** `query.mjs --chart <id>` still returns the query rows when its assertion fails,
+  alongside the diagnostic and exit status 1. JSON output includes `ok: false`, `errors` and the rows/counts.
+- **Preserve plotted data and readable diagnostics.** Bar transforms avoid collisions with query column names;
+  assertion diagnostics escape invisible characters in category, column and query names.
+
 ## [2.4.0] - 2026-11-23
 
 A security pass over all five skills, against prompt injection and what the skills.sh scanners (Gen Agent Trust Hub,

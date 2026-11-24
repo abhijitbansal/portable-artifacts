@@ -101,6 +101,15 @@ export const SCHEMA = {
           format: { enum: FORMATS },
           views: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true, maxItems: 6 },
           pair: { type: 'boolean' },
+          assert: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['type', 'category'],
+            properties: {
+              type: { const: 'max' },
+              category: { type: 'string' },
+            },
+          },
         },
       },
     },
@@ -134,7 +143,7 @@ function items(spec) {
 }
 
 // Chart keys only a kind chart reads; on a raw vegaLite chart they would be ignored silently.
-const KIND_ONLY_KEYS = ['x', 'y', 'color', 'size', 'value', 'views', 'format', 'pair'];
+const KIND_ONLY_KEYS = ['x', 'y', 'color', 'size', 'value', 'views', 'format', 'pair', 'assert'];
 
 function crossRefs(spec, dir, { allowOutside }) {
   const errors = [];
@@ -174,6 +183,9 @@ function crossRefs(spec, dir, { allowOutside }) {
   }
   (spec.charts ?? []).forEach((c, i) => {
     const p = pathJoin('charts', i);
+    if (c.assert && c.kind && (c.kind !== 'bar' || c.color !== undefined)) {
+      errors.push({ path: pathJoin(p, 'assert'), message: 'max assertion needs kind "bar" without color' });
+    }
     if (c.kind && c.vegaLite) errors.push({ path: p, message: 'use either kind or vegaLite, not both' });
     else if (!c.kind && !c.vegaLite) errors.push({ path: p, message: `add kind (one of ${KIND_NAMES.join(', ')}) or vegaLite` });
     else if (!c.kind) {
