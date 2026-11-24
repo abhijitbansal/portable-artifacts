@@ -117,7 +117,15 @@ test('the CLI writes results.json, prints one line a site and runs the next site
   const { file } = sitesFile([entry('missing', '/plain/', [{ do: 'click', role: 'link', name: 'No such link' }]), entry('plain', '/plain/', [scroll(300)])]);
   const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'make-demo-cli-')), 'out');
   const stdout = collect();
-  const code = await main([file, '--out', out], { live: () => [], out: stdout.write, err: stdout.write });
+  // The file's own browser is already open: lend it to the CLI (its close is a no-op) so two never run at once.
+  const lend = async () => new Proxy(browser, {
+    get(target, prop) {
+      if (prop === 'close') return async () => {};
+      const value = Reflect.get(target, prop);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const code = await main([file, '--out', out], { live: () => [], launch: lend, out: stdout.write, err: stdout.write });
   assert.equal(code, 0);
   const results = JSON.parse(fs.readFileSync(path.join(out, 'results.json'), 'utf8'));
   assert.deepEqual(results.map((r) => [r.name, r.verdict]), [['missing', 'inconclusive'], ['plain', 'steppable']]);
