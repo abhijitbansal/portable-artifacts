@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slow page</title>
+<style>
+  body { margin: 0; font: 20px/1.5 system-ui, sans-serif; padding: 48px 32px; color: #1c2430; background: #fbfaf7; }
+  .spin { width: 40px; height: 40px; border: 5px solid #d8deea; border-top-color: #1b5fd1; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<h1>Reports</h1>
+<div id="out"><div class="spin" role="status" aria-label="Loading"></div></div>
+<script>
+const DELAY_MS = 1200;
+setTimeout(async () => {
+  const res = await fetch('/slow/data');
+  const { items } = await res.json();
+  document.getElementById('out').replaceChildren(...items.map((t) => Object.assign(document.createElement('p'), { textContent: t })));
+}, DELAY_MS);
+</script>
+</body>
+</html>

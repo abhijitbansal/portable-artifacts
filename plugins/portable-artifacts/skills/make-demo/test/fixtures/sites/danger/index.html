@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Danger zone</title>
+<style>body { margin: 0; font: 20px/1.5 system-ui, sans-serif; padding: 48px 32px; color: #1c2430; background: #fbfaf7; } button { font: inherit; margin: 6px 8px 6px 0; padding: 6px 14px; } button.icon { width: 40px; height: 40px; } form { display: inline; }</style>
+</head>
+<body>
+<h1>Project settings</h1>
+<p><a href="/danger/item/1/delete">Archive item 1</a></p>
+<form method="post" action="/danger/delete"><button type="submit">Delete</button></form>
+<form method="post" action="/danger/pay"><button type="submit">Pay</button></form>
+<form method="post" action="/danger/invite"><button type="submit">Send invite</button></form>
+<form method="post"><button type="submit" formaction="/danger/icon" class="icon"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#c0392b"/></svg></button></form>
+</body>
+</html>

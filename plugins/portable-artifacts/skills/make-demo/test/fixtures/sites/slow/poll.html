@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Polling page</title>
+<style>body { margin: 0; font: 20px/1.5 system-ui, sans-serif; padding: 48px 32px; color: #1c2430; background: #fbfaf7; } #n { font-size: 64px; font-variant-numeric: tabular-nums; }</style>
+</head>
+<body>
+<h1>Live count</h1>
+<div id="n">0</div>
+<script>
+const POLL_MS = 200;
+setInterval(async () => {
+  const res = await fetch('/slow/poll/tick');
+  const { n } = await res.json();
+  document.getElementById('n').textContent = String(n);
+}, POLL_MS);
+</script>
+</body>
+</html>

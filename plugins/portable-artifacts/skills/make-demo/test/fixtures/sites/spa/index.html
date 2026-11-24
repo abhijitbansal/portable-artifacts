@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Single-page app</title>
+<style>
+  body { margin: 0; font: 18px/1.5 system-ui, sans-serif; color: #1c2430; background: #f4f6fb; }
+  header { padding: 20px 32px; background: #fff; border-bottom: 1px solid #d8deea; display: flex; gap: 12px; align-items: center; }
+  header h1 { font-size: 22px; margin: 0 24px 0 0; }
+  input { font: inherit; padding: 6px 10px; border: 1px solid #9aa6bd; border-radius: 6px; }
+  button, [role="tab"] { font: inherit; padding: 6px 14px; border: 1px solid #9aa6bd; border-radius: 6px; background: #fff; cursor: pointer; }
+  [role="tab"][aria-selected="true"] { background: #1b5fd1; color: #fff; }
+  main { padding: 24px 32px; }
+  #count { font-size: 64px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  ul { list-style: none; padding: 0; margin: 12px 0; }
+  li { padding: 6px 0; }
+  .row { opacity: 0; transform: translateY(12px); transition: opacity 500ms linear, transform 500ms linear; padding: 10px 14px; margin: 6px 0; background: #fff; border-radius: 8px; }
+  .row.in { opacity: 1; transform: none; }
+  [role="tabpanel"] { padding: 12px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pipeline</h1>
+  <input id="q" type="text" aria-label="Filter accounts" placeholder="Filter accounts">
+  <button id="go" type="button">Search</button>
+</header>
+<main>
+  <div role="tablist" aria-label="Views">
+    <button role="tab" id="tab-a" aria-selected="true" aria-controls="panel-a">Overview</button>
+    <button role="tab" id="tab-b" aria-selected="false" aria-controls="panel-b">Accounts</button>
+    <button role="tab" id="tab-c" aria-selected="false" aria-controls="panel-c">History</button>
+  </div>
+  <div role="tabpanel" id="panel-a" aria-labelledby="tab-a">
+    <div>Open deals</div>
+    <div id="count" aria-live="off">0</div>
+    <div id="results"></div>
+  </div>
+  <div role="tabpanel" id="panel-b" aria-labelledby="tab-b" hidden>
+    <ul id="accounts"></ul>
+  </div>
+  <div role="tabpanel" id="panel-c" aria-labelledby="tab-c" hidden>
+    <p>No history yet.</p>
+  </div>
+</main>
+<script>
+const ACCOUNTS = ['Acme Berlin', 'Borealis Ops', 'Cobalt Labs', 'Delta Freight', 'Evergreen Co', 'Foxglove Ltd'];
+const TARGET = 247;
+const COUNT_MS = 1200;
+const $ = (id) => document.getElementById(id);
+
+function renderAccounts(filter) {
+  const needle = filter.trim().toLowerCase();
+  $('accounts').replaceChildren(...ACCOUNTS.filter((a) => a.toLowerCase().includes(needle)).map((a) => Object.assign(document.createElement('li'), { textContent: a })));
+}
+
+function countUp() {
+  const t0 = performance.now();
+  (function frame() {
+    const p = Math.min(1, (performance.now() - t0) / COUNT_MS);
+    $('count').textContent = String(Math.round(TARGET * (1 - Math.pow(1 - p, 3))));
+    if (p < 1) requestAnimationFrame(frame);
+  })();
+}
+
+function showRows(q) {
+  const box = $('results');
+  box.replaceChildren();
+  ACCOUNTS.filter((a) => a.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 4).forEach((name) => {
+    const row = Object.assign(document.createElement('div'), { className: 'row', textContent: name });
+    box.append(row);
+    row.getBoundingClientRect();
+    row.classList.add('in');
+  });
+}
+
+function selectTab(id) {
+  for (const tab of document.querySelectorAll('[role="tab"]')) {
+    const on = tab.id === id;
+    tab.setAttribute('aria-selected', String(on));
+    $(tab.getAttribute('aria-controls')).hidden = !on;
+  }
+  history.pushState({ tab: id }, '', `#${id}`);
+}
+
+$('q').addEventListener('input', (e) => renderAccounts(e.target.value));
+$('go').addEventListener('click', () => {
+  const q = $('q').value;
+  history.pushState({ q }, '', `?q=${encodeURIComponent(q)}`);
+  showRows(q);
+  countUp();
+});
+for (const tab of document.querySelectorAll('[role="tab"]')) tab.addEventListener('click', () => selectTab(tab.id));
+renderAccounts('');
+</script>
+</body>
+</html>

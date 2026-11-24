@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Canvas chart</title>
+<style>body { margin: 0; font: 20px system-ui, sans-serif; padding: 24px 32px; background: #fbfaf7; color: #1c2430; } canvas { display: block; }</style>
+</head>
+<body>
+<h1>Revenue by month</h1>
+<canvas id="c" width="800" height="360" role="img" aria-label="Bar chart of revenue by month"></canvas>
+<script>
+const VALUES = [0.35, 0.55, 0.45, 0.8, 0.65, 0.95];
+const DRAW_MS = 2000;
+const ctx = document.getElementById('c').getContext('2d');
+let t0;
+function draw(now) {
+  t0 ??= now;
+  const p = Math.min(1, (now - t0) / DRAW_MS);
+  ctx.clearRect(0, 0, 800, 360);
+  VALUES.forEach((v, i) => {
+    const h = v * 300 * p;
+    ctx.fillStyle = '#1b5fd1';
+    ctx.fillRect(40 + i * 120, 340 - h, 80, h);
+  });
+  if (p < 1) requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

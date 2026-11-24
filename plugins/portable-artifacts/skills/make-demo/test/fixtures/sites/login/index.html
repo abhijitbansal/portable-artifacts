@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in</title>
+<style>body { margin: 0; font: 20px/1.5 system-ui, sans-serif; padding: 48px 32px; color: #1c2430; background: #fbfaf7; } label { display: block; margin: 12px 0 4px; } input, button { font: inherit; padding: 6px 10px; }</style>
+</head>
+<body>
+<h1>Sign in</h1>
+<form method="post" action="/login/signin">
+  <label for="user">User</label>
+  <input id="user" name="user" type="text" autocomplete="off">
+  <label for="pass">Password</label>
+  <input id="pass" name="pass" type="password" autocomplete="off">
+  <p><button type="submit">Sign in</button></p>
+</form>
+</body>
+</html>
