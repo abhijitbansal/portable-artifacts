@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A WebSocket after load</title></head>
+<body>
+<h1>A WebSocket after load</h1>
+<script>setTimeout(() => { new WebSocket(`ws://${location.host}/socket`); }, 800);</script>
+</body>
+</html>

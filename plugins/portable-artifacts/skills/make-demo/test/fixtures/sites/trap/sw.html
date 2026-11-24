@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A service worker that POSTs</title></head>
+<body>
+<h1>A service worker that POSTs</h1>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/trap/sw.js').catch((error) => { document.title = `no worker: ${error.name}`; });
+}
+</script>
+</body>
+</html>

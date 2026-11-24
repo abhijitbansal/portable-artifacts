@@ -2,6 +2,8 @@
 // (real time twice, page clock stepped once), then compares the settled pictures where the two real-time runs agree.
 //   node test/feasibility/probe.mjs <sites.json> --out <dir>
 // Exit 0 when it ran, 2 for a usage error or a live headless browser. Run by hand: no test and no CI job visits a public site.
+// The probe sends nothing beyond what loading the page sends: see probe-guard.mjs. It cannot tell a GET that changes state
+// (a redirect chain, a fetch of a URL like /delete?id=1) from a read; the final address of each run is recorded for that reason.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,20 +11,21 @@ import { launchBrowser, liveBrowsers } from '../../scripts/lib/browser.mjs';
 import { captureRun, FPS } from './probe-run.mjs';
 import { stableMask, maskedSsim, verdict } from './compare.mjs';
 import { decodePng } from './decode.mjs';
+import { ownOriginBlocks } from './probe-guard.mjs';
 
 const NAME_PATTERN = /^[\w.-]+$/;
-const LOOK_KINDS = new Set(['scroll', 'hover', 'click']);
+const LOOK_KINDS = new Set(['scroll', 'hover']);
 const MAX_SCROLL_SECONDS = 10;
 const EXIT_USAGE = 2;
 
-/** Why a sites.json entry is not usable, or null. The probe is look only: scroll, hover, and click on a named control. */
+/** Why a sites.json entry is not usable, or null. The probe is look only: scroll, and hover over a named control. */
 export function entryProblem(entry) {
   if (!entry || typeof entry !== 'object') return 'an entry is not an object';
   if (!NAME_PATTERN.test(entry.name ?? '')) return `name "${entry.name}" must be letters, digits, dot, dash or underscore`;
   if (!/^https?:\/\//.test(entry.url ?? '')) return `${entry.name}: url must start with http:// or https://`;
-  if (!Array.isArray(entry.steps)) return `${entry.name}: steps must be a list`;
+  if (!Array.isArray(entry.steps) || entry.steps.length === 0) return `${entry.name}: steps must be a list of at least one look step`;
   for (const [i, step] of entry.steps.entries()) {
-    if (!LOOK_KINDS.has(step?.do)) return `${entry.name}: step ${i + 1} is "${step?.do}", but the probe takes look steps only (scroll, hover, click)`;
+    if (!LOOK_KINDS.has(step?.do)) return `${entry.name}: step ${i + 1} is "${step?.do}", but the probe takes look steps only (scroll, hover)`;
     if (step.do === 'scroll' && !(step.to >= 0 && step.seconds > 0 && step.seconds <= MAX_SCROLL_SECONDS)) return `${entry.name}: step ${i + 1} needs "to" (px) and "seconds" up to ${MAX_SCROLL_SECONDS}`;
     if (step.do !== 'scroll' && !(step.role && step.name)) return `${entry.name}: step ${i + 1} needs "role" and "name"`;
   }
@@ -52,7 +55,6 @@ async function compareStep(util, outDir, index, [stepped, real1, real2]) {
 }
 
 const verdictRecord = (entry, result, extra = {}) => ({ name: entry.name, url: entry.url, ...result, ...extra });
-const pick = (runs, key) => runs.map((r) => r[key]).find(Boolean) ?? null;
 
 function filmNumbers({ film }) {
   const seconds = film.frames / FPS;
@@ -60,28 +62,40 @@ function filmNumbers({ film }) {
   return { frames: film.frames, seconds, wallMsPerFilmSecond: film.wallMs / seconds, bytesPerSecond: film.bytes / seconds, bytesPerSecondWithoutRepeats: film.rawBytes / seconds };
 }
 
+const RUNS = [['real-1', false], ['real-2', false], ['stepped', true]];
+
+/** Why this run ends the probe before any comparison, as a verdict result, or null. */
+function stopResult(run) {
+  if (run.wall) return verdict({ ssims: [], shares: [], controlsEqual: true, newErrors: 0, wall: run.wall });
+  const blocked = ownOriginBlocks(run.traffic ?? { blocked: [] });
+  if (blocked.length > 0) {
+    const what = blocked.map((b) => `${b.kind} ${b.method} ${b.path}`).join(', ');
+    return { verdict: 'inconclusive', why: [`the ${run.label} run tried to send ${what} after the page loaded, and the probe blocked it: the picture may show a state the real site does not`] };
+  }
+  if (run.problem) return { verdict: 'inconclusive', why: [`${run.label} run: ${run.problem}`] };
+  return null;
+}
+
 /** Probe one site: three runs, then the verdict and the numbers. Pictures go to `<outDir>/<name>/`. */
 export async function probeSite(browser, entry, outDir) {
   const invalid = entryProblem(entry);
   if (invalid) throw new Error(invalid);
-  const real1 = await captureRun(browser, entry, { stepped: false });
-  const wallEarly = real1.wall;
-  if (wallEarly || real1.problem) return stopped(entry, real1, wallEarly, `real-time run: ${real1.problem}`);
-  const real2 = await captureRun(browser, entry, { stepped: false });
-  const stepped = await captureRun(browser, entry, { stepped: true });
-  const runs = [stepped, real1, real2];
-  const problem = runs.map((r) => r.problem).find(Boolean);
-  const wall = pick(runs, 'wall');
-  if (wall || problem) return stopped(entry, stepped, wall, problem);
-  return compareRuns(browser, entry, outDir, { stepped, real1, real2 });
+  const runs = [];
+  for (const [label, stepped] of RUNS) {
+    const run = await captureRun(browser, entry, { stepped, label });
+    runs.push(run);
+    const stop = stopResult(run);
+    if (stop) return stopped(entry, runs, stop);
+  }
+  const [real1, real2, stepped] = runs;
+  return compareRuns(browser, entry, outDir, { stepped, real1, real2 }, runs.map((r) => r.traffic));
 }
 
-function stopped(entry, run, wall, problem) {
-  const result = wall ? verdict({ ssims: [], shares: [], controlsEqual: true, newErrors: 0, wall }) : { verdict: 'inconclusive', why: [problem] };
-  return verdictRecord(entry, result, { status: run.status, steps: [], film: null });
+function stopped(entry, runs, result) {
+  return verdictRecord(entry, result, { status: runs.at(-1).status, steps: [], film: null, traffic: runs.map((r) => r.traffic) });
 }
 
-async function compareRuns(browser, entry, outDir, { stepped, real1, real2 }) {
+async function compareRuns(browser, entry, outDir, { stepped, real1, real2 }, traffic) {
   const dir = path.join(outDir, entry.name);
   fs.mkdirSync(dir, { recursive: true });
   const context = await browser.newContext();
@@ -98,8 +112,8 @@ async function compareRuns(browser, entry, outDir, { stepped, real1, real2 }) {
       status: stepped.status,
       steps,
       film: filmNumbers(stepped),
-      nonGetRequests: stepped.nonGet,
-      blockedWrites: stepped.blocked,
+      traffic,
+      finalUrls: [real1.finalUrl, real2.finalUrl, stepped.finalUrl],
       pageErrors: { stepped: stepped.errors, realTime: [...realMessages], newInStepped: newErrors },
     });
   } finally {

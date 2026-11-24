@@ -115,6 +115,11 @@ export async function startSites() {
   const closeServer = (server) => new Promise((done) => { server.closeAllConnections?.(); server.close(() => done()); });
 
   const main = await listen(handle);
+  // A WebSocket upgrade is logged and refused: a test then sees whether a page ever reached the server with one.
+  main.on('upgrade', (req, socket) => {
+    log.push({ method: 'UPGRADE', path: new URL(req.url, 'http://fixture.invalid').pathname });
+    socket.destroy();
+  });
   const other = await listen(handleOther);
   return {
     origin: `http://127.0.0.1:${main.address().port}`,

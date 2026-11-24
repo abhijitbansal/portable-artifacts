@@ -5,7 +5,7 @@
     "steps": [
       { "do": "scroll", "to": 1200, "seconds": 1.5 },
       { "do": "hover", "role": "link", "name": "Open the full film" },
-      { "do": "click", "role": "link", "name": "03 Diagram" }
+      { "do": "hover", "role": "link", "name": "03 Diagram" }
     ]
   },
   {
@@ -14,7 +14,7 @@
     "steps": [
       { "do": "scroll", "to": 1500, "seconds": 1.5 },
       { "do": "hover", "role": "button", "name": "Tools" },
-      { "do": "click", "role": "link", "name": "Browser market" }
+      { "do": "hover", "role": "link", "name": "Browser market" }
     ]
   },
   {
@@ -23,7 +23,7 @@
     "steps": [
       { "do": "scroll", "to": 800, "seconds": 1 },
       { "do": "hover", "role": "link", "name": "Reference" },
-      { "do": "click", "role": "link", "name": "Thinking in React" }
+      { "do": "hover", "role": "link", "name": "Thinking in React" }
     ]
   },
   {
@@ -31,7 +31,7 @@
     "url": "https://excalidraw.com/",
     "steps": [
       { "do": "hover", "role": "button", "name": "Rectangle" },
-      { "do": "click", "role": "button", "name": "Library" },
+      { "do": "hover", "role": "button", "name": "Library" },
       { "do": "hover", "role": "button", "name": "Ellipse" }
     ]
   },

@@ -126,10 +126,11 @@ test('sites.json holds the five sites of the plan, each with two to four valid l
 
 test('entryProblem refuses typing, submitting and anything that is not a look', () => {
   const base = { name: 'x', url: 'https://example.test/' };
-  for (const kind of ['type', 'fill', 'press', 'select', 'submit', 'goto']) {
+  for (const kind of ['click', 'type', 'fill', 'press', 'select', 'submit', 'goto']) {
     assert.match(entryProblem({ ...base, steps: [{ do: kind, role: 'textbox', name: 'q', value: 'v' }] }), /look/, kind);
   }
-  assert.match(entryProblem({ ...base, steps: [{ do: 'click', role: 'button' }] }), /role/);
+  assert.match(entryProblem({ ...base, steps: [{ do: 'hover', role: 'button' }] }), /role/);
+  assert.match(entryProblem({ ...base, steps: [] }), /at least one/);
   assert.match(entryProblem({ ...base, url: 'file:///etc/passwd', steps: [] }), /http/);
   assert.match(entryProblem({ ...base, name: '../x', steps: [] }), /name/);
 });

@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A POST a little after load</title></head>
+<body>
+<h1>A POST a little after load</h1>
+<script>setTimeout(() => fetch('/w', { method: 'POST' }), 800);</script>
+</body>
+</html>
