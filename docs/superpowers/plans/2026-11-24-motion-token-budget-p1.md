@@ -158,3 +158,5 @@ Pass rule, per arm: median of (arm cost / A cost) over usable prompts at most 0.
 - [ ] **Step 3:** `--resume` for the rest, in the background, no other browser work.
 - [ ] **Step 4:** `--packets`; three reviewer-tier readers per prompt, each told only the brief and the packet folder, writing ranks as JSON; no key, no cost.
 - [ ] **Step 5:** `--verdict`; write `docs/superpowers/plans/2026-11-24-motion-token-budget-p1-report.md` and a row in `eval/results/INDEX.md` with host version, plugin version, command line and spend. Report to the owner. Stop before Phase 2.
+
+**Result (2026-11-24):** verdict none; see `plugins/portable-artifacts/eval/results/summary-motion-token-budget-2026-11-24.md`, which replaces the report of Task 6 step 5. Phase 2 is not started. Open before any push: the six HIGH findings of the second review of the driver, and one `plugin.json` bump or `[skip-plugin-bump]`.
