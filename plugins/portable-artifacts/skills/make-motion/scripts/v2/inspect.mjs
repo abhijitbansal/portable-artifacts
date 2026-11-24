@@ -6,8 +6,9 @@
 // that `p`, so one of them may be partly or wholly gone (a crossfade shows both only for p between 0.3 and 0.5). `nodes`
 // lists the incoming shot alone (the page's __snapshot, engine/page/stage.mjs), so `cut` names the outgoing shot and the
 // second it stands at. No review, no sound, no ffmpeg: the browser writes the picture.
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 import { cutWindowAt } from '../../engine/graph/film.mjs';
 import { drawnBoxes, inspectNodes } from '../../engine/review/inspect-nodes.mjs';
 import { unitOf } from '../../engine/units.mjs';
@@ -36,7 +37,7 @@ export function cutAt(film, timeline, frame) {
 
 // Both files written whole or not at all: each to a partial beside it, renamed once every partial is written.
 function writeWhole(files) {
-  mkdirSync(path.dirname(files[0][0]), { recursive: true });
+  ensureOutputFolder(path.dirname(files[0][0]));
   const partials = files.map(([file]) => path.join(path.dirname(file), `.${path.basename(file)}.partial-${process.pid}`));
   try {
     files.forEach(([, data], k) => writeFileSync(partials[k], data, { flag: 'wx' }));

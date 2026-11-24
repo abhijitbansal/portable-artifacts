@@ -12,11 +12,11 @@
 // A PNG that scripts/v2/png.mjs cannot read, and a JPEG, WebP, GIF or BMP, is decoded by ffmpeg behind the file
 // protocol, picture demuxer and picture decoder whitelists (a file of any other kind is refused). Exit 0 done; exit 2: a
 // usage or IO problem (an unreadable picture, a strip outside 1 to 9, a cell outside 1 to 36, a URL), one line on stderr.
-import { lstatSync, mkdirSync, realpathSync, statSync } from 'node:fs';
+import { lstatSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli } from '../shared/cli.mjs';
-import { writeFileReplacing } from '../shared/write-file.mjs';
+import { ensureOutputFolder, writeFileReplacing } from '../shared/write-file.mjs';
 import { GRID, STRIPS, cellsBox, readPicture, renderBox, renderGrid, renderStrips, stripsBox, toRegion } from './lib/locate.mjs';
 import { encodePng } from './lib/png-write.mjs';
 
@@ -94,7 +94,7 @@ function outDir(out, picture, names) {
   for (const name of names) {
     if (realOrResolved(path.join(dir, name)) === source) throw new UsageError(`--out: ${name} in ${dir} is the picture itself; choose another folder`);
   }
-  mkdirSync(dir, { recursive: true });
+  ensureOutputFolder(dir);
   return dir;
 }
 

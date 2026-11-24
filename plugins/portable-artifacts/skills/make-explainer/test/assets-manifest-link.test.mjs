@@ -9,8 +9,9 @@ import { MANIFEST, syncAssets } from '../scripts/lib/assets.mjs';
 
 const skip = process.platform === 'win32' && 'symbolic links need a privilege on Windows';
 
-test('syncAssets: a symlink at the manifest path or at the old temp name is replaced or ignored, and its target is untouched', { skip }, () => {
+test('syncAssets: a symlink at the manifest path or at the old temp name is replaced or ignored, and its target is untouched', { skip }, (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-manifest-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const victim = path.join(dir, 'victim.txt');
   fs.writeFileSync(victim, 'precious');
   const assets = path.join(dir, 'page.assets');

@@ -1,5 +1,5 @@
 // Arguments, target resolution and the loopback server. The screenshot loop runs against a stub that never starts a browser.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -11,7 +11,9 @@ import { UsageError } from '../cli.mjs';
 import { parseShotArgs, pagesFor, startServer, liveBrowsers, findBrowserLib, main, BROWSER_PACKAGE, MAX_SHOT_HEIGHT } from '../shot.mjs';
 
 const SHOT = fileURLToPath(new URL('../shot.mjs', import.meta.url));
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pa-shot-'));
+const made = [];
+const tmp = () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-shot-')); made.push(dir); return dir; };
+after(() => { for (const dir of made) fs.rmSync(dir, { recursive: true, force: true }); });
 const usageError = (fn) => { try { fn(); } catch (e) { assert.ok(e instanceof UsageError, String(e)); return e; } throw new Error('did not throw'); };
 
 function get(origin, urlPath, method = 'GET') {
@@ -159,7 +161,7 @@ function stubChromium({ log, height = 1200, scrollWidth = 0 }) {
               if (url.includes('page-with-bad-asset')) listeners.response?.({ ok: () => false, status: () => 404, url: () => `${new URL(url).origin}/missing.png` });
             },
             evaluate: async () => ({ height, scrollWidth: scrollWidth || opts.viewport.width }),
-            screenshot: async (o) => { log.shots.push(o); fs.writeFileSync(o.path, 'png'); },
+            screenshot: async (o) => { log.shots.push(o); return Buffer.from('png'); }, // the shot is taken to a buffer: the file is written by writeFileReplacing
           };
         },
       };
@@ -201,7 +203,7 @@ test('main: one PNG per page, width and scheme at a real viewport, deviceScaleFa
   assert.deepEqual(log.contexts.map((c) => [c.viewport.width, c.colorScheme, c.deviceScaleFactor]), [[390, 'light', 1], [390, 'dark', 1], [1280, 'light', 1], [1280, 'dark', 1]]);
   // Shots show the settled page: entrance animations (make-explainer's section rise-in) start at opacity 0.
   assert.ok(log.contexts.every((c) => c.reducedMotion === 'reduce'), 'every context asks for reduced motion');
-  assert.ok(log.shots.every((s) => s.fullPage === true && s.clip === undefined));
+  assert.ok(log.shots.every((s) => s.fullPage === true && s.clip === undefined && s.path === undefined), 'the browser is never given a path to open');
   assert.equal(log.closed, true);
 });
 
@@ -218,6 +220,88 @@ test('main: a symlink at a shot\'s predictable name is replaced by the shot, and
   assert.equal(r.code, 0, r.err);
   assert.ok(fs.readFileSync(victim, 'utf8') === 'precious', 'a shot was written through a link');
   for (const n of names) assert.equal(fs.lstatSync(path.join(outDir, n)).isSymbolicLink(), false);
+});
+
+// ---- containment: the default folder, an explicit one and a linked ancestor (F2, F7) --------------------------------------
+const linkSkip = process.platform === 'win32' && 'symbolic links need a privilege on Windows';
+
+function plantedRepo(t, { outsideIsRepo = false } = {}) {
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pa-shot-link-')));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const repo = path.join(base, 'repo');
+  const outside = path.join(base, 'outside');
+  fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+  fs.mkdirSync(outside);
+  if (outsideIsRepo) fs.mkdirSync(path.join(outside, '.git'));
+  fs.writeFileSync(path.join(repo, 'p.html'), '<p>x</p>');
+  return { base, repo, outside };
+}
+
+async function inFolder(dir, fn) {
+  const before = process.cwd();
+  process.chdir(dir);
+  try {
+    return await fn();
+  } finally {
+    process.chdir(before);
+  }
+}
+
+function refusedWith(r, log, outside, link, before = []) {
+  assert.equal(r.code, 2, r.err);
+  assert.equal(r.err.trim().split('\n').length, 1, r.err);
+  assert.ok(r.err.includes(link), r.err);
+  assert.match(r.err, /remove the link, or pass the folder's real path/);
+  assert.equal(log.contexts.length, 0, 'no browser page was opened');
+  assert.deepEqual(fs.readdirSync(outside, { recursive: true }).sort(), before, 'nothing was written through the link');
+}
+
+test('main: a .scratch that links out of the repository is refused for the default folder, and a link already inside it is left alone', { skip: linkSkip }, async (t) => {
+  const { repo, outside } = plantedRepo(t);
+  fs.mkdirSync(path.join(outside, 'shots'));
+  fs.symlinkSync('real-user-file', path.join(outside, 'shots', 'p-390-light.png'));
+  const before = fs.readdirSync(outside, { recursive: true }).sort();
+  fs.symlinkSync(outside, path.join(repo, '.scratch'));
+  const log = newLog();
+  const r = await inFolder(repo, () => runMain([path.join(repo, 'p.html'), '--widths', '390'], { chromium: stubChromium({ log }), live: () => [] }));
+  refusedWith(r, log, outside, path.join(repo, '.scratch'), before);
+  assert.equal(fs.lstatSync(path.join(outside, 'shots', 'p-390-light.png')).isSymbolicLink(), true, 'the user\'s link outside was not unlinked');
+});
+
+test('main: a shots folder that is a link out of the repository is refused, with --out as with the default', { skip: linkSkip }, async (t) => {
+  const { repo, outside } = plantedRepo(t);
+  fs.symlinkSync(outside, path.join(repo, 'shots'));
+  const log = newLog();
+  const r = await inFolder(repo, () => runMain([path.join(repo, 'p.html'), '--out', 'shots'], { chromium: stubChromium({ log }), live: () => [] }));
+  refusedWith(r, log, outside, path.join(repo, 'shots'));
+});
+
+test('main: a linked ancestor of --out is refused; its real path is accepted; a link that stays inside the repository is allowed', { skip: linkSkip }, async (t) => {
+  const { repo, outside } = plantedRepo(t);
+  fs.symlinkSync(outside, path.join(repo, 'ext'));
+  const log = newLog();
+  const refused = await runMain([path.join(repo, 'p.html'), '--out', path.join(repo, 'ext', 'a', 'b')], { chromium: stubChromium({ log }), live: () => [] });
+  refusedWith(refused, log, outside, path.join(repo, 'ext'));
+  const real = await runMain([path.join(repo, 'p.html'), '--widths', '390', '--out', path.join(outside, 'a', 'b')], { chromium: stubChromium({ log: newLog() }), live: () => [] });
+  assert.equal(real.code, 0, real.err);
+  assert.ok(fs.existsSync(path.join(outside, 'a', 'b', 'p-390-light.png')));
+  fs.mkdirSync(path.join(repo, 'build'));
+  fs.symlinkSync(path.join(repo, 'build'), path.join(repo, 'inside'));
+  const inside = await runMain([path.join(repo, 'p.html'), '--widths', '390', '--out', path.join(repo, 'inside', 's')], { chromium: stubChromium({ log: newLog() }), live: () => [] });
+  assert.equal(inside.code, 0, inside.err);
+  assert.ok(fs.existsSync(path.join(repo, 'build', 's', 'p-390-light.png')));
+});
+
+test('main: a hard link or a link at a shot name is replaced; the shot is written from a buffer by writeFileReplacing', { skip: linkSkip }, async (t) => {
+  const { repo, outside } = plantedRepo(t, {});
+  const out = path.join(repo, 'shots');
+  fs.mkdirSync(out);
+  fs.writeFileSync(path.join(outside, 'victim.txt'), 'precious');
+  fs.linkSync(path.join(outside, 'victim.txt'), path.join(out, 'p-390-light.png'));
+  const r = await runMain([path.join(repo, 'p.html'), '--widths', '390', '--out', out], { chromium: stubChromium({ log: newLog() }), live: () => [] });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(fs.readFileSync(path.join(outside, 'victim.txt'), 'utf8'), 'precious', 'a hard link was written through');
+  assert.equal(fs.readFileSync(path.join(out, 'p-390-light.png'), 'utf8'), 'png');
 });
 
 test('main: a non-2xx page or asset fails with exit 1 and names the URL; the PNGs are still written', async () => {

@@ -11,10 +11,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { ensureOutputFolder, TEMP_NAME, writeFileReplacing } from '../../shared/write-file.mjs';
 
 export const MANIFEST = '.pa-assets.json';
-const MANIFEST_TMP = `${MANIFEST}.tmp`;
+const MANIFEST_TMP = `${MANIFEST}.tmp`; // an older build's temp name
 const MANIFEST_VERSION = 1;
 const FIX = 'move it, or rename the section or its asset';
 
@@ -49,7 +49,7 @@ const realOrNull = (p) => {
   }
 };
 
-const isOwnName = (name) => [MANIFEST, MANIFEST_TMP].includes(name.toLowerCase()); // a case-insensitive disk folds them together
+const isOwnName = (name) => [MANIFEST, MANIFEST_TMP].includes(name.toLowerCase()) || TEMP_NAME.test(name); // a case-insensitive disk folds the first two together
 
 // A manifest entry is a relative path of plain names, with "/" as the separator. The manifest's own name
 // (and its temp file's), in any case, is never an entry.
@@ -60,11 +60,14 @@ function entryParts(entry) {
   return parts.length === 1 && isOwnName(parts[0]) ? null : parts;
 }
 
-// -> { files, dirs } (valid entries only) recorded by the previous build, or null when there is no usable manifest.
+// -> { files, dirs } (valid entries only) recorded by the previous build, or null when there is no usable manifest. A manifest that
+// is not a regular file (a pipe, a device, a link) is never opened: reading a pipe would block for good.
 function readManifest(root) {
+  const file = path.join(root, MANIFEST);
+  if (!lstatOrNull(file)?.isFile()) return null;
   let data;
   try {
-    data = JSON.parse(fs.readFileSync(path.join(root, MANIFEST), 'utf8'));
+    data = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return null;
   }
@@ -115,10 +118,10 @@ function removeEmptyDirs(root, from, owned) {
 function makeDirs(root, dir, made) {
   const names = relInside(root, dir);
   if (names === null) {
-    fs.mkdirSync(dir, { recursive: true });
+    ensureOutputFolder(dir);
     return;
   }
-  if (lstatOrNull(root) === null) fs.mkdirSync(root, { recursive: true });
+  if (lstatOrNull(root) === null) ensureOutputFolder(root);
   let current = root;
   for (const [i, name] of names.entries()) {
     current = path.join(current, name);
@@ -136,11 +139,16 @@ function writeManifest(root, { files, dirs }) {
   io(file, () => writeFileReplacing(file, `${JSON.stringify(body, null, 2)}\n`));
 }
 
-// A leftover manifest temp file from an older build is ours, never a user's: remove it (a regular file or a symlink only).
+// A leftover manifest temp file is ours, never a user's: the older fixed name (a regular file or a symlink), and the
+// .pa-<hex>.tmp a killed build left (a regular file only: it is never a name a user chose).
 function removeStaleTmp(root) {
-  const tmp = path.join(root, MANIFEST_TMP);
-  const stat = lstatOrNull(tmp);
-  if (stat !== null && (stat.isFile() || stat.isSymbolicLink())) io(tmp, () => fs.unlinkSync(tmp));
+  const old = path.join(root, MANIFEST_TMP);
+  const stat = lstatOrNull(old);
+  if (stat !== null && (stat.isFile() || stat.isSymbolicLink())) io(old, () => fs.unlinkSync(old));
+  for (const name of fs.readdirSync(root)) {
+    const file = path.join(root, name);
+    if (TEMP_NAME.test(name) && lstatOrNull(file)?.isFile()) io(file, () => fs.unlinkSync(file));
+  }
 }
 
 const sameFile = (a, b) => {

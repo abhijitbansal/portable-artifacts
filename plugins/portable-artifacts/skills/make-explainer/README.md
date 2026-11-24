@@ -79,8 +79,8 @@ Or just ask your agent: *"Recap this branch with a manual test checklist."* It
 gathers the facts, fills the file, runs validate and build and tells you where
 the page is. Without `--out` a spec inside a git repository builds into
 `<git root>/.scratch/<slug>.html`; any other spec builds into `~/.agent/diagrams/`;
-set `PA_OUTPUT_DIR` or pass `--out <file.html|dir>` to change it. A `.scratch` that is a symlink is refused
-(remove it, or pass `--out`), and a symlink at the page's path or its `--md` twin is replaced, not written through. `build` prints the
+set `PA_OUTPUT_DIR` or pass `--out <file.html|dir>` to change it. In a git repository a symlink on the folder's path that leads outside it is refused
+(pass the folder's real path), and a symlink at the page's path or its `--md` twin is replaced, not written through. `build` prints the
 page as a `file://` URL alone on its last line. A section with
 files (a video, an interactive chart) also writes `<name>.assets/` next to the
 page, so keep the two together.

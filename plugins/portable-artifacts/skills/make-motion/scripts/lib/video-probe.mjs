@@ -3,8 +3,9 @@
 // 1's `video` element, scripts/lib/video.mjs, built its frame cache on these; it was deleted at cut-over.)
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 import { PROTOCOL_WHITELIST, fileInput } from './ffmpeg.mjs';
 
 // The file extensions a clip may have (case-insensitive). The cut-out tool tells a clip from a photo by this list.
@@ -127,7 +128,7 @@ function publish(work, dir, ext) {
 export function decodeFrames(ffmpeg, { dir, ...opts }) {
   const ext = opts.alpha ? 'png' : 'jpg';
   const work = `${dir}.partial-${suffix()}`;
-  mkdirSync(work, { recursive: true });
+  ensureOutputFolder(work);
   try {
     const r = spawnSync(ffmpeg, decodeArgs({ ...opts, dir: work }), { encoding: 'utf8' });
     if (r.status !== 0) throw new Error(`ffmpeg cannot decode ${opts.file}: ${(r.stderr ?? '').trim().split('\n')[0] || r.error?.message}`);

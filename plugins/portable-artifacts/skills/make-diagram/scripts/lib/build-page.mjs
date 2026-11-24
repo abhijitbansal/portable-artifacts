@@ -1,7 +1,6 @@
 // The build itself: spec file -> validated, laid out, drawn and written as one HTML page (or one standalone SVG).
 // Everything heavy (ajv, ELK) loads through this file, so the entry script (scripts/build.mjs) can check that
 // node_modules exists first and say so in one line.
-import fs from 'node:fs';
 import path from 'node:path';
 import { loadSpec } from './spec.mjs';
 import { buildDiagram } from './api.mjs';
@@ -12,7 +11,7 @@ import { themeFor } from './theme.mjs';
 import { standaloneSvg } from './svg-export.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { ensureOutputFolder, writeFileReplacing } from '../../shared/write-file.mjs';
 
 export const FORMATS = ['html', 'svg'];
 const KB = 1024;
@@ -63,9 +62,10 @@ export async function build(file, { out, theme, format = 'html', model, effort, 
     return { ok: false, errors: [{ path: '', message }] };
   }
   try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
+    ensureOutputFolder(path.dirname(target)); // refuses a symlink that leads out of the repository, before anything is made
     writeFileReplacing(target, text);
   } catch (e) {
+    if (e instanceof UsageError) throw e;
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }
   return { ok: true, out: target, warnings: built.warnings };

@@ -4,12 +4,12 @@
 // into <models folder>/modnet/ (a per-user folder, see model-cache.mjs) and are checked against MODEL_SHA256 before every use. The image is decoded, shrunk,
 // enlarged and re-encoded on a Playwright page canvas (no sharp); only the matte comes from the model.
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from '../../shared/cli.mjs';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { ensureOutputFolder, inspectTarget, writeFileReplacing } from '../../shared/write-file.mjs';
 import { doctorCommand, optionalInstall } from './doctor-hint.mjs';
 import { modelDir } from './model-cache.mjs';
 import { importOptional } from './optional.mjs';
@@ -263,7 +263,7 @@ export async function cutoutPicture({ session, ort, page, bytes, mime }) {
 
 // The cutout appears whole or not at all; a link at the output name is replaced, never written through.
 export function writeAtomic(file, bytes) {
-  mkdirSync(path.dirname(file), { recursive: true });
+  ensureOutputFolder(path.dirname(file));
   writeFileReplacing(file, bytes);
 }
 
@@ -315,7 +315,7 @@ export async function cutoutVideo({ session, ort, page, ffmpeg, info, input, out
   if (reused) log(`cutout: reusing the alpha frames of this clip at ${fps} fps from ${dir}`);
   else {
     const work = `${dir}.partial-${process.pid}-${randomBytes(4).toString('hex')}`;
-    mkdirSync(path.join(work, 'src'), { recursive: true });
+    ensureOutputFolder(path.join(work, 'src'));
     mkdirSync(path.join(work, 'alpha'));
     try {
       run(ffmpeg, extractArgs(input, fps, path.join(work, 'src', '%06d.png')), 'frame extraction');
@@ -335,15 +335,26 @@ export async function cutoutVideo({ session, ort, page, ffmpeg, info, input, out
       rmSync(work, { recursive: true, force: true }); // gone already once moved into place
     }
   }
-  mkdirSync(path.dirname(output), { recursive: true });
-  const partial = `${output}.partial-${process.pid}.webm`;
+  encodeWebm({ ffmpeg, framesDir: path.join(dir, 'alpha'), fps, output });
+  return { output, frames: done.count, reused };
+}
+
+/**
+ * Encodes the numbered alpha PNGs of `framesDir` as a VP9 alpha WebM at `output`. ffmpeg (-y) writes into a private folder made
+ * beside `output` (a random name, mode 0700), never into a name a repository could guess; the finished file is renamed over
+ * `output`, which replaces a symlink there. A pipe, socket or device at `output` is refused before ffmpeg starts.
+ */
+export function encodeWebm({ ffmpeg, framesDir, fps, output }) {
+  ensureOutputFolder(path.dirname(output));
+  inspectTarget(output);
+  const scratch = mkdtempSync(path.join(path.dirname(output), '.pa-'));
+  const partial = path.join(scratch, 'clip.webm');
   try {
-    run(ffmpeg, ['-v', 'error', '-y', '-framerate', String(fps), ...fileInput(path.join(dir, 'alpha', '%06d.png')), '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-auto-alt-ref', '0', '-b:v', '0', '-crf', '24', partial], 'WebM encoding');
+    run(ffmpeg, ['-v', 'error', '-y', '-framerate', String(fps), ...fileInput(path.join(framesDir, '%06d.png')), '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-auto-alt-ref', '0', '-b:v', '0', '-crf', '24', partial], 'WebM encoding');
     renameSync(partial, output);
   } finally {
-    rmSync(partial, { force: true });
+    rmSync(scratch, { recursive: true, force: true });
   }
-  return { output, frames: done.count, reused };
 }
 
 /** The frame rate to use for a clip: --fps, else the clip's own rounded, at most DEFAULT_FPS_CAP. */

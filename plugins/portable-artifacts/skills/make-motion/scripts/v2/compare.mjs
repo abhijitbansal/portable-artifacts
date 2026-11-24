@@ -7,8 +7,8 @@
 // from the film-wide fields and the anchor alone, marked; a look that parks the anchor's kind is drawn and marked. A page finding
 // every look shares is one note. The tiles are placed in Node (png.mjs reads, scripts/lib/png-write.mjs writes). No review,
 // no sound, no ffmpeg of its own (a film with clips or music.snap prepares them as a poster does: run.mjs passes `prepare`).
-import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
 import { canvasSize } from '../../engine/formats.mjs';
 import { isParkedChartType, isParkedKind } from '../../engine/looks/index.mjs';
@@ -290,7 +290,7 @@ export async function writeComparison({ specPath, values = {}, shot, file, brows
   }
   if (!cells.some((cell) => cell.status !== 'refused')) throw noLookError(mode, shot, index, cells); // every page refused it
   const tiles = cells.map((cell) => readPng(Buffer.from(cell.png, 'base64')));
-  mkdirSync(path.dirname(file), { recursive: true });
+  ensureOutputFolder(path.dirname(file));
   writeAtomically(file, assembleSheet(tiles, { columns: COMPARE_COLUMNS, tileWidth: tile.width, tileHeight: tile.height }));
   const whole = cells.filter((cell) => cell.frame !== null);
   const anchored = whole.find((cell) => cell.look === own.film.look) ?? whole[0];

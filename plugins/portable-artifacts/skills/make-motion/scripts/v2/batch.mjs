@@ -5,8 +5,9 @@
 // data: a value used in a file name holds no path separator, no "..", no control character, no leading dot and no
 // Windows device name, and the files stay inside the template's folder.
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { lstatSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 import { launchRunBrowser } from './session.mjs';
 import { loadFilm, readFilmFile } from './pipeline.mjs';
 import { SpecError } from './spec-common.mjs';
@@ -164,7 +165,7 @@ async function renderRow(row, { options, io, browser }) {
 }
 
 function writeManifest(file, entries) {
-  mkdirSync(path.dirname(file), { recursive: true });
+  ensureOutputFolder(path.dirname(file));
   const partial = `${file}.partial-${process.pid}`;
   try {
     writeFileSync(partial, `${JSON.stringify({ rows: entries }, null, 2)}\n`, { flag: 'wx' });

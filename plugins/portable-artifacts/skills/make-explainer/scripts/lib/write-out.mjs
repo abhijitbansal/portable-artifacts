@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { ensureOutputFolder, writeFileReplacing } from '../../shared/write-file.mjs';
 
 // `overwrite: false` refuses a file that already exists (scaffold: a filled-in spec must not be replaced by a
 // TODO skeleton); gather keeps the default, since its facts file is rewritten on every run.
@@ -22,7 +22,7 @@ export function emit(text, outFile, { overwrite = true } = {}) {
     if (existing && !overwrite) {
       throw new UsageError(`${outFile} already exists; edit it instead, or pass --force to replace it with a fresh skeleton`);
     }
-    fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true });
+    ensureOutputFolder(path.dirname(path.resolve(outFile)));
     writeFileReplacing(outFile, text); // a symlink at the path is replaced, never written through
   } catch (e) {
     if (e instanceof UsageError) throw e;

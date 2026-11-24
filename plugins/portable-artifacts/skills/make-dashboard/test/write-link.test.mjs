@@ -10,4 +10,5 @@ linkTests({
   spec: 'minimal.json',
   build: fileURLToPath(new URL('../scripts/build.mjs', import.meta.url)),
   folder: (repo, spec) => path.join(path.dirname(spec), 'dist'),
+  paOutputDir: false,
 });

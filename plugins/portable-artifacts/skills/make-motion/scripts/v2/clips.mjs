@@ -7,8 +7,9 @@
 // (/clip/<k>/<n>); a shot's sound is cut from the clip to the shot's length and mixed under the voice unless `muted`.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { createReadStream, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 import { findFfmpeg, findFfprobe } from './render.mjs';
 import { SpecError } from './spec.mjs';
 import { fileInside, CLIP_FRAME_PATTERN } from './server.mjs';
@@ -149,7 +150,7 @@ function usedRange(entry, duration) {
 
 // `stream`: the index of the probed video stream, mapped by that index (never "the first video", which could be a picture).
 async function decode({ ffmpeg, file, stream, from, to, fps, size, dir, signal }) {
-  mkdirSync(dir, { recursive: true });
+  ensureOutputFolder(dir);
   const args = ['-nostdin', '-v', 'error', '-y', '-ss', String(from), '-t', String(to - from), ...clipInput(file), '-map', `0:${stream}`, '-an', '-sn', '-dn',
     '-vf', `fps=${fps},scale=${size[0]}:${size[1]}:flags=bicubic,format=rgb24`, '-start_number', '1', '-f', 'image2', '-c:v', 'png', path.join(dir, CLIP_FRAME_PATTERN)];
   const result = await run(ffmpeg, args, { signal });
@@ -274,7 +275,7 @@ export async function prepareClips({ film, specDir, timeline, cacheDir, canvas, 
   if (entries.length > MAX_CLIPS) throw filmError(entries[MAX_CLIPS].uses[0].index, 'src', `a film may use at most ${MAX_CLIPS} clip files; this one names ${entries.length}`);
   const { ffmpeg, ffprobe } = await tools();
   const version = await ffmpegVersion(ffmpeg, signal);
-  mkdirSync(cacheDir, { recursive: true });
+  ensureOutputFolder(cacheDir);
   const clips = [];
   for (const [k, entry] of entries.entries()) {
     const file = clipFile(specDir, entry);

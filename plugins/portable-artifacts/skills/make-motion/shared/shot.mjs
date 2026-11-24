@@ -2,7 +2,8 @@
 // node shared/shot.mjs <file.html | folder> [--widths 390,1280] [--out <dir>] [--json]
 // Screenshot a local page the way a person would check it: served from a loopback server (so relative assets load
 // and a 404 is seen), at each width, light and dark. One PNG per page, width and scheme in <out>
-// (default <git root>/.scratch/shots). Then LOOK at the PNGs; a script that wrote them has verified nothing.
+// (default <git root>/.scratch/shots; a symlink on that folder's path that leads out of a git repository is refused, and each
+// PNG is written from a buffer, replacing what is at its name). Then LOOK at the PNGs; a script that wrote them has verified nothing.
 //
 // Exit 0 ok, 1 a page answered non-2xx or a request failed, 2 usage / environment (no browser library, another
 // headless browser running). The browser library is loaded lazily from the calling skill's own node_modules (this file
@@ -17,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 import { findGitRoot, slugify } from './output.mjs';
-import { dropLinkAt } from './write-file.mjs';
+import { ensureOutputFolder, writeFileReplacing } from './write-file.mjs';
 
 export const BROWSER_PACKAGE = 'playwright';
 export const DEFAULT_WIDTHS = [390, 1280];
@@ -166,8 +167,9 @@ async function shootOne(browser, { url, name, width, scheme, out }) {
     if (scrollWidth > width) warnings.push(`${name} at ${width}px: the page is ${scrollWidth}px wide (horizontal overflow)`);
     if (height > MAX_SHOT_HEIGHT) warnings.push(`${name} at ${width}px: the page is ${height}px tall; the shot is cut at ${MAX_SHOT_HEIGHT}px`);
     const file = path.join(out, `${name}-${width}-${scheme}.png`);
-    dropLinkAt(file); // a predictable name: a symlink there is replaced by the shot, not written through
-    await page.screenshot({ path: file, fullPage: true, ...(height > MAX_SHOT_HEIGHT ? { clip: { x: 0, y: 0, width, height: MAX_SHOT_HEIGHT } } : {}) });
+    // Taken to a buffer and written by writeFileReplacing: the browser never opens a path someone may have prepared (a link, a hard link).
+    const png = await page.screenshot({ fullPage: true, ...(height > MAX_SHOT_HEIGHT ? { clip: { x: 0, y: 0, width, height: MAX_SHOT_HEIGHT } } : {}) });
+    writeFileReplacing(file, png);
     return { shot: { page: name, width, scheme, path: file }, problems, warnings };
   } finally {
     await context.close();
@@ -213,8 +215,8 @@ export async function main(argv, deps = {}) {
       if (!dir) throw new UsageError(`the browser library (${BROWSER_PACKAGE}) is not installed in this skill or a sibling; run the skill's doctor (scripts/doctor.mjs --fix dev_deps, or --fix node_modules in make-motion)`);
       chromium = await loadChromium(dir);
     }
-    const out = path.resolve(args.out ?? path.join(findGitRoot(process.cwd()) ?? process.cwd(), '.scratch', 'shots'));
-    fs.mkdirSync(out, { recursive: true });
+    // The folder is checked (a symlink that leads out of the repository is refused) and made before the server and the browser start.
+    const out = ensureOutputFolder(args.out ?? path.join(findGitRoot(process.cwd()) ?? process.cwd(), '.scratch', 'shots'));
     server = await startServer(root);
     browser = await launch(chromium);
     const result = { ok: true, shots: [], problems: [], warnings: [] };

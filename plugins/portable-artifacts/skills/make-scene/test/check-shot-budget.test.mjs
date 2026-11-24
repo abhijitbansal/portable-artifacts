@@ -53,9 +53,11 @@ function fakeBrowser(shotMs) {
     waitForTimeout: async () => {},
     addStyleTag: async () => ({ evaluate: async () => {} }),
     locator: () => ({ first: () => ({ screenshot: async ({ timeout } = {}) => { await take('locator.screenshot', timeout ?? 30000); return png; } }) }),
+    // Taken to a buffer, as the check does now: it never hands the browser a path to open.
     screenshot: async ({ timeout, path: file } = {}) => {
+      assert.equal(file, undefined, 'the browser was given a path to open');
       await take('page.screenshot', timeout ?? 5000);
-      if (file !== undefined) fs.writeFileSync(file, 'png'); // like Playwright: opens the path itself, links followed
+      return png;
     },
   };
   const context = { newPage: async () => page, close: async () => {} };

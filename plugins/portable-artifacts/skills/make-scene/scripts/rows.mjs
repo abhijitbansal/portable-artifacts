@@ -3,10 +3,9 @@
 // Writes { "rows": [...] } (commits per top-level folder per ISO week) for a scene's data.file. A --repo inside a
 // larger repository counts that folder alone, grouped by the folders inside it (one stderr note says so).
 // exit 0 written, 2 usage/IO
-import fs from 'node:fs';
 import path from 'node:path';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
-import { writeFileReplacing } from '../shared/write-file.mjs';
+import { ensureOutputFolder, writeFileReplacing } from '../shared/write-file.mjs';
 import { exitInternal } from './lib/internal-error.mjs';
 import { historyRows } from './lib/history-rows.mjs';
 
@@ -40,9 +39,10 @@ try {
 
   const rows = historyRows({ repo, weeks, depth, warn: (m) => process.stderr.write(`${m}\n`) });
   try {
-    fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
+    ensureOutputFolder(path.dirname(path.resolve(out)));
     writeFileReplacing(out, `${JSON.stringify({ rows })}\n`); // ./scene-rows.json is a predictable name: a symlink there is replaced, never written through
   } catch (e) {
+    if (e instanceof UsageError) throw e;
     throw new UsageError(`cannot write ${out}: ${e.code ?? e.message}`);
   }
   const file = path.basename(out);

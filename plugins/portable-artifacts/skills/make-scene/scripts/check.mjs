@@ -16,7 +16,7 @@ import { SCHEMES, parseShotsDir, shotName } from './lib/shots.mjs';
 import { distinctColours } from './lib/png.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
-import { dropLinkAt } from '../shared/write-file.mjs';
+import { assertContained, ensureOutputFolder, writeFileReplacing } from '../shared/write-file.mjs';
 
 const USAGE = 'node scripts/check.mjs <page.html> [--shots <dir>] [--json]';
 const OPTIONS = { json: { type: 'boolean' }, shots: { type: 'string' } };
@@ -90,8 +90,8 @@ async function checkViewport(browser, url, viewport, readyMs, { scheme = 'light'
   const written = [];
   const snap = async (name) => {
     const target = path.join(shots.dir, name);
-    dropLinkAt(target); // a predictable name: a symlink there is replaced by the shot, not written through
-    await page.screenshot({ path: target, timeout: SHOT_MS });
+    // To a buffer, then written by writeFileReplacing: the browser never opens a path someone may have prepared.
+    writeFileReplacing(target, await page.screenshot({ timeout: SHOT_MS }));
     written.push(target);
   };
   let page;
@@ -164,7 +164,7 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
     }
     const url = pathToFileURL(file).href;
     const results = [];
-    if (shotsDir) fs.mkdirSync(shotsDir, { recursive: true });
+    if (shotsDir) ensureOutputFolder(shotsDir);
     for (const viewport of VIEWPORTS) {
       for (const scheme of shotsDir ? SCHEMES : ['light']) {
         if (stopped) break;
@@ -249,6 +249,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new UsageError(`cannot read ${positionals[0]}`);
     const timeoutMs = timeoutFromEnv(process.env);
     const shotsDir = parseShotsDir(values.shots);
+    if (shotsDir !== null) assertContained(shotsDir); // a refusal comes before the browser starts; the folder is made when the first shot is due
     warnIfStaleCopy();
     const result = await checkPage(file, { timeoutMs, shotsDir });
     report(result, json, shotsDir !== null);

@@ -2,18 +2,19 @@
 // ffmpeg on a pipe. Two capture modes: `exact` takes PNG (lossless: tests, sheets, --exact) and the default `fast`
 // takes JPEG at quality 98 (a grainy frame costs far less to encode as JPEG). A frame whose __stateKey equals the
 // previous frame's is not captured again: the previous picture is sent twice. The video is written to a partial file
-// beside the output and renamed when ffmpeg is done, so a stop or a failure leaves no half-written MP4 behind.
+// in a private folder (random name) beside the output and renamed when ffmpeg is done, so a stop or a failure leaves no half-written MP4 behind.
 // A film's sound (voice/master.mjs: its narration, and the cues and music bed of the run's sound plan) is mixed, mastered
 // and encoded to AAC before the first frame is captured, so a broken audio chain or a level the film would be refused
 // for fails fast; after the video encode the AAC is muxed into a second partial file, both streams copied, and only that
 // file is renamed to the output. A film with neither a voice nor sound
 // takes none of those steps: its video is exactly what it was before. A slice (`frames`) is that case too: silent.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg } from '../lib/ffmpeg.mjs';
+import { assertContained, ensureOutputFolder } from '../../shared/write-file.mjs';
 // for scripts/v2 modules that run ffmpeg themselves (clips.mjs) without importing scripts/lib/ffmpeg.mjs directly
 export { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
@@ -38,6 +39,9 @@ const STDERR_KEEP = 4000;
 const STDERR_LINES = 5;
 const PARTIAL_MAX_AGE_MS = 60 * 60 * 1000;
 const PARTIAL_RE = /^\..+\.partial-\d+\.mp4$/;
+const WORK_PREFIX = '.pa-';
+const WORK_RE = /^\.pa-[A-Za-z0-9]{6}$/; // what mkdtempSync makes of WORK_PREFIX
+const WORK_FILES = ['video.mp4', 'voice.mp4'];
 const QUIET = ['-hide_banner', '-loglevel', 'error'];
 const DEFAULT_MODE = 'pro'; // as the timeline's (engine/script/timing.mjs)
 
@@ -122,13 +126,29 @@ function startEncoder(ffmpeg, args, signal) {
   };
 }
 
-// A video that was being written when a run was killed leaves `.<name>.partial-<pid>.mp4` beside the output; those older
-// than an hour belong to no live run and are removed.
+// A video that was being written when a run was killed leaves `.<name>.partial-<pid>.mp4` (an older run) or a private
+// `.pa-XXXXXX` folder holding only its own two files beside the output; those older than an hour belong to no live run and are
+// removed. Nothing is looked at, let alone removed, when `dir` leads out of the repository by a link.
 export function sweepPartials(dir, { olderThanMs = PARTIAL_MAX_AGE_MS, now = Date.now() } = {}) {
+  assertContained(dir);
   if (!existsSync(dir)) return [];
-  const stale = readdirSync(dir).filter((name) => PARTIAL_RE.test(name) && now - statSync(path.join(dir, name)).mtimeMs > olderThanMs);
-  for (const name of stale) rmSync(path.join(dir, name), { force: true });
+  const stale = readdirSync(dir).filter((name) => (PARTIAL_RE.test(name) || isPrivateWork(path.join(dir, name))) && now - lastTouched(path.join(dir, name)) > olderThanMs);
+  for (const name of stale) rmSync(path.join(dir, name), { recursive: isPrivateWork(path.join(dir, name)), force: true });
   return stale;
+}
+
+// When a file or a work folder was last written to: a folder's own time moves only when a file is added or removed, not while ffmpeg
+// grows the video in it, so a live render is judged by its newest file.
+function lastTouched(entry) {
+  const own = statSync(entry);
+  if (!own.isDirectory()) return own.mtimeMs;
+  return Math.max(own.mtimeMs, ...readdirSync(entry).map((name) => statSync(path.join(entry, name)).mtimeMs));
+}
+
+// A work folder of ours: a real folder named .pa-XXXXXX that holds nothing but the two video files a render makes.
+function isPrivateWork(folder) {
+  if (!WORK_RE.test(path.basename(folder)) || !lstatSync(folder).isDirectory()) return false;
+  return readdirSync(folder).every((name) => WORK_FILES.includes(name) && lstatSync(path.join(folder, name)).isFile());
 }
 
 // Which of frames from..to equal their predecessor under the capture key.
@@ -291,8 +311,9 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
   const loaded = own ? loadFilm(specPath) : null;
   const loudness = loudnessFor(own ? loaded.film : session.film, voice, sound, range !== undefined);
   const open = own ? await openSession(loaded) : session;
-  const partial = path.join(path.dirname(out), `.${path.basename(out)}.partial-${process.pid}.mp4`);
-  const muxed = path.join(path.dirname(out), `.${path.basename(out)}.voice.partial-${process.pid}.mp4`);
+  let partial; // the video and the muxed video are made in a private folder (mkdtemp: a random name, mode 0700) beside the output
+  let muxed; // and renamed over the output, so no name a repository could guess is ever opened by ffmpeg
+  let scratch = null;
   let encoder = null;
   let work = null;
   const started = performance.now();
@@ -305,8 +326,11 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     // short of the target (judgeLevel noVoice).
     const narrated = steps !== null && steps.hasNarration(voice);
     const subject = narrated ? 'the mastered narration' : 'the mastered sound';
-    mkdirSync(path.dirname(out), { recursive: true });
+    ensureOutputFolder(path.dirname(out)); // a symlink that leads out of the repository is refused before anything is removed or made
     sweepPartials(path.dirname(out));
+    scratch = mkdtempSync(path.join(path.dirname(out), WORK_PREFIX));
+    partial = path.join(scratch, WORK_FILES[0]);
+    muxed = path.join(scratch, WORK_FILES[1]);
     if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
     const master = (headroomDb) => steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined, tracks: sound?.tracks ?? [], headroomDb });
     // Before any frame is captured: the master encoded to the AAC the film ships (raised by what AAC took from it, and
@@ -339,8 +363,7 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio, workers: pooled ? Math.min(workers, frames) : 1, timing: clock.totals() };
   } finally {
     if (encoder) await encoder.stop();
-    rmSync(partial, { force: true });
-    rmSync(muxed, { force: true });
+    if (scratch !== null) rmSync(scratch, { recursive: true, force: true });
     if (work !== null) rmSync(work, { recursive: true, force: true });
     if (own) await open.close();
   }

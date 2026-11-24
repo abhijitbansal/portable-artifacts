@@ -13,7 +13,7 @@ import { loadData } from './rows.mjs';
 import { resolveScenePath } from './scene-path.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { assertContained, ensureOutputFolder, writeFileReplacing } from '../../shared/write-file.mjs';
 
 const ID_PREFIX = 'sc';
 const OVER_CAP = 'over the page limit';
@@ -68,14 +68,17 @@ function fragmentOf(built) {
 // <slug>.fragment.html in the default folder or a --out folder; a --out that names a .html file is that file.
 const fragmentPath = (target, out) => (out && /\.html?$/i.test(out) ? target : target.replace(/\.html?$/i, '.fragment.html'));
 
-// The page and the fragment replace whatever is at their path (a symlink included); the spec is the user's own file and
-// is rewritten in place, as before (`replace: false`).
+// The page and the fragment replace whatever is at their path (a symlink included), in a folder that does not leave the
+// repository by a link; the spec is the user's own file and is rewritten in place, as before (`replace: false`), after
+// build() checked that it does not lead out of the repository either.
 function writeFile(target, text, { replace = true } = {}) {
   try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    if (replace) writeFileReplacing(target, text);
-    else fs.writeFileSync(target, text);
+    if (replace) {
+      ensureOutputFolder(path.dirname(target));
+      writeFileReplacing(target, text);
+    } else fs.writeFileSync(target, text);
   } catch (e) {
+    if (e instanceof UsageError) throw e;
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }
 }
@@ -114,8 +117,9 @@ export async function build(file, { out, theme, world, model, effort, agent, fra
     writeFile(written, fragmentOf(built));
     return { ok: true, out: written, bytes: bytes, world: built.world, alternatives: [], table: '', rewroteSpec: false, warnings: checked.warnings ?? [], fragment: true };
   }
-  writeFile(target, html);
   const rewroteSpec = world !== undefined && loaded.world !== world;
+  if (rewroteSpec) assertContained(path.resolve(file)); // before the page is written: a refusal leaves nothing behind
+  writeFile(target, html);
   if (rewroteSpec) writeFile(path.resolve(file), `${JSON.stringify({ ...loaded, world }, null, 2)}\n`, { replace: false });
 
   // A lift is never second-guessed: it has no other worlds to offer.

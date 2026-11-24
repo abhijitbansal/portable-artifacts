@@ -34,6 +34,7 @@ import { inspectDir, writeInspect } from './inspect.mjs';
 import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf, slicePath } from './slice.mjs';
 import { comparePath, memoiseMusicInput, writeComparison } from './compare.mjs';
 import { writeSubtitles } from './subtitles.mjs';
+import { assertContained } from '../../shared/write-file.mjs';
 import { logoThrowFinding, pictureLoadFinding } from './picture-finding.mjs';
 import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
@@ -606,6 +607,7 @@ async function execute(options, state, io) {
   }
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so. So does --estimated
   // (with --sheets-only): its sheets and board are drawn on the estimate, whose times the render later measures.
+  if (options.outline !== true) assertContained(path.dirname(outputPaths(options).out)); // before a voice, clip or sheet is made, or a cache is swept
   const voiced = film.voice !== undefined && options.outline !== true && options.estimated !== true;
   if (film.voice !== undefined && options.estimated === true) io.log('make: --estimated: no voice was made; the sheets and the board use estimated timing');
   const made = !voiced ? null

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, lstatSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, lstatSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,9 @@ import { pngOf } from './helpers/png.mjs';
 
 const skip = process.platform === 'win32' && 'symbolic links need a privilege on Windows';
 const LOCATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/locate.mjs');
-const scratch = () => mkdtempSync(path.join(tmpdir(), 'mm-link-'));
+const made = [];
+const scratch = () => { const dir = mkdtempSync(path.join(tmpdir(), 'mm-link-')); made.push(dir); return dir; };
+test.after(() => { for (const dir of made) rmSync(dir, { recursive: true, force: true }); });
 
 function victimIn(dir) {
   const victim = path.join(dir, 'victim.txt');
@@ -46,12 +48,11 @@ test('a review sheet that is a symlink is replaced, and a link at a guessable te
   assert.equal(lstatSync(sheet).isSymbolicLink(), false);
 });
 
-test('a cutout whose output or guessable partial name is a symlink is replaced, never written through', { skip }, () => {
+test('a cutout picture whose output name is a symlink is replaced, never written through', { skip }, () => {
   const dir = scratch();
   const victim = victimIn(dir);
   const file = path.join(dir, 'cut.png');
   symlinkSync(victim, file);
-  symlinkSync(victim, `${file}.partial-${process.pid}`);
   writeCutout(file, Buffer.from([9, 9]));
   assert.ok(readFileSync(victim, 'utf8') === 'precious', 'the cutout was written through a link');
   assert.deepEqual([...readFileSync(file)], [9, 9]);

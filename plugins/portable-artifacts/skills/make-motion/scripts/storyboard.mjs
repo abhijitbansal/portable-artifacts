@@ -13,8 +13,9 @@
 // passed (a script cannot tell an interactive session from `claude -p`, so the agent declares it). Read the answers only
 // through `node <make-explainer>/scripts/answers.mjs <plan.json> <answers.json>`. Exit 1: the film does not validate (its
 // errors on stderr, one `path: message` per line); exit 2: a usage or IO problem.
-import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, lstatSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../shared/write-file.mjs';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 import { checkStrips, copyStrips } from './v2/board-stills.mjs';
@@ -79,7 +80,7 @@ function checkOut(out) {
 const shellQuote = (text) => (/^[\w@%+=:,./-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`);
 
 function writePlan(out, plan) {
-  mkdirSync(path.dirname(out), { recursive: true });
+  ensureOutputFolder(path.dirname(out));
   const partial = path.join(path.dirname(out), `.${path.basename(out)}.${process.pid}.partial`);
   rmSync(partial, { force: true });
   closeSync(openSync(partial, 'wx'));

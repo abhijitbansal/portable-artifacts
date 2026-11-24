@@ -1,7 +1,8 @@
 // One pinned, hash-checked download, shared by the cutout weights and the Kokoro model files. A leaf module: node built-ins only.
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 
 const DOWNLOAD_SLACK = 2; // a download this many times the expected size is refused
 const BYTES_PER_MB = 1e6;
@@ -39,7 +40,7 @@ async function download({ url, bytes, label, fetchImpl }) {
  */
 export async function ensurePinnedFile({ url, sha256, bytes, file, label, fetchImpl = fetch, log = () => {} }) {
   if (existsSync(file) && sha256Of(readFileSync(file)) === sha256) return file;
-  mkdirSync(path.dirname(file), { recursive: true });
+  ensureOutputFolder(path.dirname(file));
   log(`downloading the ${label} (${sizeText(bytes)}, once) from ${url}`);
   const partial = `${file}.partial-${process.pid}-${randomBytes(4).toString('hex')}`;
   try {

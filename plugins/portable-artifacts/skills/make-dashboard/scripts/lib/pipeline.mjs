@@ -13,8 +13,7 @@ import { didYouMean } from '../../shared/errors.mjs';
 import { loadTheme, listThemes, DEFAULT_THEME, ThemeError } from '../../shared/theme.mjs';
 import { checkTheme } from '../../shared/contrast.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
-import { findGitRoot, refuseLinkedFolder } from '../../shared/output.mjs';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { ensureOutputFolder, writeFileReplacing } from '../../shared/write-file.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const VENDOR_FILES = {
@@ -38,21 +37,17 @@ function readVendor() {
 function writePage(outDir, html) {
   const target = path.join(outDir, 'index.html');
   try {
-    fs.mkdirSync(outDir, { recursive: true });
+    ensureOutputFolder(outDir); // refuses a symlink that leads out of the repository, before anything is made
     writeFileReplacing(target, html);
   } catch (e) {
+    if (e instanceof UsageError) throw e;
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }
   return target;
 }
 
-// <spec folder>/dist with no --out. In a repository (which may not be the user's own) a symlinked dist is refused, as a
-// symlinked .scratch is for the other skills: the page would land outside it.
-function defaultOutDir(dir) {
-  const folder = path.join(dir, 'dist');
-  if (findGitRoot(dir) !== null) refuseLinkedFolder(folder);
-  return folder;
-}
+// <spec folder>/dist with no --out; writePage checks it like any other output folder.
+const defaultOutDir = (dir) => path.join(dir, 'dist');
 
 // Unknown theme name -> UsageError, with a did-you-mean when one is close.
 function resolveTheme(name) {

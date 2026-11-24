@@ -1,5 +1,5 @@
 // `--out <file>` of gather.mjs and scaffold.mjs (lib/write-out.mjs) replaces a symlink at the path; it never writes through it.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,8 +18,12 @@ function quiet(fn) {
   }
 }
 
+const made = [];
+after(() => { for (const dir of made) fs.rmSync(dir, { recursive: true, force: true }); });
+
 function planted() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-emit-'));
+  made.push(dir);
   const victim = path.join(dir, 'victim.txt');
   fs.writeFileSync(victim, 'precious');
   return { dir, victim, out: path.join(dir, 'facts.json') };

@@ -12,8 +12,9 @@ import { flavorFor, CLASSIC } from './flavor.mjs';
 import { specTheme } from './default-theme.mjs';
 import { fetchHeroImage, heroPrompt, parseEndpoint, requireKey, ImageHookError, KEY_ENV } from './image-hook.mjs';
 import { twinFile, isBuildTwin, hasChecklist } from './checklist-md.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { assertContained, ensureOutputFolder, writeFileReplacing } from '../../shared/write-file.mjs';
 
 const fail = (errors) => ({ ok: false, errors });
 const MD_NEEDS_CHECKLIST = '--md writes the markdown twin of a checklist, and this spec has no checklist section; add one or drop --md';
@@ -35,6 +36,7 @@ export async function build(file, { out, theme, model, effort, agent, imageApi, 
   if (!checked.ok) return fail(checked.errors);
   if (md && !hasChecklist(spec)) return fail([{ path: 'sections', message: MD_NEEDS_CHECKLIST }]);
   const target = resolveOutput({ out, title: spec.title, specPath: file, env });
+  assertContained(path.dirname(target)); // before the assets folder is made or tidied, or anything is written: a link that leaves the repository is refused
   const twin = md ? mdPath(target) : null;
   const twinClash = twin === null ? null : twinConflict(twin, spec);
   if (twinClash) return fail([twinClash]);
@@ -114,8 +116,9 @@ function twinConflict(twin, spec) {
 function writeAtomic(target, text) {
   const folder = path.dirname(target);
   try {
-    fs.mkdirSync(folder, { recursive: true });
+    ensureOutputFolder(folder);
   } catch (e) {
+    if (e instanceof UsageError) throw e;
     throw new WriteError(folder, e);
   }
   try {

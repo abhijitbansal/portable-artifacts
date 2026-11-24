@@ -2,9 +2,9 @@
 // cut (plan.mjs says which frames). The page seeks each frame and draws the visible canvas, post pass included, onto a
 // sheet canvas with each tile stamped "<shot id> . <seconds>s" in the bundled mono face; Node lays the tiles out
 // (layout.mjs) and writes the PNG. No ffmpeg and no screenshots. writeSheets also returns the film review's findings.
-import { lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { lstatSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { writeFileReplacing } from '../../shared/write-file.mjs';
+import { assertContained, ensureOutputFolder, TEMP_NAME, writeFileReplacing } from '../../shared/write-file.mjs';
 import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
@@ -93,10 +93,12 @@ export function writeAtomically(file, bytes) {
 }
 
 // The folder belongs to one video, so the PNGs in it are the last run's sheets; they go before the new ones are made,
-// and a sheet the film no longer has cannot linger.
+// and a sheet the film no longer has cannot linger. So does a temp file (.pa-<hex>.tmp, a regular file) a killed run left.
 function clearOwnSheets(dir) {
-  mkdirSync(dir, { recursive: true });
-  for (const name of readdirSync(dir)) if (name.toLowerCase().endsWith('.png')) rmSync(path.join(dir, name), { force: true });
+  ensureOutputFolder(dir); // before anything is deleted: a folder that leads out of the repository by a link is refused
+  for (const name of readdirSync(dir)) {
+    if (name.toLowerCase().endsWith('.png') || (TEMP_NAME.test(name) && lstatSync(path.join(dir, name)).isFile())) rmSync(path.join(dir, name), { force: true });
+  }
 }
 
 const BOARD_DIR = 'board';
@@ -111,7 +113,7 @@ const kindOf = (stat) => (stat.isSymbolicLink() ? 'a symbolic link' : 'not a fil
 function boardFolder(dir, log) {
   const stat = lstatSync(dir, { throwIfNoEntry: false });
   if (stat === undefined) {
-    mkdirSync(dir, { recursive: true });
+    ensureOutputFolder(dir);
     return true;
   }
   if (stat.isDirectory()) return true;
@@ -134,6 +136,7 @@ function clearOwnBoard(dir) {
  * @param {string} dir the sheets folder
  */
 export function clearStaleBoard(dir) {
+  assertContained(dir);
   const boardDir = path.join(dir, BOARD_DIR);
   if (lstatSync(boardDir, { throwIfNoEntry: false })?.isDirectory() === true) clearOwnBoard(boardDir);
 }
@@ -156,6 +159,7 @@ function stripFree(file, log) {
  */
 export async function writeBoard({ session, dir, signal, log = () => {} }) {
   const boardDir = path.join(dir, BOARD_DIR);
+  assertContained(boardDir); // before the board's own strips are deleted
   signal?.throwIfAborted();
   if (!boardFolder(boardDir, log)) return [];
   clearOwnBoard(boardDir);
@@ -187,7 +191,7 @@ export async function writeSheets({ specPath, dir, session, signal, slice = null
     if (slice === null) {
       clearOwnSheets(dir);
       clearStaleBoard(dir);
-    } else mkdirSync(dir, { recursive: true });
+    } else ensureOutputFolder(dir);
     const [w, h] = canvasSize(open.film);
     const planned = planSheets(open.film, open.timeline);
     const files = [];

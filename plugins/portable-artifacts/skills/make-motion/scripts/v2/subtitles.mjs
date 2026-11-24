@@ -4,8 +4,9 @@
 // sidecar, or an author's recording); without one they are the word-count estimate, and the file says so: a VTT in a
 // NOTE line. SRT has no comment line, so an estimated SRT is refused rather than written without the warning. Word
 // text is the narration as plain text (marks gone); < and & are written as entities so a player shows them as text.
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 
 export const MAX_CUE_WORDS = 8;
 export const ESTIMATE_NOTE = 'the times are estimated from the word count: the film has no voice to measure them by';
@@ -83,7 +84,7 @@ export const subtitlePath = (videoOut, format) => path.join(path.dirname(videoOu
 export function writeSubtitles({ timeline, format, videoOut, level = 'sentence' }) {
   const file = subtitlePath(videoOut, format);
   const text = subtitleText(timeline, format, { level });
-  mkdirSync(path.dirname(file), { recursive: true });
+  ensureOutputFolder(path.dirname(file));
   const partial = `${file}.partial-${process.pid}`;
   try {
     writeFileSync(partial, text, { flag: 'wx' });

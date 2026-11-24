@@ -268,8 +268,8 @@ your project folder):
    `$PA_OUTPUT_DIR` if that is set, else `<git root>/.scratch/<slug>.html` when the spec sits in
    a git repository, else `~/.agent/diagrams/<slug>.html`. `--out file.html` or `--out dir` overrides all of
    these; an `--out` that does not end in `.html` is a folder. A symlink at the page's path is replaced by the
-   page, never written through, and a default `.scratch` that is itself a symlink is refused (remove it or pass
-   `--out`). Add `.scratch/` to `.gitignore`
+   page, never written through, and in a git repository a symlink on the folder's path that leads outside it is refused
+   (pass the folder's real path). Add `.scratch/` to `.gitignore`
    (the build prints a note when it is not ignored). `--theme <name>` overrides the spec's
    theme: `blueprint` (default), `paper`, `ink`, `editorial`, `dusk`, `press`,
    `poster`, `mono` or `brief`. `--format svg --out diagram.svg` writes one standalone SVG

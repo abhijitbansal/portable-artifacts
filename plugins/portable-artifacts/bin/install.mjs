@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { agentFile, REVIEWER_HOSTS, reviewerFile, writeAgentFile, writeReviewerFile } from '../shared/agents.mjs';
 import { parseCli, UsageError, exitUsage } from '../shared/cli.mjs';
 import { cmdLine } from '../shared/doctor.mjs';
+import { assertContained, writeFileReplacing } from '../shared/write-file.mjs';
 
 const SKILLS_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../skills');
 const SKIP = new Set(['node_modules', 'test', 'dist', 'out', '.cache']);
@@ -295,14 +296,23 @@ function installAgents(targets, { force, replaceForeign = false }) {
   return failed;
 }
 
+// A project install writes into a folder that may belong to a repository the user did not write, which can ship a symlink where
+// .claude/skills, .gemini/commands or an agents folder should be: every folder it writes is checked first, before anything is made
+// (shared/write-file.mjs). A user install writes under HOME, which is the user's own (a stowed ~/.claude is a link on purpose).
+function checkProjectFolders(folders) {
+  for (const folder of folders) if (folder) assertContained(folder);
+}
+
 function main() {
   const opts = parse(process.argv.slice(2));
   const scope = opts.project ? 'project' : 'user';
   const ctx = { home: os.homedir(), proj: path.resolve(opts.project ?? '.') };
   const dirs = targetsFor(opts.host, scope, ctx);
   const h = HOSTS[opts.host];
+  const agentTargets = agentTargetsFor(opts.host, scope, ctx);
+  if (scope === 'project') checkProjectFolders([...(opts['agents-only'] ? [] : [dirs.skills, dirs.commands]), ...agentTargets.map((t) => t.dir)]);
   if (opts['agents-only']) {
-    const targets = agentTargetsFor(opts.host, scope, ctx);
+    const targets = agentTargets;
     if (!targets.length) {
       process.stdout.write(`no agent file for ${opts.host}\n`);
       return;
@@ -322,11 +332,11 @@ function main() {
     if (dirs.commands) {
       fs.mkdirSync(dirs.commands, { recursive: true });
       const toml = path.join(dirs.commands, `${skill}.toml`);
-      fs.writeFileSync(toml, geminiCommand(skill, readDescription(path.join(SKILLS_SRC, skill))));
+      writeFileReplacing(toml, geminiCommand(skill, readDescription(path.join(SKILLS_SRC, skill)))); // a link at the name is replaced, never written through
     }
     process.stdout.write(`installed ${skill} -> ${dst}\n  invoke: ${h.invoke(skill)} <what to make>\n`);
   }
-  installAgents(agentTargetsFor(opts.host, scope, ctx), { force: opts.force, replaceForeign: opts['replace-foreign'] });
+  installAgents(agentTargets, { force: opts.force, replaceForeign: opts['replace-foreign'] });
   if (plan.some((p) => p.skill === 'make-motion')) {
     process.stdout.write('make-motion also needs ffmpeg on PATH and, once: npx playwright install chromium (run in the skill folder)\n');
   }

@@ -21,6 +21,7 @@ import {
   renameSync, rmSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import { assertContained, ensureOutputFolder } from '../../../shared/write-file.mjs';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { registries } from '../../../engine/registry.mjs';
@@ -436,7 +437,7 @@ function publish(staging, dir) {
 // sweeping stale staging folders. -> { staging, jobFile }.
 function stage(dir, film, { voice, runtime, modelDir, log }) {
   const cacheRoot = path.dirname(dir);
-  fsStep(`create ${cacheRoot}`, () => mkdirSync(cacheRoot, { recursive: true }));
+  fsStep(`create ${cacheRoot}`, () => ensureOutputFolder(cacheRoot));
   fsStep(`clear stale staging folders in ${cacheRoot}`, () => sweepStaleStaging(cacheRoot, log));
   const staging = `${dir}.partial-${process.pid}-${randomUUID()}`;
   fsStep(`create ${staging}`, () => mkdirSync(staging));
@@ -515,6 +516,7 @@ export async function synthesiseFilm(film, options = {}) {
   const runtime = options.runtime ?? path.join(OPTIONAL_ROOT, 'voice');
   const modelDir = options.modelDir ?? voiceModelDir();
   const dir = path.join(outDir, CACHE_DIR, voiceHash(film, { voice, runtimeLock: lockHash(runtime) }));
+  assertContained(outDir); // before a cache entry is read, removed or made: an output folder that leads out of the repository is refused
   const cached = cachedSidecar(dir, film, { voice, outDir, log });
   if (cached) return { dir, sidecar: cached, cached: true };
   throwIfAborted(signal);

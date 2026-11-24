@@ -1,8 +1,9 @@
 // The board's strips (`board-<n>.jpg`, written by `make.mjs --sheets-only --estimated`) as the storyboard page takes them:
 // read from the board folder, refused when make-explainer would refuse them, and copied beside the plan. Strip n holds the
 // shots (n - 1) * BOARD_PER_STRIP onward, so a strip is tied to its shots by the number in its name, never by its place in a list.
-import { copyFileSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, lstatSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { BOARD_PER_STRIP } from './plan.mjs';
 
@@ -67,7 +68,7 @@ function prepareDest(folder, dest, stillsName) {
   if (existing !== null && sameFolder(dest, folder)) {
     throw new UsageError(`--stills: ${folder} is the folder the pictures are copied into (${stillsName} beside the plan); keep the board elsewhere, or choose another --out`);
   }
-  mkdirSync(dest, { recursive: true });
+  ensureOutputFolder(dest);
   for (const name of readdirSync(dest)) {
     if (STRIP_RE.test(name) && lstatSync(path.join(dest, name)).isFile()) rmSync(path.join(dest, name), { force: true });
   }

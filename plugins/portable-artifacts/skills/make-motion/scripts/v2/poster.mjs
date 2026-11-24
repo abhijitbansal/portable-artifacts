@@ -2,8 +2,9 @@
 // pass, captions and the film's overlays left out (window.__seek(i, { captions: false, overlays: false }); a page that
 // does not know the options draws them),
 // written as JPEG (quality 92) or PNG by the file's extension. No ffmpeg: the browser writes the picture.
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../shared/write-file.mjs';
 import { posterReadFindings } from '../../engine/review/poster.mjs';
 import { frameContext } from './review.mjs';
 
@@ -46,7 +47,7 @@ export async function writePoster({ session, frame, file }) {
   await page.evaluate((i) => window.__seek(i, { captions: false, overlays: false }), frame);
   const png = path.extname(file).toLowerCase() === '.png';
   const picture = await page.screenshot(png ? { type: 'png' } : { type: 'jpeg', quality: POSTER_JPEG_QUALITY });
-  mkdirSync(path.dirname(file), { recursive: true });
+  ensureOutputFolder(path.dirname(file));
   const partial = path.join(path.dirname(file), `.${path.basename(file)}.partial-${process.pid}`);
   try {
     writeFileSync(partial, picture, { flag: 'wx' });

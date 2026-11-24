@@ -338,10 +338,10 @@ Each skill folder also has its own README.
   bare-repository discovery off, counts untracked files whatever `status.showUntrackedFiles` says
   and refuses a repository whose work tree does not contain the folder you
   gave. The page builders' "is `.scratch/` ignored" note is asked the same way,
-  with `--no-index` and a 5 second limit. A page is written to a new temp file
-  and renamed over its path, so a symlink a repository planted there is replaced
-  and its target left alone, and a default `.scratch` that is a symlink is
-  refused. Your own global filter drivers still
+  with `--no-index` and a 5 second limit. Before a tool writes into a git repository, it stops with one line when a symlink on the folder's path leads outside the
+  repository (pass the folder's real path); a folder with no `.git`, such as an unpacked archive, is not checked. A file is
+  written to a temp file and renamed over its path, so a symlink a repository planted there is replaced and its target left
+  alone. Your own global filter drivers still
   run on the files a repository's attributes select, in that repository's
   folder. The PATH rule covers git only: make-motion's ffmpeg and the doctor
   look programs up on your PATH as it is, so keep `.`, relative entries and folders of the repository off PATH. A folder whose name ends in a space is not handled. This lowers the

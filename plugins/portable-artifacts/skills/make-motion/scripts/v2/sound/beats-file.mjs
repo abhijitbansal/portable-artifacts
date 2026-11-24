@@ -3,8 +3,9 @@
 // scripts/lib/beats-file.mjs (deleted at cut-over). A beats file is data from outside: its path stays inside the film's folder after links are
 // followed (as a picture's src: spec-common.mjs srcProblem), its size is capped, and its shape is checked (a bounded,
 // rising list of finite seconds). It is never executed.
-import { closeSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ensureOutputFolder } from '../../../shared/write-file.mjs';
 import { quote, srcProblem } from '../spec-common.mjs';
 
 export const MAX_BEATS = 10000; // about 50 minutes at 200 BPM; beats.mjs analyses five
@@ -104,7 +105,7 @@ function beatsText({ source, bpm, confidence, beats }) {
 export function writeBeatsFile(out, grid) {
   const problem = shapeProblem(grid, MIN_BEATS_WRITE);
   if (problem) throw new BeatsFileError(`writeBeatsFile: ${problem}`);
-  mkdirSync(path.dirname(out), { recursive: true });
+  ensureOutputFolder(path.dirname(out));
   const partial = path.join(path.dirname(out), `.${path.basename(out)}.${process.pid}.partial`);
   rmSync(partial, { force: true });
   closeSync(openSync(partial, 'wx'));
