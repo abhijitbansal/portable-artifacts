@@ -1,6 +1,6 @@
 # Design: make-motion token budget
 
-Date 2026-11-23. Status: draft for the owner's approval. The owner approved the plan this is built from (plan page
+Date 2026-11-23. Status: approved by the owner on 2026-11-24 (section 10 answered). The owner approved the plan this is built from (plan page
 `token-budget-plan-nov-2026`, verdict approve) with: skill only, paired test first, 2 polish rounds and a hard stop at 6,
 release orchestration left out. Lines marked **[call]** are the author's choices, made while turning the plan into a
 design; the owner has not answered them.
@@ -112,7 +112,7 @@ storyboard rule (`--non-interactive` in this host). A keeps its own wording, sin
 - Sonnet, effort high, `--timeout 1800`. 10 prompts times 3 arms is 30 sessions, one at a time. The first prompt's three cases are the
   smoke test; a harness fault there stops the run before the other 27.
 - Expected about $14 at list price (estimate: three runs' mean times 30). `--budget 1.00` per case; `--max-total 20`, because a cap
-  equal to the expected spend would stop the test a few cases short. **The owner's yes was for about $15; the $20 ceiling needs its own yes.**
+  equal to the expected spend would stop the test a few cases short. The owner approved the $20 ceiling on 2026-11-24.
 - **Incomplete or failed.** A case that hits its budget or timeout, writes no MP4, or fails the repository's check is a failed case: it counts as rated
   worse than A and as a cost ratio above 0.80. If A fails a prompt, that prompt is dropped; with fewer than eight prompts left,
   or the ceiling reached, the test is inconclusive and the owner decides.
@@ -213,9 +213,10 @@ they miss two or more, the short path goes back to opening every sheet.
 Names of helpers and test files, the exact wording of refusals, where the fingerprint code lives, how the summary formats
 the new columns, and the wording of the five new briefs within 5.2.
 
-## 10. Open for the owner
+## 10. Answered by the owner (2026-11-24)
 
-- The prompt set of 5.2 (five existing and five new, instead of ten existing).
-- The $20 ceiling of 5.4 (expected about $14).
-- The host probe: the page says "No, wait" and its comment says "Only copilot".
-- Phase 3's extra runs (about 20, a new yes) are asked for when Phase 2 is done.
+- The design is approved. Run to the paired test's result; Phase 2 code waits for the owner to see it.
+- Prompts: five existing and five new (5.2).
+- Ceiling: $20 in total, $1.00 per run (5.4).
+- Host probe: Copilot only, now; no Codex.
+- Still to ask: Phase 3's extra runs (about 20), when Phase 2 is done.
