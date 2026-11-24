@@ -15,15 +15,16 @@ export function emit(text, outFile, { overwrite = true } = {}) {
   }
   if (outFile.trim() === '') throw new UsageError('--out needs a file path, for example --out facts.json');
   try {
-    const existing = fs.statSync(outFile, { throwIfNoEntry: false });
+    const file = path.resolve(outFile); // folded once: this one path is looked at, made and written (a `..` after a link is text)
+    const existing = fs.statSync(file, { throwIfNoEntry: false });
     if (existing?.isDirectory()) {
       throw new UsageError(`--out must be a file, not a directory: ${outFile}`);
     }
     if (existing && !overwrite) {
       throw new UsageError(`${outFile} already exists; edit it instead, or pass --force to replace it with a fresh skeleton`);
     }
-    ensureOutputFolder(path.dirname(path.resolve(outFile)));
-    writeFileReplacing(outFile, text); // a symlink at the path is replaced, never written through
+    ensureOutputFolder(path.dirname(file));
+    writeFileReplacing(file, text); // a symlink at the path is replaced, never written through
   } catch (e) {
     if (e instanceof UsageError) throw e;
     throw new UsageError(`cannot write ${outFile}: ${e.code ?? e.message}`);

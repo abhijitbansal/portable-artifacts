@@ -78,6 +78,38 @@ test('rows.mjs git --out: a path through a linked folder out of the repository i
   assert.equal(real.status, 0, real.stderr);
 });
 
+test('rows.mjs git --out l/../r.json (l is a link out): the file checked is the file written; the file behind the link is untouched', { skip }, (t) => {
+  const { base, outside } = world(t);
+  const repo = path.join(base, 'real-repo');
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  mustGit(repo, 'init', '-q', '-b', 'main');
+  fs.writeFileSync(path.join(repo, 'src', 'a.js'), 'a\n');
+  mustGit(repo, 'add', '-A');
+  mustGit(repo, 'commit', '-q', '-m', 'base');
+  fs.mkdirSync(path.join(outside, 'deep'));
+  fs.writeFileSync(path.join(outside, 'r.json'), 'precious');
+  fs.symlinkSync(path.join(outside, 'deep'), path.join(repo, 'l'));
+  const r = runNode(t, script('rows.mjs'), ['git', '--weeks', '2', '--out', 'l/../r.json'], repo);
+  assert.ok([0, 2].includes(r.status), `${r.stdout}${r.stderr}`);
+  assert.equal(fs.readFileSync(path.join(outside, 'r.json'), 'utf8'), 'precious', 'the file behind the link was overwritten');
+});
+
+test('check.mjs --shots below an unreadable folder: a one-line usage error, exit 2, before a browser starts (not "check crashed")', { skip: skip || process.getuid?.() === 0 }, (t) => {
+  const { repo } = world(t);
+  const page = path.join(repo, 'page.html');
+  fs.writeFileSync(page, '<p>x</p>');
+  fs.mkdirSync(path.join(repo, 'locked', 'a'), { recursive: true });
+  fs.chmodSync(path.join(repo, 'locked'), 0o000);
+  try {
+    const r = runNode(t, script('check.mjs'), [page, '--shots', path.join(repo, 'locked', 'a', 'shots')], repo);
+    assert.equal(r.status, 2, `${r.stdout}${r.stderr}`);
+    assert.equal(r.stderr.trim().split('\n').length, 1, r.stderr);
+    assert.doesNotMatch(r.stdout + r.stderr, /check crashed/);
+  } finally {
+    fs.chmodSync(path.join(repo, 'locked'), 0o700); // before the folder is removed
+  }
+});
+
 test('check.mjs --shots: a linked folder out of the repository is refused before a browser starts; the real path is not', { skip }, (t) => {
   const { repo, outside } = world(t);
   const page = path.join(repo, 'page.html');

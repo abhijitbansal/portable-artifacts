@@ -6,10 +6,119 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-11-24
+
+A security patch for what the tools write: the page builders of make-diagram, make-explainer, make-scene and make-dashboard,
+the files make-motion writes, `bin/install.mjs --project`, make-dashboard's DuckDB spill files and the agent files of
+`agents.mjs`. A repository can ship a symlink where a tool writes. If you run any of them on a repository you did not make
+yourself (a download, an unpacked archive, a shared checkout, a pull-request branch), upgrade to 2.4.2 after 2.4.1. This lowers
+the risk; it does not make a hostile repository safe, and a sandbox is still the right place for a repository you expect to be
+hostile. The 2.4.1 notes below, and their limits, still apply.
+
+### Behaviour changes to know about
+
+- **A build wrote through, or into, a symlink that a repository shipped.** A repository can ship a symlink where a tool
+  writes: the page (`.scratch/<slug>.html`), a default folder (`.scratch`, make-dashboard's `dist`, a `--shots` folder, make-motion's
+  `<name>.sheets`, `out`, `.voice`, `.clips`) or a name another tool picks (the `--md` twin, `scene-rows.json`, a `locate` picture, a
+  cutout, `.gemini/commands/<skill>.toml`). A build then overwrote the file the link points at, put its output outside the
+  repository, and in make-motion's sheets step deleted the PNGs in the target of a linked `<name>.sheets`. By reading the code,
+  make-explainer's old temp name `<page>.html.tmp` was also guessable. Now the tools
+  that write files, except those named under "Not covered" below, make one check before they create, write or delete anything: when the folder is inside a git repository
+  (a `.git` folder or file on its path, so a linked work tree and a submodule count; every such ancestor is checked, a home
+  folder that is itself a repository included), the real path of the folder, or of its deepest part that exists, must lie
+  inside that repository. A symlink that leads outside stops the tool with one line naming the link and the repository; a link
+  that stays inside is allowed; a link that leads nowhere is refused. It covers the default folders and your own `--out`,
+  `--shots` and `$PA_OUTPUT_DIR` alike, a spec reached through a linked folder that is itself a repository, the `--world`
+  rewrite of a scene spec, and `bin/install.mjs --project`. What changes for you:
+  - an explicit `--out` (or `--shots`) through a link in the repository that leads outside it is now refused; pass the folder's
+    real path instead;
+  - an `--out` that names a symlinked file now replaces the link (before, the file behind it was overwritten, except in
+    make-explainer, where that was deliberate); a link to a folder there is an error, as a folder is;
+  - the writers below write a temp file `.pa-<hex>.tmp` beside the path (owner-only until the text is in) and rename it over it:
+    the page builders, the `--out` file of `scaffold`, `gather` and `rows.mjs`, the `--md` twin, make-explainer's assets and
+    manifest, `shot.mjs` and the scene check shots, make-motion's sheets, `locate` pictures and cutout picture, and the
+    installer's TOML files. There, an `--out` that names a named pipe, socket or device is refused in one line (2.4.0 opened it and
+    wrote into it), and exactly `/dev/stdout`, `/dev/stderr`, `/dev/null`, `/dev/tty`, `/dev/fd/N`, `/proc/self/fd/N` and
+    `/proc/<pid>/fd/N` are written in place as before (`/dev/shm` is an ordinary folder). An existing regular file keeps its
+    mode and, when you may give it, its group (otherwise the group bits are dropped; a mount that refuses the chmod leaves an
+    owner-only file); one that is not writable is an error, as a plain write reports it (make-explainer replaced such a page
+    before). Screenshots are taken to memory and written the same way. If the file system cannot do the rename, the tool
+    reports the error and does not write in place;
+  - the other make-motion writers (the MP4, its poster, subtitles, the beats file, the inspect files, the batch manifest and the
+    storyboard plan) keep their own partial file and rename it into place: a rename replaces a named pipe or a read-only file at
+    the name without opening it, the replaced file's mode is not kept, and a path under `/dev/` is not written in place. They
+    make and check their folder as the writers above do. The clip cutout and the render write into a private folder beside the
+    output;
+  - make-explainer's `.pa-assets.json` is no longer opened when it is not a regular file (a named pipe there hung the build), and its
+    assets folder and make-motion's sheets folder sweep a `.pa-<hex>.tmp` that a killed build left;
+  - a backslash in a folder or file name is one letter of the name on macOS and Linux, as it is to the system. The check read it
+    as a separator, so a link in such a folder was not seen, and a repository below a folder with a backslash in its name was
+    refused for no reason. Both are fixed;
+  - the path is folded once (`..` is text) and the folded path is the one that is checked, made and written; `--out l/../x` no
+    longer lets the check and the write look at two places. A path in the repository's own `.git` is refused as an output;
+  - a folder the tool cannot read, a name over the limit, a link loop or a null byte in `--out` is a one-line usage error (exit
+    2, valid `--json`), not a stack trace, in every command;
+  - make-motion's sheets folder that is itself a link is refused even when it stays inside the repository, and the sheets step
+    deletes only the names it writes (a shot id and `.png`), not every picture in the folder;
+  - make-motion's sweep of what a killed render left removes a private work folder only when a marker in it (the render's pid,
+    host and a random token) names a process that has ended, the folder is yours and holds only the two video files and the
+    marker, and nothing in it was written for an hour. It skips, and never fails on, a folder it cannot read or that another run
+    removes meanwhile. It removes the `.<name>.partial-<pid>.mp4` file of an older run after an hour, if it is a plain file. A
+    clip-frame cache entry that is a link is replaced, not read, and its target's times are no longer set;
+  - make-dashboard's DuckDB spills to a private folder in the system temp folder (removed at close), where it used `.tmp` under
+    the working folder;
+  - `agents.mjs write` and `write-reviewer` (also run by the doctor's fix) check a project agents folder like any other output
+    folder; `~/.claude/agents`, `~/.copilot/agents` and `~/.codex/agents` under your home stay unchecked;
+  - `bin/install.mjs --project` ran npm in a folder inside the repository, and npm looks upward from its folder for the root it
+    works on, so a repository's own workspace settings could make npm treat the repository as that root. npm now runs with
+    `--prefix` set to its own folder and workspaces off. Checked offline with an empty-dependency fixture, npm 11.5.1 on macOS;
+    other npm versions were not run.
+
+### Known limits kept in this release
+
+- The folder check looks for a `.git` on the path of the folder. A folder with none (an unpacked archive, a download, a copy
+  without its history) is not checked, and a link there is followed as before. It sees the path the tool is given: a folder
+  reached through a link by your shell (`cd` into it) is already its real path when the tool starts.
+- The check and the write are two steps: a process that swaps a link in between is not stopped. make-explainer's assets
+  are written by name into a folder checked once, and the voice, clip-frame and decode caches use names a repository could
+  guess inside a folder that passed the check; those are races only. A hard link to an existing file is replaced, not
+  written through (the other name keeps the old text), but a file the tool writes in place by name (an asset copied over a
+  hard-linked one) is not covered.
+- A replaced file loses its owner, ACL entries, extended attributes and setuid/setgid bits. A layout that let an in-place write
+  work and a rename fail (a single file mounted into a container, a read-only folder with a writable file, a sticky folder with
+  another user's file, a mount that refuses the rename) now reports the error.
+- On Windows none of this was run: a rename over a file another program holds open fails where an in-place write could succeed,
+  and a junction counts as a link only if Node reports it as one.
+- Every repository on the path must contain the real path, not only the innermost: a link out of a submodule into its parent
+  repository is refused, and so is a link out of a project folder under a home folder that is itself a repository.
+- Not covered: the cloud-icon cache of make-diagram (`MAKE_DIAGRAM_ICON_DIR`, `icons.mjs import`), the doctor's installs, make-diagram's
+  developer script `build-icons.mjs`, the eval harness, and `bin/install.mjs` for a user install under your home folder.
+- The check looks at the path as it is named. A path that reaches a repository through your own link into one of its
+  subfolders (`alias -> repo/sub`, then `alias/out` a link out) is not checked, nor is one spelled `/.vol/<dev>/<ino>/...` on
+  macOS. A link inside the repository to the same folder spelled `/System/Volumes/Data<repo>/...` is refused although it
+  stays inside.
+- A repository under your home folder, with `~/.cache` (or `$CLAUDE_PLUGIN_DATA`, or `~/.agent`) linked to another disk, has the
+  model download refused; there is no flag to pass a real path there. `docs/.git` planted in a folder (a dangling link is
+  enough) makes a link below it a refusal naming `docs` as the repository: a denial only. An unreadable ancestor counts as "no
+  repository" when the tool looks for `.git`.
+- `--out /dev/stdout` when stdout is a socket (an agent harness that starts the tool with socket pipes): Linux refuses to open
+  it (ENXIO) and the tools that print their file with `--out` (`scaffold`, `gather`, `rows.mjs`) say so in one line, exit 2;
+  macOS duplicates it and works. Write to a file or a real pipe. A reader that closed the pipe reports the code `EACCES`.
+  `--out /dev/fd` as a folder is an error naming a path inside it.
+- A killed render of a version before this one left its work folder with no marker: it is never swept, delete it by hand. The
+  cutout's `clip.webm` work folder (`.pa-xxxxxx`) a killed cutout left is not swept either. A `.pa-<hex>.tmp` left in a plain
+  output folder (not a sheets or assets folder) is never swept, and two runs at once in one sheets or assets folder can remove
+  each other's live temp file, so the second fails at its rename. A `.<name>.partial-<pid>` name a repository planted may be
+  deleted by a writer that finds it in its way, inside the repository only.
+- `batch` and `--compare-looks` start the browser and draw before a refused folder is reported (nothing is written);
+  `--preview` has no early check, its caches check themselves.
+- On Windows, a path such as `D:x` (a drive, no slash) is not told apart from a relative path by the check; it may be refused or
+  pass wrongly (not run on Windows).
+
 ## [2.4.1] - 2026-11-23
 
-A security patch for the page builders of make-diagram, make-explainer, make-scene and make-dashboard, for make-explainer
-`gather`, for make-scene `rows.mjs git`, for the files make-motion writes and for `bin/install.mjs --project`. If you run any of them on a repository you did not make yourself (a download, an unpacked
+A security patch for the page builders of make-diagram, make-explainer and make-scene, for make-explainer `gather` and for
+make-scene `rows.mjs git`. If you run any of them on a repository you did not make yourself (a download, an unpacked
 archive, a shared checkout, a pull-request branch), upgrade to 2.4.1 first. This lowers the risk; it does not make a
 hostile repository safe, and a sandbox is still the right place for a repository you expect to be hostile.
 
@@ -74,30 +183,6 @@ hostile repository safe, and a sandbox is still the right place for a repository
   repository planted inside the folder is not picked up. `rows.mjs git` does not set it: it reads the repository you name,
   so a bare or mirror clone works as in 2.4.0, and it runs only `config --list`, `rev-parse` and `log`. File names and commit subjects
   still come back exact.
-- **A build wrote through, or into, a symlink that a repository shipped.** A repository can ship a symlink where a tool
-  writes: the page (`.scratch/<slug>.html`), a default folder (`.scratch`, make-dashboard's `dist`, a `--shots` folder, make-motion's
-  `<name>.sheets`, `out`, `.voice`, `.clips`) or a name another tool picks (the `--md` twin, `scene-rows.json`, a `locate` picture, a
-  cutout, `.gemini/commands/<skill>.toml`). A build then overwrote the file the link points at, put its output outside the
-  repository, and in make-motion's sheets step deleted the PNGs in the target of a linked `<name>.sheets`. By reading the code,
-  make-explainer's old temp name `<page>.html.tmp` was also guessable. Now every tool
-  that writes files makes one check before it creates, writes or deletes anything: when the folder is inside a git repository
-  (a `.git` folder or file on its path, so a linked work tree and a submodule count; every such ancestor is checked, a home
-  folder that is itself a repository included), the real path of the folder, or of its deepest part that exists, must lie
-  inside that repository. A symlink that leads outside stops the tool with one line naming the link and the repository; a link
-  that stays inside is allowed; a link that leads nowhere is refused. It covers the default folders and your own `--out`,
-  `--shots` and `$PA_OUTPUT_DIR` alike, a spec reached through a linked folder that is itself a repository, the `--world`
-  rewrite of a scene spec, and `bin/install.mjs --project`. What changes for you:
-  - an explicit `--out` (or `--shots`) through a link in the repository that leads outside it is now refused; pass the folder's
-    real path instead;
-  - an `--out` that names a symlinked file now replaces the link (before, the file behind it was overwritten, except in
-    make-explainer, where that was deliberate); a link to a folder there is an error, as a folder is;
-  - an `--out` that names a named pipe, socket or device is refused in one line (2.4.0 opened it and wrote into it); a path under `/dev/` or `/proc/` (`--out /dev/stdout`, `/dev/null`, process substitution) is written in place as before;
-  - a file is written to a temp file `.pa-<hex>.tmp` beside its path and renamed over it. An existing regular file keeps its
-    mode and, when you may give it, its group (otherwise the group bits are dropped); one that is not writable is an error, as a plain write reports it (make-explainer replaced such a page before).
-    Screenshots are taken to memory and written the same way. make-motion's render and clip cutout write into a private folder
-    beside the output. If the file system cannot do the rename, the tool reports the error and does not write in place;
-  - make-explainer's `.pa-assets.json` is no longer opened when it is not a regular file (a named pipe there hung the build), and its
-    assets folder and make-motion's sheets folder sweep a `.pa-<hex>.tmp` that a killed build left.
 
 ### Known limits kept in this release
 
@@ -114,23 +199,6 @@ hostile repository safe, and a sandbox is still the right place for a repository
   inside the repository still counts as your own.
 - When the PATH rule leaves no entry, the message says git is not installed.
 - A folder whose name ends in a space is not handled.
-- The folder check looks for a `.git` on the path of the folder. A folder with none (an unpacked archive, a download, a copy
-  without its history) is not checked, and a link there is followed as before. It sees the path the tool is given: a folder
-  reached through a link by your shell (`cd` into it) is already its real path when the tool starts.
-- The check and the write are two steps: a process that swaps a link in between is not stopped. make-explainer's assets
-  are written by name into a folder checked once, and the voice, clip-frame and decode caches use names a repository could
-  guess inside a folder that passed the check; those are races only. A hard link to an existing file is replaced, not
-  written through (the other name keeps the old text), but a file the tool writes in place by name (an asset copied over a
-  hard-linked one) is not covered.
-- A replaced file loses its owner, ACL entries, extended attributes and setuid/setgid bits. A layout that let an in-place write
-  work and a rename fail (a single file mounted into a container, a read-only folder with a writable file, a sticky folder with
-  another user's file, a mount that refuses the rename) now reports the error.
-- On Windows none of this was run: a rename over a file another program holds open fails where an in-place write could succeed,
-  and a junction counts as a link only if Node reports it as one.
-- Every repository on the path must contain the real path, not only the innermost: a link out of a submodule into its parent
-  repository is refused, and so is a link out of a project folder under a home folder that is itself a repository.
-- Not covered: the cloud-icon cache of make-diagram (`MAKE_DIAGRAM_ICON_DIR`, `icons.mjs import`), the doctor's installs, make-diagram's
-  developer script `build-icons.mjs`, the eval harness, and `bin/install.mjs` for a user install under your home folder.
 - The time limit stops git; a filter it started may run on.
 - A second process that writes into the repository between `gather`'s config check and its `git status` is not guarded
   against.

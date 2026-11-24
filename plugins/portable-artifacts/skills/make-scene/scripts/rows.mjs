@@ -39,8 +39,9 @@ try {
 
   const rows = historyRows({ repo, weeks, depth, warn: (m) => process.stderr.write(`${m}\n`) });
   try {
-    ensureOutputFolder(path.dirname(path.resolve(out)));
-    writeFileReplacing(out, `${JSON.stringify({ rows })}\n`); // ./scene-rows.json is a predictable name: a symlink there is replaced, never written through
+    const target = path.resolve(out); // folded once: this one path is looked at, made and written
+    ensureOutputFolder(path.dirname(target));
+    writeFileReplacing(target, `${JSON.stringify({ rows })}\n`); // ./scene-rows.json is a predictable name: a symlink there is replaced, never written through
   } catch (e) {
     if (e instanceof UsageError) throw e;
     throw new UsageError(`cannot write ${out}: ${e.code ?? e.message}`);

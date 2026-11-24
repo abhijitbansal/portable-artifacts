@@ -4,14 +4,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import '../../scripts/v2/list.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { writeSheets, writeBoard, clearStaleBoard } from '../../scripts/v2/sheets.mjs';
-import { sweepPartials } from '../../scripts/v2/render.mjs';
+import { makeWorkFolder, sweepPartials, WORK_OWNER_FILE } from '../../scripts/v2/render.mjs';
 import { writePoster } from '../../scripts/v2/poster.mjs';
 import { writeSubtitles } from '../../scripts/v2/subtitles.mjs';
 import { writeBeatsFile } from '../../scripts/v2/sound/beats-file.mjs';
@@ -75,9 +75,11 @@ test('control: the same layout with a real folder (and the stub session) does de
   await writeSheets({ dir: path.join(real.repo, 'out'), session: stubSession }).catch(() => {}); // fails later, on the empty film
   assert.equal(existsSync(path.join(real.repo, 'out', 'old.png')), false, 'the writer clears its own sheets');
   const noGit = world({ git: false });
+  mkdirSync(path.join(noGit.outside, 'film.sheets'));
+  writeFileSync(path.join(noGit.outside, 'film.sheets', 'holiday.png'), 'x');
   symlinkSync(noGit.outside, path.join(noGit.repo, 'out'));
-  await writeSheets({ dir: path.join(noGit.repo, 'out'), session: stubSession }).catch(() => {});
-  assert.equal(existsSync(path.join(noGit.outside, 'holiday.png')), false, 'outside any repository nothing changes (a stated limit)');
+  await writeSheets({ dir: path.join(noGit.repo, 'out', 'film.sheets'), session: stubSession }).catch(() => {});
+  assert.equal(existsSync(path.join(noGit.outside, 'film.sheets', 'holiday.png')), false, 'outside any repository a linked parent folder is followed as before (a stated limit)');
 });
 
 test('a link that stays inside the repository is allowed for the sheets', { skip }, async () => {
@@ -101,6 +103,29 @@ test('the sheets folder is cleared of its PNGs and of a temp file a killed run l
   assert.deepEqual(names(dir), ['.pa-fedcba9876543210.tmp', '.pa-mine.tmp', 'notes.txt']);
 });
 
+test('a sheets folder that is itself a link is refused even when it stays inside the repository; the files behind it survive', { skip }, async () => {
+  const { repo } = world();
+  mkdirSync(path.join(repo, 'screenshots'));
+  writeFileSync(path.join(repo, 'screenshots', 'mine.png'), 'the user\'s, not yet committed');
+  mkdirSync(path.join(repo, 'out'));
+  symlinkSync('../screenshots', path.join(repo, 'out', 'film.sheets'));
+  const named = (e) => e instanceof UsageError && !e.message.includes('\n') && e.message.includes(path.join(repo, 'out', 'film.sheets')) && /link/.test(e.message);
+  await assert.rejects(writeSheets({ dir: path.join(repo, 'out', 'film.sheets'), session: stubSession }), named);
+  await assert.rejects(writeSheets({ dir: path.join(repo, 'out', 'film.sheets'), session: stubSession, slice: { from: 0, to: 0, shots: [] } }), named);
+  assert.deepEqual(names(path.join(repo, 'screenshots')), ['mine.png']);
+});
+
+test('the sheets folder is cleared of the names this tool writes (a shot id and .png), not of every picture in it', { skip }, async () => {
+  const { repo } = world();
+  const dir = path.join(repo, 'film.sheets');
+  mkdirSync(dir);
+  for (const keep of ['Holiday.png', 'IMG_1.png', 'my photo.png', 'UPPER.PNG', 'notes.png.txt']) writeFileSync(path.join(dir, keep), 'the user\'s');
+  writeFileSync(path.join(dir, 'a.partial-x.png'), 'the user\'s'); // not a slice label
+  for (const ours of ['intro.png', 'shot-2.png', 'cut-intro-outro.png', 'a.partial-range-30-75.png', 'b.partial-shot-intro.png']) writeFileSync(path.join(dir, ours), 'x');
+  await writeSheets({ dir, session: stubSession }).catch(() => {});
+  assert.deepEqual(names(dir), ['Holiday.png', 'IMG_1.png', 'UPPER.PNG', 'a.partial-x.png', 'my photo.png', 'notes.png.txt']);
+});
+
 test('clearStaleBoard and writeBoard refuse a sheets folder that leads out, and the board strips survive', { skip }, async () => {
   const { repo, outside } = world();
   mkdirSync(path.join(outside, 'board'));
@@ -111,27 +136,80 @@ test('clearStaleBoard and writeBoard refuse a sheets folder that leads out, and 
   assert.deepEqual(names(path.join(outside, 'board')), ['board-1.jpg']);
 });
 
-test('sweepPartials: a folder that leads out is refused and nothing in it is removed; a real one is swept, own work folders included', { skip }, () => {
+const LATER = { now: Date.now() + 2 * 3600 * 1000 };
+const deadPid = () => spawnSync(process.execPath, ['-e', '0']).pid; // a process that has ended: no one holds its number now
+
+// A work folder as a render leaves it: its two files and, when `owner` is given, the marker with that owner.
+function workFolder(dir, name, owner) {
+  const folder = path.join(dir, name);
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(path.join(folder, 'video.mp4'), 'x');
+  if (owner !== undefined) writeFileSync(path.join(folder, WORK_OWNER_FILE), JSON.stringify({ host: hostname(), token: 'a'.repeat(32), ...owner }));
+  return folder;
+}
+
+test('sweepPartials: a folder that leads out is refused and nothing in it is removed', { skip }, () => {
   const { repo, outside } = world();
   const old = path.join(outside, '.film.mp4.partial-1.mp4');
   writeFileSync(old, 'x');
   symlinkSync(outside, path.join(repo, 'out'));
-  const later = { now: Date.now() + 2 * 3600 * 1000 };
-  assert.throws(() => sweepPartials(path.join(repo, 'out'), later), refused(path.join(repo, 'out')));
+  assert.throws(() => sweepPartials(path.join(repo, 'out'), LATER), refused(path.join(repo, 'out')));
   assert.equal(existsSync(old), true);
+});
+
+test('sweepPartials removes only what it can prove is a dead run\'s: a marked work folder whose process has ended, and an old partial file', { skip }, () => {
+  const { repo } = world();
   const dir = path.join(repo, 'real');
-  mkdirSync(path.join(dir, '.pa-abc123'), { recursive: true });
-  writeFileSync(path.join(dir, '.pa-abc123', 'video.mp4'), 'x');
-  mkdirSync(path.join(dir, '.pa-mine12'));
-  writeFileSync(path.join(dir, '.pa-mine12', 'notes.txt'), 'the user\'s');
+  workFolder(dir, '.pa-dead01', { pid: deadPid() });
+  workFolder(dir, '.pa-live01', { pid: process.pid }); // a run that is alive, however long its video has not changed
+  workFolder(dir, '.pa-nomark'); // no marker: not ours to judge
+  workFolder(dir, '.pa-hostxx', { pid: deadPid(), host: 'some-other-machine' });
+  workFolder(dir, '.pa-badmrk');
+  writeFileSync(path.join(dir, '.pa-badmrk', WORK_OWNER_FILE), '{"pid": "x"');
+  mkdirSync(path.join(dir, '.pa-mine12')); // empty: a live render looks like this too, and so does a user's folder
   mkdirSync(path.join(dir, 'a-folder'));
   writeFileSync(path.join(dir, '.x.partial-9.mp4'), 'x');
-  mkdirSync(path.join(dir, '.pa-live99'));
-  writeFileSync(path.join(dir, '.pa-live99', 'video.mp4'), 'still growing'); // its folder is old, its video was written just now
-  utimesSync(path.join(dir, '.pa-live99'), new Date(0), new Date(0));
-  assert.deepEqual(sweepPartials(dir, { now: Date.now() + 30 * 60 * 1000 }), [], 'a live render is not swept');
-  assert.deepEqual(sweepPartials(dir, later).sort(), ['.pa-abc123', '.pa-live99', '.x.partial-9.mp4']);
-  assert.deepEqual(names(dir), ['.pa-mine12', 'a-folder']);
+  assert.deepEqual(sweepPartials(dir, { now: Date.now() + 30 * 60 * 1000 }), [], 'nothing is an hour old yet');
+  assert.deepEqual(sweepPartials(dir, LATER).sort(), ['.pa-dead01', '.x.partial-9.mp4']);
+  assert.deepEqual(names(dir), ['.pa-badmrk', '.pa-hostxx', '.pa-live01', '.pa-mine12', '.pa-nomark', 'a-folder']);
+});
+
+test('sweepPartials removes nothing but the marker and the two video files: a marked folder holding anything else is left', { skip }, () => {
+  const { repo } = world();
+  const dir = path.join(repo, 'real');
+  const folder = workFolder(dir, '.pa-extra1', { pid: deadPid() });
+  writeFileSync(path.join(folder, 'notes.txt'), 'the user\'s');
+  assert.deepEqual(sweepPartials(dir, LATER), []);
+  assert.deepEqual(names(folder), ['notes.txt', WORK_OWNER_FILE, 'video.mp4']);
+});
+
+test('sweepPartials never aborts a render: an unreadable folder, a dangling link or a folder named like a partial file are skipped', { skip: skip || process.getuid?.() === 0 }, () => {
+  const { repo } = world();
+  const dir = path.join(repo, 'real');
+  workFolder(dir, '.pa-dead01', { pid: deadPid() });
+  workFolder(dir, '.pa-other1', { pid: deadPid() });
+  chmodSync(path.join(dir, '.pa-other1'), 0o000); // another user's folder: mkdtemp makes it 0700
+  symlinkSync(path.join(dir, 'nowhere'), path.join(dir, '.a.partial-1.mp4'));
+  mkdirSync(path.join(dir, '.b.partial-2.mp4'));
+  try {
+    assert.deepEqual(sweepPartials(dir, LATER), ['.pa-dead01']);
+    assert.equal(lstatSync(path.join(dir, '.a.partial-1.mp4')).isSymbolicLink(), true);
+    assert.equal(lstatSync(path.join(dir, '.b.partial-2.mp4')).isDirectory(), true);
+  } finally {
+    chmodSync(path.join(dir, '.pa-other1'), 0o700);
+  }
+});
+
+test('makeWorkFolder: a private folder beside the output, marked with this process and a random token', { skip }, () => {
+  const { repo } = world();
+  mkdirSync(path.join(repo, 'out'));
+  const folder = makeWorkFolder(path.join(repo, 'out'));
+  assert.match(path.basename(folder), /^\.pa-[A-Za-z0-9]{6}$/);
+  const marker = JSON.parse(readFileSync(path.join(folder, WORK_OWNER_FILE), 'utf8'));
+  assert.equal(marker.pid, process.pid);
+  assert.equal(marker.host, hostname());
+  assert.match(marker.token, /^[0-9a-f]{32}$/);
+  assert.equal(sweepPartials(path.join(repo, 'out'), LATER).length, 0, 'this run is alive');
 });
 
 test('a poster, subtitles and a beats file go nowhere through a link out of the repository', { skip }, async () => {
@@ -201,6 +279,26 @@ test('the clip frame cache: a .clips that leads out of the repository is refused
   await assert.rejects(prepareClips({ ...args, cacheDir: path.join(repo, 'out', '.clips') }), refused(path.join(repo, 'out', '.clips')));
   assert.deepEqual(names(stale), ['000001.png'], 'a cache hit would have swept the dead run\'s folder');
   assert.ok(existsSync(first.dir), 'and pruned nothing');
+});
+
+test('the clip frame cache: an entry that is a link is no cache hit, and the times of its target are left alone', { skip: skip || !hasFfmpeg }, async () => {
+  const { repo, outside } = world();
+  const specDir = mkdtempSync(path.join(tmpdir(), 'mm-contain-spec-'));
+  made.push(specDir);
+  copyFileSync(path.resolve(HERE, '../../references/examples/v2/media-clip.mp4'), path.join(specDir, 'clip.mp4'));
+  const film = { version: 2, fps: 30, look: 'desk', shots: [{ id: 'reel', show: 'media', src: 'clip.mp4', hold: 1 }] };
+  const args = { film, specDir, timeline: buildTimeline(film, { fps: 30 }), canvas: { w: 1920, h: 1080 }, maxCacheBytes: 1e9 };
+  const [first] = await prepareClips({ ...args, cacheDir: path.join(outside, 'cache') }); // outside any repository
+  const longAgo = new Date(1000);
+  utimesSync(first.dir, longAgo, longAgo);
+  const cache = path.join(repo, 'out', '.clips');
+  mkdirSync(cache, { recursive: true });
+  const entry = path.join(cache, path.basename(first.dir));
+  symlinkSync(first.dir, entry); // the repository ships an entry that leads outside, done.json and all
+  const [again] = await prepareClips({ ...args, cacheDir: cache });
+  assert.equal(again.cached, false, 'a link is not a cache entry');
+  assert.equal(lstatSync(entry).isSymbolicLink(), false);
+  assert.equal(statSync(first.dir).mtimeMs, 1000, 'the folder behind the link had its times set');
 });
 
 test('encodeWebm: ffmpeg writes into a private folder, a link or a pipe at the output name is never opened, and nothing is left behind', { skip: skip || !hasFfmpeg }, (t) => {

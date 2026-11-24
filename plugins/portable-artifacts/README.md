@@ -339,7 +339,7 @@ Each skill folder also has its own README.
   and refuses a repository whose work tree does not contain the folder you
   gave. The page builders' "is `.scratch/` ignored" note is asked the same way,
   with `--no-index` and a 5 second limit. Before a tool writes into a git repository, it stops with one line when a symlink on the folder's path leads outside the
-  repository (pass the folder's real path); a folder with no `.git`, such as an unpacked archive, is not checked. A file is
+  repository (pass the folder's real path), and never into the repository's own `.git`; a folder with no `.git`, such as an unpacked archive, is not checked. A file is
   written to a temp file and renamed over its path, so a symlink a repository planted there is replaced and its target left
   alone. Your own global filter drivers still
   run on the files a repository's attributes select, in that repository's

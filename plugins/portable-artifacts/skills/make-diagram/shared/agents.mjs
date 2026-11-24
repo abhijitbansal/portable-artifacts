@@ -9,8 +9,10 @@
 //                                                                 (--force copies a file it replaces to motion-reviewer.md.bak first)
 // The Claude Code text is also shipped as the plugin's agents/artifact-builder.md; a test holds the two equal.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertContained } from './write-file.mjs';
 
 export const AGENT_NAME = 'artifact-builder';
 
@@ -324,9 +326,30 @@ function writeFiles(dir, files, force) {
   return status;
 }
 
+// The host folders of the user's own agents (<home>/.claude/agents ...): a stowed ~/.claude is a link on purpose, so they are not
+// checked. Any other folder, a project's included, may belong to a repository that ships a link there: assertContained refuses it.
+const USER_AGENT_DIRS = ['.claude', '.copilot', '.codex'].map((dot) => path.join(dot, 'agents'));
+
+// Returns null when `dir` may be written, else the one-line reason.
+function folderRefusal(dir) {
+  const abs = path.resolve(dir);
+  if (USER_AGENT_DIRS.some((rel) => abs === path.join(os.homedir(), rel))) return null;
+  try {
+    assertContained(abs);
+    return null;
+  } catch (e) {
+    return String(e.message).split('\n')[0];
+  }
+}
+
 function cli(argv) {
   const [command, host, dir, ...rest] = argv;
   const validDir = Boolean(dir) && !dir.startsWith('-');
+  const refusal = validDir && (command === 'write' || command === 'write-reviewer') ? folderRefusal(dir) : null;
+  if (refusal !== null) {
+    process.stderr.write(`agent: ${refusal}\n`);
+    return 1;
+  }
   if (command === 'write' && AGENT_HOSTS.includes(host) && validDir && !rest.length) {
     const files = [agentFile(host)];
     if (REVIEWER_HOSTS.includes(host)) files.push(reviewerFile(host));

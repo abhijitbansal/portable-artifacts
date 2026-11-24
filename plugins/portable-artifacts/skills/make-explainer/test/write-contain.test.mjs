@@ -81,6 +81,37 @@ test('scaffold --out: a path through a linked folder out of the repository is re
   assert.ok(fs.existsSync(path.join(outside, 'e.json')));
 });
 
+test('scaffold --out l/../x.json (l is a link out): the file that is checked is the file that is written; the file behind the link is untouched', { skip }, (t) => {
+  const { repo, outside } = world(t);
+  fs.mkdirSync(path.join(outside, 'deep'));
+  fs.writeFileSync(path.join(outside, 'victim.json'), 'precious');
+  fs.symlinkSync(path.join(outside, 'deep'), path.join(repo, 'l'));
+  const r = runNode(t, script('scaffold.mjs'), ['concept', '--out', 'l/../victim.json', '--force'], repo);
+  assert.ok([0, 2].includes(r.status), `${r.stdout}${r.stderr}`);
+  assert.equal(fs.readFileSync(path.join(outside, 'victim.json'), 'utf8'), 'precious', 'the file behind the link was overwritten');
+  assert.deepEqual(listing(outside).sort(), ['deep', 'victim.json']);
+});
+
+test('build --out below an unreadable folder, or a name over the limit: one line, exit 2, valid --json (a raw stack before)', { skip: skip || process.getuid?.() === 0 }, (t) => {
+  const { repo } = world(t);
+  fs.cpSync(examples, path.join(repo, 'examples'), { recursive: true });
+  const spec = path.join(repo, 'examples', 'recap-simple.explainer.json');
+  fs.mkdirSync(path.join(repo, 'locked', 'a'), { recursive: true });
+  fs.chmodSync(path.join(repo, 'locked'), 0o000);
+  try {
+    for (const out of [path.join(repo, 'locked', 'a', 'x.html'), path.join(repo, 'n'.repeat(300), 'x.html')]) {
+      const text = runNode(t, script('build.mjs'), [spec, '--out', out], repo);
+      assert.equal(text.status, 2, `${text.stdout}${text.stderr}`);
+      assert.equal(text.stderr.trim().split('\n').length, 1, text.stderr);
+      const json = runNode(t, script('build.mjs'), [spec, '--out', out, '--json'], repo);
+      assert.equal(json.status, 2, `${json.stdout}${json.stderr}`);
+      assert.equal(JSON.parse(json.stdout).ok, false);
+    }
+  } finally {
+    fs.chmodSync(path.join(repo, 'locked'), 0o700); // before the folder is removed
+  }
+});
+
 test('gather --out: a path through a linked folder out of the repository is refused; nothing is written', { skip }, (t) => {
   const { base, outside } = world(t);
   const repo = path.join(base, 'real-repo');
@@ -95,10 +126,26 @@ test('gather --out: a path through a linked folder out of the repository is refu
   assert.deepEqual(listing(outside), []);
 });
 
-test('--out /dev/stdout works again (scaffold writes to the process stdout)', { skip: !canLink || !fs.existsSync('/dev/stdout') }, (t) => {
-  const r = runNode(t, script('scaffold.mjs'), ['concept', '--out', '/dev/stdout', '--force'], process.cwd());
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /"sections"/);
+// Node hands a child `pipe` stdio as a SOCKET pair, which Linux will not open as /dev/stdout (ENXIO; macOS duplicates it). So the
+// child's stdout is a regular file's descriptor, which every platform opens, and the file is read back.
+test('--out /dev/stdout works again (scaffold writes to the process stdout, a file here)', { skip: !canLink || !fs.existsSync('/dev/stdout') }, (t) => {
+  const sink = path.join(tmpDir(t, 'pa-ex-sink-'), 'stdout.txt');
+  const fd = fs.openSync(sink, 'w');
+  try {
+    const r = spawnSync(process.execPath, [script('scaffold.mjs'), 'concept', '--out', '/dev/stdout', '--force'], { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', fd, 'pipe'], timeout: LIMIT_MS });
+    assert.equal(r.status, 0, r.stderr);
+  } finally {
+    fs.closeSync(fd);
+  }
+  assert.match(fs.readFileSync(sink, 'utf8'), /"sections"/);
+});
+
+test('--out /dev/stdout when stdout is a socket: the text is written, or one line and exit 2 (Linux refuses with ENXIO), never a stack', { skip: !canLink || !fs.existsSync('/dev/stdout') }, (t) => {
+  const r = runNode(t, script('scaffold.mjs'), ['concept', '--out', '/dev/stdout', '--force'], process.cwd()); // spawnSync's default pipes are sockets
+  if (r.status === 0) return assert.match(r.stdout, /"sections"/);
+  assert.equal(r.status, 2, `${r.stdout}${r.stderr}`);
+  assert.equal(r.stderr.trim().split('\n').length, 1, r.stderr);
+  assert.match(r.stderr, /cannot write \/dev\/stdout: ENXIO/);
 });
 
 test('a manifest that is a named pipe is never opened: the build does not hang, and the pipe is left alone', { skip: !canLink }, (t) => {

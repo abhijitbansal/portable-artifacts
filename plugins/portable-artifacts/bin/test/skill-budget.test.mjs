@@ -26,7 +26,7 @@ const read = (skill, ...rest) => fs.readFileSync(path.join(SKILLS, skill, ...(re
 // line, the consent exception and a list of the files written outside the project (make-explainer also names --image-api,
 // make-dashboard the extension download and the network scope, make-motion the model cache). Measured with `wc -c`: 16,304,
 // 16,520, 23,463, 21,868 and 13,026 bytes (dashboard, diagram, explainer, motion, scene); each budget is that plus about 3 percent.
-// make-dashboard's budget is raised to 17,300 bytes for the one sandbox line (2.4.1) that make-motion and make-dashboard now share with the
+// make-dashboard's budget is raised to 17,300 bytes for the one sandbox line (2.4.2) that make-motion and make-dashboard now share with the
 // other three skills: the file measured 16,784 bytes (`wc -c`) with it, 16,750 before.
 const BUDGETS = {
   'make-dashboard': { bytes: 17300, lines: 145 },

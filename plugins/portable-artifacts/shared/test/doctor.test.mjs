@@ -1230,7 +1230,8 @@ function fakeMachine({ user, project } = {}) {
   fs.mkdirSync(agents, { recursive: true });
   fs.mkdirSync(path.join(skillDir, "shared"), { recursive: true });
   fs.mkdirSync(cwd);
-  fs.copyFileSync(AGENTS_SRC, path.join(skillDir, "shared", "agents.mjs"));
+  // agents.mjs imports its siblings (write-file.mjs checks a project folder), so the fake skill carries the whole shared folder, as a real one does
+  for (const name of fs.readdirSync(path.dirname(AGENTS_SRC))) if (name.endsWith(".mjs")) fs.copyFileSync(path.join(path.dirname(AGENTS_SRC), name), path.join(skillDir, "shared", name));
   fs.writeFileSync(path.join(agents, "artifact-builder.md"), BUILDER_HAND_EDITED);
   if (user !== undefined) fs.writeFileSync(path.join(agents, "motion-reviewer.md"), user);
   const projectAgents = path.join(cwd, ".claude", "agents");

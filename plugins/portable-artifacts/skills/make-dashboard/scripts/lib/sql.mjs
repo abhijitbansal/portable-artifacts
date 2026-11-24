@@ -1,6 +1,9 @@
 // DuckDB helpers: in-memory instances (plain and locked down), a parser-backed
 // SELECT-only guard, the LIMIT wrapper, and the timed runner.
 import { DuckDBInstance } from '@duckdb/node-api';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkAst } from './guard.mjs';
 import {
@@ -19,16 +22,25 @@ export async function runOne(conn, sql) {
   return conn.run(sql);
 }
 
+// A query that does not fit in memory spills to DuckDB's temp_directory, which is `.tmp` under the working folder unless it is
+// set: a repository could ship `.tmp` as a link. So every database spills to its own private folder (mkdtemp: random name, mode
+// 0700) in the system temp folder, set before any source is attached or the configuration is locked, and removed at close.
 export async function openDb() {
   const instance = await DuckDBInstance.create(':memory:');
   const conn = await instance.connect();
-  return {
-    conn,
-    close() {
-      conn.closeSync?.();
-      instance.closeSync?.();
-    },
+  const spill = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-duckdb-'));
+  const close = () => {
+    conn.closeSync?.();
+    instance.closeSync?.();
+    fs.rmSync(spill, { recursive: true, force: true });
   };
+  try {
+    await runOne(conn, `SET temp_directory=${sqlLiteral(spill)}`);
+  } catch (e) {
+    close();
+    throw e;
+  }
+  return { conn, close };
 }
 
 const MIN_DERIVED_SECRET = 4; // shorter password pieces would mangle ordinary text

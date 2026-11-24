@@ -144,11 +144,15 @@ function placeSkill(src, at, link) {
 }
 
 // npm ci for the skill placed at `at`; a message when it failed, otherwise null.
-function installDeps(src, at, link) {
+export function installDeps(src, at, link) {
   // A linked install runs inside the source checkout: --omit=dev there would delete the developer's dev deps.
-  const args = ['ci', '--ignore-scripts', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
+  // The folder npm works in is named with --prefix and workspaces are off: left to find its own root, npm looks UP from the
+  // stage, and a repository whose package.json lists the stage in `workspaces` (with a lock that names it) makes the REPOSITORY
+  // npm's root, so `npm ci` empties the repository's node_modules, and whatever folder that link leads to.
+  const dir = link ? src : at;
+  const args = ['ci', '--ignore-scripts', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund', '--workspaces=false', '--prefix', dir];
   const npm = npmCommand(args);
-  const r = spawnSync(npm.cmd, npm.args, { cwd: link ? src : at, stdio: 'inherit', shell: npm.shell });
+  const r = spawnSync(npm.cmd, npm.args, { cwd: dir, stdio: 'inherit', shell: npm.shell });
   if (r.status === 0) return null;
   return r.error ? ` (${r.error.message})` : '';
 }

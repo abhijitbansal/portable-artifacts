@@ -7,9 +7,10 @@
 // (/clip/<k>/<n>); a shot's sound is cut from the clip to the shot's length and mixed under the voice unless `muted`.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { createReadStream, lstatSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ensureOutputFolder } from '../../shared/write-file.mjs';
+import { pidAlive } from './pid-alive.mjs';
 import { findFfmpeg, findFfprobe } from './render.mjs';
 import { SpecError } from './spec.mjs';
 import { fileInside, CLIP_FRAME_PATTERN } from './server.mjs';
@@ -181,9 +182,11 @@ function fileHash(file) {
   });
 }
 
-// The entry's frame count when it is whole (its done marker names the key and as many frames as the folder holds).
+// The entry's frame count when it is whole (its done marker names the key and as many frames as the folder holds). An entry that
+// is a link is no entry: the run decodes afresh and replaces the link, so nothing behind it is read or has its times set.
 function readDone(dir, key) {
   try {
+    if (!lstatSync(dir).isDirectory()) return null;
     const done = JSON.parse(readFileSync(path.join(dir, DONE), 'utf8'));
     const count = readdirSync(dir).filter((f) => f.endsWith('.png')).length;
     return done.key === key && Number.isInteger(done.count) && done.count > 0 && done.count === count ? count : null;
@@ -196,16 +199,6 @@ function readDone(dir, key) {
 const folderBytes = (dir) => readdirSync(dir).reduce((sum, f) => sum + statSync(path.join(dir, f)).size, 0);
 
 const PARTIAL_RE = /^\.partial-[0-9a-f]+-(\d+)$/; // the decode folder of cachedDecode: .partial-<key>-<pid>
-
-// Whether a process with this pid runs (EPERM: it does, under another user).
-function pidAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return err.code === 'EPERM';
-  }
-}
 
 // Removes the decode folders that a killed run left behind: the .partial folders whose process is gone.
 function sweepPartials(cacheDir) {

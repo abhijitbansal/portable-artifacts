@@ -271,17 +271,40 @@ test('a path under /dev/ is written in place, as before: /dev/null stays a devic
   assert.equal(fs.lstatSync('/dev/null').isCharacterDevice(), true);
 });
 
-test('--out /dev/stdout reaches the process stdout (a pipe here), and /dev/stdout is not replaced', { skip: !canLink || !fs.existsSync('/dev/stdout') }, () => {
-  const r = writeInChild('/dev/stdout', 'to the pipe\n');
+// Node gives a child's `pipe` stdio as a SOCKET pair, and Linux refuses to open /dev/stdout or /dev/fd/N when the descriptor is a
+// socket (ENXIO; macOS duplicates it). So the descriptor handed to these children is a regular file's, which every platform opens.
+function writeInChildToFile(t, target, data, slot) {
+  const dir = tmp(t);
+  const file = path.join(dir, 'sink.txt');
+  const fd = fs.openSync(file, 'w');
+  try {
+    const stdio = ['ignore', 'ignore', 'pipe'];
+    stdio[slot] = fd;
+    const r = writeInChild(target, data, { stdio });
+    return { r, text: fs.readFileSync(file, 'utf8') };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+test('--out /dev/stdout reaches the process stdout (a file here), and /dev/stdout is not replaced', { skip: !canLink || !fs.existsSync('/dev/stdout') }, (t) => {
+  const { r, text } = writeInChildToFile(t, '/dev/stdout', 'to the file\n', 1);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout, 'to the pipe\n');
+  assert.equal(text, 'to the file\n');
   assert.equal(fs.lstatSync('/dev/stdout').isFile(), false);
 });
 
-test('a /dev/fd/N path (process substitution) is written in place', { skip: !canLink || !fs.existsSync('/dev/fd') }, () => {
-  const r = writeInChild('/dev/fd/3', 'through fd 3\n', { stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
+test('a /dev/fd/N path (process substitution) is written in place', { skip: !canLink || !fs.existsSync('/dev/fd') }, (t) => {
+  const { r, text } = writeInChildToFile(t, '/dev/fd/3', 'through fd 3\n', 3);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(String(r.output[3]), 'through fd 3\n');
+  assert.equal(text, 'through fd 3\n');
+});
+
+test('--out /dev/stdout into a real pipe (sh and cat) reaches the reader', { skip: !canLink || !fs.existsSync('/dev/stdout') || !fs.existsSync('/bin/sh') }, () => {
+  const code = `import { writeFileReplacing } from ${JSON.stringify(MODULE)}; writeFileReplacing('/dev/stdout', 'through a pipe\\n');`;
+  const r = spawnSync('/bin/sh', ['-c', 'exec "$0" --input-type=module -e "$1" | cat', process.execPath, code], { encoding: 'utf8', timeout: CHILD_LIMIT_MS });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'through a pipe\n');
 });
 
 test('a link named stdout that is not under /dev/ is replaced like any other link', { skip: !canLink || !fs.existsSync('/dev/fd/1') }, (t) => {

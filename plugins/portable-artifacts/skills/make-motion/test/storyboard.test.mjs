@@ -4,7 +4,7 @@
 // interface of version 1 was deleted at cut-over; the film-to-plan cases live in test/v2/storyboard.test.mjs).
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -207,4 +207,20 @@ test('a plan from a film with narration and an experimental look still validates
   assert.equal(run(CLI, [writeFilm(base, film), '--out', out]).status, 0);
   const validated = spawnSync(process.execPath, [REAL_VALIDATE, out], { encoding: 'utf8' });
   assert.equal(validated.status, 0, validated.stdout + validated.stderr);
+});
+
+// A repository a folder of which the user cannot read: the check's EACCES is the one-line usage error, exit 2, never a stack.
+test('--out below an unreadable folder of a repository: one line, exit 2 (the check used to throw a raw EACCES)', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
+  const base = tmp();
+  mkdirSync(path.join(base, '.git'));
+  mkdirSync(path.join(base, 'locked', 'a'), { recursive: true });
+  chmodSync(path.join(base, 'locked'), 0o000);
+  try {
+    const result = call([writeFilm(base, LONG_FILM), '--out', path.join(base, 'locked', 'a', 'plan.json')], explainerIn(base, { present: true }));
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(result.stderr.trim().split('\n').length, 1, result.stderr);
+    assert.match(result.stderr, /EACCES/);
+  } finally {
+    chmodSync(path.join(base, 'locked'), 0o700);
+  }
 });

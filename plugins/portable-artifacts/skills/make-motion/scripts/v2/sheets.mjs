@@ -4,6 +4,7 @@
 // (layout.mjs) and writes the PNG. No ffmpeg and no screenshots. writeSheets also returns the film review's findings.
 import { lstatSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { UsageError } from '../../shared/cli.mjs';
 import { assertContained, ensureOutputFolder, TEMP_NAME, writeFileReplacing } from '../../shared/write-file.mjs';
 import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
@@ -92,12 +93,28 @@ export function writeAtomically(file, bytes) {
   return writeFileReplacing(file, bytes);
 }
 
-// The folder belongs to one video, so the PNGs in it are the last run's sheets; they go before the new ones are made,
-// and a sheet the film no longer has cannot linger. So does a temp file (.pa-<hex>.tmp, a regular file) a killed run left.
+// A sheet is `<shot id>.png` or `cut-<id>-<id>.png`, and a shot id is a lowercase letter, then lowercase letters, digits and hyphens
+// (spec.mjs ID_RE): only names of that shape are this tool's. A picture of any other name in the folder is the user's.
+// A slice's partial sheet is `<name>.partial-<shot-id | range-<from>-<to>>.png` (slice.mjs).
+const SHEET_NAME = /^[a-z][a-z0-9-]*(?:\.partial-(?:shot-[a-z][a-z0-9-]*|range-\d+-\d+))?\.png$/;
+
+// The sheets folder, checked and made: a folder that leads out of the repository by a link is refused (ensureOutputFolder), and so is
+// one that is itself a link even when it stays inside, as the board's and the stills' folders are: the sheets of the last run are
+// deleted from it, and a link could name any folder of the repository (`out/film.sheets -> ../screenshots`).
+function sheetsFolder(dir) {
+  const abs = ensureOutputFolder(dir);
+  if (lstatSync(abs).isSymbolicLink()) throw new UsageError(`${abs} is a symbolic link; the sheets folder must be a real folder (remove the link, or pass the folder's real path)`);
+  return abs;
+}
+
+// The folder belongs to one video, so the sheets in it are the last run's; they go before the new ones are made, and a sheet the
+// film no longer has cannot linger. So does a temp file (.pa-<hex>.tmp, a regular file) a killed run left.
 function clearOwnSheets(dir) {
-  ensureOutputFolder(dir); // before anything is deleted: a folder that leads out of the repository by a link is refused
-  for (const name of readdirSync(dir)) {
-    if (name.toLowerCase().endsWith('.png') || (TEMP_NAME.test(name) && lstatSync(path.join(dir, name)).isFile())) rmSync(path.join(dir, name), { force: true });
+  const abs = sheetsFolder(dir); // before anything is deleted
+  for (const name of readdirSync(abs)) {
+    const file = path.join(abs, name);
+    const stat = lstatSync(file);
+    if (!stat.isDirectory() && (SHEET_NAME.test(name) || (TEMP_NAME.test(name) && stat.isFile()))) rmSync(file, { force: true });
   }
 }
 
@@ -191,7 +208,7 @@ export async function writeSheets({ specPath, dir, session, signal, slice = null
     if (slice === null) {
       clearOwnSheets(dir);
       clearStaleBoard(dir);
-    } else ensureOutputFolder(dir);
+    } else sheetsFolder(dir);
     const [w, h] = canvasSize(open.film);
     const planned = planSheets(open.film, open.timeline);
     const files = [];
