@@ -47,7 +47,10 @@ unless you opt in with `--image-api` (see below).
   page title and subtitle to that host, needs your key in `PA_IMAGE_API_KEY`, and
   may cost money; the endpoint contract is in `references/schema.md`.
 - **Checklists remember**: ticks are saved in the browser, with a progress bar,
-  per-group tallies and a reset that asks first.
+  per-group tallies and a reset that asks first. When browser storage is full,
+  saved ticks and saved plan answers still show (plan answers can be exported);
+  a change that cannot be saved stays on the page and is carried by the next
+  save that works, and the "not saved" note clears after that save.
 - **Slides**: one section per slide, arrow keys and Space, `O` for an outline,
   `#slide-3` deep links, the last slide remembered, one slide per printed page.
   A slide that is too full fails validation (at most 6 points, 8 table rows, 12

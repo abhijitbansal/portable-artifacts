@@ -1911,7 +1911,8 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 
   // ---- checklists -----------------------------------------------------------
   // Ticks are saved as {id: true} under pa-checklist:<key>. Storage can be missing or
-  // refuse writes; then ticking still works for this visit and a quiet note says so.
+  // refuse writes; then ticking still works for this visit and a quiet note says so. A full store still reads, so
+  // saved ticks are restored; a write that fails never drops them.
   function setupChecklist(box) {
     var storeKey = 'pa-checklist:' + box.getAttribute('data-key');
     var inputs = [].slice.call(box.querySelectorAll('input[data-id]'));
@@ -1923,12 +1924,20 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     var confirmBox = part('data-confirm');
     var unsaved = part('data-unsaved');
     var saved = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
-    var checked = saved ? PA.readChecks(PA.readStore(local, storeKey), ids) : PA.readChecks(null, ids);
+    // A full store can still be read: the write probe only decides the note, never what is restored.
+    var checked = PA.readChecks(PA.readStore(local, storeKey), ids);
+    // The ids this tab changed since its last write that held. A write puts only these over what is stored now, so
+    // ticks saved earlier (or by another tab) are never dropped, and a tick that failed to save is carried by the next.
+    var changed = Object.create(null);
 
-    // Merge into what is stored now, so another tab's (or page's) ticks are never lost.
     function persist() {
-      var ok = PA.saveStore(local, storeKey, PA.mergeChecks(PA.readStore(local, storeKey), ids, checked));
-      if (!ok) unsaved.hidden = false;
+      var raw = PA.readStore(local, storeKey);
+      // With nothing stored (cleared elsewhere, or never written) every tick on screen is written; otherwise only the
+      // ids changed here go over what is stored.
+      var mine = raw === null ? ids : ids.filter(function (id) { return changed[id]; });
+      var ok = PA.saveStore(local, storeKey, PA.mergeChecks(raw, mine, checked));
+      if (ok) changed = Object.create(null);
+      unsaved.hidden = ok;
     }
     function refresh() {
       var done = 0;
@@ -1975,6 +1984,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       if (!input.matches || !input.matches('input[data-id]')) return;
       var id = input.getAttribute('data-id');
       if (input.checked) checked[id] = true; else delete checked[id];
+      changed[id] = true;
       persist();
       refresh();
     });
@@ -1989,15 +1999,20 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     part('data-reset-no').addEventListener('click', function () { closeConfirm(true); });
     part('data-reset-yes').addEventListener('click', function () {
       checked = Object.create(null);
+      ids.forEach(function (id) { changed[id] = true; }); // a reset changes every id on this page
       persist();
       refresh();
       closeConfirm(true);
       announce('Checklist reset');
     });
-    // Another tab or page changed this key: take its ticks, keep showing ours consistent.
+    // Another tab or page changed this key: take its ticks, except the ones changed here and not saved yet.
     window.addEventListener('storage', function (event) {
-      if (event.storageArea !== local || (event.key !== null && event.key !== storeKey)) return;
-      checked = PA.readChecks(PA.readStore(local, storeKey), ids);
+      if (!local || event.storageArea !== local || (event.key !== null && event.key !== storeKey)) return;
+      var stored = PA.readChecks(PA.readStore(local, storeKey), ids);
+      ids.forEach(function (id) {
+        if (changed[id]) return;
+        if (stored[id] === true) checked[id] = true; else delete checked[id];
+      });
       refresh();
     });
     confirmBox.addEventListener('keydown', function (event) {
