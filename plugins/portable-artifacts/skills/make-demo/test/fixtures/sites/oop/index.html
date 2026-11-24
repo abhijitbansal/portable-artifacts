@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A cross-site frame far down the page</title></head>
+<body style="font: 18px system-ui; margin: 16px">
+<h1>A cross-site frame far down the page</h1>
+<div style="height: 5000px"></div>
+<script>
+// localhost and 127.0.0.1 are different sites, so with site isolation the frame is out of process, and off screen.
+const frame = document.createElement('iframe');
+frame.id = 'far';
+frame.width = 300;
+frame.height = 100;
+frame.src = location.href.replace('127.0.0.1', 'localhost').replace(/oop\/?$/, 'oop/inner');
+document.body.append(frame);
+</script>
+</body>
+</html>

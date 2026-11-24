@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Far frame</title></head>
+<body style="margin: 0">
+<div id="box" style="width: 20px; height: 20px; background: #1b5fd1"></div>
+<script>
+// An animation that starts 300 ms after load is pending until a frame: in an off-screen cross-site frame the browser gives none.
+setTimeout(() => { window.slide = document.getElementById('box').animate([{ transform: 'none' }, { transform: 'translateX(200px)' }], 5000); }, 300);
+</script>
+</body>
+</html>

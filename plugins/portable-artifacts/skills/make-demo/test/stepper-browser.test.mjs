@@ -2,6 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startSites } from './fixtures/sites/server.mjs';
+import { chromium } from 'playwright';
 import { launchBrowser, liveBrowsers } from '../scripts/lib/browser.mjs';
 import * as stepperModule from '../scripts/lib/stepper.mjs';
 
@@ -16,7 +17,8 @@ before(async () => {
   const live = liveBrowsers();
   assert.deepEqual(live, [], 'another headless browser is running: wait for it, never run two');
   sites = await startSites();
-  browser = await launchBrowser();
+  // Site isolation on, so a frame from another site (localhost against 127.0.0.1) is out of process, as on a real site.
+  browser = await launchBrowser({ launch: () => chromium.launch({ args: ['--site-per-process'] }) });
 });
 after(async () => {
   await browser?.close();
@@ -432,6 +434,19 @@ test('an exception a page timer throws does not stop the film, and timerErrors()
   assert.match(stepper.timerErrors()[0], /boom 123/);
   await stepper.step(2);
   assert.equal(stepper.timerErrors().length, 1, 'the next steps add none');
+  await context.close();
+});
+
+test('an animation that starts in an off-screen cross-site frame does not stop the step (C1 of review 2)', { timeout: 30000 }, async () => {
+  const { context, page, stepper } = await open('/oop/');
+  const began = Date.now();
+  await stepper.step(20);
+  // Each step may wait the 250 ms give-up for a frame that never comes, so 20 steps are bounded by 20 x 250 ms plus their own work.
+  assert.ok(Date.now() - began < 20 * 250 + 3000, `20 steps took ${Date.now() - began} ms`);
+  const far = page.frames().find((f) => f.url().includes('localhost'));
+  assert.ok(far, 'the cross-site frame is there');
+  const time = await far.evaluate(() => window.slide?.currentTime);
+  assert.ok(time > 300 && time < 420, `the animation, started at 300 ms of film, reads ${time} at 667 ms`);
   await context.close();
 });
 

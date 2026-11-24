@@ -44,6 +44,7 @@ export class StepTimeout extends Error {
 /** Init script, before the page's own: keep the real requestAnimationFrame, and count what the stepper cannot move. */
 function setupPage() {
   window.__nativeRAF = window.requestAnimationFrame.bind(window);
+  window.__nativeSetTimeout = window.setTimeout.bind(window);
   const counts = (window.__makeDemoCounts = { workers: 0, audioContexts: 0, closedShadowRoots: 0, smoothScrolls: 0 });
   const counted = (name, key) => {
     if (typeof window[name] !== 'function') return;
@@ -79,11 +80,13 @@ async function syncAnimations(dt) {
   const seen = new Set();
   for (const root of roots) for (const animation of root.getAnimations()) seen.add(animation);
   // A play(), reverse() or rate change the page made is pending until a frame: its rate is not the new one yet, so wait for
-  // `ready` (a few real frames at most, in case a frozen timeline never settles it).
+  // `ready` (a few real frames at most, in case a frozen timeline never settles it, and at most 250 ms: a frame that is off
+  // screen or hidden gets no frames from the browser, so a frame callback alone would wait for ever).
   const pending = [...seen].filter((animation) => animation.pending);
   if (pending.length > 0 && typeof window.__nativeRAF === 'function') {
     const frames = (n) => new Promise((resolve) => window.__nativeRAF(() => (n > 1 ? frames(n - 1).then(resolve) : resolve())));
-    await Promise.race([Promise.all(pending.map((animation) => animation.ready)), frames(5)]);
+    const giveUp = new Promise((resolve) => window.__nativeSetTimeout(resolve, 250));
+    await Promise.race([Promise.all(pending.map((animation) => animation.ready)), frames(5), giveUp]);
   }
   for (const animation of seen) {
     if (animation.playState !== 'running' || animation.timeline !== document.timeline || animation.playbackRate === 0) continue;
