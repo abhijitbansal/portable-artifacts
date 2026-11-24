@@ -35,6 +35,21 @@ export function sessionCells(s) {
   return [tri(s.firstBuildValid), byCell(s.steps, 'spec'), byCell(s.steps, 'make'), cellText(operatorCell(s)), cellText(s.directorModel)];
 }
 
+export const USAGE_HEADERS = ['cost $', 'calls', 'tools', 'pictures', 'renders', 'drafts', 'input', 'output'];
+
+const COST_DECIMALS = 2;
+const count = (n) => (Number.isFinite(n) ? String(n) : '-');
+
+/** The eight usage cells for one row, in USAGE_HEADERS order. Input is the sum of fresh, cache-write and cache-read tokens. */
+export function usageCells(s) {
+  if (!s.readable) return USAGE_HEADERS.map(() => UNREADABLE);
+  const u = s.usage;
+  if (!u) return USAGE_HEADERS.map(() => '-'); // a record from before usage was read
+  const input = u.input ? u.input.fresh + u.input.write + u.input.read : null;
+  const cost = Number.isFinite(u.costUsd) ? u.costUsd.toFixed(COST_DECIMALS) : '-';
+  return [cost, ...[u.calls, u.toolUses, u.pictures, u.renders, u.drafts, input, u.output].map(count)];
+}
+
 /** Note fragments for one row's notes cell. */
 export function sessionNotes(s) {
   if (!s.readable) return ['session stream unreadable'];

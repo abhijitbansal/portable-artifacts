@@ -172,6 +172,16 @@ test('make.mjs --list and --outline are not builds: first build valid is the fir
   assert.equal(firstBuildValid(s.steps), false);
 });
 
+// --draft (a look at the film, drafted without a render) builds no film, like --list and --outline.
+test('make.mjs film.json --draft --json is not a make step', () => {
+  const events = [
+    F.init(),
+    F.toolUse({ id: 'a', name: 'Bash', input: { command: 'node skills/make-motion/scripts/make.mjs film.json --draft --json' } }),
+    F.toolResult({ id: 'a', content: F.report(true) }),
+  ];
+  assert.deepEqual(parse(events).steps, []);
+});
+
 test('a command that only mentions make.mjs is not a make step', () => {
   const events = [
     F.init(),

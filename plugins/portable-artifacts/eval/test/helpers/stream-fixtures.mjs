@@ -21,11 +21,23 @@ export const init = ({ model = DIRECTOR_MODEL, agents = [AGENT_LISTED, 'general-
 });
 
 // One assistant event with one tool_use block. `parent` is the delegating call's id for a subagent's event, else null.
-export const toolUse = ({ id, name, input, model = DIRECTOR_MODEL, parent = null }) => ({
+// `messageId`: a real stream splits one API message into one event per content block, all with the same `message.id`;
+// by default each event is its own message. `usage`: that message's `usage` object (see `tokens`), left out when absent.
+export const toolUse = ({ id, name, input, model = DIRECTOR_MODEL, parent = null, messageId = `msg_${id}`, usage }) => ({
   type: 'assistant',
   parent_tool_use_id: parent,
-  message: { model, content: [{ type: 'tool_use', id, name, input }] },
+  message: { id: messageId, model, ...(usage ? { usage } : {}), content: [{ type: 'tool_use', id, name, input }] },
 });
+
+// A message's `usage` object, in the stream's own key names.
+export const tokens = ({ fresh = 0, write = 0, read = 0, output = 0 } = {}) => ({
+  input_tokens: fresh, cache_creation_input_tokens: write, cache_read_input_tokens: read, output_tokens: output,
+});
+
+// A result event's `modelUsage`: one entry per model, in the stream's own key names.
+export const modelUsage = (perModel) => Object.fromEntries(Object.entries(perModel).map(([model, t]) => [model, {
+  inputTokens: t.fresh ?? 0, cacheCreationInputTokens: t.write ?? 0, cacheReadInputTokens: t.read ?? 0, outputTokens: t.output ?? 0,
+}]));
 
 export const toolResult = ({ id, content, isError = false, parent = null }) => ({
   type: 'user',
@@ -35,7 +47,9 @@ export const toolResult = ({ id, content, isError = false, parent = null }) => (
 
 export const hook = ({ name, subtype = 'hook_started' }) => ({ type: 'system', subtype, hook_name: name });
 
-export const result = ({ cost = 0.42, subtype = 'success' } = {}) => ({ type: 'result', subtype, is_error: subtype !== 'success', total_cost_usd: cost });
+export const result = ({ cost = 0.42, subtype = 'success', modelUsage: perModel } = {}) => ({
+  type: 'result', subtype, is_error: subtype !== 'success', total_cost_usd: cost, ...(perModel ? { modelUsage: perModel } : {}),
+});
 
 export const report = (ok, extra = {}) => JSON.stringify({ ok, output: ok ? '/work/out/film.mp4' : null, stages: [{ name: 'validate', ok, seconds: 0.1 }], findings: [], ...extra });
 

@@ -389,6 +389,82 @@ test('copySkill: a skill whose deps are not installed is copied without node_mod
   assert.equal(fs.existsSync(path.join(work, 'skills/make-bare/node_modules')), false);
 });
 
+// A fake skill folder with packages at the top level and under optional/voice, as make-motion has them.
+function fakeSkillWithDeps() {
+  const src = path.join(tmp(), 'make-fake');
+  for (const rel of ['node_modules/pkg', 'node_modules/@scope/inner', 'optional/voice/node_modules/pkg', 'scripts']) fs.mkdirSync(path.join(src, rel), { recursive: true });
+  fs.writeFileSync(path.join(src, 'SKILL.md'), '# repo copy\n');
+  fs.writeFileSync(path.join(src, 'node_modules/pkg/index.js'), 'top\n');
+  fs.writeFileSync(path.join(src, 'node_modules/@scope/inner/index.js'), 'scoped\n');
+  fs.writeFileSync(path.join(src, 'optional/voice/node_modules/pkg/index.js'), 'voice\n');
+  fs.writeFileSync(path.join(src, 'optional/voice/package.json'), '{}\n');
+  return src;
+}
+
+test('copySkill: top-level and optional packages are linked to the source, and deleting them in the copy leaves the source', () => {
+  const src = fakeSkillWithDeps();
+  const work = tmp();
+  copySkill(src, work);
+  const dst = path.join(work, 'skills/make-fake');
+  for (const rel of ['node_modules/pkg', 'node_modules/@scope/inner', 'optional/voice/node_modules/pkg']) {
+    assert.ok(fs.lstatSync(path.join(dst, rel)).isSymbolicLink(), `${rel} is a link`);
+    assert.equal(fs.realpathSync(path.join(dst, rel)), fs.realpathSync(path.join(src, rel)), `${rel} resolves to the source package`);
+  }
+  assert.ok(!fs.lstatSync(path.join(dst, 'optional/voice/node_modules')).isSymbolicLink(), 'the optional node_modules is a real folder of links');
+  fs.rmSync(path.join(dst, 'node_modules'), { recursive: true, force: true });
+  fs.rmSync(path.join(dst, 'optional/voice/node_modules'), { recursive: true, force: true });
+  assert.equal(fs.readFileSync(path.join(src, 'node_modules/pkg/index.js'), 'utf8'), 'top\n');
+  assert.equal(fs.readFileSync(path.join(src, 'optional/voice/node_modules/pkg/index.js'), 'utf8'), 'voice\n');
+});
+
+test('copySkill: depsFrom and name let one folder carry another folder\'s packages under a chosen name', () => {
+  const deps = fakeSkillWithDeps();
+  const arm = path.join(tmp(), 'arm-b');
+  fs.mkdirSync(arm, { recursive: true });
+  fs.writeFileSync(path.join(arm, 'SKILL.md'), '# arm\n');
+  const work = tmp();
+  copySkill(arm, work, { depsFrom: deps, name: 'make-fake' });
+  const dst = path.join(work, 'skills/make-fake');
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), '# arm\n');
+  assert.equal(fs.existsSync(path.join(work, 'skills/arm-b')), false);
+  assert.equal(fs.realpathSync(path.join(dst, 'node_modules/pkg')), fs.realpathSync(path.join(deps, 'node_modules/pkg')));
+});
+
+test('prepareWorkdir: skillSrc supplies an arm\'s SKILL.md while the packages are linked from the repository folder', () => {
+  const root = tmp();
+  const repoSkill = path.join(root, 'make-fake');
+  fs.cpSync(fakeSkillWithDeps(), repoSkill, { recursive: true });
+  const arm = path.join(tmp(), 'arm-b');
+  fs.mkdirSync(arm, { recursive: true });
+  fs.writeFileSync(path.join(arm, 'SKILL.md'), '# arm\n');
+  const skillCfg = { dir: 'make-fake', spec: 'fake.json' };
+  const { work } = prepareWorkdir({ id: 'x' }, { skillCfg, skillsRoot: root, evalDir, tmpDir: tmp(), skillSrc: arm });
+  const dst = path.join(work, 'skills/make-fake');
+  assert.equal(fs.readFileSync(path.join(dst, 'SKILL.md'), 'utf8'), '# arm\n', 'the arm\'s SKILL.md, not the repository\'s');
+  assert.equal(fs.realpathSync(path.join(dst, 'node_modules/pkg')), fs.realpathSync(path.join(repoSkill, 'node_modules/pkg')));
+  assert.equal(fs.realpathSync(path.join(dst, 'optional/voice/node_modules/pkg')), fs.realpathSync(path.join(repoSkill, 'optional/voice/node_modules/pkg')));
+  const plain = prepareWorkdir({ id: 'y' }, { skillCfg, skillsRoot: root, evalDir, tmpDir: tmp() });
+  assert.equal(fs.readFileSync(path.join(plain.work, 'skills/make-fake/SKILL.md'), 'utf8'), '# repo copy\n', 'no skillSrc: the repository folder');
+});
+
+const hostsFile = JSON.parse(fs.readFileSync(path.join(evalDir, 'hosts.json'), 'utf8'));
+const STREAM_STOP = 'follow the workflow to the end, looking at what you made as it says; stop when the film is rendered and reported.';
+
+test('buildPrompt: a streamed host without an agent file ends its "Do not start" sentence with the look-and-report clause; other hosts are unchanged', () => {
+  const head = 'Read skills/fake/SKILL.md and follow its workflow exactly. The skill\'s scripts are in skills/fake/scripts/ and its dependencies are already installed. Work only inside the current directory. Do not start serve.mjs or preview.mjs (they never exit);';
+  const tail = 'Task: Do X. Save the spec as ./spec.json.';
+  const fake = { dir: 'fake', spec: 'spec.json' };
+  assert.equal(buildPrompt(fake, 'Do X.', hostsFile['claude-stream']), `${head} ${STREAM_STOP} ${tail}`);
+  assert.equal(buildPrompt(fake, 'Do X.', { stream: true }), `${head} ${STREAM_STOP} ${tail}`);
+  assert.equal(buildPrompt(fake, 'Do X.', hostsFile.claude), `${head} stop after validate and build/render. ${tail}`);
+  assert.equal(buildPrompt(fake, 'Do X.', hostsFile['claude-director']), `${head} follow the skill's Director and operator section; stop when the build is done. ${tail}`, 'an agent file wins over stream');
+});
+
+test('prepareWorkdir: a host with no agent file gets no .claude folder, claude-stream included', () => {
+  const { work } = prepareWorkdir({ id: 'x' }, { skillCfg: SKILLS.diagram, skillsRoot, evalDir, tmpDir: tmp(), host: hostsFile['claude-stream'] });
+  assert.equal(fs.existsSync(path.join(work, '.claude')), false);
+});
+
 test('prepareWorkdir: a skill without siblings gets only itself', () => {
   const { work } = prepare({ id: 'dash', prompt: 'x' }, SKILLS.diagram);
   assert.deepEqual(fs.readdirSync(path.join(work, 'skills')), ['make-diagram']);

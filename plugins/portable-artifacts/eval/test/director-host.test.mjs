@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { buildPrompt, expandCmd, prepareWorkdir, summarize, readValidateLog, countValidateRuns, SKILLS } from '../lib.mjs';
 import { parseSession } from '../session.mjs';
+import { USAGE_HEADERS } from '../session-columns.mjs';
 import { agentFile } from '../../shared/agents.mjs';
 import * as F from './helpers/stream-fixtures.mjs';
 
@@ -49,9 +50,34 @@ test('hosts.json: claude-director names no model (the account default is what a 
   assert.ok(!director.cmd.includes('--model') && !director.cmd.includes('--agent'));
 });
 
-test('hosts.json: only claude-director has budgetArgs and agentFile', () => {
-  assert.deepEqual(Object.keys(hosts).filter((h) => hosts[h].budgetArgs), ['claude-director']);
+test('hosts.json: only claude-director and claude-stream have budgetArgs, only claude-director has an agentFile, both stream', () => {
+  assert.deepEqual(Object.keys(hosts).filter((h) => hosts[h].budgetArgs), ['claude-director', 'claude-stream']);
   assert.deepEqual(Object.keys(hosts).filter((h) => hosts[h].agentFile), ['claude-director']);
+  assert.deepEqual(Object.keys(hosts).filter((h) => hosts[h].stream), ['claude-director', 'claude-stream']);
+});
+
+const streamHost = hosts['claude-stream'];
+
+test('hosts.json: claude-stream is the director command without the agent tools, the subagent and hook flags, at effort high', () => {
+  assert.ok(streamHost, 'claude-stream is defined');
+  const cmd = streamHost.cmd;
+  const at = (flag) => cmd.indexOf(flag);
+  assert.deepEqual(cmd.slice(0, 3), ['claude', '-p', '{prompt}']);
+  assert.deepEqual(cmd.slice(at('--output-format'), at('--output-format') + 2), ['--output-format', 'stream-json']);
+  assert.ok(cmd.includes('--verbose'));
+  for (const flag of ['--forward-subagent-text', '--include-hook-events']) assert.ok(!cmd.includes(flag), `no ${flag}`);
+  assert.deepEqual(cmd.slice(at('--effort'), at('--effort') + 2), ['--effort', 'high']);
+  assert.ok(at('--effort') < at('--setting-sources'), '--effort comes before --setting-sources');
+  assert.deepEqual(cmd.slice(at('--setting-sources'), at('--setting-sources') + 2), ['--setting-sources', 'project']);
+  assert.ok(at('--setting-sources') < at('--allowedTools'), 'the variadic --allowedTools comes last');
+  const tools = cmd.slice(at('--allowedTools') + 1);
+  assert.deepEqual(tools, director.cmd.slice(director.cmd.indexOf('--allowedTools') + 1).filter((t) => t !== 'Agent' && t !== 'Task'));
+  assert.deepEqual(streamHost.modelArgs, ['--model', '{model}']);
+  assert.deepEqual(streamHost.budgetArgs, ['--max-budget-usd', '{budget}']);
+  assert.equal(streamHost.stream, true);
+  assert.equal(streamHost.agentFile, undefined);
+  assert.equal(director.stream, true);
+  assert.deepEqual(streamHost.check, ['claude', '--version']);
 });
 
 // --- expandCmd ---
@@ -131,12 +157,23 @@ const sessionRows = () => [
 test('summarize: rows with a session get five more columns after first try, and the self-reported column says so', () => {
   const md = summarize(sessionRows(), { host: 'claude-director', skill: 'motion' });
   const header = headerOf(md);
-  assert.deepEqual(header.slice(header.indexOf('first try')), ['first try', 'first build valid', 'spec by', 'make by', 'operator model', 'director model', '']);
+  assert.deepEqual(header.slice(header.indexOf('first try')), ['first try', 'first build valid', 'spec by', 'make by', 'operator model', 'director model', ...USAGE_HEADERS, '']);
   assert.ok(header.includes('model reported (self-reported)'));
   const separator = md.split('\n').find((l) => l.startsWith('|---')).split('|');
   assert.equal(separator.length, header.length, 'the separator row has one cell per column');
   const a = cellsOf(md, 'a');
   assert.deepEqual(['first build valid', 'spec by', 'make by', 'operator model', 'director model'].map((h) => a[header.indexOf(h)]), ['✓', 'director', 'operator', F.OPERATOR_MODEL, F.DIRECTOR_MODEL]);
+});
+
+test('summarize: rows with a usage get the usage columns after the session columns, one cell each; unreadable says so', () => {
+  const perModel = F.modelUsage({ m: { fresh: 1, write: 2, read: 3, output: 4 } });
+  const read = session([F.init(), F.result({ cost: 0.25, modelUsage: perModel })]);
+  const md = summarize([{ id: 'u', ...base, session: read }, { id: 'v', ...base, session: parseSession('not a stream\n') }], { host: 'claude-stream', skill: 'motion' });
+  const header = headerOf(md);
+  assert.deepEqual(header.slice(header.indexOf('director model')), ['director model', 'cost $', 'calls', 'tools', 'pictures', 'renders', 'drafts', 'input', 'output', '']);
+  assert.equal(md.split('\n').find((l) => l.startsWith('|---')).split('|').length, header.length);
+  assert.deepEqual(cellsOf(md, 'u').slice(header.indexOf('cost $'), -1), ['0.25', '0', '0', '0', '0', '0', '6', '4']);
+  assert.deepEqual(cellsOf(md, 'v').slice(header.indexOf('cost $'), -1), Array(8).fill('unreadable'));
 });
 
 test('summarize: a case where nobody delegated says "director ran it", it is not dropped', () => {
@@ -298,6 +335,39 @@ test('run-eval: a claude-director case passes the cap and the stream flags, find
   const summary = fs.readFileSync(path.join(dir, 'summary.md'), 'utf8');
   assert.match(summary, /\| operator model \| director model \|/);
   assert.match(summary, /Delegated 1\/1/);
+});
+
+test('run-eval: claude-stream needs --budget and takes --model; its case records the usage of the stream', (t) => {
+  const { bin: bare } = fakeClaudeBin('');
+  const refused = evalWith(bare, ['--host', 'claude-stream', '--only', '__none__', '--model', 'sonnet']);
+  assert.equal(refused.status, 2);
+  assert.match(refused.stderr, /host "claude-stream" is billed per prompt and needs --budget <usd>/);
+  if (!fs.existsSync(path.join(skillsRoot, 'make-dashboard', 'node_modules'))) {
+    if (process.env.CI) assert.fail('make-dashboard has no node_modules; CI installs it');
+    t.skip('make-dashboard has no node_modules here');
+    return;
+  }
+  const perModel = F.modelUsage({ 'model-director-x': { fresh: 5, write: 100, read: 1000, output: 50 } });
+  const events = [
+    F.init(),
+    F.toolUse({ id: 'm', name: 'Bash', input: { command: 'node skills/make-motion/scripts/make.mjs film.json --json' }, usage: F.tokens({ fresh: 5 }) }),
+    F.toolUse({ id: 'p', name: 'Read', input: { file_path: '/work/out/film.sheets/hook.png' } }),
+    F.result({ cost: 0.31, modelUsage: perModel }),
+  ];
+  const { bin, marker } = fakeClaudeBin(F.lines(events));
+  const out = tmp();
+  const r = evalWith(bin, ['--host', 'claude-stream', '--only', 'rev-by-region', '--model', 'sonnet', '--budget', '1', '--out', out], MODEL_ENV);
+  assert.equal(r.status, 0, r.stderr);
+  const call = JSON.parse(fs.readFileSync(marker, 'utf8').trim());
+  assert.equal(call.agentFile, false, 'no agent file in the workdir');
+  assert.deepEqual(call.argv.slice(-4), ['--model', 'sonnet', '--max-budget-usd', '1']);
+  assert.equal(call.subagentModel, null, 'a streamed host drops the variables that pick a model');
+  assert.equal(call.anthropicModel, null);
+  const row = JSON.parse(fs.readFileSync(path.join(out, 'claude-stream-dashboard', 'results.json'), 'utf8')).rows[0];
+  assert.deepEqual(row.session.usage, {
+    costUsd: 0.31, calls: 2, toolUses: 2, pictures: 1, renders: 1, drafts: 0, input: { fresh: 5, write: 100, read: 1000 }, output: 50,
+  });
+  assert.match(fs.readFileSync(path.join(out, 'claude-stream-dashboard', 'summary.md'), 'utf8'), /\| cost \$ \| calls \| tools \| pictures \| renders \| drafts \| input \| output \|/);
 });
 
 // Pilot finding (Task 9): the owner's shell exports CLAUDE_CODE_SUBAGENT_MODEL=sonnet, which `--setting-sources project`

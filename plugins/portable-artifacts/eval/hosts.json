@@ -17,6 +17,18 @@
             "--allowedTools", "Read", "Write", "Edit", "Glob", "Grep", "Agent", "Task", "Bash(node:*)", "Bash(npm:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(echo:*)", "Bash(pwd:*)", "Bash(head:*)"],
     "budgetArgs": ["--max-budget-usd", "{budget}"],
     "agentFile": "claude",
+    "stream": true,
+    "check": ["claude", "--version"]
+  },
+  "claude-stream": {
+    "cmd": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits",
+            "--output-format", "stream-json", "--verbose",
+            "--effort", "high",
+            "--setting-sources", "project",
+            "--allowedTools", "Read", "Write", "Edit", "Glob", "Grep", "Bash(node:*)", "Bash(npm:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(echo:*)", "Bash(pwd:*)", "Bash(head:*)"],
+    "modelArgs": ["--model", "{model}"],
+    "budgetArgs": ["--max-budget-usd", "{budget}"],
+    "stream": true,
     "check": ["claude", "--version"]
   },
   "codex": {

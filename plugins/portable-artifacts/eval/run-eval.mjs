@@ -130,14 +130,14 @@ for (const p of prompts) {
   const r = await run(argv, {
     cwd: work,
     env: { EVAL_LOG: evalLog, PA_OUTPUT_DIR: path.join(work, 'out') }, // PA_OUTPUT_DIR keeps the default output inside the workdir
-    dropEnv: host.agentFile ? MODEL_ENV_VARS : [],
+    dropEnv: host.stream ? MODEL_ENV_VARS : [],
     timeoutMs: Number(opts.timeout) * 1000,
     logFile: path.join(caseDir, 'transcript.txt'),
     abortIf: abortNoSpecSec > 0 ? { afterMs: abortNoSpecSec * 1000, done: madeProgress } : undefined,
   });
   const score = await scoreRun({ work, skillCfg, skillDir: path.join(work, 'skills', skillCfg.dir), seedSpec, expect: p.expect, maxChanged: p.maxChanged });
-  // A host that streams its session (agentFile) is read for evidence of a delegation; the transcript is the stream.
-  const session = host.agentFile ? readSession(path.join(caseDir, 'transcript.txt'), { specName: skillCfg.spec }) : null;
+  // A host that streams its session (`stream`) is read for evidence of a delegation and for its cost; the transcript is the stream.
+  const session = host.stream ? readSession(path.join(caseDir, 'transcript.txt'), { specName: skillCfg.spec }) : null;
   const row = { id: p.id, hostExit: r.code, timedOut: r.timedOut, aborted: r.aborted, seconds: r.seconds, ...score, ...(session ? { session } : {}) };
   rows.push(row);
   // .eval-log.jsonl is every validate call the host made, in order: kept so a retry loop can be read back, not just counted.

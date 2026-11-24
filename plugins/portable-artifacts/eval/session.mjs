@@ -12,9 +12,15 @@ const DELEGATING_TOOLS = new Set(['Agent', 'Task']);
 const SPEC_WRITERS = new Set(['Write', 'Edit', 'MultiEdit']);
 const SPEC_NAME = /^(dashboard|diagram|explainer|scene|film)\.json$/;
 const MAKE_COMMAND = /(?:^|[\s;&|(])node\s+[^;&|\n]*\bmake\.mjs\b/;
-// make.mjs modes that only look (the kinds list, the shot outline) and build nothing: not a make step.
-const MAKE_LOOK_ONLY = /\s--(?:list|outline)\b/;
+// make.mjs modes that only look (the kinds list, the shot outline, a draft) and build nothing: not a make step.
+const MAKE_LOOK_ONLY = /\s--(?:list|outline|draft)\b/;
 const VIEW_FILE =/\.(png|jpe?g|webp|gif|html?)$/i;
+// For the usage record: a draft is draft.mjs or a make.mjs run that stops short of the film; a render is a make.mjs run
+// that is neither a draft nor one of the modes that only look at something.
+const DRAFT_COMMAND = /(?:^|[\s;&|(])node\s+[^;&|\n]*\bdraft\.mjs\b/;
+const MAKE_DRAFT_FLAG = /\s--(?:sheets-only|no-render|draft)\b/;
+const MAKE_NOT_A_RENDER = /\s--(?:list|outline|preview|poster|inspect|phonemes|compare-looks)\b/;
+const IMAGE_FILE = /\.(png|jpe?g|webp|gif)$/i;
 
 /** `ok` of the first make step, or null when there was none (or its result was not a report). */
 export function firstBuildValid(steps) {
@@ -26,6 +32,7 @@ const unreadable = (reason) => ({
   readable: false, reason, directorModel: null, agentsListed: [], operatorModel: null, delegated: false, agent: null,
   requestedModel: null, delegations: [], settingSources: null, plugins: [], hooks: [], hooksFired: [], steps: [],
   firstBuildValid: null, costUsd: null, capped: false,
+  usage: { costUsd: null, calls: null, toolUses: null, pictures: null, renders: null, drafts: null, input: null, output: null },
 });
 
 export function readSession(transcriptPath, opts) {
@@ -67,6 +74,49 @@ function reportIn(text) {
     } catch { /* next candidate */ }
   }
   return null;
+}
+
+const num = (v) => (Number.isFinite(v) ? v : 0);
+
+// Tokens of the whole session, subagents included. The result event's `modelUsage` has one entry per model and is
+// exact; a killed stream has no result event, so then each distinct assistant message id counts once (a message is
+// split over several events that repeat its `usage`; the last one is the fullest).
+function tokenTotals(events, final) {
+  const sum = { fresh: 0, write: 0, read: 0, output: 0 };
+  const add = (fresh, write, read, output) => {
+    sum.fresh += num(fresh); sum.write += num(write); sum.read += num(read); sum.output += num(output);
+  };
+  const perModel = final?.modelUsage && typeof final.modelUsage === 'object' ? Object.values(final.modelUsage) : [];
+  if (perModel.length) {
+    for (const m of perModel) add(m?.inputTokens, m?.cacheCreationInputTokens, m?.cacheReadInputTokens, m?.outputTokens);
+    return sum;
+  }
+  const byMessage = new Map();
+  for (const e of events) {
+    if (e.type === 'assistant' && typeof e.message?.id === 'string' && e.message.usage) byMessage.set(e.message.id, e.message.usage);
+  }
+  for (const u of byMessage.values()) add(u.input_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens, u.output_tokens);
+  return sum;
+}
+
+// What the session cost and did: calls (distinct assistant message ids, any parent), tool_use blocks, pictures looked at
+// (a Read of an image file anywhere), renders and drafts (see the patterns above), tokens and the reported cost.
+function usageOf(events, calls, final) {
+  const ids = new Set(events.filter((e) => e.type === 'assistant' && typeof e.message?.id === 'string').map((e) => e.message.id));
+  const commands = calls.filter((c) => c.name === 'Bash' && typeof c.input.command === 'string').map((c) => c.input.command);
+  const isMake = (cmd) => MAKE_COMMAND.test(cmd);
+  const isDraft = (cmd) => DRAFT_COMMAND.test(cmd) || (isMake(cmd) && MAKE_DRAFT_FLAG.test(cmd));
+  const { fresh, write, read, output } = tokenTotals(events, final);
+  return {
+    costUsd: typeof final?.total_cost_usd === 'number' ? final.total_cost_usd : null,
+    calls: ids.size,
+    toolUses: calls.length,
+    pictures: calls.filter((c) => c.name === 'Read' && IMAGE_FILE.test(String(c.input.file_path ?? ''))).length,
+    renders: commands.filter((cmd) => isMake(cmd) && !isDraft(cmd) && !MAKE_NOT_A_RENDER.test(cmd)).length,
+    drafts: commands.filter(isDraft).length,
+    input: { fresh, write, read },
+    output,
+  };
 }
 
 export function parseSession(text, { specName } = {}) {
@@ -136,5 +186,6 @@ export function parseSession(text, { specName } = {}) {
     firstBuildValid: firstBuildValid(steps),
     costUsd: typeof final?.total_cost_usd === 'number' ? final.total_cost_usd : null,
     capped: final?.subtype === 'error_max_budget_usd',
+    usage: usageOf(events, calls, final),
   };
 }

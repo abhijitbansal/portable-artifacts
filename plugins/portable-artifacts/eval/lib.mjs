@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { agentFile } from '../shared/agents.mjs';
-import { SESSION_HEADERS, sessionCells, sessionNotes, sessionTotals, sessionSetup } from './session-columns.mjs';
+import { SESSION_HEADERS, USAGE_HEADERS, sessionCells, sessionNotes, sessionTotals, sessionSetup, usageCells } from './session-columns.mjs';
 
 export const SKILLS = {
   dashboard: {
@@ -114,24 +114,38 @@ export function createFixtureRepo(dir, { now = Date.now() } = {}) {
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'test']);
 
-// Copy a skill into <work>/skills/<name> without node_modules, which is linked back to the original.
-export function copySkill(src, work) {
-  const dst = path.join(work, 'skills', path.basename(src));
+// Copy a skill into <work>/skills/<name> without node_modules, which is linked back to the original. `depsFrom` is the
+// folder whose packages are linked (a copy of the skill, such as an arm folder, has none of its own); `name` is the
+// folder name inside <work>/skills. Both default to `src`. The packages under optional/<name>/node_modules (the voice
+// model) are linked the same way, so the copy can use them without a download.
+export function copySkill(src, work, { depsFrom = src, name = path.basename(src) } = {}) {
+  const dst = path.join(work, 'skills', name);
   fs.cpSync(src, dst, {
     recursive: true,
     filter: (from) => !path.relative(src, from).split(path.sep).some((seg) => SKIP_DIRS.has(seg)),
   });
   // Deps not installed (CI runs these tests before npm ci): nothing to link; a real run fails later with npm's own error.
-  if (fs.existsSync(path.join(src, 'node_modules'))) linkNodeModules(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
+  if (fs.existsSync(path.join(depsFrom, 'node_modules'))) linkNodeModules(path.join(depsFrom, 'node_modules'), path.join(dst, 'node_modules'));
+  const optionalRoot = path.join(depsFrom, 'optional');
+  if (!fs.existsSync(optionalRoot)) return;
+  for (const entry of fs.readdirSync(optionalRoot)) {
+    const modules = path.join(optionalRoot, entry, 'node_modules');
+    if (fs.existsSync(modules)) linkNodeModules(modules, path.join(dst, 'optional', entry, 'node_modules'));
+  }
 }
 
 // A fresh work directory for one prompt: the skill and its sibling skills under skills/, the data fixtures
 // under data/, ./repo for a `"repo": true` prompt, and the seed spec for an edit prompt.
 // `skillsRoot` holds the skill folders, `evalDir` the fixtures. A host with `agentFile` (claude-director) also gets
-// that host's builder agent file at <work>/.claude/agents/, so the session can delegate to it. -> { work, seedSpec }.
-export function prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir = os.tmpdir(), host }) {
+// that host's builder agent file at <work>/.claude/agents/, so the session can delegate to it. `skillSrc` is a folder
+// to copy as the skill instead of skillsRoot/<dir> (an arm of a comparison); its packages are always the repository's
+// own, linked from skillsRoot/<dir>. -> { work, seedSpec }.
+export function prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir = os.tmpdir(), host, skillSrc }) {
   const work = fs.mkdtempSync(path.join(tmpDir, `pa-eval-${p.id}-`));
-  for (const name of [skillCfg.dir, ...(skillCfg.siblings ?? [])]) copySkill(path.join(skillsRoot, name), work);
+  for (const name of [skillCfg.dir, ...(skillCfg.siblings ?? [])]) {
+    const repoDir = path.join(skillsRoot, name);
+    copySkill(name === skillCfg.dir && skillSrc ? skillSrc : repoDir, work, { depsFrom: repoDir, name });
+  }
   if (host?.agentFile) {
     const { fileName, content } = agentFile(host.agentFile);
     fs.mkdirSync(path.join(work, '.claude', 'agents'), { recursive: true });
@@ -164,10 +178,12 @@ export function loadPrompts(promptsDir, skill, set) {
 // A host with `agentFile` runs the director and operator hand-off, so "stop after validate and build/render" (which
 // steers a host around make.mjs and the agent) becomes "follow the Director and operator section". Every other host's
 // prompt is unchanged, so committed summaries stay comparable.
+// A streamed host with no agent file (claude-stream) follows the workflow to its end, including the look at the result
+// the skill asks for: the plain ending invites a skill to skip that look, which would hide the cost being measured.
 export function buildPrompt(skillCfg, task, host) {
-  const stop = host?.agentFile
-    ? "follow the skill's Director and operator section; stop when the build is done."
-    : 'stop after validate and build/render.';
+  let stop = 'stop after validate and build/render.';
+  if (host?.agentFile) stop = "follow the skill's Director and operator section; stop when the build is done.";
+  else if (host?.stream) stop = 'follow the workflow to the end, looking at what you made as it says; stop when the film is rendered and reported.';
   return [
     `Read skills/${skillCfg.dir}/SKILL.md and follow its workflow exactly.`,
     `The skill's scripts are in skills/${skillCfg.dir}/scripts/ and its dependencies are already installed.`,
@@ -467,15 +483,18 @@ export function summarize(rows, { host, skill, model, agent }) {
   const featureRows = rows.filter((r) => r.featureOk === true || r.featureOk === false); // a prompt that names no feature is not a miss
   // Rows from a host that streams its session (claude-director) carry `session`: five more columns, a totals line and a
   // setup line. Other hosts' summaries keep their old shape, so committed ones stay comparable.
+  // A session that carries `usage` (every one read by session.mjs now) adds eight more: cost, calls, pictures, tokens.
   const sessions = rows.filter((r) => r.session).map((r) => r.session);
+  const hasUsage = sessions.some((s) => s.usage);
+  const sessionHeaders = hasUsage ? [...SESSION_HEADERS, ...USAGE_HEADERS] : SESSION_HEADERS;
   const lines = [
     `# Eval — ${skill} on ${host}${model ? ` (${model})` : ''}${agent ? ` as agent ${agent}` : ''}`,
     '',
     `Spec written ${pct('specExists')} · valid ${pct('finalValid')} · output ok ${pct('outputOk')}${checkedRows.length ? ` · check ok ${checkedRows.filter((r) => r.checkOk).length}/${checkedRows.length}` : ''}${featureRows.length ? ` · feature used ${featureRows.filter((r) => r.featureOk).length}/${featureRows.length}` : ''}`,
     '',
     ...(sessions.length ? [sessionTotals(sessions), '', sessionSetup(sessions), ''] : []),
-    `| id | spec | valid | validate runs | output | seconds | model reported${sessions.length ? ' (self-reported)' : ''} | notes | check | feature | first try |${sessions.length ? ` ${SESSION_HEADERS.join(' | ')} |` : ''}`,
-    `|---|---|---|---|---|---|---|---|---|---|---|${sessions.length ? '---|'.repeat(SESSION_HEADERS.length) : ''}`,
+    `| id | spec | valid | validate runs | output | seconds | model reported${sessions.length ? ' (self-reported)' : ''} | notes | check | feature | first try |${sessions.length ? ` ${sessionHeaders.join(' | ')} |` : ''}`,
+    `|---|---|---|---|---|---|---|---|---|---|---|${sessions.length ? '---|'.repeat(sessionHeaders.length) : ''}`,
   ];
   const tri = (x) => (x === true ? '✓' : x === false ? '✗' : '-');
   for (const r of rows) {
@@ -489,7 +508,8 @@ export function summarize(rows, { host, skill, model, agent }) {
       ...(r.session ? sessionNotes(r.session) : []),
     ].filter(Boolean).join('; ').replaceAll('|', '\\|');
     const b = (x) => (x ? '✓' : '✗');
-    const extra = r.session ? ` ${sessionCells(r.session).join(' | ')} |` : '';
+    const cells = r.session ? [...sessionCells(r.session), ...(hasUsage ? usageCells(r.session) : [])] : [];
+    const extra = r.session ? ` ${cells.join(' | ')} |` : '';
     lines.push(`| ${r.id} | ${b(r.specExists)} | ${b(r.finalValid)} | ${r.validateRuns} | ${b(r.outputOk)} | ${r.seconds.toFixed(0)} | ${String(r.model ?? '-').replaceAll('|', '\\|')} | ${notes} | ${tri(r.checkOk)} | ${tri(r.featureOk)} | ${tri(r.firstTryValid)} |${extra}`);
   }
   return `${lines.join('\n')}\n`;
