@@ -180,7 +180,7 @@
       adoptPending = false;
       dirtyIds = Object.create(null);
       dirtyVerdict = false;
-      if (canSave) hide(unsaved);
+      hide(unsaved);
     } else {
       show(unsaved);
     }
@@ -216,7 +216,8 @@
     return isObject(payload.entry) && payload.entry.hash === planHash ? payload : null;
   }
   canSave = PA.saveStore(local, 'pa-probe', '1') && PA.saveStore(local, 'pa-probe', null);
-  var data = canSave ? parseStored(PA.readStore(local, storeKey)) : null;
+  // A full store can still be read. The write probe controls the warning, not answer restoration.
+  var data = parseStored(PA.readStore(local, storeKey));
   var current = data && data.hash === planHash ? data : null;
   var shipped = shippedAnswers();
   if (!canSave) show(unsaved);
@@ -250,7 +251,7 @@
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
   // Another tab (or page) saved this plan's answers: take them.
   window.addEventListener('storage', function (event) {
-    if (!canSave || event.storageArea !== local || (event.key !== null && event.key !== storeKey)) return;
+    if (!local || event.storageArea !== local || (event.key !== null && event.key !== storeKey)) return;
     var entry = freshEntry();
     if (entry) apply(entry);
   });

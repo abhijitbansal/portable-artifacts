@@ -6,6 +6,14 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-11-23
+
+- **Plan pages restore saved answers even when browser storage is full.** Readable answers, comments, the reviewer
+  name and verdict still appear and can be exported when new writes fail. After space is freed, the next successful
+  save clears the warning, and a tab opened while storage was full still receives answers saved by another tab.
+- Three browser regressions exhaust the real localStorage quota and check restoration, export, recovery and
+  cross-tab updates.
+
 ## [2.4.0] - 2026-11-23
 
 A security pass over all five skills, against prompt injection and what the skills.sh scanners (Gen Agent Trust Hub,

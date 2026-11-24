@@ -299,6 +299,9 @@ The first line installs the skills and the agent; the second writes only the age
 Full walkthroughs, spec reference and troubleshooting: **[USAGE.md](USAGE.md)**.
 Each skill folder also has its own README.
 
+Plan pages keep readable saved answers visible even when browser storage is full. You can still export them;
+the save warning clears after space is freed and an edit saves successfully.
+
 ## Security model
 
 - **Dashboards run model-written SQL.** Each query must parse (DuckDB's own
