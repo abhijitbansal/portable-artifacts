@@ -24,7 +24,7 @@
     "cmd": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits",
             "--output-format", "stream-json", "--verbose",
             "--effort", "high",
-            "--setting-sources", "project",
+            "--setting-sources", "project", "--strict-mcp-config",
             "--allowedTools", "Read", "Write", "Edit", "Glob", "Grep", "Bash(node:*)", "Bash(npm:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(echo:*)", "Bash(pwd:*)", "Bash(head:*)"],
     "modelArgs": ["--model", "{model}"],
     "budgetArgs": ["--max-budget-usd", "{budget}"],

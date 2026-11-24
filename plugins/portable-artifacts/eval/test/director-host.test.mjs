@@ -69,6 +69,8 @@ test('hosts.json: claude-stream is the director command without the agent tools,
   assert.deepEqual(cmd.slice(at('--effort'), at('--effort') + 2), ['--effort', 'high']);
   assert.ok(at('--effort') < at('--setting-sources'), '--effort comes before --setting-sources');
   assert.deepEqual(cmd.slice(at('--setting-sources'), at('--setting-sources') + 2), ['--setting-sources', 'project']);
+  // account MCP connectors load in some sessions and not others (147 tools in one arm of a smoke test, 27 in the next), so none may
+  assert.ok(cmd.includes('--strict-mcp-config') && !cmd.includes('--mcp-config'), 'no MCP server of the account');
   assert.ok(at('--setting-sources') < at('--allowedTools'), 'the variadic --allowedTools comes last');
   const tools = cmd.slice(at('--allowedTools') + 1);
   assert.deepEqual(tools, director.cmd.slice(director.cmd.indexOf('--allowedTools') + 1).filter((t) => t !== 'Agent' && t !== 'Task'));
