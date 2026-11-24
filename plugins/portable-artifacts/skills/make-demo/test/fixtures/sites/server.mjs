@@ -40,11 +40,14 @@ function fileFor(pathname) {
 
 const hasSession = (req) => (req.headers.cookie ?? '').split(/;\s*/).includes(`${SESSION_COOKIE}=${SESSION_VALUE}`);
 
-const randomPage = () => {
+// The page ground steps through dark, middle and light greys on successive loads, so no two consecutive loads agree
+// in brightness (a random colour alone could land within a few luma levels of the last one and look the same to a picture check).
+const GROUND_LIGHTNESS = [18, 52, 86];
+const randomPage = (load) => {
   const hue = () => Math.floor(Math.random() * 360);
   const word = () => randomBytes(4).toString('hex');
   return `<!doctype html><meta charset="utf-8"><title>Random ${word()}</title>
-<body style="margin:0;background:hsl(${hue()} 70% 85%);color:hsl(${hue()} 60% 25%);font:24px system-ui">
+<body style="margin:0;background:hsl(0 0% ${GROUND_LIGHTNESS[load % GROUND_LIGHTNESS.length]}%);color:hsl(${hue()} 60% 60%);font:24px system-ui">
 <h1>Visit ${word()}</h1><p>Today's code is ${word()} ${word()}.</p><div style="width:300px;height:120px;background:hsl(${hue()} 80% 50%)"></div></body>`;
 };
 
@@ -67,7 +70,7 @@ export async function startSites() {
     const { pathname } = url;
     log.push({ method: req.method, path: pathname });
     if (pathname === '/wall/') return send(res, 403, wallPage);
-    if (pathname === '/random/') return send(res, 200, randomPage());
+    if (pathname === '/random/') return send(res, 200, randomPage(log.filter((r) => r.path === '/random/').length));
     if (pathname === '/slow/data') return send(res, 200, JSON.stringify({ items: ['Quarterly report', 'Team roster', 'Open tasks'] }), TYPES['.json']);
     if (pathname === '/slow/poll/tick') return send(res, 200, JSON.stringify({ n: log.filter((r) => r.path === '/slow/poll/tick').length }), TYPES['.json']);
     if (pathname === '/login/signin' && req.method === 'POST') {

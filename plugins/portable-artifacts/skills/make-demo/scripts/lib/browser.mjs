@@ -17,7 +17,7 @@ export async function launchBrowser() {
     try {
       return await chromium.launch({ channel: 'chrome' });
     } catch {
-      throw new Error(`no browser could start (${String(bundled.message).split('\n')[0]}); install one with \`npx playwright install chromium\` or install Google Chrome`);
+      throw new Error(`no browser could start (${String(bundled.message).split('\n')[0]}); install Chromium with \`npx --no playwright install chromium\` in this skill folder, or install Google Chrome`);
     }
   }
 }

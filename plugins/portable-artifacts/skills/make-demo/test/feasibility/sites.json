@@ -1,0 +1,47 @@
+[
+  {
+    "name": "portable-artifacts",
+    "url": "https://abhijitbansal.github.io/portable-artifacts/",
+    "steps": [
+      { "do": "scroll", "to": 1200, "seconds": 1.5 },
+      { "do": "hover", "role": "link", "name": "Open the full film" },
+      { "do": "click", "role": "link", "name": "03 Diagram" }
+    ]
+  },
+  {
+    "name": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Web_browser",
+    "steps": [
+      { "do": "scroll", "to": 1500, "seconds": 1.5 },
+      { "do": "hover", "role": "button", "name": "Tools" },
+      { "do": "click", "role": "link", "name": "Browser market" }
+    ]
+  },
+  {
+    "name": "react-dev",
+    "url": "https://react.dev/learn",
+    "steps": [
+      { "do": "scroll", "to": 800, "seconds": 1 },
+      { "do": "hover", "role": "link", "name": "Reference" },
+      { "do": "click", "role": "link", "name": "Thinking in React" }
+    ]
+  },
+  {
+    "name": "excalidraw",
+    "url": "https://excalidraw.com/",
+    "steps": [
+      { "do": "hover", "role": "button", "name": "Rectangle" },
+      { "do": "click", "role": "button", "name": "Library" },
+      { "do": "hover", "role": "button", "name": "Ellipse" }
+    ]
+  },
+  {
+    "name": "grafana-play",
+    "url": "https://play.grafana.org/",
+    "steps": [
+      { "do": "scroll", "to": 700, "seconds": 1.2 },
+      { "do": "hover", "role": "button", "name": "Last 30 days" },
+      { "do": "scroll", "to": 0, "seconds": 1 }
+    ]
+  }
+]
