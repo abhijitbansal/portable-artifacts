@@ -77,16 +77,17 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   }
   const fieldErrors = checkFields(spec, results);
   if (fieldErrors.length) return { ok: false, errors: fieldErrors };
-  const expanded = expandCharts(spec, results);
-  if (expanded.errors.length) return { ok: false, errors: expanded.errors };
-  const warnings = [...themeWarnings, ...kpiRowWarnings(spec, results)];
-  const outDir = path.resolve(out ?? path.join(dir, 'dist'));
-  const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env, now }));
   const sources = Object.entries(spec.sources).map(([name, src]) => [
     name,
     FILE_TYPES.includes(src.type) ? checkSource(src, dir, { allowOutside }).abs : `${src.type} (env ${src.env})`,
   ]);
   const watch = [path.resolve(specFile), ...sources.map(([, abs]) => abs).filter((p) => path.isAbsolute(p))];
+  const expanded = expandCharts(spec, results);
+  // These sources have been validated and queried even when a finding fails. Watch their next edit.
+  if (expanded.errors.length) return { ok: false, errors: expanded.errors, watch };
+  const warnings = [...themeWarnings, ...kpiRowWarnings(spec, results)];
+  const outDir = path.resolve(out ?? path.join(dir, 'dist'));
+  const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env, now }));
   return { ok: true, spec, target, outDir, results, sources, watch, warnings };
 }
 
@@ -120,7 +121,29 @@ export async function validateChart(specFile, chartId, { allowOutside = false, t
  * -> { ok: true, chart: the spec chart, view: the primary Vega-Lite view, result: { rows, columns, types, rowCount, truncated } }
  * or { ok: false, errors } (see validateChart).
  */
-export async function chartData(specFile, chartId, { allowOutside = false, timeoutMs, now = new Date() } = {}) {
+export async function chartData(specFile, chartId, options = {}) {
+  const data = await materializeChart(specFile, chartId, options);
+  if (!data.ok) return data;
+  const { spec, chart, results, result } = data;
+  const expanded = expandCharts(spec, results);
+  if (expanded.errors.length) return { ok: false, errors: expanded.errors };
+  const view = expanded.charts.find((c) => c.id === chart.id).views[0].vegaLite;
+  return { ok: true, chart, view, result };
+}
+
+// Row inspection deliberately returns data alongside a failed assertion. No renderable view is produced;
+// builders and embedding callers use chartData, whose failure never includes a view or result.
+export async function inspectChartRows(specFile, chartId, options = {}) {
+  const data = await materializeChart(specFile, chartId, options);
+  if (!data.ok) return data;
+  const { spec, chart, results, result } = data;
+  const { errors } = expandCharts(spec, results);
+  const assertionPath = `charts[${spec.charts.indexOf(chart)}].assert`;
+  if (errors.some((e) => e.path !== assertionPath)) return { ok: false, errors };
+  return { ok: errors.length === 0, chart, result, ...(errors.length ? { errors } : {}) };
+}
+
+async function materializeChart(specFile, chartId, { allowOutside = false, timeoutMs, now = new Date() } = {}) {
   const checked = await validateChart(specFile, chartId, { allowOutside, timeoutMs });
   if (!checked.ok) return checked;
   const { spec, dir, chart } = checked;
@@ -133,9 +156,6 @@ export async function chartData(specFile, chartId, { allowOutside = false, timeo
   }
   const fieldErrors = checkFields(spec, results);
   if (fieldErrors.length) return { ok: false, errors: fieldErrors };
-  const expanded = expandCharts(spec, results);
-  if (expanded.errors.length) return { ok: false, errors: expanded.errors };
-  const view = expanded.charts.find((c) => c.id === chart.id).views[0].vegaLite;
   const { rows, columns, types, rowCount, truncated } = results[chart.query];
-  return { ok: true, chart, view, result: { rows, columns, types, rowCount, truncated } };
+  return { ok: true, spec, chart, results, result: { rows, columns, types, rowCount, truncated } };
 }

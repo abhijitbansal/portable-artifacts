@@ -220,6 +220,16 @@ It rebuilds when you save the spec or a file source (csv, parquet, json, duckdb,
 dashboard.json`. No agent is needed. For a schedule, copy the cron or launchd
 recipe from `make-dashboard/references/refresh.md`.
 
+**Keep a maximum finding true on refresh:** a single-series bar chart can opt into
+`"assert": { "type": "max", "category": "East" }`. East must have the unique highest
+`y` among the chart query's rows. A failed check stops the build before replacing the
+page; watch mode keeps the last good page and shows the error to existing and new viewers.
+Review the new rows before changing both the title and assertion. Use neutral titles for
+other recurring findings. The rule needs unique string categories and finite numeric
+values; ties, missing data, truncated results and values that cannot be compared safely
+fail. SQL filtering and limits define the comparison scope, and the rule does not verify
+free-form prose. See [Data assertions](skills/make-dashboard/references/schema.md#data-assertions).
+
 **Databases:**
 
 ```json

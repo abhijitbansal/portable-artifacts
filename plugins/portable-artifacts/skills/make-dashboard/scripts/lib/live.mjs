@@ -15,8 +15,8 @@ export const MIN_INTERVAL_S = 5;
 export const MAX_INTERVAL_S = 86400;
 
 // Function replacers throughout: "$&" in the token or the client must stay literal.
-export function liveHtml(html, { token }) {
-  const client = fs.readFileSync(LIVE_JS, 'utf8').replace('__PA_TOKEN__', () => JSON.stringify(token)).replace(/<\/(script)/gi, '<\\/$1');
+export function liveHtml(html, { token, revision = '' }) {
+  const client = fs.readFileSync(LIVE_JS, 'utf8').replace('__PA_TOKEN__', () => JSON.stringify(token)).replace('__PA_REVISION__', () => JSON.stringify(revision)).replace(/<\/(script)/gi, '<\\/$1');
   const tail = `<style>${LIVE_CSS}</style>\n<script>${client}</script>\n`;
   const withCsp = html.replace(/(<meta http-equiv="Content-Security-Policy" content=")([^"]*)(")/, (_, a, csp, b) => `${a}${csp}; connect-src 'self'${b}`);
   const at = withCsp.lastIndexOf('</body>');
@@ -94,11 +94,13 @@ export function watchFiles(paths, onChange, { debounceMs = 300, onError } = {}) 
 export async function startLiveServer({ specFile, port = 0, interval, theme, allowOutside = false, timeoutMs, out, watch = watchFiles, buildFn = buildDashboard }) {
   const token = crypto.randomBytes(16).toString('hex');
   const clients = new Set();
-  const state = { html: null, watcher: null, watchPaths: [], warning: null, closed: false };
+  const state = { html: null, revision: null, watcher: null, watchPaths: [], warning: null, errors: null, closed: false };
   const frame = (event, payload) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   const send = (event, payload) => { if (!state.closed) for (const c of clients) c.write(frame(event, payload)); };
   // The watcher note outlives the reload that follows a good build: new clients hear it on connect.
   const warn = (problem) => { state.warning = problem; send('watch-warning', problem); };
+  // A retained page must also show its failed rebuild to new and reconnecting viewers.
+  const fail = (errors) => { state.errors = errors; send('build-error', errors); };
   const watchProblem = (e) => ({ path: 'watch', code: e.code ?? e.message, message: `watcher stopped: ${e.code ?? e.message}; fix the folder and press Rebuild now` });
 
   // (Re)arm the file watchers on every build, so a deleted and recreated data
@@ -129,18 +131,26 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
     let result;
     try {
       result = await buildFn(specFile, { out, theme, allowOutside, timeoutMs });
-      if (result.ok) state.html = liveHtml(fs.readFileSync(result.target, 'utf8'), { token });
+      if (result.ok) {
+        // Unique across server restarts as well as builds. Commit HTML and its revision together.
+        const revision = crypto.randomBytes(16).toString('hex');
+        const html = liveHtml(fs.readFileSync(result.target, 'utf8'), { token, revision });
+        state.html = html;
+        state.revision = revision;
+      }
     } catch (e) {
       if (state.html === null && e instanceof UsageError) throw e; // first build: report as usage error
       result = { ok: false, errors: [{ path: '', message: String(e.message).split('\n')[0] }] };
     }
-    const problem = arm(result.ok ? result.watch : state.watchPaths);
+    if (!result.ok && state.html === null) return result; // no server will own watchers after a failed start
+    const problem = arm(result.watch ?? state.watchPaths);
     if (!result.ok) {
-      send('build-error', problem ? [...result.errors, problem] : result.errors);
+      fail(problem ? [...result.errors, problem] : result.errors);
       return result;
     }
     // The build was good, so the page reloads; a watcher problem is a separate, non-error note.
-    send('rebuilt', { at: new Date().toISOString() });
+    state.errors = null;
+    send('rebuilt', { at: new Date().toISOString(), revision: state.revision });
     if (problem) warn(problem);
     return result;
   }
@@ -148,7 +158,7 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
     onError: (e) => {
       const message = String(e?.message ?? e).split('\n')[0];
       process.stderr.write(`rebuild failed: ${message}\n`);
-      send('build-error', [{ path: '', message: `rebuild failed: ${message}` }]);
+      fail([{ path: '', message: `rebuild failed: ${message}` }]);
     },
   });
 
@@ -174,7 +184,9 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
     if (pathname === '/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       res.write(': connected\n\n');
+      res.write(frame('revision', { revision: state.revision }));
       if (state.warning) res.write(frame('watch-warning', state.warning));
+      if (state.errors) res.write(frame('build-error', state.errors));
       clients.add(res);
       const ping = setInterval(() => res.write(': ping\n\n'), KEEPALIVE_MS);
       req.on('close', () => { clearInterval(ping); clients.delete(res); });

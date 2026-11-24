@@ -2,6 +2,7 @@
 // the dist/index.html on disk never contains it.
 (function () {
   var TOKEN = __PA_TOKEN__;
+  var REVISION = __PA_REVISION__;
   var bar = document.createElement('div');
   bar.className = 'pa-live';
   bar.innerHTML = '<span id="pa-live-badge">Live</span> <button type="button" id="pa-live-rebuild">Rebuild now</button>'
@@ -28,10 +29,22 @@
 
   var stamp = function (iso) { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
   var es = new EventSource('/events');
-  es.addEventListener('rebuilt', function (e) {
+  var reloading = false;
+  var reload = function () {
+    if (reloading) return;
+    reloading = true;
     if (window.PA) window.PA.writeStore(session, 'pa-scroll', String(window.scrollY));
-    badge.textContent = 'Live · rebuilt ' + stamp(JSON.parse(e.data).at);
     location.reload();
+  };
+  // Every connection reports the current page revision, including after a missed successful rebuild.
+  es.addEventListener('revision', function (e) {
+    if (JSON.parse(e.data).revision !== REVISION) reload();
+  });
+  es.addEventListener('rebuilt', function (e) {
+    var update = JSON.parse(e.data);
+    if (update.revision === REVISION) return;
+    badge.textContent = 'Live · rebuilt ' + stamp(update.at);
+    reload();
   });
   es.addEventListener('build-error', function (e) {
     var errors = JSON.parse(e.data);

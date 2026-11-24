@@ -1,7 +1,7 @@
 // query.mjs body, loaded after the preflight (see scripts/query.mjs).
 import { UsageError, parseCli, parseTimeout, exitUsage } from '../../shared/cli.mjs';
 import { printResult } from '../../shared/errors.mjs';
-import { chartData } from '../lib/pipeline.mjs';
+import { inspectChartRows } from '../lib/pipeline.mjs';
 import { loadSpec, MAX_ROWS_DEFAULT } from '../lib/spec.mjs';
 import { agentText, agentRow } from '../../shared/agent-text.mjs';
 
@@ -45,8 +45,8 @@ export async function main(argv) {
     const limit = parseLimit(values.limit);
     const timeoutMs = parseTimeout(values.timeout, 30);
     const { spec } = loadSpec(positionals[0]); // a usage error (exit 2) when the file is missing or not JSON
-    const data = await chartData(positionals[0], values.chart, { allowOutside: values['allow-outside'], timeoutMs });
-    if (!data.ok) {
+    const data = await inspectChartRows(positionals[0], values.chart, { allowOutside: values['allow-outside'], timeoutMs });
+    if (!data.result) {
       printResult({ ok: false, errors: data.errors }, { json, label: positionals[0] });
       process.exitCode = 1;
       return;
@@ -54,11 +54,13 @@ export async function main(argv) {
     const maxRows = spec.maxRows ?? MAX_ROWS_DEFAULT;
     if (json) {
       const { rows, columns, types, rowCount, truncated } = data.result;
-      const body = { ok: true, chart: values.chart, query: data.chart.query, rowCount, truncated, maxRows, columns: columns.map((name, i) => ({ name, type: types[i] })), rows: rows.slice(0, limit) };
+      const body = { ok: data.ok, ...(data.errors ? { errors: data.errors } : {}), chart: values.chart, query: data.chart.query, rowCount, truncated, maxRows, columns: columns.map((name, i) => ({ name, type: types[i] })), rows: rows.slice(0, limit) };
       process.stdout.write(`${JSON.stringify(body)}\n`);
     } else {
       printRows(values.chart, data, limit, maxRows);
+      if (!data.ok) printResult({ ok: false, errors: data.errors }, { label: positionals[0] });
     }
+    if (!data.ok) process.exitCode = 1;
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
     exitUsage(e, { json });

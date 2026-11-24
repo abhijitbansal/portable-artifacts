@@ -78,6 +78,26 @@ test('errors inside the dashboard keep its paths, under sections[i].dashboard, a
   assert.match(errors[0], /^sections\[0\]\.dashboard\.charts\[0\]\.x: "regoin" is not a column of query "by_region".*\(in sales\.dashboard\.json\)$/);
 });
 
+test('embedding a dashboard enforces its assertion before rendering the explainer', async () => {
+  const spec = {
+    title: 'Sales', sources: {},
+    queries: { q: "SELECT * FROM (VALUES ('East', 10), ('West', 90)) AS t(region, revenue)" },
+    charts: [{ id: 'by-region', title: 'East leads', query: 'q', kind: 'bar', x: 'region', y: 'revenue', assert: { type: 'max', category: 'East' } }],
+  };
+  const dir = folder({ 'sales.dashboard.json': spec });
+  assert.deepEqual(await errorsOf(doc([dashboard()]), dir), [], 'bind validation does not evaluate the claim');
+  await assert.rejects(make([dashboard()], dir), (e) => {
+    assert.ok(e instanceof BuildError);
+    assert.equal(e.errors[0].path, 'sections[0].dashboard.charts[0].assert');
+    assert.match(e.errors[0].message, /East.*10.*West.*90.*sales\.dashboard\.json/);
+    return true;
+  });
+  spec.charts[0].title = 'West leads';
+  spec.charts[0].assert.category = 'West';
+  fs.writeFileSync(path.join(dir, 'sales.dashboard.json'), JSON.stringify(spec));
+  assert.match((await make([dashboard()], dir)).html, /West leads/);
+});
+
 test('two interactive charts that would share an output folder are an error', async () => {
   const dir = folder({ 'other/sales.dashboard.json': JSON.parse(fs.readFileSync(path.join(FIXTURE, 'sales.dashboard.json'), 'utf8')), 'other/sales.csv': fs.readFileSync(path.join(FIXTURE, 'sales.csv'), 'utf8') });
   const same = await errorsOf(doc([dashboard({ interactive: true }), dashboard({ interactive: true })]), dir);

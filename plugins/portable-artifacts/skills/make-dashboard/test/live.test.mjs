@@ -133,6 +133,47 @@ test('POST /rebuild needs the token; other methods and foreign hosts are refused
   await until(() => es.seen.some((e) => e.event === 'rebuilt'), { label: 'a rebuilt event after POST /rebuild' });
 });
 
+test('--watch: a contradicted assertion keeps the last page and a corrected finding recovers', async (t) => {
+  const { file, csv, dir, spec } = project();
+  spec.kpis = [];
+  spec.queries = { revenue: 'SELECT region, revenue FROM k' };
+  spec.charts = [{ id: 'revenue', title: 'East earns the most revenue', query: 'revenue', kind: 'bar', x: 'region', y: 'revenue', assert: { type: 'max', category: 'East' } }];
+  fs.writeFileSync(csv, 'region,revenue\nEast,90\nWest,10\n');
+  fs.writeFileSync(file, JSON.stringify(spec));
+  const { port, token } = await serve(t, ['--watch', file]);
+  const es = events(t, port);
+  await until(() => es.connected, { label: 'the assertion event stream to connect' });
+  await until(() => es.seen.some((e) => e.event === 'revision'), { label: 'the initial page revision' });
+  const revision = es.seen.find((e) => e.event === 'revision').data.revision;
+  assert.match((await request(port)).body, new RegExp(`var REVISION = "${revision}"`));
+  const target = path.join(dir, 'dist/index.html');
+  const good = fs.readFileSync(target, 'utf8');
+  const rebuild = () => request(port, { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': token } });
+  fs.writeFileSync(csv, 'region,revenue\nEast,10\nWest,90\n');
+  await rebuild(); // deterministic trigger; the watcher may also coalesce this write
+  await until(() => es.seen.some((e) => e.event === 'build-error'), { label: 'the failed assertion event' });
+  const error = es.seen.find((e) => e.event === 'build-error');
+  assert.equal(error.data[0].path, 'charts[0].assert');
+  assert.match(error.data[0].message, /West.*90/);
+  assert.equal(fs.readFileSync(target, 'utf8'), good);
+  assert.match((await request(port)).body, /East earns the most revenue/);
+  // A newly connected viewer receives the failure too, so the retained page isn't silently current.
+  const late = events(t, port);
+  await until(() => late.seen.some((e) => e.event === 'build-error'), { label: 'the failure for a late viewer' });
+  assert.equal(late.seen.find((e) => e.event === 'revision').data.revision, revision, 'a failed build keeps the page revision');
+  spec.charts[0].title = 'West earns the most revenue';
+  spec.charts[0].assert.category = 'West';
+  fs.writeFileSync(file, JSON.stringify(spec));
+  await rebuild();
+  await until(() => es.seen.some((e) => e.event === 'rebuilt'), { label: 'the corrected finding to rebuild' });
+  assert.match((await request(port)).body, /West earns the most revenue/);
+  assert.notEqual(fs.readFileSync(target, 'utf8'), good);
+  const recovered = events(t, port);
+  await until(() => recovered.seen.some((e) => e.event === 'revision'), { label: 'a viewer after recovery' });
+  assert.notEqual(recovered.seen.find((e) => e.event === 'revision').data.revision, revision, 'reconnecting viewers can detect the missed recovery');
+  assert.equal(recovered.seen.some((e) => e.event === 'build-error'), false, 'success clears the remembered error');
+});
+
 test('--interval rebuilds on a timer; --watch with a directory argument is a usage error', async (t) => {
   const { file, dir } = project();
   const { port } = await serve(t, ['--watch', file, '--interval', '5']);
@@ -148,6 +189,60 @@ test('--interval rebuilds on a timer; --watch with a directory argument is a usa
     assert.equal(r.status, 2, `--interval ${bad}`);
     assert.match(r.stderr, /--interval must be between 5 and 86400 seconds/);
   }
+});
+
+test('--watch follows a new source after an assertion failure and recovers on its next edit', async (t) => {
+  const { file, csv, dir, spec } = project();
+  spec.kpis = [];
+  spec.queries = { q: 'SELECT * FROM k' };
+  spec.charts = [{ id: 'rev', title: 'East leads', query: 'q', kind: 'bar', x: 'region', y: 'revenue', assert: { type: 'max', category: 'East' } }];
+  fs.writeFileSync(csv, 'region,revenue\nEast,90\nWest,10\n');
+  fs.writeFileSync(file, JSON.stringify(spec));
+  const next = path.join(dir, 'data/next.csv');
+  fs.writeFileSync(next, 'region,revenue\nEast,10\nWest,90\n');
+  let watched = [];
+  const live = await startLiveServer({ specFile: file, watch: (paths, onChange, opts) => {
+    watched = paths;
+    return watchFiles(paths, onChange, opts);
+  } });
+  t.after(async () => { await live.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  assert.equal(live.ok, true);
+  const port = Number(new URL(live.url).port);
+  const es = events(t, port);
+  await until(() => es.connected, { label: 'the source-change event stream' });
+  const target = path.join(dir, 'dist/index.html');
+  const good = fs.readFileSync(target, 'utf8');
+  spec.sources.k.path = 'data/next.csv';
+  fs.writeFileSync(file, JSON.stringify(spec));
+  await request(port, { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': live.token } });
+  await until(() => es.seen.some((e) => e.event === 'build-error'), { label: 'the assertion failure for the new source' });
+  assert.deepEqual(watched, [file, next], 'watch the validated current source while retaining the old page');
+  assert.equal(fs.readFileSync(target, 'utf8'), good);
+  let lastWrite = 0;
+  await until(() => {
+    if (Date.now() - lastWrite > 700) { lastWrite = Date.now(); fs.writeFileSync(next, 'region,revenue\nEast,95\nWest,5\n'); }
+    return es.seen.some((e) => e.event === 'rebuilt');
+  }, { label: 'recovery from editing only the new source' });
+  assert.notEqual(fs.readFileSync(target, 'utf8'), good);
+});
+
+test('an initial assertion failure does not leave a watcher running', async (t) => {
+  const { file, csv, dir, spec } = project();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  spec.kpis = [];
+  spec.queries = { q: 'SELECT * FROM k' };
+  spec.charts = [{ id: 'rev', title: 'East leads', query: 'q', kind: 'bar', x: 'region', y: 'revenue', assert: { type: 'max', category: 'East' } }];
+  fs.writeFileSync(csv, 'region,revenue\nEast,10\nWest,90\n');
+  fs.writeFileSync(file, JSON.stringify(spec));
+  const active = new Set();
+  const live = await startLiveServer({ specFile: file, watch: (paths) => {
+    const handle = { close: () => active.delete(handle) };
+    if (paths.length) active.add(handle);
+    return handle;
+  } });
+  assert.equal(live.ok, false);
+  assert.equal(live.errors[0].path, 'charts[0].assert');
+  assert.equal(active.size, 0);
 });
 
 test('a vanished data folder is reported (event + stderr), then Rebuild now re-arms the watchers', async (t) => {
@@ -191,12 +286,12 @@ test('a watcher problem after a GOOD build sends rebuilt then watch-warning, nev
     await until(() => es.connected, { label: 'the event stream to connect' });
     assert.equal((await request(port, { method: 'POST', path: '/rebuild', headers: { 'x-pa-token': live.token } })).status, 202);
     await until(() => es.seen.some((e) => e.event === 'watch-warning'), { label: 'the watch-warning event' });
-    assert.deepEqual(es.seen.map((e) => e.event), ['rebuilt', 'watch-warning']);
-    assert.equal(es.seen[1].data.code, 'EMFILE');
-    assert.match(es.seen[1].data.message, /watcher stopped: EMFILE/);
+    assert.deepEqual(es.seen.map((e) => e.event), ['revision', 'rebuilt', 'watch-warning']);
+    assert.equal(es.seen[2].data.code, 'EMFILE');
+    assert.match(es.seen[2].data.message, /watcher stopped: EMFILE/);
     const later = events(t, port);
-    await until(() => later.seen.length > 0, { label: 'the replayed watch-warning' });
-    assert.equal(later.seen[0].event, 'watch-warning', 'a page that just reloaded still learns the watcher is paused');
+    await until(() => later.seen.some((e) => e.event === 'watch-warning'), { label: 'the replayed watch-warning' });
+    assert.deepEqual(later.seen.map((e) => e.event), ['revision', 'watch-warning'], 'a page that just reloaded still learns the watcher is paused');
   } finally {
     await live.close();
   }

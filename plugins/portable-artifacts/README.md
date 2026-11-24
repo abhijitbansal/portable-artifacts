@@ -5,6 +5,10 @@ from open-source parts, by any coding agent.**
 
 What changed in each release: [`CHANGELOG.md`](CHANGELOG.md).
 
+Dashboard bar charts can now [assert a unique maximum](skills/make-dashboard/references/schema.md#data-assertions).
+If refreshed query results contradict the declared winner, the build stops before replacing the page. The check is
+optional and explicit; it does not interpret title prose.
+
 Five agent skills that do what hosted "artifact" features do, without a cloud,
 an account or a particular model:
 

@@ -82,10 +82,54 @@ test('--json prints rows, columns and counts', () => {
   assert.equal(j.rows.length, 4);
 });
 
+test('inspection returns rows with assertion errors so a failed finding can be repaired', (t) => {
+  const spec = {
+    title: 'T', sources: {},
+    queries: { q: "SELECT * FROM (VALUES ('East', 10), ('West', 90)) AS t(region, revenue)" },
+    charts: [{ id: 'rev', title: 'East leads', query: 'q', kind: 'bar', x: 'region', y: 'revenue', assert: { type: 'max', category: 'East' } }],
+  };
+  const file = project(spec);
+  t.after(() => fs.rmSync(path.dirname(file), { recursive: true, force: true }));
+  const plain = run([file, '--chart', 'rev']);
+  assert.equal(plain.status, 1, 'failed assertions remain a nonzero exit');
+  assert.match(plain.stdout, /chart rev \(query q\): 2 rows/);
+  assert.match(plain.stdout, /"region":"West","revenue":90/);
+  assert.match(plain.stdout, /charts\[0\]\.assert/);
+  const json = run([file, '--chart', 'rev', '--json']);
+  assert.equal(json.status, 1);
+  const body = JSON.parse(json.stdout);
+  assert.equal(body.ok, false);
+  assert.equal(body.errors[0].path, 'charts[0].assert');
+  assert.deepEqual(body.rows, [{ region: 'East', revenue: 10 }, { region: 'West', revenue: 90 }]);
+  assert.equal(body.rowCount, 2);
+  assert.equal(body.truncated, false);
+});
+
 test('an unknown chart id suggests the close one and exits 1', () => {
   const r = run([project(SPEC), '--chart', 'revv']);
   assert.equal(r.status, 1);
   assert.match(r.stdout, /chart "revv" not found in the dashboard; did you mean "rev"\?/);
+});
+
+test('inspection preserves chart validation errors, including errors in sibling charts', (t) => {
+  const spec = {
+    title: 'T', sources: {},
+    queries: { q: "SELECT 'slice ' || x AS slice, 1 AS n FROM range(7) t(x)" },
+    charts: [
+      { id: 'd', title: 'Seven slices', query: 'q', kind: 'donut', x: 'slice', y: 'n' },
+      { id: 'b', title: 'Seven bars', query: 'q', kind: 'bar', x: 'slice', y: 'n' },
+    ],
+  };
+  const file = project(spec);
+  t.after(() => fs.rmSync(path.dirname(file), { recursive: true, force: true }));
+  for (const id of ['d', 'b']) {
+    const r = run([file, '--chart', id, '--json']);
+    assert.equal(r.status, 1, `${id}: invalid charts must not be reported as valid`);
+    const body = JSON.parse(r.stdout);
+    assert.equal(body.ok, false);
+    assert.deepEqual(body.errors, [{ path: 'charts[0].kind', message: 'donut needs <= 6 slices (slice has 7); use kind "bar"' }]);
+    assert.equal(body.rows, undefined, 'the row exception is only for the selected assertion');
+  }
 });
 
 test('usage problems exit 2; --help exits 0', () => {
@@ -96,4 +140,21 @@ test('usage problems exit 2; --help exits 0', () => {
   const help = run(['--help']);
   assert.equal(help.status, 0);
   assert.match(help.stdout, /usage: node scripts\/query\.mjs <spec\.json> --chart <id>/);
+});
+
+test('a failed assertion does not hide an invalid requested view during inspection', (t) => {
+  const spec = {
+    title: 'T', sources: {},
+    queries: { q: "SELECT * FROM (VALUES ('East', 10), ('West', 90), ('North', -1)) AS t(region, revenue)" },
+    charts: [{ id: 'rev', title: 'East leads', query: 'q', kind: 'bar', x: 'region', y: 'revenue', views: ['share'], assert: { type: 'max', category: 'East' } }],
+  };
+  const file = project(spec);
+  t.after(() => fs.rmSync(path.dirname(file), { recursive: true, force: true }));
+  const r = run([file, '--chart', 'rev', '--json']);
+  assert.equal(r.status, 1);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, false);
+  assert.deepEqual(body.errors.map((e) => e.path), ['charts[0].assert', 'charts[0].views[0]']);
+  assert.match(body.errors[1].message, /share.*>= 0/);
+  assert.equal(body.rows, undefined);
 });

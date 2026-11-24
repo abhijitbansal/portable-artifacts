@@ -3,6 +3,7 @@
 import { KINDS, classOf, fieldRef } from './kinds.mjs';
 import { enhanceRaw, interactionsFor, NEAREST_X, ZOOM_X, legendParam } from './interact.mjs';
 import { namedCategories, namedMonth } from './claim.mjs';
+import { assertionErrors } from './assertions.mjs';
 
 export const AXIS_FORMAT = { number: ',.2~f', currency: '$,.2~f', percent: '.1~%', compact: '.3~s' };
 export const FORMAT_NAMES = Object.keys(AXIS_FORMAT);
@@ -156,8 +157,14 @@ function context(chart, result) {
   const compactLabels = chart.format === 'compact' || (chart.format !== 'percent' && fullChars > LONG_VALUE);
   const shortFormat = chart.format === 'currency' ? 'currency-compact' : 'compact';
   const valueChars = compactLabels ? Math.max(1, ...values.map((v) => [...valueText(v, shortFormat)].length)) : fullChars;
+  // Bar helper bases are distinct; keep their usual names unless a query column already owns one.
+  const helper = (base) => {
+    let name = base;
+    for (let suffix = 2; result.columns.includes(name); suffix++) name = `${base}${suffix}`;
+    return name;
+  };
   return { def, tooltip, format, tipFormat, horizontal, xNominal, queryOrder, widest, shortSeries, seriesCount: series.length, endRoom, claimed, claimedMonth, valueChars, compactLabels, maxValue: Math.max(0, ...values),
-    xRaw: String(chart.x), yRaw: String(chart.y), colorField: legend === undefined ? undefined : fieldRef(legend) };
+    helper, xRaw: String(chart.x), yRaw: String(chart.y), colorField: legend === undefined ? undefined : fieldRef(legend) };
 }
 
 // Bars on a time axis read better as ordinal bands.
@@ -287,8 +294,8 @@ export const BUILDERS = {
   // Alternates reuse the primary helpers; share and normalized add transforms.
   sorted: (ctx) => bar(ctx, { sort: ctx.horizontal ? '-x' : '-y' }),
   share: (ctx, chart) => {
-    const total = 'pa_total';
-    const share = 'pa_share';
+    const total = ctx.helper('pa_total');
+    const share = ctx.helper('pa_share');
     const v = bar(ctx);
     const valueKey = ctx.horizontal ? 'x' : 'y';
     v.transform = [
@@ -337,7 +344,8 @@ function labelText(ctx, value, share, raw) {
   if (!ctx.compactLabels) return { encoding: { text: { field: value.field, type: 'quantitative', format: ctx.format ?? AXIS_FORMAT.number } } };
   const prefix = ctx.format === AXIS_FORMAT.currency ? '$' : '';
   const swap = COMPACT_LABEL_EXPR.replaceAll('datum.label', `format(datum[${JSON.stringify(raw)}], '${prefix}${AXIS_FORMAT.compact}')`);
-  return { transform: [{ calculate: swap, as: 'paValueText' }], encoding: { text: { field: 'paValueText', type: 'nominal' } } };
+  const field = ctx.helper('paValueText');
+  return { transform: [{ calculate: swap, as: field }], encoding: { text: { field, type: 'nominal' } } };
 }
 
 function valueLabel(ctx, value, share, raw) {
@@ -357,10 +365,11 @@ function newsroomBar(unit, name, chart, ctx) {
   const { params, mark, encoding, transform, ...rest } = unit;
   const [valueKey, bandKey] = ctx.horizontal ? ['x', 'y'] : ['y', 'x'];
   const { [valueKey]: value, [bandKey]: band, ...own } = encoding;
+  const claimField = ctx.helper('paClaim');
   const claim = ctx.claimed.length
-    ? [{ calculate: `indexof(${JSON.stringify(ctx.claimed)}, datum[${JSON.stringify(String(chart.x))}]) >= 0 ? 'claim' : 'rest'`, as: 'paClaim' }]
+    ? [{ calculate: `indexof(${JSON.stringify(ctx.claimed)}, datum[${JSON.stringify(String(chart.x))}]) >= 0 ? 'claim' : 'rest'`, as: claimField }]
     : [];
-  const color = claim.length ? { color: { field: 'paClaim', type: 'nominal', scale: { domain: ['claim', 'rest'], range: 'paHighlight' }, legend: null } } : {};
+  const color = claim.length ? { color: { field: claimField, type: 'nominal', scale: { domain: ['claim', 'rest'], range: 'paHighlight' }, legend: null } } : {};
   const steps = [...(transform ?? []), ...claim];
   const label = valueLabel(ctx, value, name === 'share', String(chart.y));
   // The value axis reaches past the longest bar: domainMax takes headroom and the scale and axis nice to one tick
@@ -437,12 +446,14 @@ function expandKind(chart, result, p) {
     if (neg) errors.push({ path: `${p}.kind`, message: `area with color stacks; it needs every ${chart.y} >= 0 (row ${neg.row} has ${neg.value}); use kind line` });
   }
   if (errors.length) return { views: [], errors };
-  const ctx = context(chart, result);
   const { offered, blocked } = availableViews(chart, result);
   (chart.views ?? []).forEach((v, i) => {
     // An empty result blocks share/normalized by definition; that is a data refresh, not a spec defect.
     if (v !== 'table' && blocked[v] && result.rowCount > 0) errors.push({ path: `${p}.views[${i}]`, message: blocked[v] });
   });
+  const assertions = assertionErrors(chart, result, p);
+  if (assertions.length) return { views: [], errors: [...assertions, ...errors] };
+  const ctx = context(chart, result);
   // `views` narrows and reorders the defaults; the table always comes last.
   const names = chart.views?.filter((v) => v !== 'table') ?? offered;
   const views = [
