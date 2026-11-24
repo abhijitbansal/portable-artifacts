@@ -98,7 +98,7 @@ case (`--setting-sources project` does not remove them, and the first would over
 the default `prompts/<skill>.json` (which stays as it is, so committed
 summaries remain comparable). An unknown set exits 2 with
 `unknown --set "x"; available for dashboard: kinds`. `--only` and
-`--limit` apply after `--set`. Motion has no set (see "Motion sets" below). The sets are:
+`--limit` apply after `--set`. The sets are: motion `budget` (see "Motion sets" below),
 explainer `features` (Simple English, a plan round trip, embeds by file, an edit, `kpis`, `cards`, `image`, `details`
 and `diff` sections), dashboard `kinds` (the six chart kinds the default set does not name) and diagram `cloud` (AWS icons).
 
@@ -186,6 +186,10 @@ become the spec itself. Edit prompts start from `fixtures/seeds/scene.json`
 tour, for the rename). The pass bar for a billed run is 90% valid.
 
 ## Motion sets
+
+`prompts/motion-budget.json` (`--set budget`) is the paired test of the token budget design: five of the prompts below, each
+id with a `short-` prefix and two of them reworded to be silent, and five 20 to 40 s briefs with no shot list (`film-...`).
+`run-arms.mjs` runs it.
 
 `prompts/motion.json` (no `--set`; the version 1 `benchmark` and `items` sets are gone) holds eleven prompts for
 make-motion 2. The agent writes `film.json`, a script of shots; the harness checks it with `make.mjs --outline --json`

@@ -634,15 +634,31 @@ test('loadPrompts: no set reads prompts/<skill>.json, a set reads prompts/<skill
   assert.deepEqual(loadPrompts(promptsDir, 'dashboard', 'kinds'), readJson('prompts', 'dashboard-kinds.json'));
 });
 
-test('motion has one prompt set, the version 2 one, and no --set', () => {
-  assert.deepEqual(fs.readdirSync(promptsDir).filter((f) => f.startsWith('motion')), ['motion.json']);
-  assert.throws(() => loadPrompts(promptsDir, 'motion', 'benchmark'), { message: 'unknown --set "benchmark"; available for motion: (none)' });
-  assert.throws(() => loadPrompts(promptsDir, 'motion', 'items'), { message: 'unknown --set "items"; available for motion: (none)' });
+test('motion has its version 2 prompts and one set, budget; the version 1 sets are gone', () => {
+  assert.deepEqual(fs.readdirSync(promptsDir).filter((f) => f.startsWith('motion')).sort(), ['motion-budget.json', 'motion.json']);
+  assert.throws(() => loadPrompts(promptsDir, 'motion', 'benchmark'), { message: 'unknown --set "benchmark"; available for motion: budget' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', 'items'), { message: 'unknown --set "items"; available for motion: budget' });
+});
+
+// The paired test of the token budget design (docs/superpowers/specs/2026-11-23-motion-token-budget-design.md, 5.2): five of the
+// default prompts, and five briefs with no shot list, whose ids start `film-` (the pass rule compares designed cuts on those).
+test('motion --set budget: five default prompts keep their expectations, five new silent briefs name no shots and no asset', () => {
+  const set = loadPrompts(promptsDir, 'motion', 'budget');
+  const defaults = new Map(loadPrompts(promptsDir, 'motion').map((p) => [p.id, p]));
+  assert.deepEqual(set.map((p) => p.id), ['short-statement-hook', 'short-clipping-highlight', 'short-chart-bar', 'short-viral-vertical', 'short-voiced-pro', 'film-data', 'film-launch', 'film-how', 'film-before-after', 'film-recap']);
+  for (const p of set) {
+    assert.equal(p.seed, undefined, p.id);
+    assert.ok(p.expect.length > 0, p.id);
+    const from = defaults.get(p.id.replace(/^short-/, '')); // ids are unique across sets, so the five carry a prefix
+    if (p.id.startsWith('short-')) assert.deepEqual(p.expect, from.expect, p.id);
+    else assert.match(p.prompt, /silent \(no voice, music or sound\)\. Write your own shot list\.$/, p.id);
+    if (p.id.startsWith('film-')) assert.doesNotMatch(p.prompt, /data\/|shot of|shots:/, p.id);
+  }
 });
 
 test('loadPrompts: an unknown set names the sets that exist, and a set is never joined into a path', () => {
-  assert.throws(() => loadPrompts(promptsDir, 'motion', 'x'), { message: 'unknown --set "x"; available for motion: (none)' });
-  assert.throws(() => loadPrompts(promptsDir, 'motion', '../motion'), { message: 'unknown --set "../motion"; available for motion: (none)' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', 'x'), { message: 'unknown --set "x"; available for motion: budget' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', '../motion'), { message: 'unknown --set "../motion"; available for motion: budget' });
   assert.throws(() => loadPrompts(promptsDir, 'scene', 'benchmark'), { message: 'unknown --set "benchmark"; available for scene: (none)' });
   assert.throws(() => loadPrompts(promptsDir, 'dashboard', 'benchmark'), { message: 'unknown --set "benchmark"; available for dashboard: kinds' });
   assert.throws(() => loadPrompts(promptsDir, 'explainer', 'x'), { message: 'unknown --set "x"; available for explainer: features' });
@@ -658,7 +674,7 @@ test('run-eval: an unknown --set exits 2 listing the sets before any host runs; 
   assert.equal(hostLaunched, false, 'no host executable may be launched');
   const motion = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'motion', '--set', 'benchmark']);
   assert.equal(motion.r.status, 2);
-  assert.match(motion.r.stderr, /unknown --set "benchmark"; available for motion: \(none\)/, 'the version 1 benchmark and items sets are gone');
+  assert.match(motion.r.stderr, /unknown --set "benchmark"; available for motion: budget/, 'the version 1 benchmark and items sets are gone');
   assert.equal(motion.hostLaunched, false);
   const known = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'dashboard', '--set', 'kinds']);
   assert.equal(known.r.status, 2);
