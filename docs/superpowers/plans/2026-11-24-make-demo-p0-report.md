@@ -42,4 +42,4 @@ No write reached a site after load through the probe, as far as it can see (work
 
 ## Limits
 
-Settled pictures only; no mid-motion frame was compared. Three sites of one kind each, one machine, one hour. Nothing was clicked or typed. Pictures stay in `.scratch/make-demo-p0/` (not committed, third-party pages).
+Settled pictures only; no mid-motion frame was compared. Five sites, four of them compared, one machine, one evening. Grafana numbers come from one real run each time. Nothing was clicked or typed. Pictures stay in `.scratch/make-demo-p0/` (not committed, third-party pages).
