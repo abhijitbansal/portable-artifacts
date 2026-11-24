@@ -427,13 +427,17 @@ test('report() names what still runs in real time (C7)', async () => {
 
 test('an exception a page timer throws does not stop the film, and timerErrors() names it (B8)', async () => {
   const { context, page, stepper } = await open('/plain/');
-  await page.evaluate(() => { setTimeout(() => { throw new Error('boom 123'); }, 50); });
-  await stepper.step(3);
-  assert.equal(stepper.now(), 100);
-  assert.equal(stepper.timerErrors().length, 1);
-  assert.match(stepper.timerErrors()[0], /boom 123/);
+  await page.evaluate(() => {
+    setTimeout(() => { throw new Error('boom 123'); }, 50);
+    // Words a lost page would use must not end the step, and a TypeError must read as real time reports it: with no class name.
+    setTimeout(() => { throw new Error('WebSocket connection closed, retrying'); }, 100);
+    setTimeout(() => { null.x; }, 150);
+  });
+  await stepper.step(7);
+  assert.equal(stepper.now(), 233, 'every step ran');
+  assert.deepEqual(stepper.timerErrors(), ['boom 123', 'WebSocket connection closed, retrying', "Cannot read properties of null (reading 'x')"]);
   await stepper.step(2);
-  assert.equal(stepper.timerErrors().length, 1, 'the next steps add none');
+  assert.equal(stepper.timerErrors().length, 3, 'the next steps add none');
   await context.close();
 });
 

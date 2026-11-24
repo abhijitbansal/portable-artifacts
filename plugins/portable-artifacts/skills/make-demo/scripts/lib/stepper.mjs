@@ -28,7 +28,6 @@ const SETTLE_CAP_SECONDS = 8;
 const SETTLE_REAL_CAP_MS = 20000;
 const SETTLE_SHOT = { type: 'jpeg', quality: 70, scale: 'css' };
 const NO_SEPARATE_SESSION = /does not have a separate CDP session/;
-const PAGE_LOST = /closed|destroyed|detached|crashed|disconnected/i;
 
 /** A step or settle that did not finish in time: the page is stuck (a busy wait on a stopped clock). The context is closed. */
 export class StepTimeout extends Error {
@@ -211,17 +210,19 @@ export async function installStepper(page, { fps = 30, startTime = 0, stepDeadli
 
 /** The film clock of one page: how far it has run, one step of it, and a deadline around any call into the page. */
 function createDriver(page, watch, { fps, stepDeadlineMs }) {
-  const state = { frames: 0, drained: 0, timerErrors: [] };
+  const state = { frames: 0, drained: 0, timerErrors: [], crashed: false };
   const filmMs = (n) => Math.round((n * MS_PER_SECOND) / fps);
 
   // The fake clock catches an exception a timer callback throws and rethrows it from runFor, after the whole step has run. Real
-  // time reports it as a page error and carries on, so the stepper keeps it (timerErrors) and carries on too. A lost page is not that.
+  // time reports it as a page error and carries on, so the stepper keeps it (timerErrors) and carries on too, whatever the text says.
+  // A lost page is a closed page or a crash, nothing else. Real time's page error has no class name, so the prefix is dropped.
+  page.on('crash', () => { state.crashed = true; });
   async function runClock(dt) {
     try {
       await page.clock.runFor(dt);
     } catch (error) {
-      if (page.isClosed() || PAGE_LOST.test(error.message)) throw error;
-      state.timerErrors.push(String(error.message).split('\n')[0].replace(/^clock\.runFor: (Error: )?/, ''));
+      if (page.isClosed() || state.crashed) throw error;
+      state.timerErrors.push(String(error.message).split('\n')[0].replace(/^clock\.runFor: (\w*Error: )?/, ''));
     }
   }
 
