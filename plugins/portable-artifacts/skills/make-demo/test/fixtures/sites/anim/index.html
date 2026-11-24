@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animations in frames and shadow roots</title>
+<style>
+  @keyframes slide { to { transform: translateX(300px); } }
+  body { margin: 0; padding: 16px; font: 18px system-ui, sans-serif; }
+  .box { width: 20px; height: 20px; background: #c0392b; margin: 8px 0; }
+  #main { animation: slide 60s linear; }
+</style>
+</head>
+<body>
+<h1>Frames and shadow roots</h1>
+<div id="main" class="box"></div>
+<div id="host"></div>
+<iframe id="inner" src="/anim/inner" width="400" height="60" title="inner"></iframe>
+<script>
+const root = document.getElementById('host').attachShadow({ mode: 'open' });
+root.innerHTML = '<style>@keyframes slide { to { transform: translateX(300px); } } .box { width: 20px; height: 20px; background: #c0392b; animation: slide 60s linear; }</style><div class="box"></div>';
+</script>
+</body>
+</html>

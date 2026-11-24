@@ -3,7 +3,9 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startSites } from './fixtures/sites/server.mjs';
 import { launchBrowser, liveBrowsers } from '../scripts/lib/browser.mjs';
-import { installStepper, scrollTo } from '../scripts/lib/stepper.mjs';
+import * as stepperModule from '../scripts/lib/stepper.mjs';
+
+const { installStepper, scrollTo } = stepperModule;
 
 const VIEWPORT = { width: 1280, height: 720 };
 const SETTLE_REAL_BUDGET_MS = 12000;
@@ -94,9 +96,12 @@ test('a 500 ms transition started in the middle of a take is at 0.5 (±0.04) aft
   const { context, page, stepper } = await open('/plain/');
   await stepper.step(10);
   await startFade(page, 'opacity 500ms linear');
+  const startedAt = stepper.now();
   await stepper.step(8);
   const progress = await opacity(page);
-  assert.ok(Math.abs(progress - 0.5) <= 0.04, `opacity ${progress} after 267 ms`);
+  const elapsed = stepper.now() - startedAt;
+  assert.ok(Math.abs(progress - 0.5) <= 0.04, `opacity ${progress} after ${elapsed} ms`);
+  assert.ok(Math.abs(progress - elapsed / 500) <= 0.01, `opacity ${progress} is not the linear progress of ${elapsed} ms`);
   await stepper.step(7);
   assert.equal(await opacity(page), 1);
   assert.equal(await page.evaluate(() => document.getAnimations().length), 0, 'a finished transition is gone');
@@ -188,7 +193,7 @@ test('settle() on /slow/poll stops at its cap and says capped, in under 12 s', a
   const result = await stepper.settle();
   assert.equal(result.capped, true);
   assert.equal(result.reason, 'frames');
-  assert.equal(result.frames, 90);
+  assert.equal(result.frames, 240, '8 s of film at 30 fps');
   assert.ok(Date.now() - began < SETTLE_REAL_BUDGET_MS, `took ${Date.now() - began} ms`);
   await context.close();
 });
@@ -217,5 +222,210 @@ test('scrollTo also finishes in real time', async () => {
   await page.goto(sites.origin + '/plain/');
   await scrollTo(page, 400, 0.2);
   await page.waitForFunction(() => window.scrollY === 400, undefined, { timeout: 3000 });
+  await context.close();
+});
+
+// ---- Fix round 1: what the review measured ----
+
+const REAL_IDLE_MS = 500;
+const idle = (ms = REAL_IDLE_MS) => new Promise((resolve) => setTimeout(resolve, ms));
+const near = (actual, wanted, slack = 1) => assert.ok(Math.abs(actual - wanted) <= slack, `${actual} is not within ${slack} of ${wanted}`);
+
+/** A box with a Web Animation the page keeps in `window.an`. */
+const startWaapi = (page, options) => page.evaluate((opts) => {
+  const box = document.createElement('div');
+  box.id = 'wa';
+  box.style.cssText = 'position:fixed;left:0;top:0;width:20px;height:20px;background:#000';
+  document.body.append(box);
+  window.an = box.animate([{ left: '0px' }, { left: '100px' }], opts);
+}, options);
+const waapi = (page) => page.evaluate(() => [Math.round(an.currentTime), an.playState, an.playbackRate]);
+
+test('animations in an iframe and in a shadow root move only when stepped (C6)', async () => {
+  const { context, page, stepper } = await open('/anim/');
+  await stepper.step(3);
+  const inner = page.frames().find((f) => f !== page.mainFrame());
+  const innerTime = () => inner.evaluate(() => document.getAnimations()[0].currentTime);
+  const shadowTime = () => page.evaluate(() => document.getElementById('host').shadowRoot.getAnimations()[0].currentTime);
+  near(await innerTime(), 100);
+  near(await shadowTime(), 100);
+  await idle();
+  near(await innerTime(), 100);
+  near(await shadowTime(), 100);
+  await context.close();
+});
+
+test('a page that pauses a Web Animation in the middle of a take holds it (C2)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await startWaapi(page, { duration: 1000 });
+  await stepper.step(6);
+  await page.evaluate(() => an.pause());
+  await stepper.step(9);
+  near((await waapi(page))[0], 200);
+  assert.equal((await waapi(page))[1], 'paused');
+  await context.close();
+});
+
+test('a CSS animation-play-state paused in the middle of a take holds it (C2)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.textContent = '@keyframes pa-k { to { transform: translateX(100px); } }';
+    document.head.append(style);
+    const box = document.createElement('div');
+    box.id = 'css';
+    box.style.cssText = 'position:fixed;left:0;top:0;width:20px;height:20px;background:#000;animation:pa-k 1s linear forwards';
+    document.body.append(box);
+  });
+  await stepper.step(6);
+  await page.evaluate(() => { document.getElementById('css').style.animationPlayState = 'paused'; });
+  await stepper.step(9);
+  near(await page.evaluate(() => document.getAnimations().find((a) => a.animationName === 'pa-k').currentTime), 200);
+  await context.close();
+});
+
+test('an animation the page plays again after it ended runs from its new start (C3)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await startWaapi(page, { duration: 300, fill: 'forwards' });
+  await stepper.step(15);
+  assert.equal((await waapi(page))[1], 'finished');
+  await page.evaluate(() => { an.currentTime = 0; an.play(); });
+  await stepper.step(3);
+  const [time, state] = await waapi(page);
+  near(time, 100);
+  assert.equal(state, 'running');
+  await context.close();
+});
+
+test('an animation the page seeks before the first step starts from its seek (C4)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await startWaapi(page, { duration: 1000 });
+  await page.evaluate(() => { an.currentTime = 500; });
+  await stepper.step(3);
+  near((await waapi(page))[0], 600);
+  await context.close();
+});
+
+test('a playback rate of 2 set mid-take doubles the film time it gains', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await startWaapi(page, { duration: 2000 });
+  await stepper.step(6);
+  await page.evaluate(() => { an.playbackRate = 2; });
+  await stepper.step(3);
+  near((await waapi(page))[0], 200 + 200);
+  await context.close();
+});
+
+test('reverse() mid-take plays back at the film rate (C5)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await startWaapi(page, { duration: 2000 });
+  await stepper.step(6);
+  await page.evaluate(() => an.reverse());
+  await stepper.step(3);
+  const [time, state, rate] = await waapi(page);
+  near(time, 200 - 100);
+  assert.deepEqual([state, rate], ['running', -1]);
+  await context.close();
+});
+
+test('the finish event of a 100 ms animation reaches the page within a frame of its end (C9)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  await page.evaluate(() => {
+    window.finished = [];
+    window.began = performance.now();
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:0;top:0;width:20px;height:20px;background:#000';
+    document.body.append(box);
+    window.an = box.animate([{ left: '0px' }, { left: '100px' }], { duration: 100 });
+    an.onfinish = () => finished.push(performance.now() - began);
+  });
+  await stepper.step(5);
+  assert.equal(await page.evaluate(() => finished.length), 1);
+  const at = await page.evaluate(() => finished[0]);
+  assert.ok(at >= 100 && at <= 134, `finish reached the page at ${at} ms of film`);
+  await context.close();
+});
+
+test('the animation timeline stays stopped across a navigation (C3, C8)', async () => {
+  const { context, page, stepper } = await open('/anim/');
+  await stepper.step(3);
+  await page.goto(sites.origin + '/anim/');
+  await idle();
+  assert.ok(await page.evaluate(() => document.getAnimations()[0].currentTime) <= 34, 'the new document runs in real time');
+  await context.close();
+});
+
+test('after 30 steps a new document sees film time in performance.now() and Date.now() (C8, pinned)', async () => {
+  const { context, page, stepper } = await open('/plain/');
+  const first = await times(page);
+  await stepper.step(30);
+  await page.goto(sites.origin + '/plain/two');
+  const second = await times(page);
+  assert.equal(second.date - first.date, 1000);
+  near(second.perf - first.perf, 1000, 2);
+  assert.equal(stepper.now(), 1000);
+  await context.close();
+});
+
+test('fps must be a positive number', async () => {
+  const context = await browser.newContext({ viewport: VIEWPORT });
+  const page = await context.newPage();
+  await assert.rejects(installStepper(page, { fps: 0 }), RangeError);
+  await assert.rejects(installStepper(page, { fps: Number.NaN }), RangeError);
+  await context.close();
+});
+
+test('settle() waits for content a timer adds 1200 ms after load, with no spinner and no request (B11)', async () => {
+  const { context, page, stepper } = await open('/slow/late');
+  const result = await stepper.settle();
+  assert.equal(result.reason, 'still');
+  assert.match(await page.textContent('#out'), /Arrived/);
+  assert.ok(stepper.now() >= 1200);
+  await context.close();
+});
+
+test('settle() on a page that busy-waits on Date.now() ends capped, never hangs (C1)', { timeout: 30000 }, async () => {
+  const { context, stepper } = await open('/busy/');
+  const began = Date.now();
+  const result = await stepper.settle();
+  assert.deepEqual([result.capped, result.reason], [true, 'time']);
+  assert.ok(Date.now() - began < 20000, `took ${Date.now() - began} ms`);
+  await context.close();
+});
+
+test('step() on a page that busy-waits throws StepTimeout and closes the context (C1)', { timeout: 30000 }, async () => {
+  const { context, page, stepper } = await open('/busy/');
+  await assert.rejects(stepper.step(5), (error) => error instanceof stepperModule.StepTimeout);
+  assert.equal(page.isClosed(), true);
+  await context.close();
+});
+
+test('settle() on a zero-delay timer loop ends capped: a page with a timer always due is not settled (C1)', { timeout: 30000 }, async () => {
+  const { context, stepper } = await open('/zero/');
+  const result = await stepper.settle({ maxRealMs: 5000 });
+  assert.equal(result.capped, true);
+  assert.ok(result.timersDue > 0, 'the cap is because a timer is always due');
+  await context.close();
+});
+
+test('report() names what still runs in real time (C7)', async () => {
+  const { context, stepper } = await open('/realtime/');
+  await stepper.step(2);
+  const report = await stepper.report();
+  assert.equal(report.workers, 1);
+  assert.equal(report.closedShadowRoots, 1);
+  assert.equal(report.smoothScrolls >= 1, true);
+  assert.equal(report.smoothScrollCss, true);
+  assert.equal(report.playingVideos, 1);
+  assert.equal(report.animatedImages, 1);
+  assert.equal(report.smil, 1);
+  assert.equal(report.audioContexts, 0);
+  await context.close();
+});
+
+test('report() on a plain page is empty', async () => {
+  const { context, stepper } = await open('/plain/');
+  const report = await stepper.report();
+  assert.deepEqual(Object.values(report).filter((v) => v !== 0 && v !== false), []);
   await context.close();
 });

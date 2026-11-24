@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Zero timer loop</title></head>
+<body>
+<h1>Zero timer loop</h1>
+<script>
+(function again() { setTimeout(again, 0); })();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Late content</title></head>
+<body>
+<h1>Reports</h1>
+<div id="out"></div>
+<script>
+// No spinner and no request: the page looks finished until a timer 1200 ms after load adds the content.
+setTimeout(() => {
+  document.getElementById('out').innerHTML = '<h2>Arrived</h2><button type="button">Open report</button>';
+}, 1200);
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Busy wait</title></head>
+<body>
+<h1>Busy wait</h1>
+<p>A timer starts a loop that waits on Date.now(). Under a stopped clock that time never comes.</p>
+<script>
+setTimeout(() => {
+  const end = Date.now() + 30;
+  while (Date.now() < end);
+}, 100);
+</script>
+</body>
+</html>
