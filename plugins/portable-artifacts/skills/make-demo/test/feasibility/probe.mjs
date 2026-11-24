@@ -3,8 +3,8 @@
 // real-time runs agree.
 //   node test/feasibility/probe.mjs <sites.json> --out <dir>
 // Exit 0 when it ran, 2 for a usage error or a live headless browser. Run by hand: no test and no CI job visits a public site.
-// The probe sends nothing beyond what loading the page sends: see probe-guard.mjs. It cannot tell a GET that changes state
-// (a redirect chain, a fetch of a URL like /delete?id=1) from a read; the final address of each run is recorded for that reason.
+// Its claim, in short: after load it blocks explicit writes, new page sockets and top-level navigation, and lists the reads a
+// scroll or hover causes (see probe-guard.mjs); it claims no more. It cannot tell a GET that changes state from a read.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

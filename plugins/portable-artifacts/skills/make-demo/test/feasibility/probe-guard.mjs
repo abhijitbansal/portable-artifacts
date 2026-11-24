@@ -1,12 +1,15 @@
-// What the probe may do to a site: it sends nothing beyond what loading the page sends. While the page loads, its own requests
-// run (many apps are blank without them). From `goto` returning, for the rest of the run and whatever the step, in every page
-// of the context (popups too): anything but GET, HEAD and OPTIONS is aborted, a top-level navigation is aborted, a new
-// WebSocket is closed. Service workers are blocked, downloads refused, permissions none, popups closed and counted.
+// What the probe claims: it visits named, signed-out sites in a fresh browser and scrolls and hovers. While the page loads, its
+// own requests run (many apps are blank without them). From `goto` returning, whatever the step, in every page of the context
+// (popups too): the explicit writes the browser lets it see (POST, PUT, PATCH, DELETE, form submits, beacons) are aborted, a
+// top-level navigation is aborted, a new WebSocket is closed. The reads a scroll or hover causes are let through and listed
+// (`readsAfterLoad`). Service workers are blocked, downloads refused, permissions none, popups closed and counted.
+// It claims no more: workers, WebRTC, WebTransport, fetchLater and sockets opened during load are the site's own, as for any visitor.
 
 export const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 const newTraffic = () => ({
-  writesAtLoad: [], // { method, path }: the page's own requests during load, sent
+  writesAtLoad: [], // { method, path }: the page's own writes during load, sent
+  readsAfterLoad: [], // { method, path }: reads a scroll or hover caused, let through after load
   blocked: [], // { kind: 'write' | 'navigation' | 'websocket', method, path, sameOrigin }: aborted after load
   websocketsAtLoad: 0,
   popups: 0,
@@ -41,7 +44,10 @@ async function routeRequest(run, route) {
     return route.continue();
   }
   const kind = isTopLevelNavigation(request) ? 'navigation' : (SAFE_METHODS.has(method) ? null : 'write');
-  if (kind === null) return route.continue();
+  if (kind === null) {
+    run.traffic.readsAfterLoad.push({ method, path: pathOf(request.url()) });
+    return route.continue();
+  }
   run.traffic.blocked.push(blockedEntry(run, kind, method, request.url()));
   return route.abort('blockedbyclient');
 }

@@ -68,6 +68,16 @@ test('a step naming a control that is not there is a record with a reason', asyn
   assert.match(record.why.join(' '), /No such link/);
 });
 
+test('the reads a page makes after load are listed, with method and path, for every run (scope cut, item 1)', async () => {
+  const record = await probeSite(browser, entry('reads', '/slow/', [scroll(0, 0.5)]), outDir);
+  assert.equal(record.traffic.length, 4);
+  for (const t of record.traffic) {
+    assert.ok(Array.isArray(t.readsAfterLoad), `${t.run} has readsAfterLoad`);
+    assert.ok(t.readsAfterLoad.some((r) => r.method === 'GET' && r.path === '/slow/data'), `${t.run}: ${JSON.stringify(t.readsAfterLoad)}`);
+    assert.ok(t.readsAfterLoad.every((r) => ['GET', 'HEAD', 'OPTIONS'].includes(r.method)), 'only reads are let through');
+  }
+});
+
 test('a hover on a danger control sends nothing: the probe only looks', async () => {
   sites.reset();
   const record = await probeSite(browser, entry('danger-hover', '/danger/', [{ do: 'hover', role: 'button', name: 'Delete' }]), outDir);
