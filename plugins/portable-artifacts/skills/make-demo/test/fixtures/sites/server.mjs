@@ -22,9 +22,11 @@ export const PRIVATE_SEEDS = [
 const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.js': 'text/javascript', '.css': 'text/css' };
 const HTML = 'text/html; charset=utf-8';
 
+/** Answer, and say so (true): a route returns false when the request is not its own. */
 const send = (res, status, body, type = HTML, headers = {}) => {
   res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', ...headers });
   res.end(body);
+  return true;
 };
 
 /** The file a path maps to: `/a/` is a/index.html, `/a/b` is a/b.html or a/b/index.html; never outside ROOT. */
@@ -58,76 +60,99 @@ const loginHome = () => `<!doctype html><meta charset="utf-8"><title>Account</ti
 <dt>Card</dt><dd>${PRIVATE_SEEDS[2]}</dd><dt>API key</dt><dd>${PRIVATE_SEEDS[4]}</dd></dl>
 <a href="/login/signout">Sign out</a>`;
 
+const DONE_PAGE = '<!doctype html><title>Done</title><h1>Done</h1>';
+const NOT_FOUND_PAGE = '<!doctype html><title>Not found</title><h1>Not found</h1>';
+const sessionCookie = (value, extra) => `${SESSION_COOKIE}=${value}; Path=/; ${extra}`;
+
+/** The path of a request, or null when the URL parser refuses it (`//`, `//[`): such a request is a 400, never a crash. */
+function pathOf(req) {
+  try {
+    return new URL(req.url, 'http://fixture.invalid').pathname;
+  } catch {
+    return null;
+  }
+}
+
+/** The sign-in pages: POST /login/signin sets the cookie, GET /login/signout clears it, /login/home needs it. */
+function loginRoute(world, req, res, pathname) {
+  if (pathname === '/login/signin' && req.method === 'POST') {
+    world.signedIn = true;
+    return send(res, 303, '', HTML, { location: '/login/home', 'set-cookie': sessionCookie(SESSION_VALUE, 'HttpOnly; SameSite=Lax') });
+  }
+  if (pathname === '/login/signout') {
+    world.signedIn = false;
+    return send(res, 303, '', HTML, { location: '/login/', 'set-cookie': sessionCookie('', 'Max-Age=0') });
+  }
+  if (pathname !== '/login/home') return false;
+  if (!world.signedIn || !hasSession(req)) return send(res, 302, '', HTML, { location: '/login/' });
+  return send(res, 200, loginHome());
+}
+
+/** The danger pages: a GET delete link and POST buttons, each recorded so a test can tell whether anything reached them. */
+function dangerRoute(world, req, res, pathname) {
+  const del = /^\/danger\/item\/([\w-]+)\/delete$/.exec(pathname);
+  if (del) {
+    world.deleted = [...world.deleted, del[1]];
+    return send(res, 200, '<!doctype html><title>Deleted</title><h1>Deleted</h1>');
+  }
+  if (!pathname.startsWith('/danger/') || req.method !== 'POST') return false;
+  world.submitted += 1;
+  return send(res, 200, DONE_PAGE);
+}
+
+/** Pages made by a handler, not read from a file. */
+function dynamicRoute(world, res, pathname) {
+  const seen = (p) => world.log.filter((r) => r.path === p).length;
+  if (pathname === '/wall/') return send(res, 403, wallPage);
+  if (pathname === '/trap/needs-login') return send(res, 302, '', HTML, { location: '/login/' });
+  if (pathname === '/random/') return send(res, 200, randomPage(seen('/random/')));
+  if (pathname === '/slow/data') return send(res, 200, JSON.stringify({ items: ['Quarterly report', 'Team roster', 'Open tasks'] }), TYPES['.json']);
+  if (pathname === '/slow/poll/tick') return send(res, 200, JSON.stringify({ n: seen('/slow/poll/tick') }), TYPES['.json']);
+  return false;
+}
+
+function handleMain(world, req, res) {
+  const pathname = pathOf(req);
+  if (pathname === null) return send(res, 400, 'bad request', 'text/plain');
+  world.log.push({ method: req.method, path: pathname });
+  if (dynamicRoute(world, res, pathname) || loginRoute(world, req, res, pathname) || dangerRoute(world, req, res, pathname)) return true;
+  if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed', 'text/plain');
+  const file = fileFor(pathname);
+  if (!file) return send(res, 404, NOT_FOUND_PAGE);
+  return send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] ?? 'application/octet-stream');
+}
+
+function handleOther(world, req, res) {
+  const pathname = pathOf(req);
+  if (pathname === null) return send(res, 400, 'bad request', 'text/plain');
+  world.log.push({ method: req.method, path: pathname });
+  if (pathname !== '/foreign/') return send(res, 404, 'not found', 'text/plain');
+  return send(res, 200, fs.readFileSync(path.join(ROOT, 'foreign', 'index.html')));
+}
+
+const listen = (handler) => new Promise((resolve, reject) => {
+  const server = http.createServer(handler);
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', () => resolve(server));
+});
+const closeServer = (server) => new Promise((done) => { server.closeAllConnections?.(); server.close(() => done()); });
+
 /** Start both servers. `requests()` lists every request seen since the start or the last `reset()`. */
 export async function startSites() {
-  let log = [];
-  let signedIn = false;
-  let deleted = [];
-  let submitted = 0;
-
-  const handle = (req, res) => {
-    const url = new URL(req.url, 'http://fixture.invalid');
-    const { pathname } = url;
-    log.push({ method: req.method, path: pathname });
-    if (pathname === '/wall/') return send(res, 403, wallPage);
-    if (pathname === '/trap/needs-login') return send(res, 302, '', HTML, { location: '/login/' });
-    if (pathname === '/random/') return send(res, 200, randomPage(log.filter((r) => r.path === '/random/').length));
-    if (pathname === '/slow/data') return send(res, 200, JSON.stringify({ items: ['Quarterly report', 'Team roster', 'Open tasks'] }), TYPES['.json']);
-    if (pathname === '/slow/poll/tick') return send(res, 200, JSON.stringify({ n: log.filter((r) => r.path === '/slow/poll/tick').length }), TYPES['.json']);
-    if (pathname === '/login/signin' && req.method === 'POST') {
-      signedIn = true;
-      return send(res, 303, '', HTML, { location: '/login/home', 'set-cookie': `${SESSION_COOKIE}=${SESSION_VALUE}; Path=/; HttpOnly; SameSite=Lax` });
-    }
-    if (pathname === '/login/signout') {
-      signedIn = false;
-      return send(res, 303, '', HTML, { location: '/login/', 'set-cookie': `${SESSION_COOKIE}=; Path=/; Max-Age=0` });
-    }
-    if (pathname === '/login/home') {
-      if (!signedIn || !hasSession(req)) return send(res, 302, '', HTML, { location: '/login/' });
-      return send(res, 200, loginHome());
-    }
-    const del = /^\/danger\/item\/([\w-]+)\/delete$/.exec(pathname);
-    if (del) {
-      deleted = [...deleted, del[1]];
-      return send(res, 200, '<!doctype html><title>Deleted</title><h1>Deleted</h1>');
-    }
-    if (pathname.startsWith('/danger/') && req.method === 'POST') {
-      submitted += 1;
-      return send(res, 200, '<!doctype html><title>Done</title><h1>Done</h1>');
-    }
-    if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed', 'text/plain');
-    const file = fileFor(pathname);
-    if (!file) return send(res, 404, '<!doctype html><title>Not found</title><h1>Not found</h1>');
-    return send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] ?? 'application/octet-stream');
-  };
-
-  const handleOther = (req, res) => {
-    const { pathname } = new URL(req.url, 'http://fixture.invalid');
-    log.push({ method: req.method, path: pathname });
-    if (pathname !== '/foreign/') return send(res, 404, 'not found', 'text/plain');
-    return send(res, 200, fs.readFileSync(path.join(ROOT, 'foreign', 'index.html')));
-  };
-
-  const listen = (handler) => new Promise((resolve, reject) => {
-    const server = http.createServer(handler);
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve(server));
-  });
-  const closeServer = (server) => new Promise((done) => { server.closeAllConnections?.(); server.close(() => done()); });
-
-  const main = await listen(handle);
+  const world = { log: [], signedIn: false, deleted: [], submitted: 0 };
+  const main = await listen((req, res) => handleMain(world, req, res));
   // A WebSocket upgrade is logged and refused: a test then sees whether a page ever reached the server with one.
   main.on('upgrade', (req, socket) => {
-    log.push({ method: 'UPGRADE', path: new URL(req.url, 'http://fixture.invalid').pathname });
+    world.log.push({ method: 'UPGRADE', path: pathOf(req) ?? '?' });
     socket.destroy();
   });
-  const other = await listen(handleOther);
+  const other = await listen((req, res) => handleOther(world, req, res));
   return {
     origin: `http://127.0.0.1:${main.address().port}`,
     otherOrigin: `http://127.0.0.1:${other.address().port}`,
-    requests: () => log.map((r) => ({ ...r })),
-    state: () => ({ signedIn, deleted: [...deleted], submitted }),
-    reset() { log = []; signedIn = false; deleted = []; submitted = 0; },
+    requests: () => world.log.map((r) => ({ ...r })),
+    state: () => ({ signedIn: world.signedIn, deleted: [...world.deleted], submitted: world.submitted }),
+    reset() { Object.assign(world, { log: [], signedIn: false, deleted: [], submitted: 0 }); },
     close: () => Promise.all([closeServer(main), closeServer(other)]).then(() => undefined),
   };
 }

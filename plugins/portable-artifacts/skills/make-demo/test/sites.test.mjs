@@ -1,5 +1,6 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { startSites, PRIVATE_SEEDS } from './fixtures/sites/server.mjs';
 
 let sites;
@@ -34,6 +35,17 @@ test('/login/home without the cookie is a 302 to /login/', async () => {
   const res = await get('/login/home');
   assert.equal(res.status, 302);
   assert.equal(res.headers.get('location'), '/login/');
+});
+
+/** A raw GET, because fetch rewrites paths like `//`. */
+const rawGet = (path) => new Promise((resolve, reject) => {
+  const { port } = new URL(sites.origin);
+  http.get({ host: '127.0.0.1', port, path }, (res) => { res.resume(); resolve(res.statusCode); }).on('error', reject);
+});
+
+test('GET // and other paths the URL parser refuses answer 400 and leave the server running (D7)', async () => {
+  for (const path of ['//', '//[']) assert.equal(await rawGet(path), 400, path);
+  assert.equal((await get('/plain/')).status, 200);
 });
 
 test('the two origins differ and the second serves a page', async () => {

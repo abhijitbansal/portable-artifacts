@@ -51,6 +51,24 @@ test('the file holds the buffer, and index() is a copy a caller cannot change', 
   assert.equal(store.index().length, 1);
 });
 
+test('a file that has the name but not the bytes is an error, never trusted (D6)', () => {
+  const dir = tempDir();
+  const probe = frameStore(tempDir());
+  const { file } = probe.add(Buffer.from('the real frame'));
+  fs.writeFileSync(path.join(dir, file), 'something else that holds the name');
+  assert.throws(() => frameStore(dir).add(Buffer.from('the real frame')), /not the same bytes/);
+});
+
+test('a file already in a reused folder with the same bytes is kept and the frame is indexed (D6)', () => {
+  const dir = tempDir();
+  frameStore(dir).add(Buffer.from('kept'));
+  const again = frameStore(dir);
+  const first = again.add(Buffer.from('kept'));
+  assert.equal(first.repeated, false, 'new to this store');
+  assert.equal(again.add(Buffer.from('kept')).repeated, true);
+  assert.equal(again.bytes(), 4);
+});
+
 test('a folder that does not exist yet is created', () => {
   const dir = path.join(tempDir(), 'nested', 'frames');
   const store = frameStore(dir);
