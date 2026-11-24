@@ -22,7 +22,7 @@ const pathOf = (url) => { const u = new URL(url); return `${u.pathname}${u.searc
 const hostOf = (url) => new URL(url).host;
 
 function blockedEntry(run, kind, method, url) {
-  return { kind, method, path: pathOf(url), sameOrigin: hostOf(url) === hostOf(run.origin) };
+  return { kind, method, path: pathOf(url), host: hostOf(url), sameOrigin: hostOf(url) === hostOf(run.origin) };
 }
 
 /** A navigation of the page's main frame. A request made before its frame exists (a popup's first) is one too. */
@@ -93,3 +93,9 @@ export function endLoad(run) {
 
 /** Blocked requests to the site's own origin: the picture may show a state the real site does not. */
 export const ownOriginBlocks = (traffic) => traffic.blocked.filter((b) => b.sameOrigin);
+
+/** Blocked writes and sockets to another host: a note in `why`, once each, not a reason to doubt the site. */
+export function otherHostNotes(traffics) {
+  const seen = new Set(traffics.flatMap((t) => t.blocked.filter((b) => !b.sameOrigin).map((b) => `blocked, to another host: ${b.kind} ${b.method} ${b.path} (${b.host})`)));
+  return [...seen];
+}

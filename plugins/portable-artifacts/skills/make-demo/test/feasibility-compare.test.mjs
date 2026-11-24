@@ -135,39 +135,48 @@ const STEP = { share: 1, wrongGroups: [], treeDifferences: [], treeLeftOut: 0 };
 const GOOD = { steps: [STEP, STEP] };
 
 test('verdict is steppable when every step agrees', () => {
-  assert.equal(verdict(GOOD).verdict, 'steppable');
+  assert.equal(verdict(GOOD).verdict, 'no difference found');
+});
+
+test('every verdict says the smallest stable share it compared, and the words are the three of the scope cut', () => {
+  const steps = [{ ...STEP, share: 0.97 }, { ...STEP, share: 0.82 }];
+  for (const result of [verdict({ steps }), verdict({ steps, wall: 'status 403' }), verdict({ steps: [{ ...STEP, share: 0.3 }] })]) {
+    assert.ok(['no difference found', 'difference found', 'inconclusive'].includes(result.verdict), result.verdict);
+    assert.match(result.why.join(' | '), /stable share compared: 0\.\d\d/);
+  }
+  assert.match(verdict({ steps }).why.join(' | '), /stable share compared: 0\.82 .*2 step/);
 });
 
 test('verdict is inconclusive for a stable share of 0.49 at any step, and keeps 0.5', () => {
   const low = verdict({ steps: [STEP, { ...STEP, share: 0.49 }] });
   assert.equal(low.verdict, 'inconclusive');
   assert.match(low.why.join(' '), /step 1: only 0\.49/);
-  assert.equal(verdict({ steps: [{ ...STEP, share: 0.5 }] }).verdict, 'steppable');
+  assert.equal(verdict({ steps: [{ ...STEP, share: 0.5 }] }).verdict, 'no difference found');
 });
 
 test('verdict is not-steppable for a wrong group, and the reason names its box', () => {
   const [group] = groupBlocks([blockAt(1, 1), blockAt(2, 1)], COLS);
   const v = verdict({ steps: [{ ...STEP, wrongGroups: [group] }] });
-  assert.equal(v.verdict, 'not-steppable');
+  assert.equal(v.verdict, 'difference found');
   assert.match(v.why.join(' '), /step 0: .*24x12 at \(12, 12\)/);
 });
 
 test('verdict is not-steppable for a tree difference and for a new page error', () => {
-  assert.equal(verdict({ steps: [{ ...STEP, treeDifferences: ['missing 1× button "Save"'] }] }).verdict, 'not-steppable');
+  assert.equal(verdict({ steps: [{ ...STEP, treeDifferences: ['missing 1× button "Save"'] }] }).verdict, 'difference found');
   const v = verdict({ ...GOOD, newErrors: [{ key: 'pageerror: boom #', stepped: 1, real: 0 }] });
-  assert.equal(v.verdict, 'not-steppable');
+  assert.equal(v.verdict, 'difference found');
   assert.match(v.why.join(' '), /pageerror: boom #/);
 });
 
 test('verdict is inconclusive when over a fifth of the tree differs among the real runs', () => {
   assert.equal(verdict({ steps: [{ ...STEP, treeLeftOut: 0.21 }] }).verdict, 'inconclusive');
-  assert.equal(verdict({ steps: [{ ...STEP, treeLeftOut: 0.2 }] }).verdict, 'steppable');
+  assert.equal(verdict({ steps: [{ ...STEP, treeLeftOut: 0.2 }] }).verdict, 'no difference found');
 });
 
 test('verdict is not-steppable for a wall, and a wall beats a low share', () => {
-  assert.equal(verdict({ ...GOOD, wall: 'status 403' }).verdict, 'not-steppable');
+  assert.equal(verdict({ ...GOOD, wall: 'status 403' }).verdict, 'difference found');
   const v = verdict({ steps: [{ ...STEP, share: 0.1 }], wall: 'status 403' });
-  assert.equal(v.verdict, 'not-steppable');
+  assert.equal(v.verdict, 'difference found');
   assert.match(v.why.join(' '), /status 403/);
 });
 
@@ -177,7 +186,7 @@ test('verdict is inconclusive for a run that never settled, and steppable with a
   assert.equal(v.verdict, 'inconclusive');
   assert.match(v.why.join(' '), /real-2 step 1 \(time\)/);
   const loops = verdict({ ...GOOD, capped: { ...capped, loops: true } });
-  assert.equal(loops.verdict, 'steppable');
+  assert.equal(loops.verdict, 'no difference found');
   assert.match(loops.why.join(' '), /loops/);
 });
 
@@ -187,7 +196,7 @@ test('verdict is inconclusive when the runs ended on different addresses, and wi
 });
 
 test('a NaN share is never a pass', () => {
-  assert.notEqual(verdict({ steps: [{ ...STEP, share: Number.NaN }] }).verdict, 'steppable');
+  assert.notEqual(verdict({ steps: [{ ...STEP, share: Number.NaN }] }).verdict, 'no difference found');
 });
 
 const settled = { capped: false, reason: 'still', pendingRequests: 0 };

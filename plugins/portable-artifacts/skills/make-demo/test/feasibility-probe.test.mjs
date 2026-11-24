@@ -29,7 +29,7 @@ const scroll = (to, seconds = 0.5) => ({ do: 'scroll', to, seconds });
 
 test('/plain/ is steppable, with the numbers a later phase needs', async () => {
   const record = await probeSite(browser, entry('plain', '/plain/', [scroll(600, 1), { do: 'hover', role: 'link', name: 'Go to the second page' }]), outDir);
-  assert.equal(record.verdict, 'steppable', record.why.join('; '));
+  assert.equal(record.verdict, 'no difference found', record.why.join('; '));
   assert.equal(record.steps.length, 3, 'the load and two steps');
   for (const step of record.steps) assert.ok(step.ssim >= 0.98 && step.share >= 0.5);
   assert.ok(record.film.wallMsPerFilmSecond > 0);
@@ -42,23 +42,23 @@ test('/plain/ is steppable, with the numbers a later phase needs', async () => {
 
 test('/spa/ is steppable when scrolled and hovered', async () => {
   const record = await probeSite(browser, entry('spa', '/spa/', [{ do: 'hover', role: 'button', name: 'Search' }, { do: 'hover', role: 'tab', name: 'Accounts' }]), outDir);
-  assert.equal(record.verdict, 'steppable', record.why.join('; '));
+  assert.equal(record.verdict, 'no difference found', record.why.join('; '));
 });
 
 test('/canvas/ is steppable', async () => {
   const record = await probeSite(browser, entry('canvas', '/canvas/', [scroll(0, 0.5)]), outDir);
-  assert.equal(record.verdict, 'steppable', record.why.join('; '));
+  assert.equal(record.verdict, 'no difference found', record.why.join('; '));
 });
 
 test('/wall/ is not-steppable and the reason names the status', async () => {
   const record = await probeSite(browser, entry('wall', '/wall/', [scroll(0)]), outDir);
-  assert.equal(record.verdict, 'not-steppable');
+  assert.equal(record.verdict, 'difference found');
   assert.match(record.why.join(' '), /403/);
 });
 
 test('/random/ is not steppable: two real-time runs already disagree', async () => {
   const record = await probeSite(browser, entry('random', '/random/', [scroll(0)]), outDir);
-  assert.notEqual(record.verdict, 'steppable');
+  assert.notEqual(record.verdict, 'no difference found');
   assert.ok(record.steps[0].share < 0.5, `stable share ${record.steps[0].share}`);
 });
 
@@ -66,6 +66,15 @@ test('a step naming a control that is not there is a record with a reason', asyn
   const record = await probeSite(browser, entry('missing', '/plain/', [{ do: 'hover', role: 'link', name: 'No such link' }]), outDir);
   assert.equal(record.verdict, 'inconclusive');
   assert.match(record.why.join(' '), /No such link/);
+});
+
+test('a write blocked to another host is a note in why, and the site is not made inconclusive by it (scope cut, item 2)', async () => {
+  sites.reset();
+  const url = `/trap/other-post?to=${encodeURIComponent(sites.otherOrigin)}`;
+  const record = await probeSite(browser, entry('other-post', url, [scroll(0, 0.5)]), outDir);
+  assert.equal(sites.requests().some((r) => r.method === 'POST'), false, 'the POST never left');
+  assert.match(whyText(record), /blocked, to another host: write POST \/foreign\/ \(127\.0\.0\.1:\d+\)/);
+  assert.notEqual(record.verdict, 'inconclusive', whyText(record));
 });
 
 test('the reads a page makes after load are listed, with method and path, for every run (scope cut, item 1)', async () => {
@@ -156,13 +165,13 @@ for (const [trap, label, finding] of [
 ]) {
   test(`${label} is not steppable (${finding})`, async () => {
     const record = await probeTrap(trap, trap);
-    assert.equal(record.verdict, 'not-steppable', whyText(record));
+    assert.equal(record.verdict, 'difference found', whyText(record));
   });
 }
 
 test('an accessible name that differs with no change to the picture is not steppable, and the reason names both (B7)', async () => {
   const record = await probeTrap('label', 'label');
-  assert.equal(record.verdict, 'not-steppable', whyText(record));
+  assert.equal(record.verdict, 'difference found', whyText(record));
   assert.match(whyText(record), /missing 1× button "Save"/);
   assert.match(whyText(record), /extra 1× button "Store"/);
   assert.ok(record.steps.every((s) => s.wrongBlocks === 0), 'the pictures agree: only the tree can tell');
@@ -170,7 +179,7 @@ test('an accessible name that differs with no change to the picture is not stepp
 
 test('page errors, console errors and failed requests only the stepped run has are named (B8)', async () => {
   const record = await probeTrap('errors', 'errors');
-  assert.equal(record.verdict, 'not-steppable', whyText(record));
+  assert.equal(record.verdict, 'difference found', whyText(record));
   assert.match(whyText(record), /pageerror: boom #/);
   assert.match(whyText(record), /console: hydration mismatch at #/);
   assert.match(whyText(record), /request: /);
@@ -178,19 +187,19 @@ test('page errors, console errors and failed requests only the stepped run has a
 
 test('a page whose block jumps to a new place forever is not steppable: the stepped run shows it where no real run does (B3)', async () => {
   const record = await probeTrap('cap', 'cap');
-  assert.equal(record.verdict, 'not-steppable', whyText(record));
+  assert.equal(record.verdict, 'difference found', whyText(record));
 });
 
 test('a spinner that outlasts every run is compared as it stands and the record says it loops (B3)', { timeout: 120000 }, async () => {
   const record = await probeTrap('stuck', 'stuck');
-  assert.equal(record.verdict, 'steppable', whyText(record));
+  assert.equal(record.verdict, 'no difference found', whyText(record));
   assert.match(whyText(record), /loops/);
   assert.ok(record.steps.every((s) => s.settle.capped && s.settleRealTime.capped), 'every run gave up waiting');
 });
 
 test('a control the stepped run never shows is not-steppable, naming the run (B9)', async () => {
   const record = await probeTrap('stepped-lacks', 'stepped-lacks', [{ do: 'hover', role: 'link', name: 'Open item' }]);
-  assert.equal(record.verdict, 'not-steppable', whyText(record));
+  assert.equal(record.verdict, 'difference found', whyText(record));
   assert.match(whyText(record), /stepped run/);
 });
 
@@ -205,14 +214,14 @@ for (const [trap, pattern] of [
 ]) {
   test(`/trap/${trap} is a wall, not a page to step (B5)`, async () => {
     const record = await probeTrap(trap, trap);
-    assert.equal(record.verdict, 'not-steppable', whyText(record));
+    assert.equal(record.verdict, 'difference found', whyText(record));
     assert.match(whyText(record), pattern);
   });
 }
 
 test('/random/ with near-equal grounds in a different colour each load is not steppable (E2)', async () => {
   const record = await probeSite(browser, entry('random-near-equal', '/random/', [scroll(0, 0.5)]), outDir);
-  assert.notEqual(record.verdict, 'steppable', whyText(record));
+  assert.notEqual(record.verdict, 'no difference found', whyText(record));
 });
 
 test('the record says what still runs in real time on the page (C7)', async () => {
@@ -268,7 +277,7 @@ test('the CLI writes results.json, prints one line a site and runs the next site
   const code = await main([file, '--out', out], { live: () => [], launch: lend, out: printed, err: stdout.write });
   assert.equal(code, 0);
   const results = JSON.parse(fs.readFileSync(path.join(out, 'results.json'), 'utf8'));
-  assert.deepEqual(results.map((r) => [r.name, r.verdict]), [['missing', 'inconclusive'], ['plain', 'steppable']]);
+  assert.deepEqual(results.map((r) => [r.name, r.verdict]), [['missing', 'inconclusive'], ['plain', 'no difference found']]);
   assert.deepEqual(written, [1, 2]);
   assert.equal(stdout.lines.length, 2);
 });

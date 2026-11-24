@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A write to another host</title></head>
+<body style="font: 20px system-ui; margin: 24px">
+<h1>A write to another host after load</h1>
+<script>
+// ?to= names the other origin: a POST to it, a little after load, is not the site's own.
+const target = new URLSearchParams(location.search).get('to');
+if (target) setTimeout(() => fetch(`${target}/foreign/`, { method: 'POST', mode: 'no-cors' }).catch(() => {}), 800);
+</script>
+</body>
+</html>

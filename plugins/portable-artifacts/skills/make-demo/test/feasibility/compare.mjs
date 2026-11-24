@@ -210,10 +210,11 @@ function doubts({ steps, capped, finalUrlsEqual }) {
  * runs and steps that never settled, `{ runs, loops }` (`loops: true` when all four did, with nothing pending and equal trees).
  */
 export function verdict({ steps, newErrors = [], wall = null, capped = { runs: [], loops: false }, finalUrlsEqual = true }) {
+  const share = steps.length === 0 ? [] : [`stable share compared: ${fmt(Math.min(...steps.map((s) => s.share)))} at the lowest of ${steps.length} step(s)`];
   const hard = hardReasons({ wall, steps, newErrors });
-  if (hard.length > 0) return { verdict: 'not-steppable', why: hard };
+  if (hard.length > 0) return { verdict: 'difference found', why: [...hard, ...share] };
   const unsure = doubts({ steps, capped, finalUrlsEqual });
-  if (unsure.length > 0) return { verdict: 'inconclusive', why: unsure };
+  if (unsure.length > 0) return { verdict: 'inconclusive', why: [...unsure, ...share] };
   const note = capped.loops ? ' (the page loops: compared as it stood at the cap)' : '';
-  return { verdict: 'steppable', why: [`${steps.length} step(s) matched real time${note}`] };
+  return { verdict: 'no difference found', why: [`${steps.length} step(s) compared${note}`, ...share] };
 }

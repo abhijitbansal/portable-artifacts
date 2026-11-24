@@ -13,7 +13,7 @@ import { captureRun, FPS } from './probe-run.mjs';
 import { stableMask, wrongBlocks, failingGroups, maskedSsim, verdict } from './compare.mjs';
 import { diffTrees, newErrors } from './signals.mjs';
 import { decodePng } from './decode.mjs';
-import { ownOriginBlocks } from './probe-guard.mjs';
+import { ownOriginBlocks, otherHostNotes } from './probe-guard.mjs';
 
 const NAME_PATTERN = /^[A-Za-z0-9][\w.-]*$/;
 const LOOK_KINDS = new Set(['scroll', 'hover']);
@@ -51,12 +51,14 @@ function stopResult(run) {
   if (!run.problem) return null;
   // Both real-time runs came first: a step only the stepped run cannot do is evidence against stepping.
   return run.stepped
-    ? { verdict: 'not-steppable', why: [`the stepped run failed where real time did not: ${run.problem}`] }
+    ? { verdict: 'difference found', why: [`the stepped run failed where real time did not: ${run.problem}`] }
     : { verdict: 'inconclusive', why: [`${run.label} run: ${run.problem}`] };
 }
 
+const withNotes = (result, traffic) => ({ ...result, why: [...result.why, ...otherHostNotes(traffic)] });
+
 function stopped(entry, runs, result) {
-  return verdictRecord(entry, result, { status: runs.at(-1).status, steps: [], film: null, traffic: runs.map((r) => r.traffic), finalUrls: runs.map((r) => r.finalUrl ?? null) });
+  return verdictRecord(entry, withNotes(result, runs.map((r) => r.traffic).filter(Boolean)), { status: runs.at(-1).status, steps: [], film: null, traffic: runs.map((r) => r.traffic), finalUrls: runs.map((r) => r.finalUrl ?? null) });
 }
 
 /** Probe one site: four runs, then the verdict and the numbers. Pictures go to `<outDir>/<name>/`. */
@@ -120,7 +122,7 @@ async function compareRuns(browser, entry, outDir, runs) {
     for (let i = 0; i < stepped.steps.length; i += 1) steps.push(await compareStep(util, dir, i, stepped.steps[i], reals.map((r) => r.steps[i])));
     const fresh = newErrors(stepped.errors, reals.map((r) => r.errors));
     const result = verdict({ steps, newErrors: fresh, capped: cappedSteps(runs, steps), finalUrlsEqual: sameAddress(runs.map((r) => r.finalUrl)) });
-    return verdictRecord(entry, result, {
+    return verdictRecord(entry, withNotes(result, runs.map((r) => r.traffic)), {
       status: stepped.status,
       steps,
       film: filmNumbers(stepped),
