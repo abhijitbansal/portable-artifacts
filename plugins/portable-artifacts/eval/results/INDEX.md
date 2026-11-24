@@ -61,6 +61,7 @@ the host CLI versions are only recorded where the summary says so. Three things 
 Label any of those figures "not reproducible" when quoting them.
 
 ## Adding a row
+| [`summary-motion-token-budget-2026-11-24.md`](summary-motion-token-budget-2026-11-24.md) | 2.4.0 (working copy) | motion; claude (Sonnet, `claude-stream`) | 10 prompts, 3 arms (paired test of shorter make-motion versions) | Verdict none: the shorter versions were 2% and 13% cheaper, and both were rated worse than today's skill on 6 of 10. |
 
 After a run, copy its `summary.md` to `summary-<name>-<date>.md`, add the plugin version, the host CLI version and the exact
 command line at the top, and add a row here. A new release makes every row above it historical until its prompts are rerun.
