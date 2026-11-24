@@ -76,7 +76,9 @@ test('a packet names no arm: no A, D or C folder, no .json, no board, no arm in 
   for (const rel of files) assert.ok(rel.endsWith('.png') || path.basename(rel) === 'brief.txt', `only sheets and the brief: ${rel}`);
   for (const rel of files.filter((f) => f.endsWith('.png'))) assert.doesNotMatch(fs.readFileSync(path.join(blind, rel), 'latin1'), /\b(arm|[ADC]\b)/, `no arm named inside ${rel}`);
   assert.equal(fs.existsSync(path.join(blind, 'key.json')), false);
-  assert.ok(fs.existsSync(path.join(out, 'key.json')), 'the key sits beside blind/, not inside it');
+  assert.ok(fs.existsSync(path.join(out, 'private', 'key.json')), 'the key is in <out>/private, apart from blind/');
+  assert.equal(fs.existsSync(path.join(out, 'key.json')), false, 'and not beside it');
+  assert.deepEqual(fs.readdirSync(blind).sort(), ['film-1', 'film-2'], 'blind/ holds only the packets of the prompts');
   void key;
 });
 
@@ -84,7 +86,7 @@ test('the brief of a prompt is its text, and the key maps each name to an arm', 
   const { blind, out, key } = packets();
   assert.equal(fs.readFileSync(path.join(blind, 'film-1', 'brief.txt'), 'utf8'), 'Make a launch film.');
   assert.equal(fs.readFileSync(path.join(blind, 'film-2', 'brief.txt'), 'utf8'), 'Make a recap film.');
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'key.json'), 'utf8')), key);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'private', 'key.json'), 'utf8')), key);
   assert.deepEqual(Object.values(key['film-1']).sort(), ['A', 'C', 'D']);
   assert.deepEqual(fs.readdirSync(path.join(blind, 'film-1')).sort(), [...Object.keys(key['film-1']), 'brief.txt'].sort());
 });
@@ -128,7 +130,7 @@ test('a live case with no PNG sheets stops the packets with an error naming it',
 test('packets are made once: a second run over the same out folder is refused, the key stays', () => {
   const { out, key } = packets();
   assert.throws(() => writePackets({ out, cases: specsFor(['film-1']).map((s) => good(s.prompt, s.arm)), prompts: PROMPTS, sheetsDir: 'film.sheets' }), /key\.json already exists/);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'key.json'), 'utf8')), key);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'private', 'key.json'), 'utf8')), key);
 });
 
 test('a case whose prompt is not in the set is an error', () => {

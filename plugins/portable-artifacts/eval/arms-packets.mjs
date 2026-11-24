@@ -1,6 +1,6 @@
 // The blind half of the arms test: what a reader is shown, the key kept apart, and the readers' reply files. A packet holds
 // the repository-made PNG sheets of a film under a random name and nothing else (no arm letter, no spec, no board, no JSON);
-// the name -> arm key goes to <out>/key.json, beside blind/ and never inside it.
+// the name -> arm key goes to <out>/private/key.json, apart from blind/ (the only folder a reader is given).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,12 +53,13 @@ function writePacket(blindDir, name, sheetsFrom, files) {
 }
 
 /**
- * Write <out>/blind/<prompt>/<name>/*.png, <out>/blind/<prompt>/brief.txt and <out>/key.json ({ prompt: { name: arm } }) from the
- * finished cases. A failed case has no packet; a prompt whose A failed has none at all, and one with fewer than two live films has
- * nothing to rank. Made once: an existing key.json is refused, because the ratings are tied to its names. -> the key.
+ * Write <out>/blind/<prompt>/<name>/*.png and <out>/blind/<prompt>/brief.txt, and the key ({ prompt: { name: arm } }) to
+ * <out>/private/key.json, from the finished cases. Everything a reader may be given is under blind/; the key is kept in private/.
+ * A failed case has no packet; a prompt whose A failed has none at all, and one with fewer than two live films has nothing to
+ * rank. Made once: an existing key.json is refused, because the ratings are tied to its names. -> the key.
  */
 export function writePackets({ out, cases, prompts, sheetsDir, randomInt = crypto.randomInt }) {
-  const keyFile = path.join(out, 'key.json');
+  const keyFile = path.join(out, 'private', 'key.json');
   if (fs.existsSync(keyFile)) throw new Error(`${keyFile} already exists: packets are made once, because the ratings are tied to its names`);
   const plan = planPackets({ out, cases, prompts, sheetsDir }); // everything is checked before the first file is written
   const used = new Set();
@@ -74,6 +75,7 @@ export function writePackets({ out, cases, prompts, sheetsDir, randomInt = crypt
       writePacket(blindDir, names[i], film.dir, film.files);
     });
   }
+  fs.mkdirSync(path.dirname(keyFile), { recursive: true });
   fs.writeFileSync(keyFile, `${JSON.stringify(key, null, 2)}\n`);
   return key;
 }

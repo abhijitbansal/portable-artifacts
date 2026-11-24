@@ -97,6 +97,54 @@ test('run reports exit code, output and timeout', async () => {
   assert.equal(missing.code, 127);
 });
 
+const until = async (ready, what) => {
+  for (let i = 0; i < 100; i += 1) {
+    if (ready()) return;
+    await new Promise((res) => setTimeout(res, 50));
+  }
+  assert.fail(`never happened: ${what}`);
+};
+
+test('run with `incremental` writes the log as the host prints, a plain run only at the end', async () => {
+  const d = tmp();
+  const script = 'process.stdout.write("first\\n"); setTimeout(() => process.stdout.write("second\\n"), 600);';
+  const inc = path.join(d, 'inc.txt');
+  const plain = path.join(d, 'plain.txt');
+  const running = run(['node', '-e', script], { logFile: inc, incremental: true });
+  const waiting = run(['node', '-e', script], { logFile: plain });
+  await until(() => fs.existsSync(inc) && fs.readFileSync(inc, 'utf8').includes('first'), 'the first line in the log while the host runs');
+  assert.equal(fs.existsSync(plain), false, 'a plain run writes its log in one piece at the end');
+  const [a, b] = await Promise.all([running, waiting]);
+  assert.equal(fs.readFileSync(inc, 'utf8'), 'first\nsecond\n');
+  assert.equal(fs.readFileSync(plain, 'utf8'), 'first\nsecond\n');
+  assert.equal(a.out, b.out);
+});
+
+test('run with an abort signal kills the whole process group, keeps what was logged and says interrupted', async () => {
+  const d = tmp();
+  const pidFile = path.join(d, 'gc.pid');
+  const log = path.join(d, 'log.txt');
+  const script = `const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},60000)'],{stdio:'ignore'});require('fs').writeFileSync(${JSON.stringify(pidFile)},String(c.pid));process.stdout.write('started\\n');setTimeout(()=>{},60000);`;
+  const ac = new AbortController();
+  const running = run(['node', '-e', script], { logFile: log, incremental: true, signal: ac.signal });
+  await until(() => fs.existsSync(pidFile) && fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('started'), 'the host started');
+  ac.abort();
+  const r = await running;
+  assert.equal(r.interrupted, true);
+  assert.equal(r.timedOut, false);
+  assert.match(fs.readFileSync(log, 'utf8'), /started/);
+  await new Promise((res) => setTimeout(res, 300));
+  assert.throws(() => process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 0), /ESRCH/);
+});
+
+test('run with a signal that is already aborted starts nothing that lives on; without one nothing is interrupted', async () => {
+  const ac = new AbortController();
+  ac.abort();
+  const r = await run(['node', '-e', 'setTimeout(()=>{},60000)'], { signal: ac.signal });
+  assert.equal(r.interrupted, true);
+  assert.equal((await run(['node', '-e', '1'])).interrupted, false);
+});
+
 test('run drops NODE_USE_SYSTEM_CA from the child environment', async () => {
   const prev = process.env.NODE_USE_SYSTEM_CA;
   process.env.NODE_USE_SYSTEM_CA = '1';

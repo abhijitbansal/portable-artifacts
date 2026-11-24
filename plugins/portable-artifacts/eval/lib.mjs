@@ -237,7 +237,10 @@ export function readSpecModel(specPath) {
 // run as the account default (claude-director, decision 14) does not inherit them.
 export const MODEL_ENV_VARS = ['CLAUDE_CODE_SUBAGENT_MODEL', 'ANTHROPIC_MODEL'];
 
-export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf, dropEnv = [] } = {}) {
+// `incremental: true` with a `logFile` writes the log as the host prints (a driver that is killed keeps the transcript), not
+// only when the host exits. `signal` (an AbortSignal) kills the host's whole process group when it aborts, and the result
+// says `interrupted: true`. Without these two options a run behaves as it always did.
+export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf, dropEnv = [], incremental = false, signal } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     // detached = own process group, so a timeout also kills grandchildren
@@ -249,8 +252,14 @@ export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf, dropEnv =
     const child = spawn(argv[0], argv.slice(1), {
       cwd, env: { ...baseEnv, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
     });
+    const logFd = logFile && incremental ? fs.openSync(logFile, 'w') : null;
     let out = '';
-    const onData = (d) => { out += d; };
+    const onData = (d) => {
+      out += d;
+      if (logFd !== null) fs.writeSync(logFd, d);
+    };
+    child.stdout.setEncoding('utf8'); // a multi-byte character split between two chunks stays whole
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', onData);
     child.stderr.on('data', onData);
     let timedOut = false;
@@ -258,13 +267,18 @@ export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf, dropEnv =
       try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
     };
     let aborted = false;
+    let interrupted = false;
+    const onAbortSignal = () => { interrupted = true; killGroup(); };
+    if (signal?.aborted) onAbortSignal();
+    else signal?.addEventListener('abort', onAbortSignal, { once: true });
     const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; killGroup(); }, timeoutMs) : null;
     const abortTimer = abortIf ? setTimeout(() => { if (!abortIf.done()) { aborted = true; killGroup(); } }, abortIf.afterMs) : null;
     const finish = (code) => {
       if (timer) clearTimeout(timer);
       if (abortTimer) clearTimeout(abortTimer);
-      if (logFile) fs.writeFileSync(logFile, out);
-      resolve({ code, out, timedOut, aborted, seconds: (Date.now() - started) / 1000 });
+      signal?.removeEventListener('abort', onAbortSignal);
+      if (logFd !== null) { fs.fsyncSync(logFd); fs.closeSync(logFd); } else if (logFile) fs.writeFileSync(logFile, out);
+      resolve({ code, out, timedOut, aborted, interrupted, seconds: (Date.now() - started) / 1000 });
     };
     child.on('error', (e) => { out += `\n[spawn error] ${e.message}`; finish(127); });
     child.on('close', (code) => {

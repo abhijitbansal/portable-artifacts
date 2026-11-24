@@ -31,7 +31,7 @@ export function firstBuildValid(steps) {
 const unreadable = (reason) => ({
   readable: false, reason, directorModel: null, agentsListed: [], operatorModel: null, delegated: false, agent: null,
   requestedModel: null, delegations: [], settingSources: null, plugins: [], hooks: [], hooksFired: [], steps: [],
-  firstBuildValid: null, costUsd: null, capped: false,
+  firstBuildValid: null, costUsd: null, capped: false, result: null,
   usage: { costUsd: null, calls: null, toolUses: null, pictures: null, renders: null, drafts: null, input: null, output: null },
 });
 
@@ -186,6 +186,8 @@ export function parseSession(text, { specName } = {}) {
     firstBuildValid: firstBuildValid(steps),
     costUsd: typeof final?.total_cost_usd === 'number' ? final.total_cost_usd : null,
     capped: final?.subtype === 'error_max_budget_usd',
+    // The final event as the driver judges a host fault: did the session end in an error, and of what kind. Null: no result event.
+    result: final ? { isError: final.is_error === true, subtype: typeof final.subtype === 'string' ? final.subtype : null } : null,
     usage: usageOf(events, calls, final),
   };
 }

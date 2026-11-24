@@ -118,18 +118,39 @@ of which model ran. (The harness rebuilds each page from the spec without
 effort high, with `--model` and `--budget`; its stream is read for cost, calls, pictures, renders, drafts and tokens, so its
 console line has no "delegated" fragment. `run-arms.mjs` runs one prompt set through several copies of a skill ("arms", each
 an `--arm name=<skill folder>`), one session at a time, under one spend ceiling: `--budget` caps a case, `--max-total` caps the
-run, and a case starts only if the spend so far plus `--budget` fits (a case whose stream has no cost event is charged the whole
-budget). Each finished case is appended to `<out>/cases.jsonl` and its files kept in `<out>/cases/<prompt>/<arm>/` (the run's prompts and
-arms go to `<out>/plan.json`, so a verdict counts a prompt that never started as missing); `--resume`
-skips the finished ones and counts their spend; `--dry-run` starts nothing; the exit code is 0 when every case ran (whatever its
-result), 2 for a usage error and 3 when the ceiling stopped the run. The driver scores with the repository's own skill folder, not
-the arm's copy. `--packets` writes blind sheet packets and `key.json` from the finished cases, and `--verdict` applies the pass rule
-(spec 5.4) to the cases and the readers' replies (`<prompt>.<reader>.json`, one per reader per prompt, holding the reply text with its
-`{ "ranks": { "<name>": 1 } }`) and writes `verdict.md`. BILLED: one session per case, up to `--budget` each.
+run, and a case starts only if the spend so far, what is in flight and `--budget` plus a 10% reserve fit (`--max-budget-usd` stops a
+session after the call that crosses it, so a case can cost more than its budget; a case whose stream has no cost event is charged the
+whole budget). `--model` is required for a host that takes one. Each finished case is appended to `<out>/cases.jsonl` and its files kept
+in `<out>/cases/<prompt>/<arm>/`; `--dry-run` starts nothing.
+
+Crash safety. Before a host starts, `{ prompt, arm, started: true, chargeUsd: <budget> }` goes to `<out>/inflight.jsonl`, and the moment
+the host exits (before scoring) its cost goes there too; a scoring that throws is recorded as `scoringError`, not lost. `--resume` charges
+a case that started and never finished its transcript cost (the whole budget when it has none), records it as a failed case with
+`interrupted`, and does not run it again; `--retry <prompt>:<arm>` (repeatable) runs it again, as it does a host fault or a scoring
+failure (a finished result, even a failed one, is refused: running it again would re-roll the experiment), its charge added to
+the old one, and its folder is moved aside as `<arm>.old-<n>`, never deleted. A workdir that cannot be removed is named in
+`workdirLeft`; it never loses the case. SIGINT and SIGTERM kill the host's process group, keep the
+transcript (written as the host prints), record the case `interrupted` and exit 130. `<out>/driver.lock` holds the pid and refuses a second
+live driver (a lock whose pid is dead is taken over). A host fault (an `is_error` result that is not the budget cap, an unreadable stream,
+or a non-zero exit with no result and no timeout) is recorded `hostFault`, charged its reported cost, and stops the driver with exit 4,
+since a usage or sign-in limit would fail every later case; `--retry` runs it again. A budget cap and a timeout are case failures.
+
+`<out>/plan.json` records the model, budget, timeout, host, ceiling, each arm's folder with a hash of its SKILL.md and scripts, and the
+prompts with their hashes, so a verdict counts a prompt that never started as missing. `--resume` refuses when any of them differ (naming
+which), and a larger `--max-total` needs `--raise-ceiling`; `--limit` may grow on a resume, never shrink. The exit code is 0 when every case
+ran (whatever its result), 2 for a usage error, 3 when the ceiling stopped the run, 4 for a host fault and 130 for a signal. The driver
+scores with the repository's own skill folder, not the arm's copy; a case's `mp4` is true only for a non-empty `out/film.mp4` written after
+the session began (a film under another name is `mp4: false` with `otherMp4`). `--packets` writes the blind sheet packets under
+`<out>/blind/` and the key to `<out>/private/key.json`: give the raters only `blind/<prompt>` paths, never `<out>`, whose `cases/` names
+every arm. `--verdict` applies the pass rule (spec 5.4) to the cases and the readers' replies (`<prompt>.<reader>.json`, one per reader
+per prompt, holding the reply text with its `{ "ranks": { "<name>": 1 } }`) and writes `verdict.md`: the cost ratio comes from
+`usage.costUsd` (a prompt with none on either side is unmeasured and blocks the verdict), "worse than A" needs 2 of 3 readers (two readers
+decide only when they agree), the limit of 2 prompts rated worse is a count whatever the number of usable prompts, and the prompts' missing
+`expect` features are listed beside it, never part of the rule. BILLED: one session per case, up to `--budget` each.
 
 ```bash
 node run-arms.mjs --skill motion --set budget --host claude-stream --model sonnet --arm A=<folder> --arm D=<folder> --arm C=<folder> \
-  --budget 1.00 --max-total 20 --timeout 1800 --out <dir> [--resume] [--limit n] [--dry-run]
+  --budget 1.00 --max-total 20 --timeout 1800 --out <dir> [--resume [--retry <prompt>:<arm>] [--raise-ceiling]] [--limit n] [--dry-run]
 node run-arms.mjs --packets --skill motion --set budget --out <dir>
 node run-arms.mjs --verdict --out <dir> --ratings <dir>
 ```

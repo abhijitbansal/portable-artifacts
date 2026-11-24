@@ -3,25 +3,10 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { main } from '../run-arms.mjs';
-import { readLedger } from '../arms-lib.mjs';
-import { cleanup, fakeArms, fakeClaude, fakePrompts, fakeRepo, skillFolder, sink, tmp, withClaude } from './helpers/arms-fixtures.mjs';
+import { cleanup, fakeArms, fakeClaude, fakePrompts, fakeRepo, skillFolder, tmp } from './helpers/arms-fixtures.mjs';
+import { drive, tool } from './helpers/arms-drive.mjs';
 
 after(cleanup);
-
-const evalDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-// One driver run: -> { code, stdout, stderr, out, calls }. `args` replace the defaults key by key (an undefined value drops one).
-async function drive({ claude = fakeClaude(), repo = fakeRepo(), arms = fakeArms(), armArgs, args = {}, out = tmp('pa-arms-out-'), prompts = fakePrompts(), pre } = {}) {
-  const flags = { '--skill': 'motion', '--set': 'budget', '--host': 'claude-stream', '--model': 'sonnet', '--budget': '1', '--max-total': '20', '--timeout': '60', '--out': out, ...args };
-  const argv = [...Object.entries(flags).flatMap(([k, v]) => (v === undefined ? [] : v === true ? [k] : [k, String(v)])), ...(armArgs ?? Object.entries(arms).flatMap(([n, d]) => ['--arm', `${n}=${d}`]))];
-  if (pre) pre(out);
-  const stdout = sink();
-  const stderr = sink();
-  const code = await withClaude(claude.bin, () => main(argv, { evalDir, skillsRoot: repo, promptsDir: prompts, stdout, stderr }));
-  return { code, stdout: stdout.text, stderr: stderr.text, out, calls: claude.calls(), ledger: () => readLedger(fs.readFileSync(path.join(out, 'cases.jsonl'), 'utf8')) };
-}
 
 test('(a) four cases run in the rotating order and cases.jsonl has four lines, each with its record', async () => {
   const r = await drive();
@@ -31,7 +16,10 @@ test('(a) four cases run in the rotating order and cases.jsonl has four lines, e
   assert.equal(r.calls.length, 4);
   assert.ok(Math.abs(spentUsd - 3.6) < 1e-9);
   const c = cases[0];
-  assert.deepEqual(Object.keys(c).sort(), ['arm', 'capped', 'chargeUsd', 'checkOk', 'errors', 'exit', 'film', 'finalValid', 'mp4', 'outputOk', 'prompt', 'seconds', 'specExists', 'timedOut', 'usage'].sort());
+  assert.deepEqual(Object.keys(c).sort(), [
+    'arm', 'capped', 'chargeUsd', 'checkOk', 'errors', 'exit', 'featureOk', 'film', 'finalValid', 'hostFault', 'interrupted', 'missingFeatures', 'mp4',
+    'otherMp4', 'outputOk', 'prompt', 'scoringError', 'seconds', 'specExists', 'timedOut', 'usage',
+  ].sort());
   assert.equal(c.mp4, true);
   assert.equal(c.specExists, true);
   assert.equal(c.finalValid, true);
@@ -115,7 +103,7 @@ test('(d) --dry-run prints the case count, the order and the worst-case spend, a
   assert.equal(r.calls.length, 0);
   assert.match(r.stdout, /4 cases/);
   assert.match(r.stdout, /p1 A, p1 D, p2 D, p2 A/);
-  assert.match(r.stdout, /4\.00 USD worst case/);
+  assert.match(r.stdout, /4\.40 USD worst case/, '4 cases x (1.00 budget + 10% reserve)');
   assert.match(r.stdout, /dry run: nothing was started/);
   assert.equal(fs.existsSync(path.join(r.out, 'cases.jsonl')), false);
 });
@@ -200,7 +188,7 @@ test('the run writes plan.json, the prompts and arms it set out to run, which --
   const r = await drive({ args: { '--max-total': 2 } });
   assert.equal(r.code, 3);
   const plan = JSON.parse(fs.readFileSync(path.join(r.out, 'plan.json'), 'utf8'));
-  assert.deepEqual(plan, { skill: 'motion', set: 'budget', arms: ['A', 'D'], prompts: ['p1', 'p2'] });
+  assert.deepEqual({ skill: plan.skill, set: plan.set, arms: plan.arms, prompts: plan.prompts }, { skill: 'motion', set: 'budget', arms: ['A', 'D'], prompts: ['p1', 'p2'] });
 });
 
 // --- --packets and --verdict: no host, no budget ---
@@ -211,18 +199,13 @@ async function finished() {
   return r.out;
 }
 
-const tool = async (argv, { prompts = fakePrompts() } = {}) => {
-  const stdout = sink();
-  const stderr = sink();
-  const code = await main(argv, { evalDir, skillsRoot: fakeRepo(), promptsDir: prompts, stdout, stderr });
-  return { code, stdout: stdout.text, stderr: stderr.text };
-};
-
 test('--packets writes blind/<prompt>/<name>/*.png, a brief and key.json from the finished cases; no host, no budget', async () => {
   const out = await finished();
   const r = await tool(['--packets', '--out', out, '--skill', 'motion', '--set', 'budget']);
   assert.equal(r.code, 0, r.stderr);
-  const key = JSON.parse(fs.readFileSync(path.join(out, 'key.json'), 'utf8'));
+  const key = JSON.parse(fs.readFileSync(path.join(out, 'private', 'key.json'), 'utf8'));
+  assert.equal(fs.existsSync(path.join(out, 'key.json')), false, 'the key is not left beside blind/ and cases/');
+  assert.match(r.stdout, /Give each rater only the paths .*blind.*<prompt>.*never .* itself/);
   assert.deepEqual(Object.keys(key).sort(), ['p1', 'p2']);
   assert.deepEqual(Object.values(key.p1).sort(), ['A', 'D']);
   assert.equal(fs.readFileSync(path.join(out, 'blind', 'p1', 'brief.txt'), 'utf8'), 'Make film p1.');
@@ -234,7 +217,7 @@ test('--packets writes blind/<prompt>/<name>/*.png, a brief and key.json from th
 test('--verdict reads the ratings folder, prints the verdict and writes verdict.md (two prompts are far too few: inconclusive)', async () => {
   const out = await finished();
   assert.equal((await tool(['--packets', '--out', out, '--skill', 'motion', '--set', 'budget'])).code, 0);
-  const key = JSON.parse(fs.readFileSync(path.join(out, 'key.json'), 'utf8'));
+  const key = JSON.parse(fs.readFileSync(path.join(out, 'private', 'key.json'), 'utf8'));
   const ratings = tmp('pa-ratings-');
   for (const p of Object.keys(key)) {
     const reply = `{"ranks":${JSON.stringify(Object.fromEntries(Object.keys(key[p]).map((n) => [n, 1])))}}`;
@@ -276,7 +259,7 @@ test('--packets and --verdict usage errors exit 2 and touch nothing', async () =
     assert.equal(r.code, 2, argv.join(' '));
     assert.match(r.stderr, pattern, argv.join(' '));
   }
-  assert.equal(fs.existsSync(path.join(out, 'key.json')), false);
+  assert.equal(fs.existsSync(path.join(out, 'private')), false);
   assert.equal(fs.existsSync(path.join(out, 'blind')), false);
 });
 

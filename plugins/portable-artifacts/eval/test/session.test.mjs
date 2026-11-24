@@ -81,6 +81,17 @@ test('a stream that is not JSON lines returns a record that says unreadable', ()
   }
 });
 
+test('the result event is kept as { isError, subtype }, null when the stream has none', () => {
+  const read = (events) => parseSession(F.lines(events), { specName: SPEC_NAME });
+  assert.deepEqual(read([F.init(), F.result()]).result, { isError: false, subtype: 'success' });
+  assert.deepEqual(read([F.init(), F.result({ subtype: 'error_during_execution' })]).result, { isError: true, subtype: 'error_during_execution' });
+  const capped = read([F.init(), F.result({ subtype: 'error_max_budget_usd' })]);
+  assert.deepEqual(capped.result, { isError: true, subtype: 'error_max_budget_usd' });
+  assert.equal(capped.capped, true);
+  assert.equal(read([F.init()]).result, null);
+  assert.equal(parseSession('not a stream').result, null);
+});
+
 test('readSession reads a file, and a missing file is unreadable with the reason', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-session-test-'));
   made.push(d);

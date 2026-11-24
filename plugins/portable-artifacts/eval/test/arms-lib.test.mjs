@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SKILLS } from '../lib.mjs';
 import {
-  caseOrder, chargeOf, failReason, filmCounts, isFailed, mayStart, median, parseRatings, readLedger, renderVerdict, verdict, worseThanA,
+  caseOrder, chargeOf, failReason, filmCounts, isFailed, median, parseRatings, readLedger, renderVerdict, verdict, worseThanA,
 } from '../arms-lib.mjs';
+import { COST, FILM, IDS, decide, world } from './helpers/arms-world.mjs';
 
 // --- Task 3 ---
 
@@ -24,11 +25,6 @@ test('an unreadable stream is charged the whole budget; a read cost is charged a
   assert.equal(chargeOf({ readable: false, usage: { costUsd: null } }, 1), 1);
   assert.equal(chargeOf({ readable: true, usage: { costUsd: 0.37 } }, 1), 0.37);
   assert.equal(chargeOf({ readable: true, usage: { costUsd: 1.04 } }, 1), 1.04, 'a cost above the cap is real spend');
-});
-
-test('a case starts only if the budget still fits', () => {
-  assert.equal(mayStart(19, 1, 20), true);
-  assert.equal(mayStart(19.01, 1, 20), false);
 });
 
 const rec = (prompt, arm, chargeUsd) => JSON.stringify({ prompt, arm, chargeUsd });
@@ -157,26 +153,11 @@ test('worseThanA: better than A is not worse; fewer than two readers parsed is n
   assert.equal(worseThanA([R(2, 1, 3), R(2, 1, 3), R(2, 1, 3)], 'd', 'a'), false);
   assert.equal(worseThanA([R(1, 2, 3), null, null], 'd', 'a'), null);
   assert.equal(worseThanA([], 'd', 'a'), null);
-  assert.equal(worseThanA([R(1, 2, 3), R(1, 2, 3), null], 'd', 'a'), true, 'two parsed readers are enough');
-  assert.equal(worseThanA([R(1, 2, 3), R(1, 1, 3), null], 'd', 'a'), false);
+  assert.equal(worseThanA([R(1, 2, 3), R(1, 2, 3), null], 'd', 'a'), true, 'two readers who agree it is worse are enough');
+  assert.equal(worseThanA([R(1, 1, 3), R(1, 1, 3), null], 'd', 'a'), false, 'two readers who agree it is not worse are enough');
 });
 
-// A world: ten prompts (five new briefs, `film-*`, five older), arms A D C, every arm ok. `tweak(prompt, arm, case)` edits a case.
-const IDS = ['film-1', 'film-2', 'film-3', 'film-4', 'film-5', 'old-1', 'old-2', 'old-3', 'old-4', 'old-5'];
-const COST = { A: 1, D: 0.7, C: 0.6 };
-const FILM = { designedCuts: 3, devices: 4 };
-
-function world({ ids = IDS, tweak = () => ({}), worse = () => false } = {}) {
-  const cases = ids.flatMap((prompt) => ['A', 'D', 'C'].map((arm) => ({
-    prompt, arm, timedOut: false, capped: false, specExists: true, mp4: true, checkOk: true, chargeUsd: COST[arm], film: { ...FILM }, ...tweak(prompt, arm),
-  })));
-  const key = Object.fromEntries(ids.map((p) => [p, { na: 'A', nd: 'D', nc: 'C' }]));
-  // three readers; `worse(prompt, arm)` puts that arm below A for every reader
-  const reading = (p) => ({ ranks: { na: 1, nd: worse(p, 'D') ? 2 : 1, nc: worse(p, 'C') ? 2 : 1 } });
-  const ratings = Object.fromEntries(ids.map((p) => [p, [reading(p), reading(p), reading(p)]]));
-  return { cases, ratings, key };
-}
-const decide = (w) => verdict(w.cases, w.ratings, w.key);
+// The world (ten prompts, five of them new briefs, arms A D C, every case ok) is in helpers/arms-world.mjs.
 
 test('verdict: everything passes and C is at least 0.05 below D: C', () => {
   const v = decide(world());

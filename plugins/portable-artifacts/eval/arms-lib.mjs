@@ -5,6 +5,13 @@
 // A float sum such as 19 + 1 compared with 20 must not drop a case that exactly fits.
 const EPSILON = 1e-9;
 
+/** A case record with nothing found: what a case that was never scored (interrupted, host fault) starts from. */
+export const blankCase = (prompt, arm) => ({
+  prompt, arm, seconds: 0, timedOut: false, exit: null, specExists: false, finalValid: false, outputOk: false, checkOk: null,
+  mp4: false, otherMp4: [], capped: false, chargeUsd: 0, usage: null, errors: [], film: { designedCuts: 0, devices: 0 },
+  featureOk: null, missingFeatures: [], hostFault: null, interrupted: false, scoringError: null,
+});
+
 /** Every (prompt, arm) pair, prompt by prompt; the arm order rotates by one each prompt (A D C, D C A, C A D, ...). */
 export function caseOrder(promptIds, arms) {
   return promptIds.flatMap((prompt, i) => arms.map((_, j) => ({ prompt, arm: arms[(i + j) % arms.length] })));
@@ -41,8 +48,29 @@ export function chargeOf(session, budget) {
   return Number.isFinite(cost) ? cost : budget;
 }
 
-/** A case may start only if the spend so far plus its whole budget still fits under the ceiling. */
-export const mayStart = (spentUsd, budget, maxTotal) => spentUsd + budget <= maxTotal + EPSILON;
+// `--max-budget-usd` stops a session after the call that crosses it, so a case can cost more than its budget. Each case is
+// reserved this much above it before it may start.
+export const OVERSHOOT_RESERVE = 0.1;
+
+/** What one case is reserved against the ceiling: its budget plus the overshoot reserve. */
+export const reserveOf = (budget) => budget * (1 + OVERSHOOT_RESERVE);
+
+/** A case may start only if the spend so far, what is in flight and the case's reserve still fit under the ceiling. */
+export const mayStart = (spentUsd, budget, maxTotal, inflightUsd = 0) => spentUsd + inflightUsd + reserveOf(budget) <= maxTotal + EPSILON;
+
+/**
+ * Why the host, not the skill, failed a session, or null. A host fault is an `is_error` result that is not the budget cap, a
+ * stream that cannot be read, or a non-zero exit with no result event; a timeout and an interrupt are never one. Such a failure
+ * says nothing about the arm, and a usage or sign-in limit would repeat for every later case.
+ */
+export function hostFaultOf({ session, exit, timedOut = false, interrupted = false }) {
+  if (timedOut || interrupted) return null;
+  if (!session?.readable) return `unreadable stream (${session?.reason ?? 'no session'})`;
+  const result = session.result;
+  if (result?.isError && !session.capped) return `result is_error${result.subtype ? ` (${result.subtype})` : ''}`;
+  if (!result && exit !== 0) return `exit ${exit} with no result event`;
+  return null;
+}
 
 const isDesignedCut = (cut) => (typeof cut === 'string' ? cut !== 'cut' : typeof cut?.type === 'string' && cut.type !== 'cut');
 
@@ -69,10 +97,14 @@ export function median(values) {
 }
 
 /**
- * Why a case failed, for a reader to print, or null when it did not. A case fails when its budget was reached, it timed out,
- * it wrote no MP4 or the repository's check did not pass (a check that was skipped is not a pass). Computed on read, never stored.
+ * Why a case failed, for a reader to print, or null when it did not. A case fails when it was interrupted, the host faulted,
+ * scoring threw, its budget was reached, it timed out, it wrote no MP4 or the repository's check did not pass (a check that was
+ * skipped is not a pass). Computed on read, never stored.
  */
 export function failReason(c) {
+  if (c.interrupted) return 'interrupted';
+  if (c.hostFault) return 'host fault';
+  if (c.scoringError) return 'scoring failed';
   if (c.capped) return 'budget reached';
   if (c.timedOut) return 'timed out';
   if (!c.specExists) return 'no spec';
@@ -90,6 +122,7 @@ export const BASELINE = 'A';
 const MAX_REPLY_CHARS = 50000;
 const MAX_OBJECT_STARTS = 200; // a reply is untrusted: scanning every `{` of a long run of them would be quadratic
 const MIN_READERS = 2;
+const FULL_PANEL = 3; // below this many covering readers, only a unanimous pair decides
 
 // The index of the `}` that closes the object opened at `start`, or -1. A brace inside a string does not count.
 function objectEnd(text, start) {
@@ -147,26 +180,31 @@ export function parseRatings(text, names) {
 }
 
 /**
- * Did the readers rank `name` strictly below A (a larger rank than A's)? true when at least two readers did; null when fewer
- * than two readings cover both films. A tie with A is not worse. `rankings` are parseRatings results (null entries are skipped).
+ * Did the readers rank `name` strictly below A (a larger rank than A's)? With three readers or more, true when at least two
+ * did. With two readers covering both films it is decided only when they agree (2 of 2 worse, or 2 of 2 not worse); a 1-1 split
+ * is null, because the missing third reader could have made it 2 of 3. Fewer than two readers is null. A tie with A is not
+ * worse. `rankings` are parseRatings results (null entries are skipped).
  */
 export function worseThanA(rankings, name, aName) {
   const covering = (rankings ?? []).filter((r) => Number.isInteger(r?.ranks?.[name]) && Number.isInteger(r?.ranks?.[aName]));
   if (covering.length < MIN_READERS) return null;
-  return covering.filter((r) => r.ranks[name] > r.ranks[aName]).length >= MIN_READERS;
+  const worse = covering.filter((r) => r.ranks[name] > r.ranks[aName]).length;
+  if (covering.length >= FULL_PANEL) return worse >= MIN_READERS;
+  return worse === 0 || worse === covering.length ? worse === covering.length : null;
 }
 
 // --- The pass rule (spec 5.4), written before the run -----------------------------------------------------------------
 
 const CHALLENGERS = ['D', 'C'];
 const MIN_USABLE_PROMPTS = 8;
+const TARGET_PROMPTS = 10;
 const MAX_COST_RATIO = 0.8;
 const MAX_WORSE_PROMPTS = 2;
 const MIN_GAP_TO_D = 0.05;
 const NEW_BRIEF = /^film-/;
 
 const nameOf = (names, arm) => Object.keys(names ?? {}).find((n) => names[n] === arm);
-const ratio4 = (x) => (Number.isFinite(x) ? String(Number(x.toFixed(4))) : 'unmeasurable (a failed case)');
+const ratio4 = (x) => (Number.isFinite(x) ? String(Number(x.toFixed(4))) : x === null ? 'unmeasured' : 'unmeasurable (a failed case)');
 
 function ratedWorse(readings, names, arm) {
   const mine = nameOf(names, arm);
@@ -174,17 +212,31 @@ function ratedWorse(readings, names, arm) {
   return mine && base ? worseThanA(readings, mine, base) : null;
 }
 
+// The cost ratio from the costs the streams reported (`usage.costUsd`), never from the charge, which is the whole budget when a
+// stream has no cost event. Null when either side has none (or A's is 0): unmeasured.
+function costRatio(c, a) {
+  const cost = c.usage?.costUsd;
+  const base = a.usage?.costUsd;
+  return Number.isFinite(cost) && Number.isFinite(base) && base > 0 ? cost / base : null;
+}
+
 // One challenger's case against A's on one prompt. A failed case is rated worse, with a cost ratio above any limit.
 function challengerRow(c, a, readings, names, arm) {
   const reason = failReason(c);
   return {
     costUsd: c.chargeUsd,
-    ratio: reason || !(a.chargeUsd > 0) ? Infinity : c.chargeUsd / a.chargeUsd,
+    ratio: reason ? Infinity : costRatio(c, a),
     failReason: reason,
     worse: reason ? true : ratedWorse(readings, names, arm),
     designedCuts: c.film?.designedCuts ?? 0,
     devices: c.film?.devices ?? 0,
   };
+}
+
+// The spec features each arm's film left out (the prompt's `expect` list), for the report only: never part of the rule.
+function missingFeaturesOf(byArm) {
+  const lists = [BASELINE, ...CHALLENGERS].map((arm) => [arm, byArm[arm]?.missingFeatures]);
+  return Object.fromEntries(lists.filter(([, list]) => Array.isArray(list) && list.length > 0));
 }
 
 // A prompt is usable when all three arms have a case and A's did not fail; a failed A drops the prompt.
@@ -194,7 +246,7 @@ function promptRow(prompt, byArm, readings, names) {
   const aFailReason = a ? failReason(a) : null;
   const usable = missing.length === 0 && aFailReason === null;
   return {
-    prompt, missing, usable, aFailReason, aCostUsd: a?.chargeUsd ?? null,
+    prompt, missing, usable, aFailReason, aCostUsd: a?.chargeUsd ?? null, missingFeatures: missingFeaturesOf(byArm),
     a: { designedCuts: a?.film?.designedCuts ?? 0, devices: a?.film?.devices ?? 0 },
     arms: usable ? Object.fromEntries(CHALLENGERS.map((arm) => [arm, challengerRow(byArm[arm], a, readings, names, arm)])) : {},
   };
@@ -206,19 +258,20 @@ function armSummary(arm, rows) {
   const mine = used.map((r) => r.arms[arm]);
   const briefs = used.filter((r) => NEW_BRIEF.test(r.prompt));
   const compare = (key) => (briefs.length ? { arm: median(briefs.map((r) => r.arms[arm][key])), a: median(briefs.map((r) => r.a[key])) } : null);
-  const ratioMedian = median(mine.map((m) => m.ratio));
+  const unmeasured = used.filter((r) => r.arms[arm].ratio === null).map((r) => r.prompt);
+  const ratioMedian = median(mine.map((m) => m.ratio).filter((x) => x !== null));
   const worseCount = mine.filter((m) => m.worse === true).length;
   const failedCount = mine.filter((m) => m.failReason).length;
   const cuts = compare('designedCuts');
   const devices = compare('devices');
   const checks = {
-    ratio: ratioMedian !== null && ratioMedian <= MAX_COST_RATIO + EPSILON,
+    ratio: ratioMedian !== null && unmeasured.length === 0 && ratioMedian <= MAX_COST_RATIO + EPSILON,
     worse: worseCount <= MAX_WORSE_PROMPTS,
     noFailed: failedCount === 0,
     film: cuts && devices ? cuts.arm >= cuts.a && devices.arm >= devices.a : null,
   };
   return {
-    ratioMedian, worseCount, failedCount, cuts, devices, checks,
+    ratioMedian, worseCount, failedCount, cuts, devices, checks, unmeasured,
     undecided: used.filter((r) => r.arms[arm].worse === null).map((r) => r.prompt),
     pass: checks.ratio && checks.worse && checks.noFailed && checks.film === true,
   };
@@ -226,7 +279,7 @@ function armSummary(arm, rows) {
 
 function armReasons(arm, s, rows) {
   const out = [];
-  if (!s.checks.ratio) out.push(`${arm}: median cost ratio ${ratio4(s.ratioMedian)} is above ${MAX_COST_RATIO.toFixed(2)}`);
+  if (!s.checks.ratio && s.unmeasured.length === 0) out.push(`${arm}: median cost ratio ${ratio4(s.ratioMedian)} is above ${MAX_COST_RATIO.toFixed(2)}`);
   if (!s.checks.worse) out.push(`${arm}: rated worse than A in ${s.worseCount} prompts, at most ${MAX_WORSE_PROMPTS} allowed`);
   for (const r of rows.filter((x) => x.usable && x.arms[arm].failReason)) out.push(`${arm}: ${r.prompt} failed (${r.arms[arm].failReason}) and A did not`);
   if (s.checks.film === false) {
@@ -240,7 +293,8 @@ function armReasons(arm, s, rows) {
 function blockers(rows, arms, usable) {
   const out = rows.flatMap((r) => r.missing.map((arm) => `${r.prompt} has no case for ${arm}`));
   if (usable < MIN_USABLE_PROMPTS) out.push(`only ${usable} usable prompts, at least ${MIN_USABLE_PROMPTS} are needed`);
-  for (const p of new Set(CHALLENGERS.flatMap((arm) => arms[arm].undecided))) out.push(`${p} has no usable rating (fewer than two readers gave a reply that names its films)`);
+  for (const p of new Set(CHALLENGERS.flatMap((arm) => arms[arm].unmeasured))) out.push(`${p} has no measured cost ratio (a stream with no cost event on A or on the arm, or a cost of 0 on A)`);
+  for (const p of new Set(CHALLENGERS.flatMap((arm) => arms[arm].undecided))) out.push(`${p} has no usable rating (fewer than two readers covered its films, or two split 1-1 with a third missing)`);
   if (arms.D.checks.film === null) out.push('no usable new brief (an id starting film-), so the designed cuts and devices cannot be compared');
   return out;
 }
@@ -281,12 +335,17 @@ function challengerCells(x) {
   return [money(x.costUsd), x.failReason ? `failed: ${x.failReason}` : ratio4(x.ratio), worseCell(x.worse)];
 }
 
+const featureCell = (missing) => Object.entries(missing).map(([arm, list]) => `${arm}: ${list.join(', ')}`).join('; ') || '-';
+
 function promptLine(r) {
   const note = r.missing.length ? `no case for ${r.missing.join(', ')}` : r.aFailReason ? `A failed: ${r.aFailReason}, prompt dropped` : '';
-  return `| ${r.prompt} | ${money(r.aCostUsd)} | ${[...challengerCells(r.arms.D), ...challengerCells(r.arms.C)].join(' | ')} | ${note} |`;
+  return `| ${r.prompt} | ${money(r.aCostUsd)} | ${[...challengerCells(r.arms.D), ...challengerCells(r.arms.C)].join(' | ')} | ${featureCell(r.missingFeatures)} | ${note} |`;
 }
 
 const armLine = (arm, s) => `| ${arm} | ${ratio4(s.ratioMedian)} | ${s.worseCount} | ${s.failedCount} | ${s.cuts ? `${s.cuts.arm} (A ${s.cuts.a})` : '-'} | ${s.devices ? `${s.devices.arm} (A ${s.devices.a})` : '-'} | ${s.pass ? 'passes' : 'fails'} |`;
+
+// The worst-than-A limit is a count, not a share: it stays 2 however many prompts were usable. Say what that means here.
+const worseLimitNote = (usable) => `At most ${MAX_WORSE_PROMPTS} prompts may be rated worse, whatever the number of usable prompts (${usable} usable here: ${MAX_WORSE_PROMPTS} of ${usable}${usable === TARGET_PROMPTS ? '' : `, not ${MAX_WORSE_PROMPTS} of ${TARGET_PROMPTS}`}).`;
 
 /** The verdict as the markdown that goes in <out>/verdict.md: the decision, every reason, each arm's four numbers, each prompt's numbers. */
 export function renderVerdict(v) {
@@ -294,14 +353,14 @@ export function renderVerdict(v) {
     `# Verdict: ${v.decision}`,
     '',
     ...(v.reasons.length ? ['Reasons:', '', ...v.reasons.map((r) => `- ${r}`), ''] : []),
-    `${v.usable} usable prompts of ${v.prompts.length}. Ten prompts is a small sample: one model, one host, one machine. Costs are USD; a ratio is the arm's cost over A's.`,
+    `${v.usable} usable prompts of ${v.prompts.length}. Ten prompts is a small sample: one model, one host, one machine. Costs are USD; a ratio is the arm's cost over A's. ${worseLimitNote(v.usable)}`,
     '',
     '| arm | median cost ratio | rated worse | failed | median designed cuts (new briefs) | median devices (new briefs) | rule |',
     '|---|---|---|---|---|---|---|',
     ...CHALLENGERS.map((arm) => armLine(arm, v.arms[arm])),
     '',
-    '| prompt | A cost | D cost | D ratio | D vs A | C cost | C ratio | C vs A | note |',
-    '|---|---|---|---|---|---|---|---|---|',
+    '| prompt | A cost | D cost | D ratio | D vs A | C cost | C ratio | C vs A | missing features (report only) | note |',
+    '|---|---|---|---|---|---|---|---|---|---|',
     ...v.prompts.map(promptLine),
     '',
   ].join('\n');
