@@ -184,9 +184,9 @@ batches and `--subtitles` are never skipped. `--force` renders.
 
 ### 6.5 `scripts/start.mjs <explainer|data|vertical>`
 
-Prints, in one call, the type guide, `story.md`, `tells.md`, the kinds, and the cut and device names: about 24,000 characters, so it fits a shell that
-caps at 30,000. `reviewing.md` is left out: the short path carries the part it needs. It does not run the doctor or hide consent text. `--part n` prints one
-part for a host with a smaller cap.
+`--part 1` prints the type guide, `story.md` and `tells.md` (about 14,000 characters); `--part 2` prints the kinds and the cut and device names (about
+14,000). SKILL.md says to run both in one turn. Two parts because a Copilot probe on 2026-11-24 saw whole output at 18 KB and a saved file with a short preview at 24 KB;
+each part stays under 18,000 characters and a test pins that. `reviewing.md` is left out: the short path carries the part it needs. It does not run the doctor or hide consent text.
 
 ### 6.6 Around it
 
