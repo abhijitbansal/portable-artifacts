@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { slugify, resolveOutput, findGitRoot, defaultOutputPath, scratchIgnoreNote, fileUrlLine } from '../output.mjs';
+import { slugify, resolveOutput, findGitRoot, defaultOutputPath, scratchIgnoreNote, fileUrlLine, refuseLinkedFolder } from '../output.mjs';
+import { UsageError } from '../cli.mjs';
 
 const home = '/home/someone';
 // A fake checkout: /repo has .git (a directory), /wt has .git (a file, as in a worktree). Nothing else exists.
@@ -70,4 +73,48 @@ test('resolveOutput: file, directory, PA_OUTPUT_DIR and home default', () => {
   assert.equal(resolveOutput({ out: '/a', title: 'My T', env: {}, home }), '/a/my-t.html');
   assert.equal(resolveOutput({ title: 'My T', env: { PA_OUTPUT_DIR: '/v' }, home }), '/v/my-t.html');
   assert.equal(resolveOutput({ title: '', fallback: 'explainer', env: {}, home }), '/home/someone/.agent/diagrams/explainer.html');
+});
+
+// ---- a .scratch that is a symlink: the implicit default is refused, an explicit choice is not ----------------------------
+const canLink = process.platform !== 'win32';
+function linkedRepo() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-out-'));
+  const repo = path.join(base, 'repo');
+  const outside = path.join(base, 'outside');
+  fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+  fs.mkdirSync(outside);
+  fs.symlinkSync(outside, path.join(repo, '.scratch'));
+  return { base, repo, outside, spec: path.join(repo, 't.json') };
+}
+
+test('a .scratch symlink under the git root is refused with a one-line UsageError naming both fixes', { skip: !canLink }, () => {
+  const { repo, spec, outside } = linkedRepo();
+  for (const call of [() => defaultOutputPath({ title: 'T', specPath: spec, env: {}, home }), () => resolveOutput({ title: 'T', specPath: spec, env: {}, home })]) {
+    assert.throws(call, (e) => e instanceof UsageError && !e.message.includes('\n') && e.message.includes(path.join(repo, '.scratch')) && /remove the link/.test(e.message) && /--out/.test(e.message));
+  }
+  assert.deepEqual(fs.readdirSync(outside), [], 'nothing is created through the link');
+});
+
+test('a .scratch symlink does not matter when --out or PA_OUTPUT_DIR names the place, or the default is not in a repo', { skip: !canLink }, () => {
+  const { repo, spec, base } = linkedRepo();
+  const elsewhere = path.join(base, 'elsewhere');
+  assert.equal(resolveOutput({ out: elsewhere, title: 'T', specPath: spec, env: {}, home }), path.join(elsewhere, 't.html'));
+  assert.equal(resolveOutput({ out: path.join(repo, '.scratch'), title: 'T', specPath: spec, env: {}, home }), path.join(repo, '.scratch', 't.html'), 'an explicit --out through a symlinked folder keeps working');
+  assert.equal(resolveOutput({ title: 'T', specPath: spec, env: { PA_OUTPUT_DIR: elsewhere }, home }), path.join(elsewhere, 't.html'));
+});
+
+test('a real .scratch folder, and no .scratch at all, resolve as before', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-out-'));
+  fs.mkdirSync(path.join(base, '.git'));
+  const spec = path.join(base, 't.json');
+  assert.equal(resolveOutput({ title: 'T', specPath: spec, env: {}, home }), path.join(base, '.scratch', 't.html'));
+  fs.mkdirSync(path.join(base, '.scratch'));
+  assert.equal(resolveOutput({ title: 'T', specPath: spec, env: {}, home }), path.join(base, '.scratch', 't.html'));
+});
+
+test('refuseLinkedFolder: a symlink is refused with the given fix, a folder or nothing is not', { skip: !canLink }, () => {
+  const { repo, base } = linkedRepo();
+  assert.throws(() => refuseLinkedFolder(path.join(repo, '.scratch')), (e) => e instanceof UsageError && /is a symlink/.test(e.message));
+  assert.doesNotThrow(() => refuseLinkedFolder(path.join(base, 'outside')));
+  assert.doesNotThrow(() => refuseLinkedFolder(path.join(base, 'missing')));
 });

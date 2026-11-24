@@ -13,6 +13,7 @@ import { loadData } from './rows.mjs';
 import { resolveScenePath } from './scene-path.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
+import { writeFileReplacing } from '../../shared/write-file.mjs';
 
 const ID_PREFIX = 'sc';
 const OVER_CAP = 'over the page limit';
@@ -67,10 +68,13 @@ function fragmentOf(built) {
 // <slug>.fragment.html in the default folder or a --out folder; a --out that names a .html file is that file.
 const fragmentPath = (target, out) => (out && /\.html?$/i.test(out) ? target : target.replace(/\.html?$/i, '.fragment.html'));
 
-function writeFile(target, text) {
+// The page and the fragment replace whatever is at their path (a symlink included); the spec is the user's own file and
+// is rewritten in place, as before (`replace: false`).
+function writeFile(target, text, { replace = true } = {}) {
   try {
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, text);
+    if (replace) writeFileReplacing(target, text);
+    else fs.writeFileSync(target, text);
   } catch (e) {
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }
@@ -112,7 +116,7 @@ export async function build(file, { out, theme, world, model, effort, agent, fra
   }
   writeFile(target, html);
   const rewroteSpec = world !== undefined && loaded.world !== world;
-  if (rewroteSpec) writeFile(path.resolve(file), `${JSON.stringify({ ...loaded, world }, null, 2)}\n`);
+  if (rewroteSpec) writeFile(path.resolve(file), `${JSON.stringify({ ...loaded, world }, null, 2)}\n`, { replace: false });
 
   // A lift is never second-guessed: it has no other worlds to offer.
   const alternatives = spec.lift === undefined ? await alternativesFor({ spec, dir, theme: pageTheme, built, bytes, maxBytes }) : [];

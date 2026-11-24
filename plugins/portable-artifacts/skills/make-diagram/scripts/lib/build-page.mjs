@@ -12,6 +12,7 @@ import { themeFor } from './theme.mjs';
 import { standaloneSvg } from './svg-export.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
+import { writeFileReplacing } from '../../shared/write-file.mjs';
 
 export const FORMATS = ['html', 'svg'];
 const KB = 1024;
@@ -63,7 +64,7 @@ export async function build(file, { out, theme, format = 'html', model, effort, 
   }
   try {
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, text);
+    writeFileReplacing(target, text);
   } catch (e) {
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }

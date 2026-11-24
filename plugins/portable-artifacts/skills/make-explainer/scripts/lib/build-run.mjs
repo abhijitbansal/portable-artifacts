@@ -13,6 +13,7 @@ import { specTheme } from './default-theme.mjs';
 import { fetchHeroImage, heroPrompt, parseEndpoint, requireKey, ImageHookError, KEY_ENV } from './image-hook.mjs';
 import { twinFile, isBuildTwin, hasChecklist } from './checklist-md.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
+import { writeFileReplacing } from '../../shared/write-file.mjs';
 
 const fail = (errors) => ({ ok: false, errors });
 const MD_NEEDS_CHECKLIST = '--md writes the markdown twin of a checklist, and this spec has no checklist section; add one or drop --md';
@@ -108,7 +109,8 @@ function twinConflict(twin, spec) {
     : clash(`${name} was not written by a make-explainer --md build (or by an older version); delete or rename it to regenerate`);
 }
 
-// Temp file + rename, so an interrupted build leaves the old file or the new one. A symlinked target is written through.
+// Temp file + rename, so an interrupted build leaves the old file or the new one. A symlink at the target is replaced
+// by the page, never written through (shared/write-file.mjs).
 function writeAtomic(target, text) {
   const folder = path.dirname(target);
   try {
@@ -116,23 +118,9 @@ function writeAtomic(target, text) {
   } catch (e) {
     throw new WriteError(folder, e);
   }
-  let dest = target;
   try {
-    dest = fs.realpathSync(target);
-  } catch {
-    // no page yet
-  }
-  const tmp = `${dest}.tmp`;
-  try {
-    fs.writeFileSync(tmp, text);
+    writeFileReplacing(target, text);
   } catch (e) {
-    fs.rmSync(tmp, { force: true });
-    throw new WriteError(tmp, e);
-  }
-  try {
-    fs.renameSync(tmp, dest);
-  } catch (e) {
-    fs.rmSync(tmp, { force: true });
-    throw new WriteError(dest, e);
+    throw new WriteError(target, e);
   }
 }

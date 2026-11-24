@@ -13,6 +13,8 @@ import { didYouMean } from '../../shared/errors.mjs';
 import { loadTheme, listThemes, DEFAULT_THEME, ThemeError } from '../../shared/theme.mjs';
 import { checkTheme } from '../../shared/contrast.mjs';
 import { withGeneratedBy } from '../../shared/provenance.mjs';
+import { findGitRoot, refuseLinkedFolder } from '../../shared/output.mjs';
+import { writeFileReplacing } from '../../shared/write-file.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const VENDOR_FILES = {
@@ -37,11 +39,19 @@ function writePage(outDir, html) {
   const target = path.join(outDir, 'index.html');
   try {
     fs.mkdirSync(outDir, { recursive: true });
-    fs.writeFileSync(target, html);
+    writeFileReplacing(target, html);
   } catch (e) {
     throw new UsageError(`cannot write ${target}: ${e.code ?? e.message}`);
   }
   return target;
+}
+
+// <spec folder>/dist with no --out. In a repository (which may not be the user's own) a symlinked dist is refused, as a
+// symlinked .scratch is for the other skills: the page would land outside it.
+function defaultOutDir(dir) {
+  const folder = path.join(dir, 'dist');
+  if (findGitRoot(dir) !== null) refuseLinkedFolder(folder);
+  return folder;
 }
 
 // Unknown theme name -> UsageError, with a did-you-mean when one is close.
@@ -80,7 +90,7 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   const expanded = expandCharts(spec, results);
   if (expanded.errors.length) return { ok: false, errors: expanded.errors };
   const warnings = [...themeWarnings, ...kpiRowWarnings(spec, results)];
-  const outDir = path.resolve(out ?? path.join(dir, 'dist'));
+  const outDir = path.resolve(out ?? defaultOutDir(dir));
   const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env, now }));
   const sources = Object.entries(spec.sources).map(([name, src]) => [
     name,

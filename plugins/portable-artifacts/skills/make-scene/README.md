@@ -43,7 +43,8 @@ Or just ask your agent: *"Show our commits per week per folder as a 3D city,
 with a tour of the busiest weeks."* It writes `scene.json`, validates, builds
 and tells you where the page is (the path, then its `file://` URL on its own
 line). The page goes to `<git root>/.scratch/` for a spec inside a repository,
-else `~/.agent/diagrams/` (`PA_OUTPUT_DIR` or `--out` change it); the default
+else `~/.agent/diagrams/` (`PA_OUTPUT_DIR` or `--out` change it; a `.scratch` that is
+a symlink is refused, and a symlink at the page's path is replaced, not written through); the default
 theme is `dusk`. `build.mjs --fragment` writes the scene alone (its CSS, host,
 runtime and mount call) to paste into another page. `validate.mjs` prints
 warnings (a link a city does not draw, a blank title) without failing.

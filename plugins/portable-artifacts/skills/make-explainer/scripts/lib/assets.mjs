@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
+import { writeFileReplacing } from '../../shared/write-file.mjs';
 
 export const MANIFEST = '.pa-assets.json';
 const MANIFEST_TMP = `${MANIFEST}.tmp`;
@@ -127,19 +128,15 @@ function makeDirs(root, dir, made) {
   }
 }
 
-// Atomic, so an interrupted build leaves the old manifest or the new one (and at worst a stale .tmp, which the next build removes).
+// Atomic, so an interrupted build leaves the old manifest or the new one. The temp file has an unpredictable name and
+// is created exclusively (shared/write-file.mjs), so a link planted at a guessable name is never written through.
 function writeManifest(root, { files, dirs }) {
   const file = path.join(root, MANIFEST);
-  const tmp = path.join(root, MANIFEST_TMP);
   const body = { version: MANIFEST_VERSION, files: [...files].sort(), dirs: [...dirs].sort() };
-  io(tmp, () => {
-    fs.rmSync(tmp, { force: true });
-    fs.writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`);
-  });
-  io(file, () => fs.renameSync(tmp, file));
+  io(file, () => writeFileReplacing(file, `${JSON.stringify(body, null, 2)}\n`));
 }
 
-// A leftover manifest temp file is ours, never a user's: remove it (a regular file or a symlink only).
+// A leftover manifest temp file from an older build is ours, never a user's: remove it (a regular file or a symlink only).
 function removeStaleTmp(root) {
   const tmp = path.join(root, MANIFEST_TMP);
   const stat = lstatOrNull(tmp);

@@ -9,6 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from '../../shared/cli.mjs';
+import { writeFileReplacing } from '../../shared/write-file.mjs';
 import { doctorCommand, optionalInstall } from './doctor-hint.mjs';
 import { modelDir } from './model-cache.mjs';
 import { importOptional } from './optional.mjs';
@@ -260,11 +261,10 @@ export async function cutoutPicture({ session, ort, page, bytes, mime }) {
   return Buffer.from(await page.evaluate(({ mask, sw, sh }) => window.cut.compose(mask, sw, sh), { mask: alpha.toString('base64'), sw: mw, sh: mh }), 'base64');
 }
 
-function writeAtomic(file, bytes) {
+// The cutout appears whole or not at all; a link at the output name is replaced, never written through.
+export function writeAtomic(file, bytes) {
   mkdirSync(path.dirname(file), { recursive: true });
-  const partial = `${file}.partial-${process.pid}`;
-  writeFileSync(partial, bytes);
-  renameSync(partial, file);
+  writeFileReplacing(file, bytes);
 }
 
 /** Writes the cutout of a photo to `output` (RGBA PNG). -> output. */

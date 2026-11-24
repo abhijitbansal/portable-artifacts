@@ -53,7 +53,10 @@ function fakeBrowser(shotMs) {
     waitForTimeout: async () => {},
     addStyleTag: async () => ({ evaluate: async () => {} }),
     locator: () => ({ first: () => ({ screenshot: async ({ timeout } = {}) => { await take('locator.screenshot', timeout ?? 30000); return png; } }) }),
-    screenshot: async ({ timeout } = {}) => { await take('page.screenshot', timeout ?? 5000); },
+    screenshot: async ({ timeout, path: file } = {}) => {
+      await take('page.screenshot', timeout ?? 5000);
+      if (file !== undefined) fs.writeFileSync(file, 'png'); // like Playwright: opens the path itself, links followed
+    },
   };
   const context = { newPage: async () => page, close: async () => {} };
   return { browser: { newContext: async () => context, close: async () => {} }, timeouts };
@@ -77,6 +80,22 @@ test('a --shots screenshot of the page gets the same budget', async (t) => {
   const { result } = await run(7000, { shotsDir: dir });
   assert.deepEqual(result.problems, []);
   assert.equal(result.status, 'ok');
+});
+
+test('a --shots file that is a symlink is replaced by the shot, and its target is untouched', { skip: process.platform === 'win32' }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-shot-link-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const first = await run(0, { shotsDir: dir });
+  assert.deepEqual(first.result.problems, []);
+  const names = fs.readdirSync(dir);
+  assert.ok(names.length > 0, 'the control run wrote shots');
+  const victim = path.join(dir, 'victim.txt');
+  fs.writeFileSync(victim, 'precious');
+  for (const n of names) { fs.rmSync(path.join(dir, n)); fs.symlinkSync(victim, path.join(dir, n)); }
+  const again = await run(0, { shotsDir: dir });
+  assert.deepEqual(again.result.problems, []);
+  assert.ok(fs.readFileSync(victim, 'utf8') === 'precious', 'a shot was written through a link');
+  for (const n of names) assert.equal(fs.lstatSync(path.join(dir, n)).isSymbolicLink(), false);
 });
 
 test('a screenshot that takes longer than any healthy runner (20 s) is still reported as a crash naming the timeout', async () => {

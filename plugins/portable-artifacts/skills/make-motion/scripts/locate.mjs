@@ -12,10 +12,11 @@
 // A PNG that scripts/v2/png.mjs cannot read, and a JPEG, WebP, GIF or BMP, is decoded by ffmpeg behind the file
 // protocol, picture demuxer and picture decoder whitelists (a file of any other kind is refused). Exit 0 done; exit 2: a
 // usage or IO problem (an unreadable picture, a strip outside 1 to 9, a cell outside 1 to 36, a URL), one line on stderr.
-import { lstatSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli } from '../shared/cli.mjs';
+import { writeFileReplacing } from '../shared/write-file.mjs';
 import { GRID, STRIPS, cellsBox, readPicture, renderBox, renderGrid, renderStrips, stripsBox, toRegion } from './lib/locate.mjs';
 import { encodePng } from './lib/png-write.mjs';
 
@@ -100,7 +101,7 @@ function outDir(out, picture, names) {
 // Paths made of plain characters print as they are; anything else is single-quoted.
 const shellQuote = (text) => (/^[\w@%+=:,./-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`);
 const rangeText = ([a, b]) => `${a}-${b}`;
-const savePng = (file, pixels) => writeFileSync(file, encodePng(pixels));
+const savePng = (file, pixels) => writeFileReplacing(file, encodePng(pixels)); // strips-cols.png, grid.png, box.png: fixed names, so a link there is replaced
 const command = (picture, parts) => `node ${shellQuote(SELF)} ${shellQuote(path.resolve(picture))} ${parts.join(' ')}`;
 
 async function run(opts, out) {

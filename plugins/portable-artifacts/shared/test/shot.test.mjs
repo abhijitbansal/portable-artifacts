@@ -205,6 +205,21 @@ test('main: one PNG per page, width and scheme at a real viewport, deviceScaleFa
   assert.equal(log.closed, true);
 });
 
+test('main: a symlink at a shot\'s predictable name is replaced by the shot, and its target is untouched', { skip: process.platform === 'win32' }, async () => {
+  const dir = tmp();
+  fs.writeFileSync(path.join(dir, 'p.html'), '<p>x</p>');
+  const outDir = path.join(tmp(), 'shots');
+  fs.mkdirSync(outDir);
+  const victim = path.join(tmp(), 'victim.txt');
+  fs.writeFileSync(victim, 'precious');
+  const names = ['p-390-light.png', 'p-390-dark.png', 'p-1280-light.png', 'p-1280-dark.png'];
+  for (const n of names) fs.symlinkSync(victim, path.join(outDir, n));
+  const r = await runMain([path.join(dir, 'p.html'), '--out', outDir], { chromium: stubChromium({ log: newLog() }), live: () => [] });
+  assert.equal(r.code, 0, r.err);
+  assert.ok(fs.readFileSync(victim, 'utf8') === 'precious', 'a shot was written through a link');
+  for (const n of names) assert.equal(fs.lstatSync(path.join(outDir, n)).isSymbolicLink(), false);
+});
+
 test('main: a non-2xx page or asset fails with exit 1 and names the URL; the PNGs are still written', async () => {
   const dir = tmp();
   fs.writeFileSync(path.join(dir, 'page-with-bad-asset.html'), '<img src="missing.png">');

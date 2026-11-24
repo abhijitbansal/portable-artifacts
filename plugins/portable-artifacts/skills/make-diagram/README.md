@@ -41,7 +41,8 @@ Or just ask your agent: *"Draw the checkout request path from the browser to
 the orders DB."* It writes `diagram.json`, runs the three commands and tells
 you where the page is. `build.mjs` prints `wrote <path>` and then the `file://` URL alone on
 its own line. Without `--out` the page goes to `<git root>/.scratch/<slug>.html` when the spec sits
-in a git repo, else `~/.agent/diagrams/`; `PA_OUTPUT_DIR` or `--out` change it.
+in a git repo, else `~/.agent/diagrams/`; `PA_OUTPUT_DIR` or `--out` change it. A `.scratch` that is a symlink
+is refused (remove it, or pass `--out`), and a symlink at the page's own path is replaced, not written through.
 
 ## Requirements
 

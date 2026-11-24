@@ -17,6 +17,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 import { findGitRoot, slugify } from './output.mjs';
+import { dropLinkAt } from './write-file.mjs';
 
 export const BROWSER_PACKAGE = 'playwright';
 export const DEFAULT_WIDTHS = [390, 1280];
@@ -165,6 +166,7 @@ async function shootOne(browser, { url, name, width, scheme, out }) {
     if (scrollWidth > width) warnings.push(`${name} at ${width}px: the page is ${scrollWidth}px wide (horizontal overflow)`);
     if (height > MAX_SHOT_HEIGHT) warnings.push(`${name} at ${width}px: the page is ${height}px tall; the shot is cut at ${MAX_SHOT_HEIGHT}px`);
     const file = path.join(out, `${name}-${width}-${scheme}.png`);
+    dropLinkAt(file); // a predictable name: a symlink there is replaced by the shot, not written through
     await page.screenshot({ path: file, fullPage: true, ...(height > MAX_SHOT_HEIGHT ? { clip: { x: 0, y: 0, width, height: MAX_SHOT_HEIGHT } } : {}) });
     return { shot: { page: name, width, scheme, path: file }, problems, warnings };
   } finally {

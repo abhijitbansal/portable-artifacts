@@ -2,8 +2,9 @@
 // cut (plan.mjs says which frames). The page seeks each frame and draws the visible canvas, post pass included, onto a
 // sheet canvas with each tile stamped "<shot id> . <seconds>s" in the bundled mono face; Node lays the tiles out
 // (layout.mjs) and writes the PNG. No ffmpeg and no screenshots. writeSheets also returns the film review's findings.
-import { lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { writeFileReplacing } from '../../shared/write-file.mjs';
 import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
@@ -85,16 +86,10 @@ async function writeOne(session, sheet, dir, canvas, signal) {
   return writeAtomically(path.join(dir, sheet.name), Buffer.from(png, 'base64'));
 }
 
-// The file appears whole or not at all: written under a temp name beside it, then renamed.
+// The file appears whole or not at all: written under a temp name beside it, then renamed. A link at `file` is replaced,
+// never written through, and the temp name cannot be guessed (shared/write-file.mjs).
 export function writeAtomically(file, bytes) {
-  const temp = path.join(path.dirname(file), `.${path.basename(file)}.tmp-${process.pid}`);
-  try {
-    writeFileSync(temp, bytes);
-    renameSync(temp, file);
-  } finally {
-    rmSync(temp, { force: true });
-  }
-  return file;
+  return writeFileReplacing(file, bytes);
 }
 
 // The folder belongs to one video, so the PNGs in it are the last run's sheets; they go before the new ones are made,

@@ -1,12 +1,14 @@
 // Where a built page goes. In order: --out (file or directory); $PA_OUTPUT_DIR; <git root>/.scratch/<slug>.html when
 // the spec sits inside a git repo; else ~/.agent/diagrams/<slug>.html. Never anywhere implicit but those.
-// Shared by every skill that writes a page. Node built-ins and shared/git-run.mjs only.
+// The implicit .scratch folder is refused when it is a symlink (see refuseLinkedFolder).
+// Shared by every skill that writes a page. Node built-ins, shared/git-run.mjs and shared/cli.mjs only.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { SCRATCH_TIMEOUT_MS, hardenedGitEnv, gitBaseArgs, spawnGit } from './git-run.mjs';
+import { UsageError } from './cli.mjs';
 
 const MAX_SLUG = 60;
 const DEFAULT_FALLBACK = 'diagram';
@@ -29,12 +31,30 @@ export function findGitRoot(start, exists = fs.existsSync) {
   }
 }
 
+/**
+ * Throw a one-line UsageError when `folder` is a symlink (nothing is created or written first). Used for a folder the
+ * build picks by itself inside a repository, which the user may not have written: through a link the page would land
+ * outside the repository. A folder the user names with --out is never checked.
+ */
+export function refuseLinkedFolder(folder) {
+  let stat;
+  try {
+    stat = fs.lstatSync(folder, { throwIfNoEntry: false });
+  } catch {
+    return; // unreadable: the write that follows reports it
+  }
+  if (stat?.isSymbolicLink()) throw new UsageError(`${folder} is a symlink, so the page would be written outside this repository; remove the link, or pass --out to build into another folder`);
+}
+
 /** The default page path with no --out: $PA_OUTPUT_DIR, else <git root>/.scratch for a spec inside a repo, else ~/.agent/diagrams. */
 export function defaultOutputPath({ title, fallback = DEFAULT_FALLBACK, specPath, env = process.env, home = os.homedir(), exists = fs.existsSync }) {
   const file = `${slugify(title, fallback)}.html`;
   if (env.PA_OUTPUT_DIR) return path.join(path.resolve(env.PA_OUTPUT_DIR), file);
   const root = specPath ? findGitRoot(path.dirname(path.resolve(specPath)), exists) : null;
-  if (root) return path.join(root, SCRATCH_DIR, file);
+  if (root) {
+    refuseLinkedFolder(path.join(root, SCRATCH_DIR));
+    return path.join(root, SCRATCH_DIR, file);
+  }
   return path.join(path.resolve(home, '.agent', 'diagrams'), file);
 }
 

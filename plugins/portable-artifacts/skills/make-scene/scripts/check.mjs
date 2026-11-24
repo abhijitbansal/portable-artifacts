@@ -16,6 +16,7 @@ import { SCHEMES, parseShotsDir, shotName } from './lib/shots.mjs';
 import { distinctColours } from './lib/png.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
+import { dropLinkAt } from '../shared/write-file.mjs';
 
 const USAGE = 'node scripts/check.mjs <page.html> [--shots <dir>] [--json]';
 const OPTIONS = { json: { type: 'boolean' }, shots: { type: 'string' } };
@@ -89,6 +90,7 @@ async function checkViewport(browser, url, viewport, readyMs, { scheme = 'light'
   const written = [];
   const snap = async (name) => {
     const target = path.join(shots.dir, name);
+    dropLinkAt(target); // a predictable name: a symlink there is replaced by the shot, not written through
     await page.screenshot({ path: target, timeout: SHOT_MS });
     written.push(target);
   };

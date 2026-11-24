@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
+import { writeFileReplacing } from '../shared/write-file.mjs';
 import { exitInternal } from './lib/internal-error.mjs';
 import { historyRows } from './lib/history-rows.mjs';
 
@@ -40,7 +41,7 @@ try {
   const rows = historyRows({ repo, weeks, depth, warn: (m) => process.stderr.write(`${m}\n`) });
   try {
     fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
-    fs.writeFileSync(out, `${JSON.stringify({ rows })}\n`);
+    writeFileReplacing(out, `${JSON.stringify({ rows })}\n`); // ./scene-rows.json is a predictable name: a symlink there is replaced, never written through
   } catch (e) {
     throw new UsageError(`cannot write ${out}: ${e.code ?? e.message}`);
   }
