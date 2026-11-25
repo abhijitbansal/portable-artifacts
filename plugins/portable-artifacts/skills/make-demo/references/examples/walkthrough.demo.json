@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "source": { "url": "https://shop.example.test/" },
+  "origins": ["https://shop.example.test"],
+  "rights": "own",
+  "viewport": { "width": 1280, "height": 720 },
+  "pages": ["/pricing"],
+  "useCases": [
+    {
+      "id": "find-pricing",
+      "title": "Find the pricing",
+      "goal": "Show a visitor how to reach the plans and what each one costs.",
+      "steps": [
+        { "id": "open-home", "do": "goto", "value": "/" },
+        { "id": "open-pricing", "do": "click", "target": { "role": "link", "name": "Pricing" } },
+        { "id": "see-plans", "do": "show", "target": { "css": "#plans" } },
+        { "id": "scroll-plans", "do": "scroll", "value": 400 }
+      ]
+    },
+    {
+      "id": "search-catalog",
+      "title": "Search the catalog",
+      "steps": [
+        { "id": "open-shop", "do": "goto", "value": "/" },
+        { "id": "type-query", "do": "type", "target": { "role": "searchbox", "name": "Search" }, "value": "tent" },
+        { "id": "submit-query", "do": "press", "value": "Enter" },
+        { "id": "let-results-load", "do": "wait", "value": 1.5 },
+        { "id": "open-first-result", "do": "click", "intent": "the first product in the results" }
+      ]
+    }
+  ],
+  "generatedBy": { "model": "example", "effort": "high", "agent": "example" }
+}

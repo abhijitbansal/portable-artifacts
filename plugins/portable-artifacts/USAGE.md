@@ -52,7 +52,7 @@ never prompts and never installs anything on its own.
 ```bash
 node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, with the fix for your OS
 node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # any skill; make-explainer and make-scene add the sister skills the spec needs
-node <skill-dir>/scripts/doctor.mjs --json --for check      # make-dashboard, make-diagram, make-explainer and make-scene: Playwright and a browser, before check.mjs
+node <skill-dir>/scripts/doctor.mjs --json --for check      # make-dashboard, make-demo, make-diagram, make-explainer and make-scene: Playwright and a browser, before check.mjs
 node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: the voice package, before a voiceover
 node <skill-dir>/scripts/doctor.mjs --json --for cutout     # make-motion: onnxruntime-node, before cutout.mjs
 node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
@@ -68,7 +68,7 @@ network) comes back to you as the exact command to run yourself; in Claude Code
 type it after an exclamation mark, its shell prefix. On no the agent does what it can without the item, for
 example make-motion still writes `film.json`, runs `make.mjs --outline` and hands you the
 build command. `--for` takes a spec `.json` in every skill (make-explainer and
-make-scene add sister skills from it), `check` (make-dashboard, make-diagram, make-explainer and make-scene), and `voiceover` or `cutout` (make-motion). Unknown or
+make-scene add sister skills from it), `check` (make-dashboard, make-demo, make-diagram, make-explainer and make-scene), and `voiceover` or `cutout` (make-motion). Unknown or
 misspelled arguments exit 2 and list the accepted ones. `--fix` takes the same
 `--for` the diagnosis used: it resolves ids against that target, so an id the
 target does not list (say `chromium` with a spec that has no check step) is

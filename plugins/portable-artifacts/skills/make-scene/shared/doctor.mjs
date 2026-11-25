@@ -18,11 +18,12 @@ const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
 // a dev checkout: `npm ls --omit=dev --all --parseable` per skill, then the on-disk size (du blocks) of every
 // package in that tree, rounded. A fresh install of the published package should land close to these; re-measure on one
 // (`npm ci --omit=dev`, then du) before trusting them to the MB. make-motion lists playwright as a production
-// dependency, so its figure is its whole tree.
+// dependency, so its figure is its whole tree; so does make-demo.
 export const INSTALL_SIZES = {
   'make-explainer': '≈3 MB',
   'make-diagram': '≈11 MB',
   'make-dashboard': '≈150 MB',
+  'make-demo': '≈22 MB',
   'make-motion': '≈57 MB',
   'make-scene': '≈3 MB',
 };

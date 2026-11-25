@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Phase 0 of make-demo: loopback fixture sites, a stepped page clock, a frame store and a feasibility probe.",
+  "description": "make-demo: scouts a site read-only and builds a click plan page; phase 1 of the skill.",
   "license": "MIT",
   "engines": {
     "node": ">=20"
@@ -14,6 +14,9 @@
   "dependencies": {
     "ajv": "8.20.0",
     "playwright": "1.64.0"
+  },
+  "portableArtifacts": {
+    "requires": ["make-explainer"]
   },
   "overrides": {
     "fast-uri": "3.1.9"

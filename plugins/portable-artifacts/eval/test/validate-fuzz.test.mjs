@@ -25,6 +25,9 @@ after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true 
 // a reference to an id); `nested`: paths to an object that takes a closed set of keys.
 const CASES = [
   { skill: 'make-dashboard', dir: 'references/examples', file: 'minimal.json', lookups: [['theme'], ['charts', 0, 'kind'], ['charts', 0, 'x'], ['charts', 0, 'query']], nested: [['charts', 0]] },
+  // Lookups are values the schema rejects when hostile: an enum, the const version, an address that is not http(s) and an origin that is not one.
+  // An id, a session name or a path would accept `constructor` as a plain word, so they are not here.
+  { skill: 'make-demo', dir: 'references/examples', file: 'walkthrough.demo.json', lookups: [['version'], ['rights'], ['source', 'url'], ['origins', 0], ['useCases', 0, 'steps', 0, 'do'], ['useCases', 0, 'steps', 1, 'do']], nested: [['source'], ['viewport'], ['useCases', 0], ['useCases', 0, 'steps', 0], ['useCases', 0, 'steps', 1, 'target'], ['generatedBy']] },
   { skill: 'make-diagram', dir: 'references/examples', file: 'architecture.diagram.json', lookups: [['theme'], ['type'], ['direction'], ['nodes', 0, 'kind'], ['nodes', 1, 'icon'], ['nodes', 1, 'group'], ['edges', 0, 'from']], nested: [['nodes', 0], ['edges', 0], ['groups', 0]] },
   { skill: 'make-explainer', dir: 'references/examples', file: 'concept.explainer.json', lookups: [['theme'], ['preset'], ['mode'], ['sections', 0, 'type'], ['sections', 0, 'tone'], ['sections', 10, 'items', 0, 'severity'], ['sections', 11, 'items', 0, 'change'], ['sections', 13, 'tone']], nested: [['sections', 0], ['sections', 5, 'items', 0], ['meta']] },
   // make-motion has no validate.mjs since the cut-over; its film validator is fuzzed in-process by make-motion/test/v2/hostile-names.test.mjs.
@@ -110,7 +113,7 @@ for (const c of CASES) {
 test('every skill that has a validate.mjs is fuzzed', () => {
   const have = fs.readdirSync(SKILLS).filter((d) => fs.existsSync(path.join(SKILLS, d, 'scripts/validate.mjs'))).sort();
   assert.deepEqual([...new Set(CASES.map((c) => c.skill))].sort(), have);
-  assert.equal(have.length, 4);
+  assert.equal(have.length, 5);
 });
 
 test('guardrail proof: a scratch validator that looks a kind up with `in` is caught accepting constructor', async () => {

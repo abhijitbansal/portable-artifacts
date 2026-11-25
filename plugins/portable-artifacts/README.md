@@ -219,7 +219,7 @@ To build a dashboard, a diagram, an explainer page, a 3D scene or an animated vi
 Not sure what is missing? Run `node <skill-dir>/scripts/doctor.mjs --json` (it
 needs only Node, so it works before `npm ci --ignore-scripts`). It lists each missing item with
 its size and the fix for your OS; add `--for` with a spec `.json` (every skill;
-make-explainer and make-scene add sister skills from it), `check` (make-dashboard, make-diagram, make-explainer and make-scene: the check browser),
+make-explainer and make-scene add sister skills from it), `check` (make-dashboard, make-demo, make-diagram, make-explainer and make-scene: the check browser),
 `voiceover` or `cutout` (make-motion), and `--fix <ids>`
 to install the ones that need no `sudo` (ids are resolved against the same `--for`;
 `dev_deps` and `chromium` are required for `check`, and `motion_chromium` is
@@ -234,17 +234,17 @@ warning: this script runs from <old copy>, not the installed copy <installed cop
 
 Fix it by running `npm ci --ignore-scripts` in the installed skill folder (or its `doctor.mjs --fix node_modules`) and using that folder's scripts. A repo checkout, an `npx skills add` install, or a missing `installed_plugins.json` draws no warning.
 
-| | make-dashboard | make-diagram | make-explainer | make-motion | make-scene |
-|---|---|---|---|---|---|
-| Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `npm ci --ignore-scripts` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Installed size (`node_modules` after that install; Chromium and on-demand installs are extra) | ≈150 MB | ≈11 MB | ≈3 MB | ≈57 MB | ≈3 MB |
-| Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram and chart sections and for card icons); make-motion only to render a motion spec | — | make-diagram to lift a diagram, make-dashboard to lift a chart; a plain world needs none |
-| `git` on `PATH` | — | — | only for `gather.mjs` | — | — |
-| Chromium for frame capture (once, ≈150 MB) | optional: only `check.mjs` (a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); the build needs no browser | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); build needs no browser, and `check.mjs` skips cleanly without one |
-| ffmpeg on `PATH` | — | — | only to render a motion film | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 5.1 for the limiter stage of the audio mastering; the doctor says so when yours is older) | — |
-| onnxruntime-node (cutouts only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/cutout` (≈300 MB, from that folder's lockfile; install scripts are skipped because onnxruntime-node's downloads GPU libraries without a hash) plus a one-time 25 MB MODNet model download (pinned commit, SHA-256 checked); the agent asks first; `npm ci --ignore-scripts` in the skill folder leaves it alone | — |
-| onnxruntime-node and phonemizer (voiceover only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (≈227 MB on macOS, from that folder's lockfile, install scripts skipped) plus a one-time 93 MB Kokoro model download (one pinned commit, each file SHA-256 checked); the agent asks first; `npm ci --ignore-scripts` in the skill folder leaves it alone. An install made before make-motion 2 also holds `kokoro-js` and still works | — |
+| | make-dashboard | make-demo | make-diagram | make-explainer | make-motion | make-scene |
+|---|---|---|---|---|---|---|
+| Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `npm ci --ignore-scripts` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene; make-demo needs the full install, as playwright is a regular dependency there) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Installed size (`node_modules` after that install; Chromium and on-demand installs are extra) | ≈150 MB | ≈22 MB | ≈11 MB | ≈3 MB | ≈57 MB | ≈3 MB |
+| Other skills beside it | — | make-explainer (required; draws the plan page) | — | make-diagram and make-dashboard (required for diagram and chart sections and for card icons); make-motion only to render a motion spec | — | make-diagram to lift a diagram, make-dashboard to lift a chart; a plain world needs none |
+| `git` on `PATH` | — | — | — | only for `gather.mjs` | — | — |
+| Chromium for frame capture (once, ≈150 MB) | optional: only `check.mjs` (a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); the build needs no browser | `npx playwright install chromium` inside the skill folder; Playwright's bundled Chromium only, an installed Chrome is not used | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); build needs no browser, and `check.mjs` skips cleanly without one |
+| ffmpeg on `PATH` | — | — | — | only to render a motion film | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 5.1 for the limiter stage of the audio mastering; the doctor says so when yours is older) | — |
+| onnxruntime-node (cutouts only, on demand) | — | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/cutout` (≈300 MB, from that folder's lockfile; install scripts are skipped because onnxruntime-node's downloads GPU libraries without a hash) plus a one-time 25 MB MODNet model download (pinned commit, SHA-256 checked); the agent asks first; `npm ci --ignore-scripts` in the skill folder leaves it alone | — |
+| onnxruntime-node and phonemizer (voiceover only, on demand) | — | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (≈227 MB on macOS, from that folder's lockfile, install scripts skipped) plus a one-time 93 MB Kokoro model download (one pinned commit, each file SHA-256 checked); the agent asks first; `npm ci --ignore-scripts` in the skill folder leaves it alone. An install made before make-motion 2 also holds `kokoro-js` and still works | — |
 
 The installed sizes are the on-disk size of each skill's production dependency tree, measured on macOS in a dev checkout
 (not a fresh install from the plugin cache): `npm ls --omit=dev --all --parseable` in the skill folder, then the size of every
