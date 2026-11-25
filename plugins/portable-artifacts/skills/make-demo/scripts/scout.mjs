@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { printResult } from '../shared/errors.mjs';
+import { agentText, escapeJsonInvisible } from '../shared/agent-text.mjs';
 import { preflight } from '../shared/preflight.mjs';
 import { scratchIgnoreNote } from '../shared/output.mjs';
 import { exitInternal } from './lib/internal-error.mjs';
@@ -20,10 +21,16 @@ const USAGE = 'node scripts/scout.mjs <demo.json> [--json]';
 const OPTIONS = { json: { type: 'boolean' } };
 const say = (line) => process.stdout.write(`${line}\n`);
 
+// A wall reason can quote the page, so every line that carries one goes through agentText (invisible characters written out, at most
+// 200 characters) and a JSON line through escapeJsonInvisible.
+const LINE_MAX = 200;
+const jsonLine = (value) => say(escapeJsonInvisible(JSON.stringify(value)));
+
 /** One line on stderr (or the JSON line on stdout) and exit 1: the scout could not be made. */
 function stop(message, json) {
-  if (json) say(JSON.stringify({ ok: false, errors: [{ path: '', message }] }));
-  else process.stderr.write(`scout: ${String(message).split('\n')[0]}\n`);
+  const text = agentText(String(message).split('\n')[0], { max: LINE_MAX });
+  if (json) jsonLine({ ok: false, errors: [{ path: '', message: text }] });
+  else process.stderr.write(`scout: ${text}\n`);
   process.exitCode = 1;
 }
 
@@ -41,7 +48,7 @@ async function readSpec(file, json) {
 function report({ scout, out, file, json }) {
   const problems = scout.pages.map((page, i) => ({ page, i })).filter(({ page }) => page.controls.length === 0 && page.wall !== null);
   if (json) {
-    say(JSON.stringify({ ok: true, out, pages: scout.pages.length, errors: problems.map(({ page, i }) => ({ path: `pages[${i}]`, message: `${page.id}: ${page.wall}` })) }));
+    jsonLine({ ok: true, out, pages: scout.pages.length, errors: problems.map(({ page, i }) => ({ path: `pages[${i}]`, message: `${page.id}: ${agentText(page.wall, { max: LINE_MAX })}` })) });
     return;
   }
   return import('./lib/digest-print.mjs').then(({ printDigest }) => {

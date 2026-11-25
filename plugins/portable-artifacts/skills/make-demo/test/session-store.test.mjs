@@ -91,6 +91,39 @@ test('forgetSession removes the file, and a second call says there was none', ()
   assert.equal(forgetSession('gone', env), false);
 });
 
+test('readSession hands a spec only the cookies and storage of its own origins, not those of the other origins the session was saved for', () => {
+  const other = 'https://other.test';
+  const state = stateOf([cookie('app.example.test', 'mine'), cookie('other.test', 'theirs')], [{ origin: ORIGIN, localStorage: [{ name: 'a', value: 'mine' }] }, { origin: other, localStorage: [{ name: 'b', value: 'theirs' }] }]);
+  saveSession('two-sites', { origins: [ORIGIN, other], state }, env);
+  const read = readSession('two-sites', [ORIGIN], env);
+  assert.deepEqual(read.cookies.map((c) => c.value), ['mine']);
+  assert.deepEqual(read.origins.map((o) => o.origin), [ORIGIN]);
+  assert.deepEqual(readSession('two-sites', [ORIGIN, other], env).cookies.map((c) => c.value), ['mine', 'theirs'], 'control: both origins listed, both kept');
+});
+
+test('saveSession never follows or reuses a file or link at a temporary name: a symlink there leaves its target alone', () => {
+  saveSession('prime', { origins: [ORIGIN], state: stateOf([]) }, env); // makes the folder
+  const file = sessionFile('linked', env);
+  const decoy = path.join(data, 'decoy.txt');
+  fs.writeFileSync(decoy, 'decoy');
+  fs.symlinkSync(decoy, `${file}.${process.pid}.tmp`);
+  saveSession('linked', { origins: [ORIGIN], state: stateOf([cookie('app.example.test')]) }, env);
+  assert.equal(fs.readFileSync(decoy, 'utf8'), 'decoy');
+  assert.ok(fs.readFileSync(file, 'utf8').includes(SECRET), 'control: the session was saved');
+});
+
+test('forgetSession also removes the temporary files a killed save left, and says it removed something', () => {
+  saveSession('crashed', { origins: [ORIGIN], state: stateOf([]) }, env);
+  const file = sessionFile('crashed', env);
+  fs.writeFileSync(`${file}.0a1b2c.tmp`, 'cookies half written');
+  fs.writeFileSync(`${sessionFile('crashed-too', env)}.0a1b2c.tmp`, 'another name');
+  assert.equal(forgetSession('crashed', env), true);
+  assert.deepEqual(fs.readdirSync(path.dirname(file)).filter((f) => f.startsWith('crashed')), ['crashed-too.json.0a1b2c.tmp'], 'only its own');
+  fs.writeFileSync(`${file}.d4e5f6.tmp`, 'leftover alone');
+  assert.equal(forgetSession('crashed', env), true, 'a leftover alone is still something removed');
+  assert.equal(forgetSession('crashed', env), false);
+});
+
 test('listSessions gives name, origins and savedAt, and never the state', () => {
   saveSession('listed', { origins: [ORIGIN], state: stateOf([cookie('app.example.test')]) }, env);
   const row = listSessions(env).find((r) => r.name === 'listed');

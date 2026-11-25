@@ -5,6 +5,7 @@
 // notice, which is only noted), or, with a session, asks for a sign-in (not signed in).
 // With a session no page text reaches the entry: names, headings and the title are masked, addresses are origin plus masked path, the
 // wall is its kind only, and there is no picture.
+import { agentText } from '../../shared/agent-text.mjs';
 import { openVisit, listRequests } from './visit.mjs';
 import { digestPage, maskDigest, maskedAddress } from './digest.mjs';
 import { wallKind, isConsentNote, isSignInRedirect } from './wall.mjs';
@@ -57,7 +58,11 @@ function verdict(read, { signedIn, hasSession }) {
   return signedIn ? wallKind(read.wall) : read.wall;
 }
 
-/** One page: open a guarded visit, read it, close it. Never throws for the site's own trouble. */
+/**
+ * One page: open a guarded visit, read it, close it. A page that cannot be read (a form that clobbers its own properties, a
+ * navigation during the read, a read that times out) is a wall, `could not be read (<error name>)`, with no message: it can hold
+ * what the page said.
+ */
 export async function visitPage(browser, { url, origins, viewport, state, signedIn, id }) {
   const { context, page, seen } = await openVisit(browser, { viewport, origins, state });
   try {
@@ -66,19 +71,27 @@ export async function visitPage(browser, { url, origins, viewport, state, signed
     const away = leftTo(page, seen, origins);
     if (away) return stopped(away);
     if (failure) return stopped(`did not load (${failure})`);
-    const read = await digestPage(page, { origins, statuses: seen.statuses, requestedUrl: url });
+    let read;
+    try {
+      read = await digestPage(page, { origins, statuses: seen.statuses, requestedUrl: url });
+    } catch (error) {
+      return stopped(`could not be read (${agentText(error?.name ?? 'Error', { max: 40 })})`);
+    }
     const lateAway = leftTo(page, seen, origins); // a script that moved the page while it was being read
     if (lateAway) return stopped(lateAway);
     const stop = verdict(read, { signedIn, hasSession: state !== null });
     if (stop) return stopped(stop, read.digest.url);
-    return await usable({ id, read, page, seen, viewport, signedIn });
+    return await finishPage({ id, read, page, seen, viewport, signedIn, origins });
   } finally {
     await context.close().catch(() => {});
   }
 }
 
-async function usable({ id, read, page, seen, viewport, signedIn }) {
-  const shot = signedIn ? null : await takeShot(page, viewport);
+/** The entry of a page that read fine. The picture comes last, so the page is checked for a move again after it, and dropped when it left. */
+export async function finishPage({ id, read, page, seen, viewport, signedIn, origins, shoot = takeShot }) {
+  const shot = signedIn ? null : await shoot(page, viewport);
+  const away = leftTo(page, seen, origins); // a redirect between the read and the picture would put another site's picture in scout/
+  if (away) return { ok: false, wall: away, entry: emptyEntry(id, read.digest.url, away, seen, signedIn) };
   const note = read.wall === null ? null : signedIn ? wallKind(read.wall) : read.wall; // only the consent notice gets here
   const whole = { id, ...read.digest, wall: note, shot: shot ? `scout/${id}.jpg` : null, ...counts(seen) };
   const entry = signedIn ? maskDigest(whole) : whole;

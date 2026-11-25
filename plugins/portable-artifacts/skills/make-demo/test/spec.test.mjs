@@ -147,11 +147,30 @@ test('type and select need target and value, or an intent alone', () => {
   }
 });
 
-test('press needs a value and may have a target', () => {
-  assert.deepEqual(errorsOf(withSteps([{ id: 'b', do: 'press', value: 'Enter' }])), []);
+test('press needs a value that is a key or chord name; Enter and Space also need a target', () => {
   assert.deepEqual(errorsOf(withSteps([{ id: 'b', do: 'press', value: 'Enter', target: { css: '#q' } }])), []);
+  for (const key of ['Tab', 'Escape', 'Backspace', 'Delete', 'Home', 'End', 'PageUp', 'PageDown', 'ArrowDown', 'ArrowLeft', 'F1', 'F12', 'a', '7', 'Control+a', 'Meta+Shift+z', 'Alt+ArrowUp']) {
+    assert.deepEqual(errorsOf(withSteps([{ id: 'b', do: 'press', value: key }])), [], key);
+  }
+  for (const key of ['Enter', 'Space', 'Shift+Enter', 'Control+Space']) failsAt(withSteps([{ id: 'b', do: 'press', value: key }]), 'target');
+  for (const key of ['Enter', 'Space']) assert.deepEqual(errorsOf(withSteps([{ id: 'b', do: 'press', value: key, intent: 'the form' }])).filter((e) => /target/.test(e.path)), [], 'an intent stands alone');
+  for (const value of ['hunter2', 'hello world', 'F13', 'Ctrl+a', 'Enter+', '', 'ab']) failsAt(withSteps([{ id: 'b', do: 'press', value, target: { css: '#q' } }]), 'value');
   failsAt(withSteps([{ id: 'b', do: 'press' }]), 'value');
   failsAt(withSteps([{ id: 'b', do: 'press', value: 7 }]), 'value');
+});
+
+test('a type or select value may not hold a control character or run past 300 characters', () => {
+  for (const verb of ['type', 'select']) {
+    for (const value of ['tent\n', 'a\tb', 'bell\u0007', `x${'y'.repeat(300)}`]) failsAt(withSteps([{ id: 'b', do: verb, target: { css: '#q' }, value }]), 'value');
+    assert.deepEqual(errorsOf(withSteps([{ id: 'b', do: verb, target: { css: '#q' }, value: 'y'.repeat(300) }])), [], 'exactly 300 is allowed');
+  }
+});
+
+test('an address with a user name or password is an error in source.url, pages and goto', () => {
+  failsAt({ ...example(), source: { url: 'https://user:hunter2@shop.example.test/' } }, 'source.url');
+  failsAt({ ...example(), pages: ['https://user:hunter2@shop.example.test/a'] }, 'pages[0]');
+  failsAt(withSteps([{ id: 'b', do: 'goto', value: 'https://u:p@shop.example.test/x' }]), 'value');
+  assert.ok(!messages({ ...example(), source: { url: 'https://user:hunter2@shop.example.test/' } }).includes('hunter2'), 'the password is not echoed');
 });
 
 test('scroll takes a target, or a value in pixels', () => {

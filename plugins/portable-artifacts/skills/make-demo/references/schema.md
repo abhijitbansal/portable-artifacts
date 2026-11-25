@@ -23,12 +23,12 @@ Every `id`, of a use case or a step, is `^[a-z][a-z0-9-]{0,40}$` and unique acro
 |---|---|
 | `goto` | `value`: an address or a path on an allowed origin |
 | `click`, `hover`, `show` | `target`, or `intent` alone |
-| `type`, `select` | `target` and `value`, or `intent` alone |
-| `press` | `value` (the key, such as `Enter`); `target` is optional |
+| `type`, `select` | `target` and `value` (no control character, at most 300 characters), or `intent` alone. Never on a password field |
+| `press` | `value`: a key or chord name (`Tab`, `Escape`, `Enter`, `Space`, `Backspace`, `Delete`, `Home`, `End`, `PageUp`, `PageDown`, `Arrow*`, `F1` to `F12`, one letter or digit, with optional `Control+`, `Meta+`, `Alt+`, `Shift+` prefixes). `Enter` and `Space` need a `target` |
 | `scroll` | `target`, or `value` in pixels |
 | `wait` | `value` in seconds, 0.1 to 10 |
 
-`target` is `{ "role": "link", "name": "Pricing" }` as scout lists the control, or `{ "css": "#plans" }` copied from the
-digest. `intent` is words for a screen not seen yet; it stands alone and excludes `target` and `value`.
+`target` is `{ "role": "link", "name": "Pricing" }` as scout lists the control, or `{ "css": … }` copied whole from where the
+digest prints `css=` (an nth-of-type path such as `html > body:nth-of-type(1) > main:nth-of-type(1) > button:nth-of-type(2)`). `intent` is words for a screen not seen yet; it stands alone and excludes `target` and `value`.
 
 Validation reads the file only. Whether a `target` names a control on the page is checked later, against scout's digest.

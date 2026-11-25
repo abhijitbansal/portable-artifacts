@@ -1,6 +1,7 @@
 // Sign-in state kept outside the project: <stable cache>/demo-sessions/<name>.json, folder 0700, file 0600.
 // A saved state is cookies and storage of the listed origins and nothing else. Nothing in here prints any of it.
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stableCacheDir } from '../../shared/doctor.mjs';
@@ -72,9 +73,11 @@ export function saveSession(name, { origins, state }, env = process.env) {
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
   fs.chmodSync(dir, DIR_MODE);
-  const temp = `${file}.${process.pid}.tmp`;
+  // A random name, opened with `wx` (it must not exist): a file or symlink already there is never followed or reused. A process killed
+  // between the write and the rename leaves `<name>.json.<random>.tmp`, which `forgetSession` removes.
+  const temp = `${file}.${randomBytes(8).toString('hex')}.tmp`;
   try {
-    fs.writeFileSync(temp, JSON.stringify({ version: FILE_VERSION, name, origins, savedAt: new Date().toISOString(), state: kept }), { mode: FILE_MODE });
+    fs.writeFileSync(temp, JSON.stringify({ version: FILE_VERSION, name, origins, savedAt: new Date().toISOString(), state: kept }), { mode: FILE_MODE, flag: 'wx' });
     fs.chmodSync(temp, FILE_MODE);
     fs.renameSync(temp, file);
   } catch (error) {
@@ -83,6 +86,9 @@ export function saveSession(name, { origins, state }, env = process.env) {
   }
   return kept.cookies.length;
 }
+
+/** The line `session.mjs login` prints: the name, the origins and the number of cookies kept, and nothing else of the state. */
+export const savedLine = (name, cookies, origins) => `saved session "${name}": ${cookies} cookies, origins ${origins.join(', ')}`;
 
 function readFile(name, env) {
   const file = sessionFile(name, env);
@@ -102,18 +108,20 @@ function readFile(name, env) {
   throw new UsageError(`the saved session "${name}" cannot be read; sign in again with: ${LOGIN_COMMAND}`);
 }
 
-/** The stored state, for a spec that needs `origins`. Refuses a session saved for fewer origins than the spec visits. */
+/** The stored state cut down to `origins`, for a spec that needs them. Refuses a session saved for fewer origins than the spec visits. */
 export function readSession(name, origins, env = process.env) {
   const saved = readFile(name, env);
   const missing = origins.filter((o) => !saved.origins.includes(o));
   if (missing.length > 0) throw new UsageError(`the saved session "${name}" does not cover ${missing.join(', ')}; sign in again with --origin for each origin`);
-  return saved.state;
+  return filterState(saved.state, origins); // a session saved for A and B does not hand B's cookies to a demo of A
 }
 
-/** Remove a session. False when there was none. */
+/** Remove a session and any temporary file of its name that a killed save left. False when there was nothing to remove. */
 export function forgetSession(name, env = process.env) {
   const file = sessionFile(name, env);
-  if (!fs.existsSync(file)) return false;
+  const leftovers = fs.existsSync(path.dirname(file)) ? fs.readdirSync(path.dirname(file)).filter((f) => f.startsWith(`${name}.json.`) && f.endsWith('.tmp')) : [];
+  for (const f of leftovers) fs.rmSync(path.join(path.dirname(file), f), { force: true });
+  if (!fs.existsSync(file)) return leftovers.length > 0;
   fs.rmSync(file);
   return true;
 }

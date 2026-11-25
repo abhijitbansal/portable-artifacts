@@ -55,6 +55,54 @@ for (const [verb, control, lang, expected, value] of TABLE) {
   });
 }
 
+const WRITES_ON_GET = [
+  ['Cancel order', '/orders/5/cancel'], ['Add to cart', '/?add-to-cart=12'], ['Add to basket', '/basket/12'], ['Add to bag', '/b/12'], ['Approve', '/x/approve'], ['Reject', '/x/reject'], ['Confirm', '/confirm?id=1'],
+  ['Clear history', '/history'], ['Unfollow', '/u/1'], ['Vote', '/poll/1'], ['Uninstall', '/apps/1'], ['Disconnect', '/net'], ['Unlink', '/acct-link'],
+  ['Purge', '/cache'], ['Wipe', '/data'], ['Renew', '/plan'], ['Order now', '/o'], ['Leave team', '/team'], ['Sign me out', '/bye'], ['Log me out', '/session/end'],
+  ['Payments', '/p'], ['Next', '/accounts'], ['Next', '/deleted'], ['Next', '/invites'], ['Signing out', '/s'], ['Deleting', '/s'], ['Removed', '/s'],
+  ['Next', '/?action=Sign%20out'], ['Next', '/?do=log%20out'], ['Next', '/a%2Flogout'], ['Next', '/?x=add-to-cart'],
+];
+for (const [name, href] of WRITES_ON_GET) {
+  test(`a plain English link ${JSON.stringify(name)} to ${href} is danger`, () => {
+    const got = classify({ do: 'click', control: link(name, href), pageUrl: PAGE, origins: ORIGINS, lang: 'en' });
+    assert.equal(got.effect, 'danger', got.reason);
+  });
+}
+
+test('dangerWord decodes percent-escapes and leaves a malformed one as it is', () => {
+  assert.equal(dangerWord('/x%zz/delete'), 'delete');
+  assert.equal(dangerWord('100%'), null);
+  assert.equal(dangerWord('/a%2Flogout'), 'logout');
+  assert.equal(dangerWord('?action=Sign%20out'), 'sign out');
+});
+
+test('dangerWord matches plural, -ed and -ing forms and not look-alike words', () => {
+  for (const [text, word] of [['Deleted', 'delete'], ['Deleting', 'delete'], ['Sending', 'send'], ['Invites', 'invite'], ['Transferred', 'transfer'], ['Logging out', 'log out'], ['Resets', 'reset'], ['Accounts', 'account']]) {
+    assert.equal(dangerWord(text), word, text);
+  }
+  for (const text of ['Resender', 'Display', 'Paypal overview', 'Docs', 'Clearance', 'Leaflet', 'Voter guide', 'Approvals']) assert.equal(dangerWord(text), null, text);
+});
+
+test('an icon link with no name is a change, not a look', () => {
+  const got = classify({ do: 'click', control: link('', '/zz/3'), pageUrl: PAGE, origins: ORIGINS, lang: 'en' });
+  assert.equal(got.effect, 'change');
+  assert.match(got.reason, /no name/);
+});
+
+test('a disclosure is a look only on an English page, like a link', () => {
+  const at = (lang) => classify({ do: 'click', control: disclosure('Menu'), pageUrl: PAGE, origins: ORIGINS, lang }).effect;
+  assert.equal(at('en'), 'look');
+  assert.equal(at('de'), 'change');
+  assert.equal(at(null), 'change');
+});
+
+test('isFollowable is false for any link with a query', () => {
+  const ctx = { pageUrl: PAGE, origins: ORIGINS, lang: 'en' };
+  assert.equal(isFollowable(link('Next', '/docs?page=2'), ctx), false);
+  assert.equal(isFollowable(link('Next', '/app/?page=2'), ctx), false);
+  assert.equal(isFollowable(link('Docs', '/docs'), ctx), true, 'control: no query is followed');
+});
+
 test('dangerWord finds whole words only', () => {
   assert.equal(dangerWord('Paypal overview'), null);
   assert.equal(dangerWord('Resender'), null);

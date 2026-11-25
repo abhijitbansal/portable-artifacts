@@ -13,7 +13,7 @@
       "steps": [
         { "id": "open-home", "do": "goto", "value": "/" },
         { "id": "open-pricing", "do": "click", "target": { "role": "link", "name": "Pricing" } },
-        { "id": "see-plans", "do": "show", "target": { "css": "#plans" } },
+        { "id": "see-plans", "do": "show", "target": { "css": "html > body:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(2)" } },
         { "id": "scroll-plans", "do": "scroll", "value": 400 }
       ]
     },
@@ -23,7 +23,7 @@
       "steps": [
         { "id": "open-shop", "do": "goto", "value": "/" },
         { "id": "type-query", "do": "type", "target": { "role": "searchbox", "name": "Search" }, "value": "tent" },
-        { "id": "submit-query", "do": "press", "value": "Enter" },
+        { "id": "submit-query", "do": "press", "value": "Enter", "target": { "role": "searchbox", "name": "Search" } },
         { "id": "let-results-load", "do": "wait", "value": 1.5 },
         { "id": "open-first-result", "do": "click", "intent": "the first product in the results" }
       ]

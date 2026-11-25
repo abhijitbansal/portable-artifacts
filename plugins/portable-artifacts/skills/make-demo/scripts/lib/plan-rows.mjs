@@ -1,8 +1,10 @@
 // The click plan's rows: demo.json steps joined with scout.json, offline. Pure: no page, no clock, no file.
-// A row is one step: { n, useCase, id, do, page, pageId, target, value, intent, effect, reason, box, viaCss }.
-//   viaCss  true when the step named its target by css (the plan page then shows the css)
-//   page    the address of the page the step is on (a goto: the one it opens); null when the screen is not seen yet
-//   target  { role, name, css } of the one control scout saw (a heading has css null), or null
+// A row is one step: { n, useCase, id, do, page, pageId, target, control, address, value, intent, effect, reason, box, viaCss }.
+//   viaCss   true when the step named its target by css (the plan page then shows the css)
+//   page     the address of the page the step is on (a goto: the one it opens); null when the screen is not seen yet
+//   target   { id, role, name, css } of the one control scout saw (a heading has css null), or null
+//   control  { kind, href, formAction, formMethod } of that control, or null: what the hash binds and the plan page shows
+//   address  a goto's address from demo.json, resolved (never masked); null for any other step
 // Where a step is: `goto` sets the page; a look click on a link to a scouted page moves there; a look disclosure, type, select, hover,
 // scroll, wait and show stay; a change or danger click, a press, or a goto or link to an unscouted page makes the screen unknown until
 // the next goto, and a step with a target there is an error ("not seen yet: use intent"). An intent row has effect change and cannot run.
@@ -13,6 +15,8 @@ import { agentText } from '../../shared/agent-text.mjs';
 import { classify } from './effects.mjs';
 import { originsOf } from './spec.mjs';
 import { maskedAddress } from './digest.mjs';
+import { pageIdentity } from './page-identity.mjs';
+import { cutLeft } from './text-cut.mjs';
 
 /** Fields that hold only words: changing one does not change the hash. Every other field of demo.json is bound by it. */
 export const WORD_FIELDS = ['generatedBy', 'useCases[].title', 'useCases[].goal'];
@@ -22,19 +26,10 @@ const ECHO_MAX = 80;
 const RANK = { look: 0, change: 1, danger: 2 };
 const NOT_SEEN = 'not seen yet: use intent';
 const INTENT_REASON = 'not seen yet, so it cannot run until it names a target';
-const STAYS_ON_PAGE = new Set(['type', 'select', 'hover', 'scroll', 'wait', 'show']);
+const VALUE_VERBS = new Set(['type', 'select', 'press']); // a step that sends keys: never to a password field
 
 const echo = (text) => `"${agentText(text, { max: ECHO_MAX })}"`;
-
-function withoutHash(address) {
-  try {
-    const url = new URL(address);
-    url.hash = '';
-    return url.href;
-  } catch {
-    return String(address);
-  }
-}
+const echoCss = (css) => `"${cutLeft(css, { max: ECHO_MAX })}"`; // the end of a css path is the part that tells two apart
 
 // ---- the hash --------------------------------------------------------------------------------------------------------------
 
@@ -54,9 +49,15 @@ function withoutWords(spec) {
   return { ...rest, useCases: rest.useCases.map(({ title, goal, ...useCase }) => useCase) };
 }
 
-/** First 12 hex characters of SHA-256 over the spec without its word fields, plus every row's id, page address and effect. */
+// What a row binds besides its step: the page, the effect, and the control it resolved (role, name, css, kind, address, form).
+function boundRow(r) {
+  const { kind, href, formAction, formMethod } = r.control ?? {};
+  return { id: r.id, page: r.page, effect: r.effect, role: r.target?.role, name: r.target?.name, css: r.target?.css, kind, href, formAction, formMethod };
+}
+
+/** First 12 hex characters of SHA-256 over the spec without its word fields, plus every row's id, page, effect and resolved control. */
 export function planHash(spec, rows) {
-  const body = { spec: withoutWords(spec), rows: rows.map((r) => ({ id: r.id, page: r.page, effect: r.effect })) };
+  const body = { spec: withoutWords(spec), rows: rows.map(boundRow) };
   return createHash('sha256').update(canonical(body)).digest('hex').slice(0, HASH_CHARS);
 }
 
@@ -77,17 +78,32 @@ const wallText = (page) => `page ${page.id} is a wall (${echo(page.wall)})`;
 
 // ---- finding pages and controls ----------------------------------------------------------------------------------------------
 
+// Signed out, a page is found by its address (a hash route counts, a plain fragment does not). Signed in, scout.json holds only masked
+// addresses, so a masked path says nothing about which page it was: a goto names a scouted page only when its address is the start
+// address or one named in `pages` (each scouted page records the index of the entry it was opened for, `fromEntry`), and a click on a
+// link only when one scouted page has that masked address and the stored address lost nothing to masking.
 function makeWorld(spec, scout) {
   const signedIn = scout.session !== null;
-  const key = (address, masked = false) => (signedIn ? (masked ? address : maskedAddress(address)) : withoutHash(address));
+  const starts = [scout.url, ...scout.named].map(pageIdentity);
+  const pagesAt = (wanted) => scout.pages.filter((p) => pageIdentity(p.url) === wanted);
   return {
     spec, scout, signedIn, origins: originsOf(spec),
     absolute: (value) => new URL(value, spec.source.url).href,
-    /** The one scouted page at this address, or null. `masked`: the address is already origin plus masked path. */
-    pageAt(address, masked = false) {
-      const wanted = key(address, masked);
-      const hits = scout.pages.filter((p) => (signedIn ? p.url : withoutHash(p.url)) === wanted);
-      if (hits.length === 0 && !signedIn && key(address) === key(scout.url)) return scout.pages[0] ?? null;
+    /** The scouted page a goto opens, or null. */
+    pageForGoto(address) {
+      const wanted = pageIdentity(address);
+      if (signedIn) {
+        const entry = starts.indexOf(wanted);
+        return entry < 0 ? null : scout.pages.find((p) => p.fromEntry === entry) ?? null;
+      }
+      const hits = pagesAt(wanted);
+      if (hits.length === 0 && wanted === starts[0]) return scout.pages[0] ?? null; // the start page may have redirected
+      return hits.length === 1 ? hits[0] : null;
+    },
+    /** The scouted page a look click on this link opens, or null when that cannot be known. */
+    pageForLink(control) {
+      if (control.href === null || (signedIn && control.hrefCut !== false)) return null;
+      const hits = pagesAt(pageIdentity(control.href));
       return hits.length === 1 ? hits[0] : null;
     },
   };
@@ -102,8 +118,8 @@ function matchesOf(page, target) {
   return [...found, ...page.headings.filter((h) => h.name === target.name).map(headingAsControl)];
 }
 
-const describeTarget = (t) => (t.css !== undefined ? `css ${echo(t.css)}` : `role ${echo(t.role)} and name ${echo(t.name)}`);
-const listed = (c) => (c.css === null ? `a heading at y ${c.box.y}` : agentText(c.css, { max: ECHO_MAX }));
+const describeTarget = (t) => (t.css !== undefined ? `css ${echoCss(t.css)}` : `role ${echo(t.role)} and name ${echo(t.name)}`);
+const listed = (c) => (c.css === null ? `a heading at y ${c.box.y}` : agentText(c.css, { max: Infinity })); // whole: the author copies one
 
 /** { control } for exactly one match, else { error } (no match, or several with each css listed). */
 function resolveTarget(page, target, at) {
@@ -135,21 +151,22 @@ function nextPage(world, page, step, { effect, control }) {
   if (step.do !== 'click') return page;
   if (effect !== 'look') return null;
   if (control.kind !== 'link') return page;
-  return control.href === null ? null : world.pageAt(control.href, world.signedIn);
+  return world.pageForLink(control);
 }
 
 // ---- one step ----------------------------------------------------------------------------------------------------------------
 
 function baseRow(n, useCase, step) {
-  return { n, useCase: useCase.id, id: step.id, do: step.do, page: null, pageId: null, target: null, value: step.value ?? null, intent: step.intent ?? null, effect: 'look', reason: '', box: null, viaCss: false };
+  return { n, useCase: useCase.id, id: step.id, do: step.do, page: null, pageId: null, target: null, control: null, address: null, value: step.value ?? null, intent: step.intent ?? null, effect: 'look', reason: '', box: null, viaCss: false };
 }
 
+// `address` is what demo.json says, resolved: the plan page shows it whole, so the owner approves the address that will be opened.
 function gotoStep(world, row, step) {
   const address = world.absolute(step.value);
-  const page = world.pageAt(address);
+  const page = world.pageForGoto(address);
   const effect = classify({ do: 'goto', value: address, pageUrl: world.spec.source.url, origins: world.origins });
   const shown = world.signedIn ? maskedAddress(address) : address;
-  return { row: { ...row, ...effect, page: page?.url ?? shown, pageId: page?.id ?? null }, page };
+  return { row: { ...row, ...effect, page: page?.url ?? shown, pageId: page?.id ?? null, address }, page };
 }
 
 function intentStep(row, step, page) {
@@ -178,14 +195,15 @@ function targetStep(world, row, step, page, at, errors) {
     return { page };
   }
   const { control } = found;
-  if (step.do === 'type' && control.kind === 'password') {
-    errors.push({ path: `${at}.target`, message: 'typing into a password field is refused: sign in with session.mjs instead' });
+  if (control.kind === 'password' && VALUE_VERBS.has(step.do)) {
+    errors.push({ path: `${at}.target`, message: `${step.do} on a password field is refused: sign in with session.mjs instead` });
     return { page };
   }
   const effect = effectOf(world, page, step, control);
-  const target = { role: control.role, name: control.name, css: control.css };
+  const target = { id: control.id, role: control.role, name: control.name, css: control.css };
+  const bound = { kind: control.kind, href: control.href, formAction: control.formAction, formMethod: control.formMethod };
   return {
-    row: { ...row, ...effect, page: page.url, pageId: page.id, target, box: control.box, viaCss: step.target.css !== undefined },
+    row: { ...row, ...effect, page: page.url, pageId: page.id, target, control: bound, box: control.box, viaCss: step.target.css !== undefined },
     page: nextPage(world, page, step, { effect: effect.effect, control }),
   };
 }

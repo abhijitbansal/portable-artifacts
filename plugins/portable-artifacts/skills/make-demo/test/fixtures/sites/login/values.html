@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Preferences</title>
+</head>
+<body>
+<h1>Preferences</h1>
+<!-- A control whose accessible name carries what a field holds. Each SECRET-* is a value, never a name. -->
+<label><input type="checkbox"> Remind <input type="text" value="SECRET-LABEL-A"> days</label>
+<span id="k">Reveal</span><input id="v" type="text" value="SECRET-LBY-B" aria-label="Key"><button type="button" aria-labelledby="k v">Show key</button>
+<label><input type="radio" name="r"> Send to <select><option>a</option><option selected>SECRET-SEL-F</option></select></label>
+<label><input type="checkbox"> Notes <textarea>SECRET-TA-I</textarea></label>
+<label><input type="checkbox"> At <input type="range" aria-valuetext="SECRET-RANGE-L" min="0" max="9"> volume</label>
+<button type="button">Balance <span role="textbox" contenteditable="true">SECRET-CE-H</span></button>
+<div role="listbox" aria-label="Pick"><div role="option" aria-selected="true">SECRET-OPTION-K</div></div>
+<select size="3" aria-label="Accounts list"><option>SECRET-LIST-N</option></select>
+<label><input type="checkbox"> Agree to terms</label>
+</body>
+</html>

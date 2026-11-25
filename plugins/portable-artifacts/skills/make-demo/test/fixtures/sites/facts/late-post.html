@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Late</title>
+</head>
+<body>
+<h1>Late</h1>
+<p>A chain of timers sends a POST on its fifth tick, about six seconds of page time in: the real load is gone by then, the stepped clock reaches it.</p>
+<script>
+  fetch('/scout/track', { method: '**APPROVED**' });
+  let tick = 0;
+  (function again() {
+    tick += 1;
+    document.title = `Late ${tick}`;
+    if (tick === 5) fetch('/scout/track', { method: 'POST' });
+    if (tick < 6) setTimeout(again, 1300);
+  })();
+</script>
+</body>
+</html>

@@ -1,32 +1,53 @@
-// The rows of a click plan as a make-explainer plan page: a summary, one table per use case, the rows that change something, a picture
-// per scouted page with numbered boxes (signed out only), what scout saw the site send, links it left alone, one approval per danger
-// row, and the verdict. Our own words pass make-explainer's lint (no filler, titles that state a claim, under 8 words). Anything a page
-// said, or the demo author typed, goes in as inline code only: backticks become quotes, "TODO:" is broken, whitespace collapses, text is
-// cut at 80 characters and invisible characters are written as code points.
+// The rows of a click plan as a make-explainer plan page: a summary, the use case's words and one table per use case, the rows that
+// change something, a picture per scouted page with numbered boxes (signed out only), what scout saw the site send, links it left
+// alone, one approval per danger row, and the verdict. Our own words pass make-explainer's lint (no filler, titles that state a
+// claim, under 8 words). Anything a page said, or the demo author typed, goes in as inline code only: backticks become quotes,
+// "TODO:" is broken, invisible characters are written as code points, and text is cut (names and addresses at 80 and 200 characters,
+// a typed value at 300, which demo.json cannot pass). A typed value is the author's own words: it is shown as written, signed in too.
 import { agentText } from '../../shared/agent-text.mjs';
-import { maskText } from './mask.mjs';
 import { maskedAddress } from './digest.mjs';
 import { MAX_HEIGHT } from './shot.mjs';
+import { cutLeft } from './text-cut.mjs';
 
 const TEXT_MAX = 80;
-const VALUE_MAX = 300; // a typed value: the owner sees what will be typed
+const ADDRESS_MAX = 200; // an address shown after a name, or a goto's
+const VALUE_MAX = 300; // a typed value; spec.mjs refuses a longer one, so nothing is hidden
 const MAX_TABLE_ROWS = 60;
-const SCROLL_ROWS = 6; // past this many rows the table scrolls inside the page
+const SCROLL_ROWS = 4; // from this many rows the table scrolls inside the page
 const NOT_SEEN = 'not seen yet';
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** Page text as one inline code span; '(empty)' for no text. make-explainer rejects "TODO:" and "lorem ipsum" in any string, code or not. */
-export function code(text, { max = TEXT_MAX } = {}) {
-  const flat = String(text).replace(/\s+/g, ' ').trim().replaceAll('`', "'").replaceAll('TODO:', 'TODO :').replace(/(lorem)\s+(ipsum)/gi, '$1 - $2');
-  return flat === '' ? '(empty)' : `\`${agentText(flat, { max })}\``;
+/**
+ * Page text as one inline code span; '(empty)' for no text. make-explainer rejects "TODO:" and "lorem ipsum" in any string, code or not.
+ * `verbatim` keeps the spaces as they are; `left` cuts a long text from the left, so its end shows.
+ */
+export function code(text, { max = TEXT_MAX, verbatim = false, left = false } = {}) {
+  const raw = verbatim ? String(text) : String(text).replace(/\s+/g, ' ').trim();
+  const flat = raw.replaceAll('`', "'").replaceAll('TODO:', 'TODO :').replace(/(lorem)\s+(ipsum)/gi, '$1 - $2');
+  if (flat === '') return '(empty)';
+  return `\`${left ? cutLeft(flat, { max }) : agentText(flat, { max })}\``;
 }
 
+const readable = (text) => text.replaceAll('%3Cid%3E', '<id>'); // a masked path id
+
 const pathOf = (address) => {
-  try { return new URL(address).pathname; } catch { return String(address); }
+  try { return readable(new URL(address).pathname); } catch { return String(address); }
 };
+
+/** An address as the owner needs to read it: path, query and hash, and the origin whenever it is not the start page's. */
+function shown(address, startOrigin) {
+  try {
+    const url = new URL(address);
+    const where = readable(`${url.pathname}${url.search}${url.hash}`);
+    return url.origin === startOrigin ? where : `${url.origin}${where}`;
+  } catch {
+    return String(address);
+  }
+}
+
 const capped = (rows) => rows.slice(0, MAX_TABLE_ROWS);
 const moreNote = (rows) => (rows.length > MAX_TABLE_ROWS ? `The first ${MAX_TABLE_ROWS} of ${rows.length} are shown.` : undefined);
-const scrollNote = (rows) => (rows.length > SCROLL_ROWS ? `Scroll the table to see all ${capped(rows).length} rows.` : undefined);
+const scrollNote = (rows) => (rows.length >= SCROLL_ROWS ? `Scroll the table to see all ${capped(rows).length} rows.` : undefined);
 function table(title, label, columns, rows, caption) {
   const notes = [caption, scrollNote(rows), moreNote(rows)].filter(Boolean);
   return { type: 'table', title, label, columns, rows: capped(rows), ...(notes.length > 0 ? { caption: notes.join(' ') } : {}) };
@@ -40,32 +61,42 @@ function tally(rows) {
 
 const isBelowPicture = (row, pictures) => pictures.has(row.pageId) && row.box !== null && row.box.y >= MAX_HEIGHT;
 
-function pageCell(row) {
+// A goto shows the address it opens, whole, from demo.json; any other row the page it sits on.
+function pageCell(row, ctx) {
   if (row.intent !== null || row.page === null) return NOT_SEEN;
+  if (row.do === 'goto') return `${row.pageId ?? 'not scouted'} ${code(shown(row.address ?? row.page, ctx.startOrigin), { max: ADDRESS_MAX })}`;
   return row.pageId === null ? `not scouted ${code(pathOf(row.page))}` : `${row.pageId} ${code(pathOf(row.page))}`;
 }
 
-function targetCell(row, pictures) {
+// Where the control leads: a link its address, a control in a form the form's method and action.
+function leadsTo(row, ctx) {
+  const { control } = row;
+  if (!control) return '';
+  if (control.href) return ` to ${code(shown(control.href, ctx.startOrigin), { max: ADDRESS_MAX })}`;
+  if (control.formAction) return ` in form ${code(`${String(control.formMethod ?? 'get').toUpperCase()} ${shown(control.formAction, ctx.startOrigin)}`, { max: ADDRESS_MAX })}`;
+  return '';
+}
+
+// Starts with the page and the control id (`p1 c12`): two rows whose names and css read the same still differ there.
+function targetCell(row, ctx) {
   if (row.intent !== null) return `intent ${code(row.intent)}`;
   if (row.target === null) return '';
-  const below = isBelowPicture(row, pictures) ? ' (below the picture, no box)' : '';
-  return `${row.target.role} ${nameAndCss(row.target, row.viaCss)}${below}`;
+  const below = isBelowPicture(row, ctx.pictures) ? ' (below the picture, no box)' : '';
+  const where = [row.pageId, row.target.id].filter(Boolean).join(' ');
+  return `${where} ${row.target.role} ${nameAndCss(row.target, row.viaCss)}${leadsTo(row, ctx)}${below}`.trim();
 }
 
-// The name; the css where there is no name, and after the name when the step named its target by css.
+// The name; the css where there is no name, and after the name when the step named its target by css. Css is cut from the left.
 function nameAndCss({ name, css }, viaCss) {
   if (css === null) return code(name);
-  if (name === '') return code(css);
-  return viaCss ? `${code(name)} at ${code(css)}` : code(name);
+  if (name === '') return code(css, { left: true });
+  return viaCss ? `${code(name)} at ${code(css, { left: true })}` : code(name);
 }
 
-function valueCell(row, signedIn) {
-  if (row.do === 'goto' || row.value === null) return '';
-  return code(signedIn ? maskText(String(row.value)) : String(row.value), { max: VALUE_MAX });
-}
+const valueCell = (row) => (row.do === 'goto' || row.value === null ? '' : code(String(row.value), { max: VALUE_MAX, verbatim: true }));
 
-const useCaseRow = (row, ctx) => [row.n, row.do, targetCell(row, ctx.pictures), pageCell(row), valueCell(row, ctx.signedIn), row.effect, row.reason];
-const changeRow = (row, ctx) => [row.n, row.useCase, row.do, targetCell(row, ctx.pictures), row.effect, row.reason];
+const useCaseRow = (row, ctx) => [row.n, row.effect, row.do, targetCell(row, ctx), pageCell(row, ctx), valueCell(row), row.reason];
+const changeRow = (row, ctx) => [row.n, row.effect, row.useCase, row.do, targetCell(row, ctx), row.reason];
 
 // ---- sections ----------------------------------------------------------------------------------------------------------------
 
@@ -82,18 +113,30 @@ function summary(spec, rows, hash) {
   };
 }
 
+// The use case's own words stand before its table; they are the author's, so they are code.
+function useCaseWords(useCase, i, own) {
+  const scrolls = own.length >= SCROLL_ROWS ? ` The table below scrolls; it has ${own.length} rows.` : '';
+  const goal = useCase.goal === undefined ? '' : ` Goal ${code(useCase.goal)}.`;
+  return {
+    type: 'text', title: useCase.goal === undefined ? `Use case ${i + 1} has a title` : `Use case ${i + 1} states its goal`, label: `Use case ${i + 1}`,
+    text: `Title ${code(useCase.title)}.${goal}${scrolls}`,
+  };
+}
+
 function useCaseTables(spec, rows, ctx) {
-  return spec.useCases.map((useCase, i) => {
+  return spec.useCases.flatMap((useCase, i) => {
     const own = rows.filter((r) => r.useCase === useCase.id);
-    const caption = [`Use case ${code(useCase.title)}.`, useCase.goal === undefined ? null : `Goal ${code(useCase.goal)}.`].filter(Boolean).join(' ');
-    return table(`Use case ${i + 1} runs ${plural(own.length, 'step')}`, `Use case ${i + 1}`, ['n', 'do', 'target', 'page', 'value', 'effect', 'reason'], own.map((r) => useCaseRow(r, ctx)), caption);
+    return [
+      useCaseWords(useCase, i, own),
+      table(`Use case ${i + 1} runs ${plural(own.length, 'step')}`, `Use case ${i + 1}`, ['n', 'effect', 'do', 'target', 'page', 'value', 'reason'], own.map((r) => useCaseRow(r, ctx))),
+    ];
   });
 }
 
 function changesTable(rows, ctx) {
   const own = rows.filter((r) => r.effect !== 'look');
   if (own.length === 0) return [];
-  return [table(`${plural(own.length, 'row')} may change something`, 'Changes', ['n', 'use case', 'do', 'target', 'effect', 'reason'], own.map((r) => changeRow(r, ctx)))];
+  return [table(`${plural(own.length, 'row')} may change something`, 'Changes', ['n', 'effect', 'use case', 'do', 'target', 'reason'], own.map((r) => changeRow(r, ctx)))];
 }
 
 function intentNote(rows) {
@@ -131,7 +174,7 @@ function approvals(rows, ctx) {
   }
   return danger.map((row) => ({
     type: 'approval', id: `danger-${row.id}`, title: `Row ${row.n} needs its own yes`, label: `Danger ${row.n}`,
-    item: `Row ${row.n}: ${row.do} ${targetCell(row, ctx.pictures).trim()} on ${pageCell(row)}.`,
+    item: row.do === 'goto' ? `Row ${row.n}: goto ${pageCell(row, ctx)}.` : `Row ${row.n}: ${row.do} ${targetCell(row, ctx)} on ${pageCell(row, ctx)}.`,
     why: `The classifier says: ${row.reason}. Nothing has been clicked.`,
   }));
 }
@@ -143,7 +186,7 @@ function approvals(rows, ctx) {
 export function planPage(spec, scout, result, pictures = new Map()) {
   const { rows, hash } = result;
   const signedIn = scout.session !== null;
-  const ctx = { signedIn, pictures: signedIn ? new Map() : pictures };
+  const ctx = { signedIn, pictures: signedIn ? new Map() : pictures, startOrigin: new URL(spec.source.url).origin };
   return {
     title: 'Click plan, nothing clicked yet',
     subtitle: `${plural(rows.length, 'step')} in ${plural(spec.useCases.length, 'use case')}; none of them has run.`,

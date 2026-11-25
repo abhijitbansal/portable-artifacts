@@ -65,25 +65,25 @@ test('a session name and the rights are in the summary', () => {
   assert.match(out.sections[0].points.join(' '), /session fixture/);
 });
 
-test('one table per use case: n, do, target, page, value, effect, reason, one row per step', () => {
+test('one table per use case: n, effect, do, target, page, value, reason, one row per step', () => {
   const out = build(dangerSpec(), dangerScout());
   const first = sections(out, 'table')[0];
-  assert.deepEqual(first.columns, ['n', 'do', 'target', 'page', 'value', 'effect', 'reason']);
+  assert.deepEqual(first.columns, ['n', 'effect', 'do', 'target', 'page', 'value', 'reason']);
   assert.equal(first.rows.length, 7);
   assert.deepEqual(first.rows.map((r) => r[0]), [1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(first.rows[4][5], 'danger');
-  assert.equal(first.rows[5][3], 'not seen yet', 'an intent row is shown as not seen yet');
-  assert.equal(first.rows[5][5], 'change');
-  assert.match(first.rows[5][2], /confirm the dialog that follows/);
+  assert.equal(first.rows[4][1], 'danger');
+  assert.equal(first.rows[5][4], 'not seen yet', 'an intent row is shown as not seen yet');
+  assert.equal(first.rows[5][1], 'change');
+  assert.match(first.rows[5][3], /confirm the dialog that follows/);
 });
 
 test('a second table lists only the change and danger rows', () => {
   const out = build(dangerSpec(), dangerScout());
   const tables = sections(out, 'table');
-  const changes = tables.find((t) => t.columns[1] === 'use case');
+  const changes = tables.find((t) => t.columns.includes('use case'));
   assert.ok(changes);
   assert.deepEqual(changes.rows.map((r) => r[0]), [3, 5, 6, 7]);
-  assert.ok(changes.rows.every((r) => ['change', 'danger'].includes(r[4])));
+  assert.ok(changes.rows.every((r) => ['change', 'danger'].includes(r[1])));
 });
 
 test('page text is only ever inline code: a hostile name is shown literally and nothing else carries it', () => {
@@ -136,32 +136,31 @@ test('a control with no name, or a target given by css, shows its css as code af
   const scout = scoutOf([page({ controls: [control({ name: '', css: 'icon-css', submits: true, formAction: 'http://127.0.0.1:4001/danger/pay', formMethod: 'post' }), control({ id: 'c2', name: 'Save', css: 'save-css' })] })]);
   const spec = specOf([{ id: 'icon', do: 'click', target: { css: 'icon-css' } }, { id: 'back', do: 'goto', value: '/' }, { id: 'save', do: 'hover', target: { css: 'save-css' } }, { id: 'named', do: 'hover', target: { role: 'button', name: 'Save' } }]);
   const out = build(spec, scout);
-  const cells = sections(out, 'table')[0].rows.map((r) => r[2]);
-  assert.equal(cells[1], 'button `icon-css`');
-  assert.equal(cells[3], 'button `Save` at `save-css`');
-  assert.equal(cells[4], 'button `Save`', 'a target given by name needs no css');
+  const cells = sections(out, 'table')[0].rows.map((r) => r[3]);
+  assert.match(cells[1], /^p1 c1 button `icon-css`/);
+  assert.equal(cells[3], 'p1 c2 button `Save` at `save-css`');
+  assert.equal(cells[4], 'p1 c2 button `Save`', 'a target given by name needs no css');
   assert.ok(!cells.join().includes('(empty)'));
   assert.match(sections(out, 'approval')[0].item, /button `icon-css`/);
 });
 
-test('a table of more than 6 rows says to scroll it, with the number of rows', () => {
+test('a table of 4 or more rows says to scroll it, with the number of rows', () => {
   const steps = Array.from({ length: 7 }, (_, i) => ({ id: `w${i}`, do: 'wait', value: 1 }));
   const out = build(specOf(steps), scoutOf([page()]));
   assert.match(sections(out, 'table')[0].caption, /Scroll the table to see all 8 rows\./);
-  const small = build(specOf(steps.slice(0, 4)), scoutOf([page()]));
+  const small = build(specOf(steps.slice(0, 2)), scoutOf([page()]));
   assert.ok(!/Scroll the table/.test(sections(small, 'table')[0].caption));
-  const changes = build(specOf(Array.from({ length: 7 }, (_, i) => ({ id: `c${i}`, do: 'press', value: 'Enter' }))), scoutOf([page()]));
-  assert.match(sections(changes, 'table').find((t) => t.columns[1] === 'use case').caption, /Scroll the table to see all 7 rows\./);
+  const changes = build(specOf(Array.from({ length: 7 }, (_, i) => ({ id: `c${i}`, do: 'press', value: 'Tab' }))), scoutOf([page()]));
+  assert.match(sections(changes, 'table').find((t) => t.columns.includes('use case')).caption, /Scroll the table to see all 7 rows\./);
 });
 
-test('a typed value is shown up to 300 characters, a name up to 80', () => {
+test('a typed value is shown whole (demo.json allows at most 300 characters), a name up to 80', () => {
   const scout = scoutOf([page({ controls: [control({ role: 'textbox', name: 'x'.repeat(100), css: 'f', kind: 'field' })] })]);
-  const value = 'v'.repeat(250);
-  const out = build(specOf([{ id: 't', do: 'type', target: { css: 'f' }, value }, { id: 'u', do: 'type', target: { css: 'f' }, value: 'w'.repeat(400) }]), scout);
+  const value = 'v'.repeat(300);
+  const out = build(specOf([{ id: 't', do: 'type', target: { css: 'f' }, value }]), scout);
   const rows = sections(out, 'table')[0].rows;
-  assert.equal(rows[1][4], `\`${value}\``);
-  assert.match(rows[2][4], /^`w{300}…\[100 more characters\]`$/);
-  assert.match(rows[1][2], /`x{80}…\[20 more characters\]`/);
+  assert.equal(rows[1][5], `\`${value}\``);
+  assert.match(rows[1][3], /`x{80}…\[20 more characters\]`/);
 });
 
 test('a plan with no danger row still has one approval, because make-explainer needs something to answer', () => {
@@ -191,15 +190,15 @@ test('a page with no row gets no image, and a control below the picture says so 
   const scout = scoutOf([page({ url: 'http://127.0.0.1:4001/hostile/', controls: [control({ css: 'h2', box: { x: 1, y: 4500, width: 5, height: 5 } })], shot: 'scout/p1.jpg' }), page({ id: 'p2', url: 'http://127.0.0.1:4001/x', shot: 'scout/p2.jpg' })], { url: 'http://127.0.0.1:4001/hostile/' });
   const out = build({ ...spec, useCases: [{ id: 'uc', title: 'T', steps: [{ id: 'open', do: 'goto', value: '/hostile/' }, { id: 'cut', do: 'hover', target: { css: 'h2' } }] }] }, scout, new Map([['p1', 'click-plan/p1.jpg'], ['p2', 'click-plan/p2.jpg']]));
   assert.deepEqual(sections(out, 'image').map((i) => i.src), ['click-plan/p1.jpg']);
-  assert.match(sections(out, 'table')[0].rows[1][2], /below the picture/);
+  assert.match(sections(out, 'table')[0].rows[1][3], /below the picture/);
 });
 
-test('a signed-in plan has no image and shows a typed value masked', () => {
+test('a signed-in plan has no image and shows a typed value as the author wrote it, never a page value', () => {
   const out = build(loginSpec(), loginScout(), new Map([['p1', 'click-plan/p1.jpg']]));
   assert.equal(sections(out, 'image').length, 0);
   const text = JSON.stringify(out);
-  assert.ok(!text.includes('maria.ostrowski'));
-  assert.match(text, /<email>/);
+  assert.ok(text.includes('`maria.ostrowski@example.test`'), 'the typed value is the author\'s own words in demo.json');
+  assert.ok(!text.includes('Ostrowski') && !text.includes('4111'), 'no page value');
 });
 
 test('a signed-in plan shows a skipped address as origin and masked path only', () => {

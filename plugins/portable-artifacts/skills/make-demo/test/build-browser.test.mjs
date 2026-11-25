@@ -144,7 +144,9 @@ test('the answers file of a built plan is accepted, and refused after one step o
   const refused = await run(path.join(EXPLAINER, 'scripts', 'answers.mjs'), [path.join(dir, 'click-plan.json'), answersFile, '--json']);
   assert.equal(refused.code, 1, refused.stdout);
   const body = JSON.parse(refused.stdout.trim());
-  assert.ok(body.errors.some((e) => e.path === 'planKey' || e.path === 'planHash'), refused.stdout);
+  const rebuiltPlan = JSON.parse(fs.readFileSync(path.join(dir, 'click-plan.json'), 'utf8'));
+  assert.notEqual(rebuiltPlan.key, plan.key, 'the demo hash (the plan key) moved with the edit, not only the page hash');
+  assert.ok(body.errors.some((e) => e.path === 'planKey'), `refused for the demo hash: ${refused.stdout}`);
 });
 
 test('a target scout did not see: exit 1 with the path of the step, no click-plan.json', async () => {

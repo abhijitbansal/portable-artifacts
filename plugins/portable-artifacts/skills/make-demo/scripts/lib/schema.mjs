@@ -8,6 +8,7 @@ export const LIMITS = {
   origins: 5, pages: 5, useCases: 5, steps: 20,
   viewportWidth: [320, 1920], viewportHeight: [320, 1200],
   waitSeconds: [0.1, 10],
+  typedValue: 300, // characters in a `type` or `select` value: the plan page shows it whole
   defaultViewport: { width: 1280, height: 720 },
 };
 

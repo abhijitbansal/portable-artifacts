@@ -55,9 +55,17 @@ function insideOrigins(address, spec) {
   return url !== null && originsOf(spec).includes(url.origin);
 }
 
+// True for an address that carries a user name or password: demo.json never holds one, and an error never echoes it.
+const hasUserinfo = (address, base) => {
+  const url = typeof address === 'string' ? parseHttp(address, base) : null;
+  return url !== null && (url.username !== '' || url.password !== '');
+};
+const USERINFO_MESSAGE = 'must not hold a user name or password; sign in with session.mjs instead';
+
 function checkOrigins(errors, spec) {
   const own = parseHttp(spec.source.url);
-  if (!own) errors.push({ path: 'source.url', message: `must be an http or https address, got ${echo(spec.source.url)}` });
+  if (hasUserinfo(spec.source.url, spec.source.url)) errors.push({ path: 'source.url', message: USERINFO_MESSAGE });
+  else if (!own) errors.push({ path: 'source.url', message: `must be an http or https address, got ${echo(spec.source.url)}` });
   (spec.origins ?? []).forEach((origin, i) => {
     if (!isBareOrigin(origin)) errors.push({ path: `origins[${i}]`, message: `must be a bare http or https origin such as "https://example.test" (no path, no trailing slash), got ${echo(origin)}` });
   });
@@ -66,7 +74,8 @@ function checkOrigins(errors, spec) {
 
 function checkPages(errors, spec) {
   (spec.pages ?? []).forEach((page, i) => {
-    if (!insideOrigins(page, spec)) errors.push({ path: `pages[${i}]`, message: `${echo(page)} is not on an allowed origin; allowed: ${originsOf(spec).join(', ')}` });
+    if (hasUserinfo(page, spec.source.url)) errors.push({ path: `pages[${i}]`, message: USERINFO_MESSAGE });
+    else if (!insideOrigins(page, spec)) errors.push({ path: `pages[${i}]`, message: `${echo(page)} is not on an allowed origin; allowed: ${originsOf(spec).join(', ')}` });
   });
 }
 
@@ -75,10 +84,24 @@ function checkPages(errors, spec) {
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const isText = (v) => typeof v === 'string' && v.length > 0;
 
+// A `press` value: Control, Meta, Alt or Shift prefixes joined with +, then one key name. Anything else is text, and text goes in `type`.
+const NAMED_KEYS = new Set(['Enter', 'Tab', 'Escape', 'Space', 'Backspace', 'Delete', 'Home', 'End', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const MODIFIERS = new Set(['Control', 'Meta', 'Alt', 'Shift']);
+const SUBMIT_KEYS = new Set(['Enter', 'Space']);
+const isKeyName = (key) => NAMED_KEYS.has(key) || /^F(?:[1-9]|1[0-2])$/.test(key) || /^[A-Za-z0-9]$/.test(key);
+
+/** The key of a chord such as "Control+a" ("a"), or null when the value is not a key or chord name. */
+function keyOf(value) {
+  const parts = String(value).split('+');
+  const key = parts.pop();
+  return isKeyName(key) && parts.every((p) => MODIFIERS.has(p)) ? key : null;
+}
+
 // What each verb needs of target, value and intent. `at` is the step's path.
 const NEEDS = {
   goto: (step, at, errors, spec) => {
     if (!isText(step.value)) errors.push({ path: `${at}.value`, message: 'goto needs a value: an address or a path on an allowed origin' });
+    else if (hasUserinfo(step.value, spec.source.url)) errors.push({ path: `${at}.value`, message: USERINFO_MESSAGE });
     else if (!insideOrigins(step.value, spec)) errors.push({ path: `${at}.value`, message: `${echo(step.value)} is not on an allowed origin; allowed: ${originsOf(spec).join(', ')}` });
   },
   click: (step, at, errors) => needTargetOrIntent(step, at, errors),
@@ -87,7 +110,10 @@ const NEEDS = {
   type: (step, at, errors) => needTargetAndValue(step, at, errors),
   select: (step, at, errors) => needTargetAndValue(step, at, errors),
   press: (step, at, errors) => {
-    if (!isText(step.value)) errors.push({ path: `${at}.value`, message: 'press needs a value: the key, such as "Enter"' });
+    if (!isText(step.value)) return errors.push({ path: `${at}.value`, message: 'press needs a value: the key, such as "Tab"' });
+    const key = keyOf(step.value);
+    if (key === null) errors.push({ path: `${at}.value`, message: `press takes a key or chord name (Tab, Escape, Control+a, ...), not text to type` });
+    else if (SUBMIT_KEYS.has(key) && step.target === undefined) errors.push({ path: `${at}.target`, message: `${key} needs a target: it may submit a form, so the plan must say which control` });
   },
   scroll: (step, at, errors) => {
     if (step.value !== undefined && !isNumber(step.value)) errors.push({ path: `${at}.value`, message: 'scroll takes a number of pixels' });
@@ -107,6 +133,8 @@ function needTargetAndValue(step, at, errors) {
   if (step.intent !== undefined) return;
   if (step.target === undefined) errors.push({ path: `${at}.target`, message: `${step.do} needs a target (or an intent alone)` });
   if (!isText(step.value)) errors.push({ path: `${at}.value`, message: `${step.do} needs a value (or an intent alone)` });
+  else if (/\p{Cc}/u.test(step.value)) errors.push({ path: `${at}.value`, message: `${step.do} takes no control character (a newline or tab could submit or move on)` });
+  else if ([...step.value].length > LIMITS.typedValue) errors.push({ path: `${at}.value`, message: `${step.do} takes at most ${LIMITS.typedValue} characters, so the plan page can show the whole value` });
 }
 
 function checkStep(errors, spec, step, at) {

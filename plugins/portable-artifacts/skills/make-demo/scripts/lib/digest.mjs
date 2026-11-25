@@ -48,32 +48,39 @@ export function walkTree(roots, { scrollX = 0, scrollY = 0 } = {}) {
 
 // ---- kind ------------------------------------------------------------------------------------------------------------------
 
-function kindOfTag(f) {
-  if (f.tag === 'a') return 'other';
-  if (f.tag === 'button') return 'button';
-  if (f.tag === 'select') return 'select';
-  if (f.tag === 'textarea') return 'field';
-  if (f.tag !== 'input') return null;
-  if (f.type === 'checkbox' || f.type === 'radio') return 'toggle';
-  return BUTTON_INPUT_TYPES.has(f.type) ? 'button' : 'field';
-}
-
-function kindOfRole(role, f) {
+// A toggle, select or field, by role and then by tag; null for anything else. Before disclosure: a checkbox, a switch, a select or a
+// combobox that carries aria-expanded is still what it is, and a `change`.
+function inputKind(node, f) {
+  const { role } = node;
   if (TOGGLE_ROLES.has(role)) return 'toggle';
   if (FIELD_ROLES.has(role)) return 'field';
   if (role === 'combobox') return f.tag === 'input' ? 'field' : 'select';
   if (role === 'listbox') return 'select';
-  if (role === 'button' || role === 'menuitem') return 'button';
-  return 'other'; // option on its own, a link with no usable address
+  if (role !== BY_TAG_ROLE) return null;
+  if (f.tag === 'select') return 'select';
+  if (f.tag === 'textarea') return 'field';
+  if (f.tag !== 'input' || BUTTON_INPUT_TYPES.has(f.type)) return null;
+  return f.type === 'checkbox' || f.type === 'radio' ? 'toggle' : 'field';
 }
 
-/** The control kind of an element, or null when a named element of no listed role turns out not to be one. */
+// What is left once link, password, input and disclosure are ruled out.
+function restKind(node, f) {
+  if (node.role === BY_TAG_ROLE) {
+    if (f.tag === 'a') return 'other';
+    return f.tag === 'button' || (f.tag === 'input' && BUTTON_INPUT_TYPES.has(f.type)) ? 'button' : null;
+  }
+  return node.role === 'button' || node.role === 'menuitem' ? 'button' : 'other'; // option on its own, a link with no usable address
+}
+
+/** The control kind of an element, or null when a named element of no listed role turns out not to be one. Order: link, password, input, disclosure, rest. */
 function kindOf(node, f) {
   const link = f.tag === 'a' && f.hrefAttr !== null && f.hrefAttr !== '' && f.hrefAttr !== '#' && /^https?:/i.test(f.href ?? '');
   if (link) return 'link';
-  if (f.tag === 'summary' || node.role === 'tab' || f.expandable) return 'disclosure';
   if (f.tag === 'input' && f.type === 'password') return 'password';
-  return node.role === BY_TAG_ROLE ? kindOfTag(f) : kindOfRole(node.role, f);
+  const input = inputKind(node, f);
+  if (input) return input;
+  if (f.tag === 'summary' || node.role === 'tab' || f.expandable) return 'disclosure';
+  return restKind(node, f);
 }
 
 /** A control from a snapshot node and the facts of its element; null when the element is not a control. */
@@ -93,6 +100,7 @@ export function controlOf(node, f) {
     formAction: f.formAction,
     formMethod: f.formMethod,
     scripted: f.scripted,
+    ...(f.holdsField ? { holdsField: true } : {}), // its name may carry what a field holds: maskDigest keeps only the length
   };
 }
 
@@ -106,9 +114,13 @@ async function factsOf(page, candidate) {
   }
 }
 
-/** The first CONTROL_CAP controls, in batches; `left` counts the listed-role candidates not looked at past the cap. */
-async function readControls(page, candidates) {
+/**
+ * The first CONTROL_CAP controls, in batches. `left` counts the listed-role candidates not looked at past the cap, and those whose
+ * facts could not be read (gone, or a form that clobbered its own properties): they are not listed, so they are not silently lost.
+ */
+export async function readControls(page, candidates) {
   const controls = [];
+  let unread = 0;
   let next = 0;
   while (next < candidates.length && controls.length < CONTROL_CAP) {
     const batch = candidates.slice(next, next + FACT_BATCH);
@@ -116,10 +128,11 @@ async function readControls(page, candidates) {
     for (let i = 0; i < batch.length && controls.length < CONTROL_CAP; i += 1) {
       const control = facts[i] ? controlOf(batch[i], facts[i]) : null;
       if (control) controls.push(control);
+      else if (!facts[i] && !batch[i].viaTag) unread += 1;
       next += 1;
     }
   }
-  return { controls, left: candidates.slice(next).filter((c) => !c.viaTag).length };
+  return { controls, left: unread + candidates.slice(next).filter((c) => !c.viaTag).length };
 }
 
 const originOfFrame = (frame) => {
@@ -178,13 +191,33 @@ function maskName(text) {
   return masked.length > NAME_MAX ? `<text ${masked.length}>` : masked.join('');
 }
 
+/** True when masking the address dropped something: a query, a hash, or an id in the path. Then the stored address is not the real one. */
+function addressWasCut(address) {
+  try {
+    const url = new URL(address);
+    return url.search !== '' || url.hash !== '' || maskPath(url.pathname) !== url.pathname;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A signed-in control. Its name is only its length when the element held a field (its accessible name may carry what the field holds)
+ * and for every option (a list's options are values). `hrefCut` says the stored address lost a query, a hash or an id.
+ */
+function maskControl(control) {
+  const { holdsField, ...c } = control;
+  const name = (holdsField || c.role === 'option') && c.name !== '' ? `<text ${[...String(c.name)].length}>` : maskName(c.name);
+  return { ...c, name, href: maskedAddress(c.href), ...(c.href ? { hrefCut: addressWasCut(c.href) } : {}), formAction: maskedAddress(c.formAction) };
+}
+
 /** A signed-in page digest: names and headings masked (long ones reduced to their length), title masked, addresses cut to origin and masked path. A new object. */
 export function maskDigest(page) {
   return {
     ...page,
     url: maskedAddress(page.url),
-    title: maskText(page.title),
+    title: maskName(page.title),
     headings: page.headings.map((h) => ({ ...h, name: maskName(h.name) })),
-    controls: page.controls.map((c) => ({ ...c, name: maskName(c.name), href: maskedAddress(c.href), formAction: maskedAddress(c.formAction) })),
+    controls: page.controls.map(maskControl),
   };
 }

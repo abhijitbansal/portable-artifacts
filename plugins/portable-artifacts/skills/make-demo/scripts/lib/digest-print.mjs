@@ -33,7 +33,7 @@ function shortAddress(address, pageUrl) {
 }
 
 const NOTED_KINDS = new Set(['disclosure', 'password']);
-const CSS_MAX = 300;
+const LISTED_MAX = 10; // frames, and refused moves, printed one by one; the rest is a count
 
 // A target is { role, name } or { css }: the print shows the role, and the css wherever role and name cannot name the control (an
 // empty name, a pair that is not unique on the page, or a name the print cut or escaped).
@@ -47,8 +47,14 @@ function controlLine(c, pageUrl, pairs) {
   const address = c.href ? ` ${shortAddress(c.href, pageUrl)}` : '';
   const form = c.formAction ? ` [${c.formMethod ?? 'get'} ${shortAddress(c.formAction, pageUrl)}]` : '';
   const flags = [NOTED_KINDS.has(c.kind) && c.kind, c.newTab && 'new tab', c.download && 'download', c.scripted && 'scripted', c.submits && 'submits'].filter(Boolean);
-  const css = needsCss(c, pairs) ? ` css=${agentText(c.css, { max: CSS_MAX })}` : '';
+  const css = needsCss(c, pairs) ? ` css=${agentText(c.css, { max: Infinity })}` : ''; // whole: the agent copies it as a target
   return `  ${c.id} ${c.role} "${agentText(c.name, { max: NAME_MAX })}"${address}${form}${flags.length > 0 ? ` (${flags.join(', ')})` : ''}${css} ${c.effect}`;
+}
+
+function framesLine(frames) {
+  if (frames.length === 0) return [];
+  const shown = frames.slice(0, LISTED_MAX).map((o) => agentText(o, { max: ADDRESS_MAX })).join(', ');
+  return [`frames not looked into: ${shown}${frames.length > LISTED_MAX ? `, and ${frames.length - LISTED_MAX} more frames` : ''}`];
 }
 
 function headingsLine(headings) {
@@ -64,14 +70,15 @@ function doneLines(page) {
   const lines = [`requests that are not GET: ${requests.length === 0 ? 'none' : requests.join('; ')}${moreRequests > 0 ? `; and ${moreRequests} more` : ''}`];
   lines.push(`on its own: dialogs ${page.dialogs ?? 0}, popups ${page.popups ?? 0}, downloads ${page.downloads ?? 0}, sockets ${page.sockets ?? 0}, errors ${page.errors ?? 0}`);
   const here = originOf(page.url);
-  for (const r of page.refused ?? []) {
-    const move = `${r.method} ${agentText(r.path, { max: ADDRESS_MAX })}`;
-    if (r.popup === true) {
-      lines.push(`refused popup move: ${r.method} ${agentText(`${r.origin}${r.path}`, { max: ADDRESS_MAX })}`);
-      continue;
-    }
-    lines.push(r.origin === here ? `refused move: ${r.method} ${agentText(`${r.origin}${r.path}`, { max: ADDRESS_MAX })} (not a GET)` : `refused move: left to ${agentText(r.origin, { max: ADDRESS_MAX })} (${move})`);
+  const refused = page.refused ?? [];
+  for (const r of refused.slice(0, LISTED_MAX)) {
+    const method = agentText(r.method, { max: 20 });
+    const whole = agentText(`${r.origin}${r.path}`, { max: ADDRESS_MAX });
+    if (r.popup === true) lines.push(`refused popup move: ${method} ${whole}`);
+    else if (r.origin === here) lines.push(`refused move: ${method} ${whole} (not a GET)`);
+    else lines.push(`refused move: left to ${agentText(r.origin, { max: ADDRESS_MAX })} (${method} ${agentText(r.path, { max: ADDRESS_MAX })})`);
   }
+  if (refused.length > LISTED_MAX) lines.push(`and ${refused.length - LISTED_MAX} more refused moves (all are in scout.json)`);
   return lines;
 }
 
@@ -88,7 +95,7 @@ export function printDigest(page) {
     `${page.id} ${agentText(page.url, { max: ADDRESS_MAX })} lang=${page.lang === null ? 'none' : agentText(page.lang, { max: 20 })} title "${agentText(page.title, { max: NAME_MAX })}"`,
     `wall: ${page.wall === null ? 'none' : agentText(page.wall, { max: ADDRESS_MAX })}`,
     `video: ${page.video ? 'playing' : 'none'}`,
-    ...((page.frames ?? []).length > 0 ? [`frames not looked into: ${page.frames.map((o) => agentText(o, { max: ADDRESS_MAX })).join(', ')}`] : []),
+    ...framesLine(page.frames ?? []),
     headingsLine(page.headings),
     `controls: ${page.controls.length} listed, left ${page.left} (past the cap of ${CONTROL_CAP})`,
   ];

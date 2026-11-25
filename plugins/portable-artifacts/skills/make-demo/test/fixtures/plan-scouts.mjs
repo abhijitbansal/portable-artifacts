@@ -71,26 +71,28 @@ export const dangerSpec = () => specOf([], {
     { id: 'back', do: 'goto', value: '/danger/' },
     { id: 'delete', do: 'click', target: { role: 'button', name: 'Delete' } },
     { id: 'then', do: 'click', intent: 'confirm the dialog that follows' },
-    { id: 'pay', do: 'press', value: 'Enter' },
+    { id: 'pay', do: 'press', value: 'Tab' },
   ] }],
 });
 
 /** Signed in: names masked, addresses origin plus masked path, the stored effects as scout computed them from the real names. */
 export const loginScout = () => scoutOf([page({
   url: `${ORIGIN}/login/home`,
+  fromEntry: 0,
   title: 'Account',
   headings: [{ level: 2, name: 'Signed in as <email>', box: { x: 32, y: 48, width: 500, height: 40 } }],
   controls: [
     control({ id: 'c1', name: 'Switch to <email>', css: 's1', kind: 'button', effect: 'change' }),
-    control({ id: 'c2', name: 'Card <number>', css: 's2', role: 'link', kind: 'link', href: `${ORIGIN}/login/card/<id>`, effect: 'look', reason: 'a plain link to a page on the allowed origins' }),
+    control({ id: 'c2', name: 'Card <number>', css: 's2', role: 'link', kind: 'link', href: `${ORIGIN}/login/card/<id>`, hrefCut: true, effect: 'look', reason: 'a plain link to a page on the allowed origins' }),
     control({ id: 'c3', name: 'Remove card', css: 's3', kind: 'button', submits: true, formAction: `${ORIGIN}/login/remove`, formMethod: 'post', effect: 'danger', reason: 'the name holds the danger word "remove"' }),
-    control({ id: 'c4', name: 'Next', css: 's4', role: 'link', kind: 'link', href: `${ORIGIN}/login/summary`, effect: 'look', reason: 'a plain link to a page on the allowed origins' }),
+    control({ id: 'c4', name: 'Next', css: 's4', role: 'link', kind: 'link', href: `${ORIGIN}/login/summary`, hrefCut: false, effect: 'look', reason: 'a plain link to a page on the allowed origins' }),
   ],
-}), page({ id: 'p2', url: `${ORIGIN}/login/summary`, title: 'Summary', headings: [{ level: 1, name: 'Summary', box: { x: 32, y: 48, width: 300, height: 40 } }], controls: [control({ id: 'c1', name: 'Back', css: 'k1', role: 'link', kind: 'link', href: `${ORIGIN}/login/home`, effect: 'look', reason: 'a plain link to a page on the allowed origins' })] })], { url: `${ORIGIN}/login/home`, session: 'fixture' });
+}), page({ id: 'p2', url: `${ORIGIN}/login/summary`, fromEntry: 1, title: 'Summary', headings: [{ level: 1, name: 'Summary', box: { x: 32, y: 48, width: 300, height: 40 } }], controls: [control({ id: 'c1', name: 'Back', css: 'k1', role: 'link', kind: 'link', href: `${ORIGIN}/login/home`, hrefCut: false, effect: 'look', reason: 'a plain link to a page on the allowed origins' })] })], { url: `${ORIGIN}/login/home`, session: 'fixture', named: [`${ORIGIN}/login/summary`] });
 
 export const loginSpec = () => specOf([], {
   source: { url: `${ORIGIN}/login/home` },
   session: 'fixture',
+  pages: ['/login/summary'],
   useCases: [{ id: 'uc', title: 'Read the account', steps: [
     { id: 'open', do: 'goto', value: '/login/home' },
     { id: 'remove', do: 'click', target: { role: 'button', name: 'Remove card' } },

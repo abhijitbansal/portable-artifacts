@@ -2,7 +2,7 @@
 // signed-in digest, and the printed text. No browser here; test/scout-browser.test.mjs runs the same code on real pages.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { walkTree, controlOf, maskDigest, CONTROL_CAP } from '../scripts/lib/digest.mjs';
+import { walkTree, controlOf, maskDigest, readControls, CONTROL_CAP } from '../scripts/lib/digest.mjs';
 import { printDigest, PRINT_BYTES } from '../scripts/lib/digest-print.mjs';
 
 const box = (x = 0, y = 0, width = 100, height = 20) => ({ x, y, width, height });
@@ -78,6 +78,14 @@ const KINDS = [
   ['a slider', { role: 'slider', name: 'Vol' }, { tag: 'input', type: 'range' }, 'field'],
   ['a menu item', { role: 'menuitem', name: 'Open' }, { tag: 'div' }, 'button'],
   ['a named generic that is only a div', { role: 'generic', name: 'Title' }, { tag: 'div' }, null],
+  ['a password field with aria-expanded and aria-haspopup', { role: 'textbox', name: 'Password' }, { tag: 'input', type: 'password', expandable: true }, 'password'],
+  ['a checkbox that reveals a section', { role: 'checkbox', name: 'More' }, { tag: 'input', type: 'checkbox', expandable: true }, 'toggle'],
+  ['a switch with aria-expanded', { role: 'switch', name: 'Public profile' }, { tag: 'button', expandable: true }, 'toggle'],
+  ['a native select with aria-haspopup', { role: 'combobox', name: 'Size' }, { tag: 'select', expandable: true }, 'select'],
+  ['a combobox input with aria-expanded', { role: 'combobox', name: 'City' }, { tag: 'input', type: 'text', expandable: true }, 'field'],
+  ['a listbox with aria-expanded', { role: 'listbox', name: 'Size' }, { tag: 'div', expandable: true }, 'select'],
+  ['a link with aria-expanded is still a link', { role: 'link', name: 'Docs' }, { tag: 'a', hrefAttr: '/docs', href: 'http://h.test/docs', expandable: true }, 'link'],
+  ['a named generic with aria-expanded', { role: 'generic', name: 'More' }, { tag: 'div', expandable: true }, 'disclosure'],
 ];
 for (const [label, node, over, kind] of KINDS) {
   test(`controlOf: ${label} is ${kind === null ? 'not a control' : kind}`, () => {
@@ -137,6 +145,38 @@ test('a name or heading over 60 characters (after masking) is only its length: a
   assert.equal(masked.controls[0].name, `<text ${body.length}>`);
   assert.match(masked.controls[1].name, /^<text \d+>$/);
   assert.ok(!JSON.stringify(masked).includes('Ostrowski'));
+});
+
+test('a control that holds a field, and every option, is only the length of its name once masked; a plain name stays', () => {
+  const named = (name, over = {}) => ({ ...page().controls[0], name, ...over });
+  const masked = maskDigest(page({ controls: [
+    named('Remind SECRET-LABEL-A days', { role: 'checkbox', kind: 'toggle', holdsField: true }),
+    named('SECRET-OPTION-K', { role: 'option', kind: 'other' }),
+    named('Agree', { role: 'checkbox', kind: 'toggle' }),
+  ] }));
+  assert.deepEqual(masked.controls.map((c) => c.name), ['<text 26>', '<text 15>', 'Agree']);
+  assert.ok(masked.controls.every((c) => !('holdsField' in c)), 'the flag is not kept');
+  assert.ok(!JSON.stringify(masked).includes('SECRET'));
+});
+
+test('a signed-in title goes through the name rule: over 60 characters it is only its length', () => {
+  const subject = 'Re: your salary review and the offer we discussed on the phone yesterday afternoon';
+  assert.equal(maskDigest(page({ title: subject })).title, `<text ${subject.length}>`);
+  assert.equal(maskDigest(page({ title: 'Inbox' })).title, 'Inbox');
+});
+
+test('controlOf keeps holdsField only when the element held a field', () => {
+  const held = controlOf({ role: 'checkbox', name: 'x', box: box() }, facts({ tag: 'input', type: 'checkbox', holdsField: true }));
+  assert.equal(held.holdsField, true);
+  assert.ok(!('holdsField' in controlOf({ role: 'button', name: 'x', box: box() }, facts({}))));
+});
+
+test('a control whose facts could not be read is counted in left', async () => {
+  const candidates = [{ role: 'button', name: 'A', ref: 'e1', box: box() }, { role: 'button', name: 'B', ref: 'e2', box: box() }, { role: 'generic', name: 'C', ref: 'e3', box: box(), viaTag: true }];
+  const page = { getByRef: (ref) => ({ evaluate: async () => { if (ref !== 'e1') throw new Error('gone'); return facts({}); } }) };
+  const { controls, left } = await readControls(page, candidates);
+  assert.deepEqual(controls.map((c) => c.name), ['A']);
+  assert.equal(left, 1, 'B is counted; the named generic that vanished is not a listed role');
 });
 
 test('maskDigest returns a new object and leaves its input as it was', () => {
@@ -216,6 +256,24 @@ test('headings are printed without css, and a long css is printed whole', () => 
   const text = printDigest(page({ headings: [{ level: 1, name: 'Title', box: box() }], controls: [ctl('c1', 'button', 'button', '', { css: deep })] }));
   assert.ok(!/h1 "Title".*css=/.test(text));
   assert.ok(lineOf(text, 'c1').includes(`css=${deep}`));
+});
+
+test('a css of 400 characters is printed whole, so the agent can copy it as a target', () => {
+  const deep = `html > ${'div:nth-of-type(1) > '.repeat(20)}button:nth-of-type(1)`;
+  assert.ok(deep.length > 400);
+  assert.ok(lineOf(printDigest(page({ headings: [], controls: [ctl('c1', 'button', 'button', '', { css: deep })] })), 'c1').includes(`css=${deep}`));
+});
+
+test('at most 10 frames and 10 refused moves are printed, each with a count of the rest, and the controls still fit', () => {
+  const frames = Array.from({ length: 300 }, (_, i) => `http://frame${i}.test`);
+  const refused = Array.from({ length: 300 }, (_, i) => ({ method: 'GET', origin: `http://other${i}.test`, path: '/x' }));
+  const text = printDigest(page({ headings: [], controls: many(3), frames, refused, left: 2600 }));
+  assert.equal(text.split('\n').filter((l) => /^refused move/.test(l)).length, 10);
+  assert.match(text, /and 290 more refused moves/);
+  assert.match(text, /and 290 more frames/);
+  assert.equal(text.split('\n').filter((l) => /^ *c\d+ /.test(l)).length, 3, 'the controls are still there');
+  assert.match(text, /left 2600/);
+  assert.ok(Buffer.byteLength(text) <= PRINT_BYTES);
 });
 
 test('printDigest prints the wall note, the video flag and what the page did on its own, as counts and masked paths', () => {

@@ -11,6 +11,10 @@
 import { maskPath } from './mask.mjs';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const STANDARD_METHODS = new Set([...SAFE_METHODS, 'POST', 'PUT', 'PATCH', 'DELETE']);
+
+/** A request method as listed: a standard one as it is, anything else `OTHER` (a method is page text, so it is never printed as the page wrote it). */
+export const listedMethod = (method) => (STANDARD_METHODS.has(method) ? method : 'OTHER');
 
 /** A fresh record of what the page did on its own. `statuses` are the answers to its main-frame navigations. */
 export const newSeen = () => ({ dialogs: 0, popups: 0, downloads: 0, sockets: 0, errors: 0, refused: [], statuses: [], writes: new Map() });
@@ -23,8 +27,9 @@ export function listRequests(seen) {
 function addWrite(seen, method, url) {
   const origin = url.origin;
   const pathText = maskPath(url.pathname);
-  const key = `${method} ${origin}${pathText}`;
-  const entry = seen.writes.get(key) ?? { method, origin, path: pathText, count: 0 };
+  const listed = listedMethod(method);
+  const key = `${listed} ${origin}${pathText}`;
+  const entry = seen.writes.get(key) ?? { method: listed, origin, path: pathText, count: 0 };
   seen.writes.set(key, { ...entry, count: entry.count + 1 });
 }
 
@@ -51,7 +56,7 @@ async function decide(route, { origins, seen, own }) {
   const url = new URL(request.url());
   const navigation = mainNavigation(request, own);
   if (navigation !== null && (!origins.includes(url.origin) || method !== 'GET')) {
-    seen.refused.push({ method, origin: url.origin, path: maskPath(url.pathname), ...(navigation === 'popup' ? { popup: true } : {}) });
+    seen.refused.push({ method: listedMethod(method), origin: url.origin, path: maskPath(url.pathname), ...(navigation === 'popup' ? { popup: true } : {}) });
     return route.abort('blockedbyclient');
   }
   if (!SAFE_METHODS.has(method)) addWrite(seen, method, url);

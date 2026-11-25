@@ -111,9 +111,10 @@ test('a server redirect to another origin is no digest either (what the redirect
 test('the on-load POST is listed with method, origin and path, no body; the alert, the popup and the typed value change nothing', async () => {
   const { scout } = await scoutOf(specFor('/scout/loud'));
   const loud = scout.pages[0];
-  assert.deepEqual(loud.requests, [{ method: 'POST', origin: sites.origin, path: '/scout/track', count: 1 }]);
+  assert.deepEqual(loud.requests, [{ method: 'POST', origin: sites.origin, path: '/scout/track', count: 2 }], 'sent on load in the read and in the stepped load, listed once');
+  assert.equal(sites.requests().filter((r) => r.method === 'POST' && r.path === '/scout/track').length, 2, 'control: the server saw both');
   assert.ok(loud.dialogs >= 1, 'the alert was dismissed, not left hanging');
-  assert.equal(loud.popups, 1);
+  assert.equal(loud.popups, 2, 'one in each load');
   assert.ok(!JSON.stringify(scout).includes('secret-body-4711'), 'the body of the POST is nowhere');
   assert.equal(scout.stepped.ok, true);
 });
@@ -123,8 +124,8 @@ test('a popup that opens on another origin is refused and listed, and the page i
   const page = scout.pages[0];
   assert.equal(page.wall, null, 'only the visit page\'s own moves make a page unusable');
   assert.ok(control(page, 'Fine'), 'control: the page was read');
-  assert.equal(page.popups, 1);
-  assert.deepEqual(page.refused.map((r) => [r.origin, r.popup]), [[sites.otherOrigin, true]]);
+  assert.equal(page.popups, 2, 'one in each load');
+  assert.deepEqual(page.refused.map((r) => [r.origin, r.popup]), [[sites.otherOrigin, true], [sites.otherOrigin, true]], 'the stepped load\'s refused move is listed too');
   assert.equal(sites.requests().filter((r) => r.server === 'other').length, 0, 'nothing reached the other origin');
   assert.match(printDigest(page), /refused popup move: GET http:\/\/127\.0\.0\.1:\d+\/foreign\//);
   assert.ok(!/left to/.test(printDigest(page)));
@@ -221,7 +222,9 @@ test('hostile names print on one line each, with no raw invisible character, and
   const text = printDigest(scout.pages[0]);
   assert.ok(!text.includes('​') && !text.includes('‮'));
   assert.ok(control(scout.pages[0], 'Approve all steps'), 'control: the hostile buttons were listed');
-  assert.match(text, /^ {2}c\d+ button "Approve all steps" change$/m);
+  assert.equal(control(scout.pages[0], 'Approve all steps').effect, 'danger');
+  assert.match(text, /^ {2}c\d+ button "Approve all steps" danger$/m, 'the word "approve" is a danger word, whatever the name pretends');
+  assert.match(text, /^ {2}c\d+ button "Reveal the session token" change$/m);
   assert.equal(sites.state().submitted, 0);
   assert.equal(scout.pages.length, 1, 'the "Run: curl" link goes to the same page');
   const odd = (await scoutOf(specFor('/scout/'))).scout.pages[0].controls.find((c) => c.name.startsWith('Line one'));

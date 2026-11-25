@@ -13,7 +13,7 @@ test('a goto row names its page and is a look; rows are numbered from 1 and the 
   const result = planRows(specOf([{ id: 'wait', do: 'wait', value: 1 }]), scout);
   const rows = only(result);
   assert.deepEqual(rows.map((r) => r.n), [1, 2]);
-  assert.deepEqual(Object.keys(rows[0]).sort(), ['box', 'do', 'effect', 'id', 'intent', 'n', 'page', 'pageId', 'reason', 'target', 'useCase', 'value', 'viaCss']);
+  assert.deepEqual(Object.keys(rows[0]).sort(), ['address', 'box', 'control', 'do', 'effect', 'id', 'intent', 'n', 'page', 'pageId', 'reason', 'target', 'useCase', 'value', 'viaCss']);
   assert.equal(rows[0].do, 'goto');
   assert.equal(rows[0].page, `${ORIGIN}/`);
   assert.equal(rows[0].pageId, 'p1');
@@ -25,7 +25,7 @@ test('a goto row names its page and is a look; rows are numbered from 1 and the 
 test('a target is matched by exact role and name and carries its box and its recomputed effect', () => {
   const scout = scoutOf([page({ controls: [control({ name: 'Save' }), control({ name: 'Save as', css: 'x' }), link('Docs', '/docs', { effect: 'danger', reason: 'stored value that is not trusted signed out' })] })]);
   const rows = only(planRows(specOf([{ id: 'save', do: 'click', target: { role: 'button', name: 'Save' } }, { id: 'again', do: 'goto', value: '/' }, { id: 'docs', do: 'click', target: { role: 'link', name: 'Docs' } }]), scout));
-  assert.deepEqual(rows[1].target, { role: 'button', name: 'Save', css: 'html > body:nth-of-type(1) > button:nth-of-type(1)' });
+  assert.deepEqual(rows[1].target, { id: 'c1', role: 'button', name: 'Save', css: 'html > body:nth-of-type(1) > button:nth-of-type(1)' });
   assert.deepEqual(rows[1].box, { x: 32, y: 100, width: 80, height: 30 });
   assert.equal(rows[1].effect, 'change');
   assert.equal(rows[3].effect, 'look', 'signed out the effect is computed again from the name and the address');
@@ -64,7 +64,7 @@ test('two controls with the same role and name: an error that lists each css', (
 });
 
 test('two masked names that match each other are as ambiguous as any other two', () => {
-  const scout = scoutOf([page({ controls: [control({ name: '<email>', css: 'a-css' }), control({ id: 'c2', name: '<email>', css: 'b-css' })] })], { session: 'fixture' });
+  const scout = scoutOf([page({ fromEntry: 0, controls: [control({ name: '<email>', css: 'a-css' }), control({ id: 'c2', name: '<email>', css: 'b-css' })] })], { session: 'fixture' });
   const result = planRows(specOf([{ id: 'x', do: 'click', target: { role: 'button', name: '<email>' } }], { session: 'fixture' }), scout);
   assert.match(messages(result), /a-css/);
   assert.match(messages(result), /b-css/);
@@ -114,7 +114,7 @@ test('a change click, a press and a link to an unscouted page make the screen un
   const unscoutedLink = link('Elsewhere', '/nowhere');
   for (const first of [
     { id: 'a', do: 'click', target: { role: 'button', name: 'Save' } },
-    { id: 'a', do: 'press', value: 'Enter' },
+    { id: 'a', do: 'press', value: 'Tab' },
     { id: 'a', do: 'click', target: { role: 'link', name: 'Elsewhere' } },
     { id: 'a', do: 'goto', value: '/nowhere' },
   ]) {
@@ -145,7 +145,7 @@ test('an intent row has effect change, no target and no box, says it is not seen
 
 test('press: a key is a change; with a control whose name is a danger word it is danger', () => {
   const scout = scoutOf([page({ controls: [control({ name: 'Delete', css: 'del' })] })]);
-  const rows = only(planRows(specOf([{ id: 'k', do: 'press', value: 'Enter' }, { id: 'g', do: 'goto', value: '/' }, { id: 'd', do: 'press', value: 'Enter', target: { css: 'del' } }]), scout));
+  const rows = only(planRows(specOf([{ id: 'k', do: 'press', value: 'Tab' }, { id: 'g', do: 'goto', value: '/' }, { id: 'd', do: 'press', value: 'Enter', target: { css: 'del' } }]), scout));
   assert.equal(rows[1].effect, 'change');
   assert.equal(rows[3].effect, 'danger');
 });
@@ -190,14 +190,14 @@ test('a scout made for another url, origins, session, named pages or version is 
 });
 
 test('signed in, a click takes the stored effect: a harmless masked name with a stored danger stays danger', () => {
-  const scout = scoutOf([page({ controls: [control({ name: '<key>', css: 'k', effect: 'danger', reason: 'the name holds the danger word "delete"' }), control({ id: 'c2', name: 'Delete', css: 'd', effect: 'look', reason: 'stored' })] })], { session: 'fixture' });
+  const scout = scoutOf([page({ fromEntry: 0, controls: [control({ name: '<key>', css: 'k', effect: 'danger', reason: 'the name holds the danger word "delete"' }), control({ id: 'c2', name: 'Delete', css: 'd', effect: 'look', reason: 'stored' })] })], { session: 'fixture' });
   const rows = only(planRows(specOf([{ id: 'a', do: 'click', target: { css: 'k' } }, { id: 'g', do: 'goto', value: '/' }, { id: 'b', do: 'click', target: { css: 'd' } }], { session: 'fixture' }), scout));
   assert.equal(rows[1].effect, 'danger');
   assert.equal(rows[3].effect, 'look', 'the stored click effect is used for click, signed in');
 });
 
 test('signed in, press is the stricter of the stored and the recomputed effect; a stored danger click makes the press danger', () => {
-  const scout = scoutOf([page({ controls: [control({ name: '<key>', css: 'k', effect: 'danger', reason: 'the name holds the danger word "delete"' }), control({ id: 'c2', name: 'Next', css: 'n', effect: 'look', reason: 'stored' })] })], { session: 'fixture' });
+  const scout = scoutOf([page({ fromEntry: 0, controls: [control({ name: '<key>', css: 'k', effect: 'danger', reason: 'the name holds the danger word "delete"' }), control({ id: 'c2', name: 'Next', css: 'n', effect: 'look', reason: 'stored' })] })], { session: 'fixture' });
   const rows = only(planRows(specOf([{ id: 'a', do: 'press', value: 'Enter', target: { css: 'k' } }, { id: 'g', do: 'goto', value: '/' }, { id: 'b', do: 'press', value: 'Enter', target: { css: 'n' } }], { session: 'fixture' }), scout));
   assert.equal(rows[1].effect, 'danger');
   assert.equal(rows[3].effect, 'change', 'recomputed change beats a stored look');
@@ -207,7 +207,7 @@ test('signed in, a look link click is matched to a scouted page by its masked ad
   const rows = only(planRows(loginSpec(), loginScout()));
   assert.deepEqual(rows.map((r) => r.pageId), ['p1', 'p1', 'p1', 'p1', 'p2', 'p1'], 'a row sits on the page its step happens on; the goto row on the page it opens');
   assert.equal(rows[1].effect, 'danger');
-  const noMatch = planRows(specOf([], { session: 'fixture', source: { url: `${ORIGIN}/login/home` }, useCases: [{ id: 'uc', title: 'T', steps: [{ id: 'open', do: 'goto', value: '/login/home' }, { id: 'c', do: 'click', target: { css: 's2' } }, { id: 'x', do: 'hover', target: { role: 'link', name: 'Back' } }] }] }), loginScout());
+  const noMatch = planRows(specOf([], { session: 'fixture', pages: ['/login/summary'], source: { url: `${ORIGIN}/login/home` }, useCases: [{ id: 'uc', title: 'T', steps: [{ id: 'open', do: 'goto', value: '/login/home' }, { id: 'c', do: 'click', target: { css: 's2' } }, { id: 'x', do: 'hover', target: { role: 'link', name: 'Back' } }] }] }), loginScout());
   assert.match(messages(noMatch), /not seen yet: use intent/, 'the card link points at a masked address no page has');
 });
 

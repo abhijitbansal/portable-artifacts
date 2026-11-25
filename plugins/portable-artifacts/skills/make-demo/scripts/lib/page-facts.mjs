@@ -13,20 +13,33 @@ export function readFacts(el) {
   const submits = (tag === 'input' && (type === 'submit' || type === 'image')) || (tag === 'button' && form !== null && type === 'submit');
   const own = submits && (tag === 'button' || tag === 'input'); // a submitter's own formaction and formmethod beat its form's
   const isLink = tag === 'a' && has('href');
+  const target = String(el.getAttribute('target') ?? '').trim().toLowerCase();
   return {
     tag,
     type,
     hrefAttr: isLink ? el.getAttribute('href') : null,
     href: isLink ? resolve(el.getAttribute('href')) : null,
-    newTab: tag === 'a' && String(el.getAttribute('target')).toLowerCase() === '_blank',
+    newTab: tag === 'a' && target !== '' && target !== '_self', // any named target opens or reuses another window
+    holdsField: holdsField(),
     download: has('download'),
     expandable: has('aria-expanded') || (has('aria-haspopup') && el.getAttribute('aria-haspopup') !== 'false'),
     submits,
     formAction: own && has('formaction') ? resolve(el.getAttribute('formaction')) : form ? resolve(form.getAttribute('action') ?? '') : null,
     formMethod: own && has('formmethod') ? methodOf(el.getAttribute('formmethod')) : form ? methodOf(form.getAttribute('method')) : null,
-    scripted: has('onclick') || has('data-method') || has('data-turbo-method') || el.getAttributeNames().some((n) => /^hx-(post|put|patch|delete)$/i.test(n)),
+    scripted: has('onclick') || has('data-method') || has('data-turbo-method') || has('ping') || el.getAttributeNames().some((n) => /^(data-)?hx-(post|put|patch|delete)$/i.test(n)),
     css: cssPath(el),
   };
+
+  // True when the element, its <label> or an aria-labelledby or aria-describedby target holds a field other than itself: the accessible
+  // name then carries what the field holds. Only the shape is looked at, never a value.
+  function holdsField() {
+    const fields = 'input, select, textarea, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]';
+    const inside = (node) => node !== null && ((node !== el && node.matches(fields)) || [...node.querySelectorAll(fields)].some((f) => f !== el));
+    const ids = ['aria-labelledby', 'aria-describedby'].flatMap((name) => String(el.getAttribute(name) ?? '').split(/\s+/)).filter(Boolean);
+    const root = el.getRootNode();
+    const targets = ids.map((id) => root.getElementById?.(id) ?? null);
+    return [el, ...(el.labels ?? []), ...targets].some(inside);
+  }
 
   // An nth-of-type path from html, no ids and no classes: one element, one path. A path through an open shadow root joins with a
   // space, which Playwright's css engine pierces.

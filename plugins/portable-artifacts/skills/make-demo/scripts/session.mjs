@@ -52,7 +52,7 @@ async function login(values, rest) {
   try {
     const state = await store.login({ browser, url, origins, untilDone: (page) => store.untilClosed(page) });
     const cookies = store.saveSession(name, { origins, state });
-    say(`saved session "${name}": ${cookies} cookies, origins ${origins.join(', ')}`);
+    say(store.savedLine(name, cookies, origins));
   } finally {
     await browser.close().catch(() => {});
   }
