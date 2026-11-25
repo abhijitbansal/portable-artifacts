@@ -43,7 +43,7 @@ test('faviconLink is one rel=icon link tag', () => {
 });
 
 test('unknown skill throws, naming the known ones', () => {
-  assert.throws(() => faviconSvg('make-nope', loadTheme('paper')), /make-dashboard, make-diagram, make-explainer, make-motion, make-scene/);
+  assert.throws(() => faviconSvg('make-nope', loadTheme('paper')), /make-dashboard, make-diagram, make-explainer, make-motion, make-scene, make-demo/);
 });
 
 test('make-scene favicon draws its glyph in class g', () => {
