@@ -239,6 +239,7 @@ Scout proposes accent, logo file and product wording with where each came from. 
 ## 7. Phases
 
 One branch, one PR. Each phase: a plan, tests first, a fresh reviewer (security lens in 1, 2 and 6), fixes, clean tree, then the owner tries it and says go. No phase starts before the one before it is accepted.
+Each phase runs in a new session on the same branch; an accepted phase ends with a hand-off document and a starter prompt for the next (owner, 2026-11-24). **Phase 0 accepted 2026-11-24**; hand-off: `docs/superpowers/plans/2026-11-24-make-demo-handoff-p1.md`.
 
 | Phase | Delivers | The owner can try |
 |---|---|---|
