@@ -118,6 +118,18 @@ test('the on-load POST is listed with method, origin and path, no body; the aler
   assert.equal(scout.stepped.ok, true);
 });
 
+test('a popup that opens on another origin is refused and listed, and the page itself still has its digest', async () => {
+  const { scout } = await scoutOf(specFor('/scout/popout'));
+  const page = scout.pages[0];
+  assert.equal(page.wall, null, 'only the visit page\'s own moves make a page unusable');
+  assert.ok(control(page, 'Fine'), 'control: the page was read');
+  assert.equal(page.popups, 1);
+  assert.deepEqual(page.refused.map((r) => [r.origin, r.popup]), [[sites.otherOrigin, true]]);
+  assert.equal(sites.requests().filter((r) => r.server === 'other').length, 0, 'nothing reached the other origin');
+  assert.match(printDigest(page), /refused popup move: GET http:\/\/127\.0\.0\.1:\d+\/foreign\//);
+  assert.ok(!/left to/.test(printDigest(page)));
+});
+
 test('a value the page script put in a field is nowhere in scout.json', async () => {
   const { scout } = await scoutOf(specFor('/scout/'));
   assert.ok(control(scout.pages[0], 'User'), 'control: the field is listed');

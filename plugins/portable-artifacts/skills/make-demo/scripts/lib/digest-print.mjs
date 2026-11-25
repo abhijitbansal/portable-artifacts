@@ -32,11 +32,23 @@ function shortAddress(address, pageUrl) {
   }
 }
 
-function controlLine(c, pageUrl) {
+const NOTED_KINDS = new Set(['disclosure', 'password']);
+const CSS_MAX = 300;
+
+// A target is { role, name } or { css }: the print shows the role, and the css wherever role and name cannot name the control (an
+// empty name, a pair that is not unique on the page, or a name the print cut or escaped).
+const pairKey = (c) => JSON.stringify([c.role, c.name]);
+
+function needsCss(c, pairs) {
+  return c.name === '' || pairs.get(pairKey(c)) > 1 || agentText(c.name, { max: NAME_MAX }) !== c.name;
+}
+
+function controlLine(c, pageUrl, pairs) {
   const address = c.href ? ` ${shortAddress(c.href, pageUrl)}` : '';
   const form = c.formAction ? ` [${c.formMethod ?? 'get'} ${shortAddress(c.formAction, pageUrl)}]` : '';
-  const flags = [c.newTab && 'new tab', c.download && 'download', c.scripted && 'scripted', c.submits && 'submits'].filter(Boolean);
-  return `  ${c.id} ${c.kind} "${agentText(c.name, { max: NAME_MAX })}"${address}${form}${flags.length > 0 ? ` (${flags.join(', ')})` : ''} ${c.effect}`;
+  const flags = [NOTED_KINDS.has(c.kind) && c.kind, c.newTab && 'new tab', c.download && 'download', c.scripted && 'scripted', c.submits && 'submits'].filter(Boolean);
+  const css = needsCss(c, pairs) ? ` css=${agentText(c.css, { max: CSS_MAX })}` : '';
+  return `  ${c.id} ${c.role} "${agentText(c.name, { max: NAME_MAX })}"${address}${form}${flags.length > 0 ? ` (${flags.join(', ')})` : ''}${css} ${c.effect}`;
 }
 
 function headingsLine(headings) {
@@ -54,6 +66,10 @@ function doneLines(page) {
   const here = originOf(page.url);
   for (const r of page.refused ?? []) {
     const move = `${r.method} ${agentText(r.path, { max: ADDRESS_MAX })}`;
+    if (r.popup === true) {
+      lines.push(`refused popup move: ${r.method} ${agentText(`${r.origin}${r.path}`, { max: ADDRESS_MAX })}`);
+      continue;
+    }
     lines.push(r.origin === here ? `refused move: ${r.method} ${agentText(`${r.origin}${r.path}`, { max: ADDRESS_MAX })} (not a GET)` : `refused move: left to ${agentText(r.origin, { max: ADDRESS_MAX })} (${move})`);
   }
   return lines;
@@ -79,8 +95,10 @@ export function printDigest(page) {
   const footer = doneLines(page);
   let used = bytes([...head, ...footer].join('\n')) + FOOTER_RESERVE_BYTES;
   const shown = [];
+  const pairs = new Map();
+  for (const control of page.controls) pairs.set(pairKey(control), (pairs.get(pairKey(control)) ?? 0) + 1);
   for (const control of page.controls) {
-    const line = controlLine(control, page.url);
+    const line = controlLine(control, page.url, pairs);
     if (used + bytes(line) + 1 > PRINT_BYTES) break;
     shown.push(line);
     used += bytes(line) + 1;

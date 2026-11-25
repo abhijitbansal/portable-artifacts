@@ -177,6 +177,47 @@ test('names with invisible characters, newlines and Markdown are printed escaped
   assert.equal(text.split('\n').filter((l) => /Line one/.test(l)).length, 1);
 });
 
+const lineOf = (text, id) => text.split('\n').find((l) => new RegExp(`^ *${id} `).test(l));
+const ctl = (id, role, kind, name, extra = {}) => ({ ...many(1)[0], id, role, kind, name, href: null, css: `css-of-${id}`, effect: 'change', reason: 'x', ...extra });
+
+test('a control is printed with its role, so a target can be written from the print; kind stays only for disclosure and password', () => {
+  const text = printDigest(page({ headings: [], controls: [
+    ctl('c1', 'textbox', 'field', 'User'),
+    ctl('c2', 'button', 'disclosure', 'More options', { effect: 'look' }),
+    ctl('c3', 'textbox', 'password', 'Password'),
+    ctl('c4', 'link', 'link', 'Docs', { href: 'http://h.test/docs', effect: 'look' }),
+    ctl('c5', 'combobox', 'select', 'Size'),
+  ] }));
+  assert.match(lineOf(text, 'c1'), /^ *c1 textbox "User"/);
+  assert.match(lineOf(text, 'c2'), /^ *c2 button "More options" \(disclosure\)/);
+  assert.match(lineOf(text, 'c3'), /^ *c3 textbox "Password" \(password\)/);
+  assert.match(lineOf(text, 'c4'), /^ *c4 link "Docs"/);
+  assert.match(lineOf(text, 'c5'), /^ *c5 combobox "Size"/);
+  assert.ok(!/field|select/.test(`${lineOf(text, 'c1')}${lineOf(text, 'c5')}`));
+});
+
+test('css is printed only where role and name cannot name the control: an empty name, a pair that is not unique, a name that was cut or escaped', () => {
+  const long = 'a'.repeat(70);
+  const text = printDigest(page({ headings: [], controls: [
+    ctl('c1', 'button', 'button', ''),
+    ctl('c2', 'button', 'button', 'Save'),
+    ctl('c3', 'button', 'button', 'Save'),
+    ctl('c4', 'button', 'button', long),
+    ctl('c5', 'button', 'button', 'Line one\nLine two'),
+    ctl('c6', 'link', 'link', 'Save'),
+    ctl('c7', 'button', 'button', 'Unique'),
+  ] }));
+  for (const id of ['c1', 'c2', 'c3', 'c4', 'c5']) assert.ok(lineOf(text, id).includes(` css=css-of-${id}`), `${id}: ${lineOf(text, id)}`);
+  for (const id of ['c6', 'c7']) assert.ok(!lineOf(text, id).includes('css='), `${id}: ${lineOf(text, id)}`);
+});
+
+test('headings are printed without css, and a long css is printed whole', () => {
+  const deep = `html > ${'div:nth-of-type(1) > '.repeat(12)}button:nth-of-type(1)`;
+  const text = printDigest(page({ headings: [{ level: 1, name: 'Title', box: box() }], controls: [ctl('c1', 'button', 'button', '', { css: deep })] }));
+  assert.ok(!/h1 "Title".*css=/.test(text));
+  assert.ok(lineOf(text, 'c1').includes(`css=${deep}`));
+});
+
 test('printDigest prints the wall note, the video flag and what the page did on its own, as counts and masked paths', () => {
   const text = printDigest(page({ wall: 'a consent notice covers half the view', video: true, dialogs: 1, popups: 2, errors: 3, sockets: 1, refused: [{ method: 'GET', origin: 'http://other.test', path: '/foreign/' }, { method: 'POST', origin: 'http://h.test', path: '/pay' }], requests: [{ method: 'POST', origin: 'http://h.test', path: '/scout/track', count: 2 }] }));
   assert.match(text, /a consent notice covers half the view/);

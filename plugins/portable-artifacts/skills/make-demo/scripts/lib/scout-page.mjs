@@ -26,11 +26,12 @@ async function load(page, url) {
   return failure;
 }
 
-/** The origin the page left to (a refused move, or a page that already sits on another origin), or null. */
+/** The origin the page left to (a refused move of its own main frame, or a page that already sits on another origin), or null. A popup's refused move does not count. */
 function leftTo(page, seen, origins) {
-  const refused = seen.refused.find((r) => !origins.includes(r.origin));
+  const own = seen.refused.filter((r) => r.popup !== true);
+  const refused = own.find((r) => !origins.includes(r.origin));
   if (refused) return `left to ${refused.origin}`;
-  if (seen.refused.length > 0) return `refused a ${seen.refused[0].method} move`; // the page tried to post itself away; what is left is an error page
+  if (own.length > 0) return `refused a ${own[0].method} move`; // the page tried to post itself away; what is left is an error page
   try {
     const here = new URL(page.url());
     return (here.protocol === 'http:' || here.protocol === 'https:') && !origins.includes(here.origin) ? `left to ${here.origin}` : null;
