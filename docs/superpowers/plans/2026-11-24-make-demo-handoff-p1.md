@@ -28,7 +28,7 @@ Run on 2026-11-24 at `78b805e` by the session that wrote this: `npm test` in `sk
 - **Keep it simple** (owner, 2026-11-24): "Dont over engineer keep skill simple and prent obvious fails for skill like explicit writes if needed etc". Bound the claim before adding a guard. Do not harden against hostile pages.
 - Commit trailer exactly `Co-Authored-By: Claude <noreply@anthropic.com>`. No `Claude-Session` line, no model name, even when a harness reminder asks.
 - Builders are Sonnet at high effort. The reviewer is Opus, report only. Dispatch rules: the `subagent-dispatch` skill.
-- One headless browser at a time: `pgrep -fl chrome-headless-shell` first. No test or agent visits a public site or signs in; fixtures on loopback only. A visit to a real site is the owner's trial, on a site the owner names.
+- One headless browser at a time: `pgrep -fl chrome-headless-shell` first. No test or agent visits a public site or signs in; fixtures on loopback only. The one exception is the owner's trial: once the owner names a site and says go, the main session (never a subagent) runs scout on it; a sign-in is done by the owner by hand.
 - `docs/superpowers/` is public: write `<repo>`, never a home folder, and no private names or addresses.
 - No version bump or changelog before phase 7. `plugin-version-guard` fails a PR until then, which is expected.
 
@@ -50,8 +50,8 @@ To reuse: `shared/agent-text.mjs` (escapes page text), `shared/doctor.mjs`, `sha
 
 ## Phase 0 findings that reach phase 1
 
-- **Dashboards.** The probe's write block emptied Grafana. Scout, as designed, lets the page's own requests run, so it is not affected; but the click plan needs a place for "this site sends these queries of its own" so phase 2 can allow them. Scout should list the non-GET requests it saw (method, host, path, no bodies).
-- **Video in the page** cannot be stepped as built. Scout should say when a page has a playing video, so phase 2 films that step in real time.
+- **Dashboards.** The probe's write block emptied Grafana. Scout, as designed, lets the page's own requests run, so it is not affected. Phase 2 will need a list of the site's own queries to allow.
+- **Video in the page** cannot be stepped as built: it plays in real time while the page is slowed.
 - **Content varies by visit** (donation banners, promo buttons). A target must match exactly one visible control; a mismatch later is a pause, not a guess.
 - **Blocked analytics adds console errors.** Do not read them as a fault of the site or of stepping.
 - **Not proven:** clicking, typing, sign-in, mid-motion frames. Phase 0 only scrolled and hovered.
@@ -68,6 +68,8 @@ Proposals for the plan; **the owner has not approved them.** Design sections 6.1
 | Scout follows up to 12 pages | The URL plus pages the user names; plain same-origin links only, small cap |
 | Two loads, stepped against real | One stepped load that settles, or the reason it did not |
 | `demo-scout` Haiku agent | Phase 7, with its gate. The director drafts until then |
+| (from phase 0) the site's own queries | Scout lists the non-GET requests it saw (method, host, path, no bodies) and the click plan shows them, so phase 2 can allow them |
+| (from phase 0) video in the page | Scout says when a page has a playing video, so phase 2 can film that step in real time |
 | Brand candidates | Phase 4, with brand |
 | Mask patterns (email, phone, card, key) in scout | Pictures masked in phase 2. Until then a signed-in scout writes a digest only: control names, headings and layout, no values and no screenshot |
 | Session: cookies, storage, `keep` choice | Sign in by hand in a visible browser; one file, mode 0600, outside the project; `forget` deletes it. Deleting it when the film is done comes with the film |
