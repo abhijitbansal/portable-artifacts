@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Loud page</title></head>
+<body>
+<h1>Loud page</h1>
+<p>On load this page sends a POST, opens an alert and opens a popup.</p>
+<script>
+fetch('/scout/track', { method: 'POST', body: 'secret-body-4711' });
+window.open('/scout/popup');
+alert('hello from the page');
+</script>
+</body>
+</html>

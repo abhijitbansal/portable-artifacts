@@ -116,6 +116,49 @@ test('two loads of /random/ differ in text and colour', async () => {
   assert.notEqual(a, b);
 });
 
+// ---- the scout fixtures ----
+
+test('/scout/ is an English page whose links to the other origin carry its real address', async () => {
+  const page = await (await get('/scout/')).text();
+  assert.match(page, /<html lang="en">/);
+  assert.ok(!page.includes('{{OTHER}}'), 'the placeholder is filled in');
+  assert.ok(page.includes(`href="${sites.otherOrigin}/foreign/"`));
+  for (const href of ['/scout/docs', '/scout/de', '/scout/loud', '/scout/jump', '/scout/signout', '/scout/item/7/delete']) assert.ok(page.includes(`href="${href}"`), href);
+});
+
+test('/scout/de is German and links to /scout/fremd; /scout/many writes 3,000 links by script', async () => {
+  const de = await (await get('/scout/de')).text();
+  assert.match(de, /<html lang="de">/);
+  assert.ok(de.includes('href="/scout/fremd"'));
+  assert.match(await (await get('/scout/many')).text(), /3000/);
+});
+
+test('/scout/bounce is a 302 to the other origin, and POST /scout/track answers 204 and is logged', async () => {
+  const bounce = await get('/scout/bounce');
+  assert.equal(bounce.status, 302);
+  assert.equal(bounce.headers.get('location'), `${sites.otherOrigin}/foreign/`);
+  assert.equal((await get('/scout/track', { method: 'POST', body: 'x' })).status, 204);
+  assert.ok(sites.requests().some((r) => r.method === 'POST' && r.path === '/scout/track'));
+});
+
+test('a request to the other origin says so in its log entry; the main origin entries keep their two fields', async () => {
+  await fetch(`${sites.otherOrigin}/foreign/`);
+  await get('/plain/');
+  const log = sites.requests();
+  assert.deepEqual(log.find((r) => r.path === '/foreign/'), { method: 'GET', path: '/foreign/', server: 'other' });
+  assert.deepEqual(log.find((r) => r.path === '/plain/'), { method: 'GET', path: '/plain/' });
+});
+
+test('/login/home also has a button named with the email, a field holding the key, a table cell with the name and a JSON copy', async () => {
+  const cookie = await signIn();
+  const body = await (await get('/login/home', { headers: { cookie } })).text();
+  assert.match(body, new RegExp(`<button[^>]*>[^<]*${PRIVATE_SEEDS[0].replace('.', '\\.')}[^<]*</button>`));
+  assert.match(body, new RegExp(`<input[^>]*value="${PRIVATE_SEEDS[4]}"`));
+  assert.match(body, new RegExp(`<td>${PRIVATE_SEEDS[3]}</td>`));
+  assert.match(body, /<script type="application\/json"[^>]*>[^<]*Maria Ostrowski/);
+  assert.ok(!/type="password"/.test(body), 'a signed-in page holds no password field');
+});
+
 test('the hostile page has instruction-like headings with bidi and zero-width characters', async () => {
   const page = await (await get('/hostile/')).text();
   assert.match(page, /ignore (all )?(your|previous)/i);

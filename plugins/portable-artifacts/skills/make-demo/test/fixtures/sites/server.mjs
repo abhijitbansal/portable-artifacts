@@ -21,6 +21,7 @@ export const PRIVATE_SEEDS = [
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.js': 'text/javascript', '.css': 'text/css' };
 const HTML = 'text/html; charset=utf-8';
+const OTHER_MARK = '{{OTHER}}';
 
 /** Answer, and say so (true): a route returns false when the request is not its own. */
 const send = (res, status, body, type = HTML, headers = {}) => {
@@ -55,9 +56,18 @@ const randomPage = (load) => {
 
 const wallPage = '<!doctype html><meta charset="utf-8"><title>Just a moment...</title><h1>Verify you are human</h1><p>Checking your browser before access is granted.</p>';
 
+// A signed-in page. The seeds sit in the places a scout could leak them from: a button name, a heading, a link address, a field value,
+// a table cell and a JSON copy in a script. Only the button, the heading and the link are names or addresses a digest may list (masked).
 const loginHome = () => `<!doctype html><meta charset="utf-8"><title>Account</title><h1>Account</h1>
+<h2>Signed in as ${PRIVATE_SEEDS[0]}</h2>
 <dl><dt>Name</dt><dd>${PRIVATE_SEEDS[3]}</dd><dt>Email</dt><dd>${PRIVATE_SEEDS[0]}</dd><dt>Phone</dt><dd>${PRIVATE_SEEDS[1]}</dd>
 <dt>Card</dt><dd>${PRIVATE_SEEDS[2]}</dd><dt>API key</dt><dd>${PRIVATE_SEEDS[4]}</dd></dl>
+<button type="button">Switch to ${PRIVATE_SEEDS[0]}</button>
+<a href="/login/card/4111111111111111?holder=Maria+Ostrowski">Card ${PRIVATE_SEEDS[2]}</a>
+<a href="/login/summary">${PRIVATE_SEEDS[3]} paid the invoice for the spring order, and the card on file is the one we charged.</a>
+<label for="key">API key</label> <input id="key" type="text" value="${PRIVATE_SEEDS[4]}">
+<table><tr><td>${PRIVATE_SEEDS[3]}</td><td>${PRIVATE_SEEDS[1]}</td></tr></table>
+<script type="application/json" id="me">{"name":"${PRIVATE_SEEDS[3]}","email":"${PRIVATE_SEEDS[0]}","key":"${PRIVATE_SEEDS[4]}"}</script>
 <a href="/login/signout">Sign out</a>`;
 
 const DONE_PAGE = '<!doctype html><title>Done</title><h1>Done</h1>';
@@ -106,6 +116,8 @@ function dynamicRoute(world, res, pathname) {
   if (pathname === '/wall/') return send(res, 403, wallPage);
   if (pathname === '/trap/needs-login') return send(res, 302, '', HTML, { location: '/login/' });
   if (pathname === '/random/') return send(res, 200, randomPage(seen('/random/')));
+  if (pathname === '/scout/bounce') return send(res, 302, '', HTML, { location: `${world.otherOrigin}/foreign/` });
+  if (pathname === '/scout/track') return send(res, 204, '');
   if (pathname === '/slow/data') return send(res, 200, JSON.stringify({ items: ['Quarterly report', 'Team roster', 'Open tasks'] }), TYPES['.json']);
   if (pathname === '/slow/poll/tick') return send(res, 200, JSON.stringify({ n: seen('/slow/poll/tick') }), TYPES['.json']);
   return false;
@@ -119,13 +131,17 @@ function handleMain(world, req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed', 'text/plain');
   const file = fileFor(pathname);
   if (!file) return send(res, 404, NOT_FOUND_PAGE);
-  return send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] ?? 'application/octet-stream');
+  const body = fs.readFileSync(file);
+  const type = TYPES[path.extname(file)] ?? 'application/octet-stream';
+  // A page may link to the other server, whose port is only known at run time: {{OTHER}} is its origin.
+  if (path.extname(file) === '.html' && body.includes(OTHER_MARK)) return send(res, 200, body.toString('utf8').replaceAll(OTHER_MARK, world.otherOrigin), type);
+  return send(res, 200, body, type);
 }
 
 function handleOther(world, req, res) {
   const pathname = pathOf(req);
   if (pathname === null) return send(res, 400, 'bad request', 'text/plain');
-  world.log.push({ method: req.method, path: pathname });
+  world.log.push({ method: req.method, path: pathname, server: 'other' }); // only these entries say which server: the main ones keep two fields
   if (pathname !== '/foreign/') return send(res, 404, 'not found', 'text/plain');
   return send(res, 200, fs.readFileSync(path.join(ROOT, 'foreign', 'index.html')));
 }
@@ -139,7 +155,7 @@ const closeServer = (server) => new Promise((done) => { server.closeAllConnectio
 
 /** Start both servers. `requests()` lists every request seen since the start or the last `reset()`. */
 export async function startSites() {
-  const world = { log: [], signedIn: false, deleted: [], submitted: 0 };
+  const world = { log: [], signedIn: false, deleted: [], submitted: 0, otherOrigin: '' };
   const main = await listen((req, res) => handleMain(world, req, res));
   // A WebSocket upgrade is logged and refused: a test then sees whether a page ever reached the server with one.
   main.on('upgrade', (req, socket) => {
@@ -147,9 +163,10 @@ export async function startSites() {
     socket.destroy();
   });
   const other = await listen((req, res) => handleOther(world, req, res));
+  world.otherOrigin = `http://127.0.0.1:${other.address().port}`;
   return {
     origin: `http://127.0.0.1:${main.address().port}`,
-    otherOrigin: `http://127.0.0.1:${other.address().port}`,
+    otherOrigin: world.otherOrigin,
     requests: () => world.log.map((r) => ({ ...r })),
     state: () => ({ signedIn: world.signedIn, deleted: [...world.deleted], submitted: world.submitted }),
     reset() { Object.assign(world, { log: [], signedIn: false, deleted: [], submitted: 0 }); },

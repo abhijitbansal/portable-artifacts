@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Many links</title></head>
+<body>
+<h1>Many links</h1>
+<p>The script writes 3000 links to places on this same page.</p>
+<div id="list"></div>
+<script>
+const list = document.getElementById('list');
+for (let i = 1; i <= 3000; i += 1) {
+  const a = document.createElement('a');
+  a.href = `#link-${i}`;
+  a.textContent = `Link number ${i} with a fairly long name to fill the page`;
+  list.append(a, document.createElement('br'));
+}
+</script>
+</body>
+</html>

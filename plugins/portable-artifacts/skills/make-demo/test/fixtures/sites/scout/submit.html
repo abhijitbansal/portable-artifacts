@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Self-submitting form</title></head>
+<body>
+<h1>Self-submitting form</h1>
+<p>On load this page posts its form to a pay address, by script.</p>
+<form method="post" action="/danger/pay"><button type="submit">Pay now</button></form>
+<script>document.forms[0].submit();</script>
+</body>
+</html>

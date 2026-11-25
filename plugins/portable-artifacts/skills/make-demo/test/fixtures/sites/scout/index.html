@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scout start</title>
+<style>body { margin: 0; font: 18px/1.5 system-ui, sans-serif; padding: 24px 32px; color: #1c2430; background: #fbfaf7; } nav a, button, input { font: inherit; margin-right: 12px; }</style>
+</head>
+<body>
+<h1>Scout start</h1>
+<nav aria-label="Main">
+  <a href="/scout/signout">Sign out</a>
+  <a href="/scout/item/7/delete">Item 7</a>
+  <a href="{{OTHER}}/foreign/">Other site</a>
+  <a href="/scout/docs">Docs</a>
+  <a href="/scout/de">Deutsch</a>
+  <a href="/scout/loud">Loud page</a>
+  <a href="/scout/jump">Jump page</a>
+</nav>
+<h2>Search</h2>
+<button type="button" aria-expanded="false" aria-controls="more">More options</button>
+<div id="more" hidden><p>Extra text that only a click would show.</p></div>
+<form action="/scout/search" method="get">
+  <label for="user">User</label>
+  <input id="user" name="user" type="text">
+  <button type="submit">Search</button>
+</form>
+<button type="button" aria-label="Line one&#10;Line two `tick` | pipe [a](http://x.test) TODO: x">Odd name</button>
+<script>
+document.getElementById('user').value = 'typed-by-script-4711';
+</script>
+</body>
+</html>
