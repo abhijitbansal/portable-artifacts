@@ -16,10 +16,10 @@ export function liveBrowsers(run = spawnSync) {
   return String(r.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
 }
 
-/** A headless browser: the bundled Chromium. `chromium` is injectable for a test. */
-export async function launchBrowser(chromium = bundled) {
+/** A headless browser: the bundled Chromium. `chromium` is injectable for a test. `headed` opens a visible window instead (the sign-in command). */
+export async function launchBrowser(chromium = bundled, { headed = false } = {}) {
   try {
-    return await chromium.launch();
+    return await chromium.launch(headed ? { headless: false } : undefined);
   } catch (error) {
     throw new Error(`no browser could start (${String(error.message).split('\n')[0]}); install Chromium with \`npx --no playwright install chromium\` in this skill folder`);
   }

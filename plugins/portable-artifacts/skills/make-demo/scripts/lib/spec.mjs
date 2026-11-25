@@ -39,6 +39,9 @@ function parseHttp(address, base) {
   }
 }
 
+/** True for a bare http(s) origin such as "https://example.test": no path, no trailing slash. */
+export const isBareOrigin = (origin) => typeof origin === 'string' && parseHttp(origin)?.origin === origin;
+
 /** The origins the demo may visit: `origins` as written, else the origin of `source.url`; [] when neither is usable. */
 export function originsOf(spec) {
   if (Array.isArray(spec?.origins)) return spec.origins.filter((o) => typeof o === 'string');
@@ -56,7 +59,7 @@ function checkOrigins(errors, spec) {
   const own = parseHttp(spec.source.url);
   if (!own) errors.push({ path: 'source.url', message: `must be an http or https address, got ${echo(spec.source.url)}` });
   (spec.origins ?? []).forEach((origin, i) => {
-    if (parseHttp(origin)?.origin !== origin) errors.push({ path: `origins[${i}]`, message: `must be a bare http or https origin such as "https://example.test" (no path, no trailing slash), got ${echo(origin)}` });
+    if (!isBareOrigin(origin)) errors.push({ path: `origins[${i}]`, message: `must be a bare http or https origin such as "https://example.test" (no path, no trailing slash), got ${echo(origin)}` });
   });
   if (own && !originsOf(spec).includes(own.origin)) errors.push({ path: 'origins', message: `must include the origin of source.url, ${own.origin}` });
 }

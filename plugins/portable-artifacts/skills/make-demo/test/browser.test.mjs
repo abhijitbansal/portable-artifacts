@@ -32,6 +32,14 @@ test('launchBrowser starts the bundled Chromium and nothing else: no Chrome fall
   assert.deepEqual(calls, [undefined], 'one launch, with no channel');
 });
 
+test('launchBrowser with headed: true opens a visible window of the same bundled Chromium (the sign-in command)', async () => {
+  const calls = [];
+  const browser = { name: 'fake' };
+  const fake = { launch: async (options) => { calls.push(options); return browser; } };
+  assert.equal(await launchBrowser(fake, { headed: true }), browser);
+  assert.deepEqual(calls, [{ headless: false }]);
+});
+
 test('launchBrowser returns what the bundled launch gives', async () => {
   const browser = { name: 'fake' };
   assert.equal(await launchBrowser({ launch: async () => browser }), browser);
