@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const PLUGIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SKILLS = ['make-dashboard', 'make-diagram', 'make-explainer', 'make-scene', 'make-motion'];
+const SKILLS = ['make-dashboard', 'make-diagram', 'make-explainer', 'make-scene', 'make-motion', 'make-demo'];
 const KINDS = ['mechanical', 'creative'];
 const CORE_KEYS = ['ok', 'output', 'stages', 'findings'];
 const EXIT_NOT_OK = 1;

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, originsOf } from '../scripts/lib/spec.mjs';
-import { siblingDir, SiblingError, loadSibling } from '../scripts/lib/siblings.mjs';
+import { siblingDir, SiblingError, siblingScript } from '../scripts/lib/siblings.mjs';
 
 const EXAMPLE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../references/examples/walkthrough.demo.json');
 const example = () => structuredClone(loadSpec(EXAMPLE).spec);
@@ -184,9 +184,18 @@ test('an unknown verb is an error that names the verbs', () => {
   assert.ok(found.some((e) => e.path.endsWith('.do') && /click/.test(e.message)), messages(withSteps([{ id: 'b', do: 'drag' }])));
 });
 
-test('siblingDir is the folder next to this skill; a missing sibling names the install command', async () => {
+test('siblingDir is the folder next to this skill; a missing sibling names the install command', () => {
   assert.equal(path.basename(siblingDir('make-explainer')), 'make-explainer');
   assert.throws(() => siblingDir('../etc'), TypeError);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'make-demo-sib-'));
-  await assert.rejects(loadSibling('make-explainer', 'scripts/lib/schema.mjs', { root }), (e) => e instanceof SiblingError && /npx --yes skills@.* add .*make-explainer/.test(e.message) && /make-explainer/.test(e.command));
+  assert.throws(() => siblingScript('make-explainer', 'scripts/build.mjs', { root }), (e) => e instanceof SiblingError && /npx --yes skills@.* add .*make-explainer/.test(e.message) && /make-explainer/.test(e.command));
+});
+
+test('siblingScript is the absolute path of a script that exists; a folder without it is a SiblingError that says which script', () => {
+  assert.equal(siblingScript('make-explainer', 'scripts/build.mjs'), path.join(siblingDir('make-explainer'), 'scripts', 'build.mjs'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'make-demo-sib-'));
+  fs.mkdirSync(path.join(root, 'make-explainer'));
+  assert.throws(() => siblingScript('make-explainer', 'scripts/build.mjs', { root }), (e) => e instanceof SiblingError && /scripts\/build\.mjs not found/.test(e.message));
+  assert.throws(() => siblingScript('make-explainer', '../../etc/passwd', { root }), TypeError);
+  assert.throws(() => siblingScript('make-explainer', '/etc/passwd', { root }), TypeError);
 });
