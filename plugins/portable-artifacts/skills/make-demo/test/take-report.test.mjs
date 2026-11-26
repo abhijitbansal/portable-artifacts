@@ -1,7 +1,7 @@
 // takeReport: the text a director reads after a take. Pure: no browser, no file.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { takeReport, REPORT_BYTES } from '../scripts/lib/take-report.mjs';
+import { takeReport, stoppedJson, REPORT_BYTES } from '../scripts/lib/take-report.mjs';
 
 const DIR = '/work/demo/take-1';
 const ORIGIN = 'http://127.0.0.1:4100';
@@ -53,6 +53,16 @@ test('a stop reason and a row id are written out through agentText: a newline an
   const text = takeReport(takeOf({ stopped: { row: 'a\nb', reason: 'the control changed: name\n‮txt.exe' } }), { dir: DIR, total: 3 });
   assert.ok(!text.includes('‮'));
   assert.match(text, /stopped: row a\\u\{000a\}b, the control changed: name\\u\{000a\}\\u\{202e\}txt\.exe/);
+});
+
+test('--json: stoppedJson is null for a finished take, and for a stop it writes the row id and the reason out through agentText', () => {
+  assert.equal(stoppedJson(null), null);
+  const hostile = stoppedJson({ row: 'a\nb', reason: 'the control changed: name\n‮txt.exe' });
+  assert.deepEqual(Object.keys(hostile), ['row', 'reason']);
+  assert.ok(!/[\n‮]/.test(hostile.row + hostile.reason), 'no newline and no bidi mark is left');
+  assert.equal(hostile.row, 'a\\u{000a}b');
+  assert.equal(hostile.reason, 'the control changed: name\\u{000a}\\u{202e}txt.exe');
+  assert.ok(stoppedJson({ row: 'r', reason: 'x'.repeat(1000) }).reason.length < 260, 'a long reason is cut');
 });
 
 test('non-GET requests are listed as method, origin, masked path and count, never a body; so are refused moves, dialogs, popups, errors', () => {

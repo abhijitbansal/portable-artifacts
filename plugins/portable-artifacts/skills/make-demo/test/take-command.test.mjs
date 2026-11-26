@@ -332,3 +332,16 @@ test('signed in: stdout, stderr and every text file hold no private value or coo
   assert.match(lost.stderr, /session\.mjs login/);
   assert.deepEqual(fs.readdirSync(signed.dir).filter((n) => n.startsWith('take-')).sort(), ['take-1', 'take-2'], 'no empty take folder is left behind');
 });
+
+test('--json: a stop reason the page wrote (an error it threw, with a bidi mark) reaches stopped.reason as code points, not characters', T, async () => {
+  const hostile = await approved('hostile-reason', demoSpec([goto('g', '/take/'), { id: 'c', do: 'click', target: by('button', 'Reveal') }]));
+  const thrower = '<script>const get = Element.prototype.getAttribute; Element.prototype.getAttribute = function (name) { if (name === "target") throw new Error("bad\\u202ereason"); return get.call(this, name); };</script>';
+  sites.rewriteHtml((html) => html.replace('<div class="tall"></div>', `<div class="tall"></div>${thrower}`));
+  const r = await run(script('take'), [hostile.file, '--answers', hostile.answers, '--json']);
+  await quiet();
+  assert.equal(r.code, 1, r.stdout + r.stderr);
+  const { stopped } = JSON.parse(r.stdout);
+  assert.equal(stopped.row, 'c');
+  assert.ok(!stopped.reason.includes('‮'), `a raw bidi mark in ${JSON.stringify(stopped.reason)}`);
+  assert.match(stopped.reason, /bad\\u\{202e\}reason/);
+});

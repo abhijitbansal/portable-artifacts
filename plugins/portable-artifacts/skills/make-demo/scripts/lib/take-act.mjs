@@ -9,6 +9,9 @@
 //    (it waits only for the element to exist). Every call into the page is held to ACT_DEADLINE_MS of real time and throws StepTimeout past it.
 //  - Before a click the point under the pointer is checked (`elementFromPoint`): when something else covers the control, the act is
 //    refused (ActRefused), never clicked at the wrong thing.
+//  - The pointer glide is 10 stepped frames, during which the page can change (a control inserted before the approved one makes its
+//    positional css match another). So after the glide a click, type, select or press with a target runs liveControl again and goes to
+//    that fresh element, or is refused with liveControl's reason.
 //  - Nothing hung: every verb finished under the stopped clock with no waiting variant, `force` or fallback of the plan's Step 3 other
 //    than the one below. What a click that navigates needed: a step that runs while a navigation commits fails with "Execution
 //    context was destroyed" (a same-origin form post with its redirect did; a plain link got lucky), so after a click or a key the
@@ -150,9 +153,19 @@ const isUncovered = (locator) => locator.evaluate((el) => {
   return Boolean(hit) && (el.contains(hit) || hit.closest('label')?.control === el);
 }, undefined, { timeout: LOCATE_MS });
 
-async function clickAt(page, live, at) {
-  if (!(await isUncovered(live.locator))) throw new ActRefused('the control is covered by something else');
-  await limited(page.mouse.click(at.x, at.y), 'a click');
+const ON_TARGET = new Set(['click', 'type', 'select', 'press']);
+
+/**
+ * Where the pointer arrived and the control the act goes to. The page may have changed during the glide (10 stepped frames), so an act
+ * on the control runs liveControl again and goes to that fresh element, never to what the css matched before; anything else (hover,
+ * show, scroll) keeps the first one. A click is also refused when something covers the control.
+ */
+async function arrive(page, row, found, { signedIn, scoutPage }) {
+  if (!ON_TARGET.has(row.do)) return { current: found, arrived: await found.locator.boundingBox({ timeout: LOCATE_MS }) };
+  const fresh = await liveControl(page, row, { signedIn, scoutPage });
+  if (!fresh.ok) throw new ActRefused(fresh.reason);
+  if (row.do === 'click' && !(await isUncovered(fresh.locator))) throw new ActRefused('the control is covered by something else');
+  return { current: fresh, arrived: fresh.box };
 }
 
 // ---- navigation ----------------------------------------------------------------------------------------------------------------
@@ -229,7 +242,7 @@ async function doAct(ctx) {
   const { page, row, live, frames, at, watch } = ctx;
   switch (row.do) {
     case 'click':
-      await clickAt(page, live, at);
+      await limited(page.mouse.click(at.x, at.y), 'a click');
       return awaitNavigation(page, watch);
     case 'type': return typeText(page, live, row.value, frames);
     case 'select': return limited(live.locator.selectOption(String(row.value), { force: true, timeout: LOCATE_MS }), 'select');
@@ -259,9 +272,10 @@ const sameBox = (a, b) => Boolean(a) && Boolean(b) && a.x === b.x && a.y === b.y
  * Run one row. `live` is the result of liveControl when the caller already has it (else it is read here for a row with a target, and a
  * control that is not the approved one is an ActRefused). Returns { startFrame, actFrame, settleFrame, pointer, box, boxMoved, settle }:
  * `box` is where the control was when the act began, `boxMoved` whether it had moved when the pointer arrived (the click goes to where
- * it is then). `onFrame()` is awaited after every step, settle steps included.
+ * it is then). `onFrame()` is awaited after every step, settle steps included. `onActStart()` is called once the row has passed every
+ * check and just before its input goes out (so a row cut off later by a cap or an error was still a row that acted).
  */
-export async function act(page, stepper, row, { signedIn, pointer = null, onFrame = null, scoutPage = null, live = null }) {
+export async function act(page, stepper, row, { signedIn, pointer = null, onFrame = null, onActStart = null, scoutPage = null, live = null }) {
   const startFrame = frameOf(stepper);
   const found = row.target ? (live ?? await liveControl(page, row, { signedIn, scoutPage })) : null;
   if (found && !found.ok) throw new ActRefused(found.reason);
@@ -273,17 +287,20 @@ export async function act(page, stepper, row, { signedIn, pointer = null, onFram
   };
   let at = pointer ?? { x: 0, y: 0 };
   let boxMoved = false;
+  let current = found;
   const box = found?.box ?? null;
   if (found) {
     await movePointer(page, frames, at, centre(box));
-    const arrived = await found.locator.boundingBox({ timeout: LOCATE_MS });
-    boxMoved = !sameBox(box, arrived);
-    at = arrived ? centre(arrived) : centre(box);
+    const here = await arrive(page, row, found, { signedIn, scoutPage });
+    current = here.current;
+    boxMoved = !sameBox(box, here.arrived);
+    at = here.arrived ? centre(here.arrived) : centre(box);
   }
   const actFrame = frameOf(stepper);
   const watch = watchNavigation(page);
   try {
-    await doAct({ page, row, live: found, frames, at, watch });
+    if (onActStart) onActStart();
+    await doAct({ page, row, live: current, frames, at, watch });
     const settle = await settleAfterNavigation(page, stepper, onFrame, watch);
     return { startFrame, actFrame, settleFrame: frameOf(stepper), pointer: at, box, boxMoved, settle };
   } finally {

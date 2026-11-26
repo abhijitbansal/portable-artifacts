@@ -104,6 +104,9 @@ function fit(pieces) {
   return out;
 }
 
+/** `take.stopped` for `--json`: null, or { row, reason } with both written out through agentText, as the text report does. */
+export const stoppedJson = (stopped) => (stopped === null ? null : { row: text(stopped.row), reason: text(stopped.reason, REASON_MAX) });
+
 export function takeReport(take, { dir, total } = {}) {
   return fit(sections(take, { dir, total }));
 }

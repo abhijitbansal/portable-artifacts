@@ -75,12 +75,16 @@ test('only take-1 ignored: take-1 is made and take-2 is refused', () => {
   assert.throws(() => takeDir(demo, options()), TakeFolderRefused);
 });
 
-test('a second take of a plan that ran a change row is refused until again, and again names the rows that run twice', () => {
+const PLAN_ROWS = [step('open', 'look'), step('save', 'change'), step('wipe', 'danger')]; // the rows of the plan being taken
+const refusedFor = (take) => (error) => error instanceof TakeFolderRefused && /--again/.test(error.message) && (take === undefined || error.message.includes(`take-${take}`));
+const frameless = (demo, n) => fs.mkdirSync(path.join(demo, `take-${n}`, 'frames'), { recursive: true });
+
+test('a second take of a plan that ran a change row is refused until again, and again names the rows of the plan that run twice', () => {
   const demo = tempDir();
   writeTake(demo, 1, { planKey: KEY, steps: [step('open', 'look'), step('save', 'change'), step('wipe', 'danger')] });
-  assert.throws(() => takeDir(demo, options()), (error) => error instanceof TakeFolderRefused && /--again/.test(error.message) && /save/.test(error.message) && /wipe/.test(error.message));
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), (error) => refusedFor(1)(error) && /save/.test(error.message) && /wipe/.test(error.message));
   assert.deepEqual(fs.readdirSync(demo), ['take-1'], 'a refusal makes no folder');
-  const again = takeDir(demo, options({ again: true }));
+  const again = takeDir(demo, options({ again: true, rows: PLAN_ROWS }));
   assert.equal(again.n, 2);
   assert.deepEqual(again.again, ['save', 'wipe']);
 });
@@ -88,47 +92,82 @@ test('a second take of a plan that ran a change row is refused until again, and 
 test('a previous take of the same plan that ran only look rows needs no again', () => {
   const demo = tempDir();
   writeTake(demo, 1, { planKey: KEY, steps: [step('open', 'look'), step('hover', 'look')] });
-  assert.deepEqual(takeDir(demo, options()).again, []);
+  assert.deepEqual(takeDir(demo, options({ rows: PLAN_ROWS })).again, []);
 });
 
-test('a previous take of another plan, or one with no take.json, needs no again', () => {
+test('a previous take of another plan, or a bare folder (no take.json, no frames), needs no again', () => {
   const other = tempDir();
   writeTake(other, 1, { planKey: 'demo-aaaaaaaaaaaa', steps: [step('save', 'change')] });
-  assert.equal(takeDir(other, options()).n, 2);
+  assert.equal(takeDir(other, options({ rows: PLAN_ROWS })).n, 2);
   const bare = tempDir();
   fs.mkdirSync(path.join(bare, 'take-1'));
-  assert.equal(takeDir(bare, options()).n, 2);
+  assert.equal(takeDir(bare, options({ rows: PLAN_ROWS })).n, 2);
 });
 
-test('a bare folder made after a take (a refused or dead take) does not hide that take: the newest take.json counts', () => {
+test('a killed take (frames/ but no take.json) counts as a take that ran a change row, for any plan', () => {
+  const demo = tempDir();
+  frameless(demo, 1);
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), (error) => refusedFor(1)(error) && /save/.test(error.message));
+  assert.deepEqual(fs.readdirSync(demo), ['take-1'], 'a refusal makes no folder');
+  const again = takeDir(demo, options({ again: true, rows: PLAN_ROWS }));
+  assert.deepEqual([again.n, again.again], [2, ['save', 'wipe']]);
+});
+
+test('a bare folder made after a take (a refused take) does not hide that take: every earlier take.json counts', () => {
   const demo = tempDir();
   writeTake(demo, 1, { planKey: KEY, steps: [step('save', 'change')] });
   fs.mkdirSync(path.join(demo, 'take-2'));
-  assert.throws(() => takeDir(demo, options()), (error) => error instanceof TakeFolderRefused && /take-1/.test(error.message));
-  const again = takeDir(demo, options({ again: true }));
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), refusedFor(1));
+  const again = takeDir(demo, options({ again: true, rows: PLAN_ROWS }));
   assert.equal(again.n, 3);
-  assert.deepEqual(again.again, ['save']);
+  assert.deepEqual(again.again, ['save', 'wipe']);
 });
 
-test('only the last take counts: take-1 ran a change row but take-2 of the same plan ran none', () => {
+test('every earlier take counts, not the newest: take-1 ran a change row, then take-2 of the same plan ran none, and take-3 is refused', () => {
   const demo = tempDir();
   writeTake(demo, 1, { planKey: KEY, steps: [step('save', 'change')] });
   writeTake(demo, 2, { planKey: KEY, steps: [step('open', 'look')] });
-  assert.equal(takeDir(demo, options()).n, 3);
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), refusedFor(1));
+  writeTake(demo, 3, { planKey: KEY, steps: [], ran: [], stopped: { row: 'open', reason: 'no match' } });
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), refusedFor(1), 'an empty take in between does not hide it either');
+});
+
+test('a take of another plan in between does not hide the earlier take of this plan', () => {
+  const demo = tempDir();
+  writeTake(demo, 1, { planKey: KEY, steps: [step('wipe', 'danger')] });
+  writeTake(demo, 2, { planKey: 'demo-aaaaaaaaaaaa', steps: [step('open', 'look')] });
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), refusedFor(1));
+});
+
+test('ran decides when it is there: a row cut off after its act began (in ran, not in steps) needs again', () => {
+  const demo = tempDir();
+  writeTake(demo, 1, { planKey: KEY, steps: [step('open', 'look')], ran: [{ id: 'open', effect: 'look' }, { id: 'wipe', effect: 'danger' }], stopped: { row: 'wipe', reason: 'film time cap' } });
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), refusedFor(1));
+  const looked = tempDir();
+  writeTake(looked, 1, { planKey: KEY, steps: [step('save', 'change')], ran: [{ id: 'open', effect: 'look' }] });
+  assert.equal(takeDir(looked, options({ rows: PLAN_ROWS })).n, 2, 'ran, when present, is the record');
 });
 
 test('a take.json that cannot be read is refused like one that ran a change row', () => {
   const demo = tempDir();
   fs.mkdirSync(path.join(demo, 'take-1'));
   fs.writeFileSync(path.join(demo, 'take-1', 'take.json'), '{ not json');
-  assert.throws(() => takeDir(demo, options()), TakeFolderRefused);
-  assert.equal(takeDir(demo, options({ again: true })).n, 2);
+  assert.throws(() => takeDir(demo, options({ rows: PLAN_ROWS })), TakeFolderRefused);
+  assert.equal(takeDir(demo, options({ again: true, rows: PLAN_ROWS })).n, 2);
 });
 
 test('the row ids in a refusal go through agentText', () => {
   const demo = tempDir();
-  writeTake(demo, 1, { planKey: KEY, steps: [step('a\nb', 'change')] });
-  assert.throws(() => takeDir(demo, options()), (error) => !error.message.includes('\n') && error.message.includes('\\u{000a}'));
+  writeTake(demo, 1, { planKey: KEY, steps: [step('save', 'change')] });
+  assert.throws(() => takeDir(demo, options({ rows: [step('a\nb', 'change')] })), (error) => !error.message.includes('\n') && error.message.includes('\\u{000a}'));
+});
+
+test('git: a .gitignore that ignores only take.json is refused, because the frames, the sheet and the downloads would be tracked', () => {
+  const only = repo('*.json\n');
+  assert.throws(() => takeDir(only, options()), (error) => error instanceof TakeFolderRefused && /git/.test(error.message));
+  const partial = repo('take-*/take.json\ntake-*/contact.jpg\ntake-*/frames/\n');
+  assert.throws(() => takeDir(partial, options()), TakeFolderRefused, 'downloads/ is not ignored');
+  assert.deepEqual(fs.readdirSync(partial).filter((name) => name.startsWith('take-')), []);
 });
 
 test('a plan key is required: without one the again rule could not be applied', () => {

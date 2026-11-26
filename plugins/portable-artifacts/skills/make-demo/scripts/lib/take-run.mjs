@@ -8,13 +8,16 @@
 // The take ENDS, keeping the frames so far, with `stopped: { row, reason }` when: a row is an intent row (`not seen yet`); the live
 // control is not the approved one (take-act.mjs: `no match`, `2 matches`, `the control changed: <field>`, ...); a move off the origins
 // was refused (the page is left on the browser's error page); a `look` row was followed by a write to an origin of the demo that scout
-// did not list on any scouted page (the request has gone by then); the page is stuck (StepTimeout); 180 s of film time (`film time cap`); 3 GB
-// of distinct frames (`size cap`). Whether the row that stops is in `steps` depends on the stop: a row that never ran (an intent row, a
-// control that is not the approved one) or that was cut off by an error or a cap is NOT in `steps` (the frames it made are in `frames`);
-// a row that ran to its end and was judged afterwards (a refused move, a look row's write) IS the last entry of `steps`. So `steps` is
-// the rows that finished; `stopped.row` is the row the take ended on, whether or not it is also a step.
+// did not list on any scouted page (the request has gone by then); the page is stuck (a StepTimeout, or a settle capped by
+// 'time' that left the context closed: `the page is stuck`); the page is on an origin that is not the demo's after a row, a server redirect (`the page moved to <origin>`);
+// 180 s of film time (`film time cap`); 3 GB of distinct frames (`size cap`). Whether the row that stops is in `steps` depends on the stop:
+// a row that never ran (an intent row, a control that is not the approved one) or that was cut off by an error or a cap is NOT in `steps`
+// (the frames it made are in `frames`); a row that ran to its end and was judged afterwards (a refused move, a look row's write, a stuck
+// settle, a move to another origin) IS the last entry of `steps`. So `steps` is the rows that finished; `stopped.row` is the row the take
+// ended on, whether or not it is also a step. `ran` is every row whose act began (after its control was checked, before its input went
+// out), a row cut off afterwards included: what takeDir reads to decide that a second take needs `--again`.
 // Not stops, listed in `seen`: dialogs (dismissed), popups (closed), writes to other origins, writes of a `change` row, a settle that hit
-// its cap (`steps[].settle.capped`).
+// its frame cap (the page is still animating; `steps[].settle.capped`).
 //
 // Frames: after every step (pointer, typing and settle steps alike) the page is covered (take-mask.mjs), shot at scale 3 as a JPEG,
 // uncovered and stored. Film frame f is `frames[f - 1]`; `steps[].settledIndex` is the index of the step's last frame, which is the
@@ -110,6 +113,26 @@ function movedAway(ctx, row, before) {
   return moved ? { row: row.id, reason: `a move to ${moved.origin} was refused` } : null;
 }
 
+/** The page's address is on an origin that is not the demo's (a server redirect: the route guard saw only the first request). Only http(s) is compared. */
+function movedOff(ctx, row) {
+  let url;
+  try {
+    url = new URL(ctx.page.url());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  return ctx.origins.includes(url.origin) ? null : { row: row.id, reason: `the page moved to ${url.origin}` };
+}
+
+/**
+ * The settle ended capped by 'time' on a step that missed its deadline: the stepper closed the context (`page.isClosed()`), so the page is
+ * stuck. A frame cap (still animating) is not a stop; nor is a settle that ran into its 20 s real-time cap with the page still open (a page
+ * that animates is slow to film at scale 3 and can reach that cap before its 240 frames: the take of /slow/poll in take-stops-browser takes
+ * 20.0 s in all, against that 20 s cap).
+ */
+const stuck = (ctx, row, result) => (result.settle?.capped === true && result.settle.reason === 'time' && ctx.page.isClosed() ? { row: row.id, reason: 'the page is stuck' } : null);
+
 /**
  * A `look` row that was followed by a write to an origin of the demo that scout did not list on ANY scouted page of scout.json. The
  * union, not the row's page alone: a look link to a scouted page makes that page's own on-load writes, which scout listed on it.
@@ -155,7 +178,8 @@ async function runRow(ctx, row) {
   const scoutPage = ctx.scout.pages.find((p) => p.id === row.pageId) ?? null;
   let result;
   try {
-    result = await act(ctx.page, ctx.stepper, row, { signedIn: ctx.signedIn, pointer: ctx.pointer, onFrame: ctx.onFrame, scoutPage });
+    const onActStart = () => ctx.ran.push({ id: row.id, effect: row.effect });
+    result = await act(ctx.page, ctx.stepper, row, { signedIn: ctx.signedIn, pointer: ctx.pointer, onFrame: ctx.onFrame, onActStart, scoutPage });
   } catch (error) {
     await keepDownloads(ctx, row);
     return { row: row.id, reason: reasonOf(error, ctx.signedIn) };
@@ -163,7 +187,7 @@ async function runRow(ctx, row) {
   ctx.pointer = result.pointer;
   ctx.steps.push(stepEntry(row, result, ctx));
   await keepDownloads(ctx, row);
-  return movedAway(ctx, row, before) ?? sentWrite(ctx, row, before);
+  return stuck(ctx, row, result) ?? movedAway(ctx, row, before) ?? movedOff(ctx, row) ?? sentWrite(ctx, row, before);
 }
 
 async function runRows(ctx, rows) {
@@ -200,6 +224,7 @@ function describe(ctx, { hash, startedAt, viewport, stopped, again }) {
     signedIn: ctx.signedIn,
     frames: ctx.store.index(),
     steps: ctx.steps,
+    ran: ctx.ran,
     stopped,
     again,
     seen: {
@@ -227,7 +252,7 @@ export async function runTake({ browser, spec, scout, rows, hash, state = null, 
     const store = frameStore(path.join(dir, 'frames'));
     const tally = { covered: 0 };
     const onFrame = frameTaker({ page: visit.page, stepper, store, signedIn, mask: spec.mask ?? [], limits: caps, tally });
-    const ctx = { page: visit.page, seen: visit.seen, stepper, store, tally, onFrame, signedIn, origins, scout, dir, pointer: null, steps: [], downloads: [], contacted: watchOrigins(visit.context) };
+    const ctx = { page: visit.page, seen: visit.seen, stepper, store, tally, onFrame, signedIn, origins, scout, dir, pointer: null, steps: [], ran: [], downloads: [], contacted: watchOrigins(visit.context) };
     const stopped = await runRows(ctx, rows);
     return describe(ctx, { hash, startedAt: began.toISOString(), viewport, stopped, again });
   } finally {

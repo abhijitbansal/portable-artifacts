@@ -5,7 +5,7 @@
 // It runs only a plan the owner approved: the answers go through make-explainer's answers.mjs, the plan is recomputed from demo.json and
 // scout.json, and the verdict and every danger row's own approval must be `approve` (take-gate.mjs). Nothing is clicked before that.
 // --again lets a second take of the same plan run after a first that ran a row that changes something: ask the user first. --json prints
-// one line { ok, stopped, dir, report } instead of the report. A take that stops early still writes take.json, the sheet and the report.
+// one line { ok, stopped, dir, report } instead of the report (stopped's row and reason go through agentText, as in the report). A take that stops early still writes take.json, the sheet and the report.
 // exit 0 every row ran, 1 the take stopped early or was refused (the plan is stale, not approved, scout says the page cannot be filmed
 // frame by frame, the take folder would be tracked by git), 2 usage, no saved session, or another headless browser is live
 //
@@ -114,16 +114,16 @@ async function take(file, values) {
   const { takeDir, TakeFolderRefused } = await import('./lib/take-folder.mjs');
   let folder;
   try {
-    folder = takeDir(dir, { planKey: `demo-${gated.hash}`, again: values.again === true });
+    folder = takeDir(dir, { planKey: `demo-${gated.hash}`, again: values.again === true, rows: gated.rows });
   } catch (error) {
     if (error instanceof TakeFolderRefused) return stop([{ path: 'take', message: error.message }], { json, label: file });
     throw error;
   }
   const state = await prepare(spec, folder);
   const taken = await film({ spec, scout: inputs.scout, gated, state, folder });
-  const { takeReport } = await import('./lib/take-report.mjs');
+  const { takeReport, stoppedJson } = await import('./lib/take-report.mjs');
   const report = takeReport(taken, { dir: folder.dir, total: gated.rows.length });
-  if (json) say(escapeJsonInvisible(JSON.stringify({ ok: taken.stopped === null, stopped: taken.stopped, dir: folder.dir, report })));
+  if (json) say(escapeJsonInvisible(JSON.stringify({ ok: taken.stopped === null, stopped: stoppedJson(taken.stopped), dir: folder.dir, report })));
   else say(report);
   process.exitCode = taken.stopped === null ? 0 : 1;
 }

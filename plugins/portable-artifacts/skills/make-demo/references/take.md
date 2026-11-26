@@ -15,7 +15,8 @@ records frames. It makes no film yet: nothing here turns the frames into a video
 - Run scout and build first: `take.mjs` needs `<demo>/scout/scout.json` and `<demo>/click-plan.json`, and says which command to
   run when one is missing. A scout made for other settings (URL, `origins`, `session`, `pages`, `mask`) is stale: run it again.
 - Add `take-*/` to the project's `.gitignore` first. A take folder holds pictures of the site, and the take is refused while git
-  would track it.
+  would track any of what it writes: `take.json`, `contact.jpg`, `frames/` and `downloads/` are each checked (a line such as
+  `*.json` ignores `take.json` only, and is refused).
 
 ## The command
 
@@ -26,10 +27,14 @@ node <skill-dir>/scripts/take.mjs <demo>/demo.json --answers <demo>/plan-answers
 Write `<skill-dir>` out in full, one plain command, as in SKILL.md. The command has no `--out`: it writes `take-<n>/` beside
 `demo.json`. It needs no model and no network beyond the site's own origins.
 
-- `--json` prints one line, `{ ok, stopped, dir, report }`, instead of the report.
-- `--again` allows a second take of the same plan after an earlier take ran a row that changes something (a `change` or `danger`
-  row), which a second take repeats. **Ask the user first**, naming those rows (the refusal lists them), and pass `--again` only on
-  their yes. The report then lists the rows that ran twice.
+- `--json` prints one line, `{ ok, stopped, dir, report }`, instead of the report. `stopped` is `null` or `{ row, reason }`, both
+  written out as in the report (invisible characters as code points, long text cut).
+- `--again` allows a second take of the same plan after ANY earlier `take-<n>/` of it ran a row that changes something (a `change`
+  or `danger` row), which a second take repeats. Every earlier take counts, not only the newest, and a row counts once its act
+  began, even when a cap, a timeout or a navigation cut it off afterwards. A `take-<n>/` with a `frames/` folder but no
+  `take.json` (a take that was killed), or a `take.json` that cannot be read, counts as having run such a row, whatever its plan.
+  **Ask the user first**, naming the change and danger rows of the plan (the refusal lists them and the folders), and pass `--again`
+  only on their yes. The report then lists the rows that ran again.
 - `--help` prints the usage. An unknown flag exits 2.
 
 Exit codes:
@@ -53,7 +58,8 @@ to end, then run it again.
 - `take.json`: `version`, `planKey` (`demo-<hash>`), `startedAt`, `viewport`, `scale` (3), `fps` (30), `mode` (`stepped`),
   `signedIn`; `frames` (file names in order); `steps` (one per row that finished: `id`, `do`, `effect`, `startFrame`, `actFrame`,
   `settleFrame`, `settledIndex` (the index in `frames` of the step's settled picture), `pointer`, `box`, `boxMoved`, `covered`,
-  `settle`); `stopped` (`null`, or `{ row, reason }`); `again` (rows run a second time); `seen` (`origins`, `requests`,
+  `settle`); `ran` (`{ id, effect }` of every row whose act began, a row cut off afterwards included: the record `--again`
+  reads); `stopped` (`null`, or `{ row, reason }`); `again` (rows run a second time); `seen` (`origins`, `requests`,
   `refused`, `dialogs`, `popups`, `downloads`, `errors`); `bytes` (the distinct frames only, not downloads).
 - `frames/`: the pictures, JPEG at quality 90 and 3x scale. Identical pictures are stored once.
 - `downloads/`: each file the site offered, saved as `<row id>-<k><ext>` under a name of our own (the suggested name is data and
@@ -90,13 +96,16 @@ reason. Fix the cause in `demo.json` (or the site), build the plan again, have t
 | `the control is covered by something else` | something sits over the control at the point of the click (a banner, a modal). Add a step for it, or scout again |
 | `a move to <origin> was refused` | a click, a form or a script tried to leave `origins` (or to submit to another origin). It was not sent. If the owner agrees the site uses that origin, add it to `origins`, scout again; otherwise change the plan |
 | `a look row sent <METHOD> <origin><path>` | a row the plan called `look` was followed by a write (not GET) to the site that scout did not list on any scouted page. The first request has gone. Tell the user what was sent, relabel or remove the row, scout and plan again |
+| `the page moved to <origin>` | after a row the page was on an origin that is not in `origins`: a server redirect (the guard sees only a request's first hop, so the redirect was followed). The row is in `steps`; later rows did not run. Find the link or form that redirects; if the owner agrees the site uses that origin, add it to `origins`, scout again; otherwise change the plan |
+| `the page is stuck` | the row's settle ended capped by `time` with the page closed: a step missed its deadline (a script that never returns under the stopped clock). The row is in `steps`, with `settle.reason` `time`. Scout again; if it keeps happening, the page cannot be filmed yet |
 | `film time cap` | 180 s of film time passed. Split the demo into shorter use cases and take them one by one |
 | `size cap` | the frames passed 3 GB. Shorten the take or lower the viewport in `demo.json` |
-| a timeout (the page is stuck) | the page did not answer within the step deadline, or never settles. Scout again; if it keeps happening, the page cannot be filmed yet |
+| a timeout (a call into the page past its deadline) | a click, key or move did not finish within its deadline. Scout again; if it keeps happening, the page cannot be filmed yet |
 | `stopped: <ErrorName>` | signed in, any other error is reported by its name only. Run once more signed out if the site allows, or ask the user |
 
 Not stops, but listed in the report: dialogs (dismissed), popups (closed), writes by the site to other origins, the site's own
-writes during a `change` row, and a settle that hit its cap (`settle.capped` in `take.json`).
+writes during a `change` row, and a settle that hit its frame cap while the page was still animating (`settle.capped` in `take.json`; a settle that ended on
+the 20 s real-time cap with the page still open is not a stop either).
 
 Before the browser starts, `take.mjs` also refuses a plan whose `scout.json` says the page cannot be filmed frame by frame:
 "this page cannot be filmed frame by frame; real-time capture is not built yet". Tell the user; do not try to get round it.
