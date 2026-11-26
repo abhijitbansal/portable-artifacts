@@ -61,6 +61,44 @@ read it before you rely on a `look` label.
 
 - A backtick in a typed value is shown as a quote mark on the plan page.
 
+## The take
+
+A take runs the approved rows and keeps frames (`references/take.md`). It does what the plan said and nothing else, but:
+
+- **Frame by frame only.** The page's clock is stopped and stepped. A page with a playing video, or one that does not settle,
+  cannot be taken yet, and a plan whose `scout.json` says so is refused. Scout makes that check on the first page only: a later
+  page that plays a video is not checked before the take. Settled frames are as the stepped clock shows them; a page
+  that reads real time in a worker, or plays sound or an animated image, is not stepped.
+- **No pause.** An unknown screen (an `intent` row), a changed control, a refused move or a sneaky write ends the take, and what
+  was recorded is kept. Retaking the same plan repeats every `change` and `danger` row, which is why it needs `--again`.
+- **A sneaky write has gone before the take stops.** The stop for a `look` row that was followed by a write comes after the
+  request left (the report says so). It also looks only at writes to the demo's own `origins`, and only after a `look` row:
+  writes of a `change` or `danger` row are listed, never a stop, and a write to a third party is only listed.
+- **A write scout saw anywhere does not stop a `look` row.** A write counts as listed when scout saw it on any scouted page, not
+  on the row's own page. A `look` row that now sends, from another page, a write scout saw on a different page is not caught.
+- **Controls.** The take compares the live control with the approved one by role, name, kind, address and form. Signed in, the
+  name is masked as scout masked it, so a twin control with the same masked name is not detected (the css, role and kind must
+  still match), and a stored `<text N>` name is not compared at all. Signed in, a heading with no css is found by its stored name,
+  so a heading whose name masking changed is `no match`.
+- **Masking covers emails, long numbers (7 or more digits), keys, password fields and `mask` targets.** Not covered: names,
+  faces, short codes and amounts (use `mask` for those), text made by CSS (`content: attr(...)`), text inside an image, a canvas
+  or a video, and a closed shadow root. A `mask` target that matches nothing, or whose css the browser refuses, covers nothing and
+  says nothing. Signed in, a `{ role, name }` target is matched against the live name, which scout printed masked: use `css`.
+- **A value that lands between the cover and the picture.** The cover is drawn once per frame, just before the picture. A value
+  that arrives in real time after it (a network reply) and before the shot is not covered; list such a place in `mask`.
+- **Over-covering.** A number written across sibling elements (a pager of separate links, `1 2 3 4 5 6 7`) counts as a long number
+  and is covered in whole.
+- **Downloads.** They are kept as the site sent them and never opened or checked. Each file over 100 MB is deleted and listed;
+  the take caps neither their number nor their total size. Chromium cleans a download's suggested name before the take sees it, so
+  the name in the report is the cleaned one (the take stores the file under a name of its own and shows the name through
+  `agentText`).
+- **Caps.** 180 s of film time and 3 GB of distinct frames; past either the take stops and keeps what it has. A row cut off by
+  a cap or an error is not in `steps`, but its frames are in `frames`.
+- **A refused form.** A form that moved to another origin since scout is refused, and the page is left on the browser's error
+  page; the take stops at that row.
+- **The take is not a proof.** The hash shows drift between the plan, the answers and `demo.json`; it does not stop an agent that
+  forges an answers file (see below).
+
 ## The hash
 
 The plan's hash covers `demo.json` (without its word-only fields) and each step's page, effect and resolved control (its role,

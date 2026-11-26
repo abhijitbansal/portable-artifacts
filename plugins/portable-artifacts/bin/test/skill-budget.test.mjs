@@ -29,9 +29,12 @@ const read = (skill, ...rest) => fs.readFileSync(path.join(SKILLS, skill, ...(re
 // make-demo (click plan, phase 1) measured 13,445 bytes and 108 lines (`wc -c -l`); the budget is that plus about 3 percent. It
 // carries the same Director and operator section and Running the commands block as the others (about 4,100 bytes), the
 // five-question intake, nine workflow steps, the three effects, and the sign-in and answers rules.
+// make-demo (phase 2, the take) measured 14,428 bytes and 110 lines (`wc -c -l`); the budget is that plus about 3 percent. The
+// growth is the take's step 10 (director only, user's yes, `--again`, what not to open), the new "what works today" wording
+// and one limits pointer; the detail itself lives in references/take.md.
 const BUDGETS = {
   'make-dashboard': { bytes: 16750, lines: 145 },
-  'make-demo': { bytes: 13850, lines: 111 },
+  'make-demo': { bytes: 14861, lines: 111 },
   'make-diagram': { bytes: 17000, lines: 145 },
   'make-explainer': { bytes: 24150, lines: 150 },
   'make-motion': { bytes: 22400, lines: 129 },
