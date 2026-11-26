@@ -70,7 +70,8 @@ A take runs the approved rows and keeps frames (`references/take.md`). It does w
   page that plays a video is not checked before the take. Settled frames are as the stepped clock shows them; a page
   that reads real time in a worker, or plays sound or an animated image, is not stepped.
 - **No pause.** An unknown screen (an `intent` row), a changed control, a refused move or a sneaky write ends the take, and what
-  was recorded is kept. Retaking the same plan repeats every `change` and `danger` row, which is why it needs `--again`.
+  was recorded is kept. Retaking the same plan repeats every `change` and `danger` row, which is why it needs `--again`, after
+  any earlier take of it that ran such a row (or died with frames and no `take.json`).
 - **A sneaky write has gone before the take stops.** The stop for a `look` row that was followed by a write comes after the
   request left (the report says so). It also looks only at writes to the demo's own `origins`, and only after a `look` row:
   writes of a `change` or `danger` row are listed, never a stop, and a write to a third party is only listed.
@@ -93,9 +94,37 @@ A take runs the approved rows and keeps frames (`references/take.md`). It does w
   the name in the report is the cleaned one (the take stores the file under a name of its own and shows the name through
   `agentText`).
 - **Caps.** 180 s of film time and 3 GB of distinct frames; past either the take stops and keeps what it has. A row cut off by
-  a cap or an error is not in `steps`, but its frames are in `frames`.
+  a cap or an error is not in `steps`, but its frames are in `frames` and, once its act began, the row is in `ran`, which is what
+  `--again` reads.
+- **A server redirect.** The take sees the first hop of a request only. A redirect to another origin is followed, and the take
+  stops after that row with `the page moved to <origin>`; the first request of the new origin has gone by then.
 - **A refused form.** A form that moved to another origin since scout is refused, and the page is left on the browser's error
   page; the take stops at that row.
+- **A control is found by its place.** The css scout wrote is a position (`tr:nth-of-type(2) button`). If a list changed
+  between scout and take, a same-named control of another record can sit in that place and pass the check: signed out its
+  address must still match, signed in the address is masked (ids and queries dropped). Scout again right before a take whose
+  `danger` row sits in a list.
+- **The page is not compared before a row.** The take checks the control, not the page's address; a same-origin page that moved
+  itself to another address with the same control in the same place passes.
+- **Typing is filmed as typed.** An approved typed value is not masked (it is on the plan page). While it is typed, a part of an
+  email, number or key that does not yet match a pattern (`alice@example.c`) shows in frames; the whole value is covered once it
+  matches. Keys go to the focused element; a page that moves focus mid-typing gets the rest.
+- **Long text is not scanned.** A text node over 100,000 characters (a log or JSON view) is not checked for emails, numbers or
+  keys; list it in `mask`. Covering and the picture have no time limit of their own.
+- **Frames inside the page.** A form with `target` set to an `iframe`, or any navigation inside a frame, is not guarded; only
+  the main page's moves are.
+- **Approval comments are not read.** A comment on an approval or the verdict ("only the test item") does not change what runs;
+  the gate reads the choice only. Approve with `changes` instead.
+- **`click-plan.json` is trusted.** The gate checks its key against the plan recomputed from `demo.json` and `scout.json`, and
+  `answers.mjs` checks the answers against the file; the page the owner read is not compared again.
+- **Scout's signed-out picture** is taken in real time after the cover is drawn, so a `mask` target that moves during the
+  full-page shot can show.
+- **A crash exits 1,** like a stop or a refusal; read the printed reason.
+- **In tests only,** `NODE_ENV=test` with `PA_SIBLINGS_ROOT` picks which make-explainer `answers.mjs` the take trusts.
+- **Hostile pages** are out of scope. A page can see the take (`window.__makeDemoCover`), remove or hide the cover layer, write
+  over a WebSocket after a `look` row (counted, not a stop), react to the pointer passing over other elements on its way, and
+  nest a link inside an approved button to take the click. Text in a broken image's `alt` or in a listbox's options is not
+  covered.
 - **The take is not a proof.** The hash shows drift between the plan, the answers and `demo.json`; it does not stop an agent that
   forges an answers file (see below).
 
