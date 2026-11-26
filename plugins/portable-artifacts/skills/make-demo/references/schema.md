@@ -13,6 +13,7 @@ not listed here is an error. A worked file is in `examples/walkthrough.demo.json
 | `viewport` | `{ width, height }` | width 320 to 1920, height 320 to 1200, whole pixels. Default 1280 by 720, applied where it is read |
 | `session` | string | `^[a-z0-9][a-z0-9-]{0,40}$`; the name of a saved sign-in |
 | `pages` | up to 5 strings | addresses or paths scout also opens, each on an allowed origin |
+| `mask` | up to 20 targets | each `{ role, name }` or `{ css }`, written like a step's `target`. Every element it matches is covered by an opaque box in each picture of a take, and in scout's signed-out pictures. It is part of the plan the owner approves, so changing it needs a new scout and a new approval. Default: none |
 | `useCases` | 1 to 5 | `{ id, title, goal?, steps }` |
 | `generatedBy` | `{ model?, effort?, agent? }` | provenance |
 
@@ -30,5 +31,10 @@ Every `id`, of a use case or a step, is `^[a-z][a-z0-9-]{0,40}$` and unique acro
 
 `target` is `{ "role": "link", "name": "Pricing" }` as scout lists the control, or `{ "css": … }` copied whole from where the
 digest prints `css=` (an nth-of-type path such as `html > body:nth-of-type(1) > main:nth-of-type(1) > button:nth-of-type(2)`). `intent` is words for a screen not seen yet; it stands alone and excludes `target` and `value`.
+
+`mask` is for what no pattern can know: a person's name, an address, an order number in words. On a signed-in take every password
+field and every email, long number (7 or more digits) and key (20 or more letters, digits, `_` and `-`, with a digit and a letter)
+is covered without being listed, in the page, in shadow roots and in frames. A `mask` target that matches nothing on a page covers
+nothing there, and says nothing.
 
 Validation reads the file only. Whether a `target` names a control on the page is checked later, against scout's digest.

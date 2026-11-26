@@ -68,7 +68,16 @@ const loginHome = () => `<!doctype html><meta charset="utf-8"><title>Account</ti
 <label for="key">API key</label> <input id="key" type="text" value="${PRIVATE_SEEDS[4]}">
 <table><tr><td>${PRIVATE_SEEDS[3]}</td><td>${PRIVATE_SEEDS[1]}</td></tr></table>
 <script type="application/json" id="me">{"name":"${PRIVATE_SEEDS[3]}","email":"${PRIVATE_SEEDS[0]}","key":"${PRIVATE_SEEDS[4]}"}</script>
-<a href="/login/signout">Sign out</a>`;
+<a href="/login/signout">Sign out</a>
+<script>
+  // A value that arrives by fetch, 400 ms (film time, under a stepped clock) after load.
+  setTimeout(() => fetch('/login/late').then((r) => r.json()).then((d) => {
+    const p = document.createElement('p');
+    p.id = 'late';
+    p.textContent = d.line;
+    document.body.append(p);
+  }), 400);
+</script>`;
 
 const DONE_PAGE = '<!doctype html><title>Done</title><h1>Done</h1>';
 const NOT_FOUND_PAGE = '<!doctype html><title>Not found</title><h1>Not found</h1>';
@@ -93,6 +102,7 @@ function loginRoute(world, req, res, pathname) {
     world.signedIn = false;
     return send(res, 303, '', HTML, { location: '/login/', 'set-cookie': sessionCookie('', 'Max-Age=0') });
   }
+  if (pathname === '/login/late') return send(res, 200, JSON.stringify({ line: `Billing contact: ${PRIVATE_SEEDS[0]}` }), TYPES['.json']);
   if (pathname !== '/login/home') return false;
   if (!world.signedIn || !hasSession(req)) return send(res, 302, '', HTML, { location: '/login/' });
   return send(res, 200, loginHome());

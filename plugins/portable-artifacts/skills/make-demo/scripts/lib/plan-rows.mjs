@@ -44,7 +44,8 @@ function canonical(value) {
 }
 
 function withoutWords(spec) {
-  const { generatedBy, ...rest } = spec;
+  const { generatedBy, mask, ...kept } = spec;
+  const rest = Array.isArray(mask) && mask.length === 0 ? kept : { ...kept, ...(mask === undefined ? {} : { mask }) }; // an empty mask is no mask
   if (!Array.isArray(rest.useCases)) return rest;
   return { ...rest, useCases: rest.useCases.map(({ title, goal, ...useCase }) => useCase) };
 }
@@ -64,11 +65,12 @@ export function planHash(spec, rows) {
 // ---- is the scout this demo's ------------------------------------------------------------------------------------------------
 
 function staleErrors(spec, scout) {
-  const want = { url: spec.source.url, origins: originsOf(spec), session: spec.session ?? null, named: (spec.pages ?? []).map((p) => new URL(p, spec.source.url).href) };
+  const want = { url: spec.source.url, origins: originsOf(spec), session: spec.session ?? null, named: (spec.pages ?? []).map((p) => new URL(p, spec.source.url).href), mask: spec.mask ?? [] };
   const problems = [];
   if (scout?.version !== 1) problems.push('is not a version 1 file');
-  for (const [key, label] of [['url', 'url'], ['origins', 'origins'], ['session', 'session'], ['named', 'pages']]) {
-    if (JSON.stringify(scout?.[key]) !== JSON.stringify(want[key])) problems.push(`was made for other ${label}`);
+  for (const [key, label] of [['url', 'url'], ['origins', 'origins'], ['session', 'session'], ['named', 'pages'], ['mask', 'mask']]) {
+    const have = key === 'mask' ? scout?.mask ?? [] : scout?.[key]; // a scout.json made before `mask` existed has none
+    if (JSON.stringify(have) !== JSON.stringify(want[key])) problems.push(`was made for other ${label}`);
   }
   return problems.map((p) => ({ path: 'scout', message: `scout.json ${p}; run scout again` }));
 }

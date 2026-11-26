@@ -5,7 +5,7 @@ export const RIGHTS = ['own', 'permitted', 'third-party'];
 export const VERBS = ['goto', 'click', 'hover', 'show', 'type', 'select', 'press', 'scroll', 'wait'];
 
 export const LIMITS = {
-  origins: 5, pages: 5, useCases: 5, steps: 20,
+  origins: 5, pages: 5, useCases: 5, steps: 20, mask: 20,
   viewportWidth: [320, 1920], viewportHeight: [320, 1200],
   waitSeconds: [0.1, 10],
   typedValue: 300, // characters in a `type` or `select` value: the plan page shows it whole
@@ -69,6 +69,7 @@ export const SCHEMA = {
         height: { type: 'integer', minimum: LIMITS.viewportHeight[0], maximum: LIMITS.viewportHeight[1] },
       },
     },
+    mask: { type: 'array', maxItems: LIMITS.mask, items: TARGET_SCHEMA, description: 'targets hidden in every picture of a take (and in scout\'s signed-out pictures)' },
     session: { type: 'string', pattern: SESSION_PATTERN, description: 'lower-case letters, digits and hyphens, starting with a letter or digit, up to 41 characters' },
     pages: { type: 'array', maxItems: LIMITS.pages, items: word },
     useCases: { type: 'array', minItems: 1, maxItems: LIMITS.useCases, items: USE_CASE_SCHEMA },

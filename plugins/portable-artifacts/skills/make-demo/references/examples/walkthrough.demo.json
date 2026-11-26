@@ -5,6 +5,7 @@
   "rights": "own",
   "viewport": { "width": 1280, "height": 720 },
   "pages": ["/pricing"],
+  "mask": [{ "css": "html > body:nth-of-type(1) > footer:nth-of-type(1)" }],
   "useCases": [
     {
       "id": "find-pricing",

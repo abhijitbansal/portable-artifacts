@@ -45,6 +45,17 @@ test('the schema is closed: an unknown root key, step key and target key are err
 
 test('version must be 1', () => failsAt({ ...example(), version: 2 }, 'version'));
 
+test('mask: up to 20 targets, each { css } or { role, name }, and the entry is closed', () => {
+  const targets = (n) => Array.from({ length: n }, (_, i) => (i % 2 === 0 ? { css: `#card-${i}` } : { role: 'heading', name: `Account ${i}` }));
+  assert.deepEqual(errorsOf({ ...example(), mask: targets(20) }), [], '20 are allowed');
+  failsAt({ ...example(), mask: targets(21) }, 'mask');
+  failsAt({ ...example(), mask: [{ css: '#x', extra: 1 }] }, 'mask');
+  failsAt({ ...example(), mask: [{ css: '#x', role: 'link' }] }, 'mask');
+  failsAt({ ...example(), mask: [{ role: 'link' }] }, 'mask');
+  failsAt({ ...example(), mask: [{ css: '' }] }, 'mask');
+  failsAt({ ...example(), mask: 'all' }, 'mask');
+});
+
 test('source.url is http or https', () => {
   for (const url of ['ftp://shop.example.test/', 'javascript:alert(1)', 'not a url', 'constructor']) {
     failsAt({ ...example(), source: { url } }, 'source.url');

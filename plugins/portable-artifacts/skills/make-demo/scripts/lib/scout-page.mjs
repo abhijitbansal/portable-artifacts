@@ -63,7 +63,7 @@ function verdict(read, { signedIn, hasSession }) {
  * navigation during the read, a read that times out) is a wall, `could not be read (<error name>)`, with no message: it can hold
  * what the page said.
  */
-export async function visitPage(browser, { url, origins, viewport, state, signedIn, id }) {
+export async function visitPage(browser, { url, origins, viewport, state, signedIn, id, mask = [] }) {
   const { context, page, seen } = await openVisit(browser, { viewport, origins, state });
   try {
     const stopped = (wall, at = url) => ({ ok: false, wall, entry: emptyEntry(id, at, wall, seen, signedIn) });
@@ -81,15 +81,15 @@ export async function visitPage(browser, { url, origins, viewport, state, signed
     if (lateAway) return stopped(lateAway);
     const stop = verdict(read, { signedIn, hasSession: state !== null });
     if (stop) return stopped(stop, read.digest.url);
-    return await finishPage({ id, read, page, seen, viewport, signedIn, origins });
+    return await finishPage({ id, read, page, seen, viewport, signedIn, origins, mask });
   } finally {
     await context.close().catch(() => {});
   }
 }
 
 /** The entry of a page that read fine. The picture comes last, so the page is checked for a move again after it, and dropped when it left. */
-export async function finishPage({ id, read, page, seen, viewport, signedIn, origins, shoot = takeShot }) {
-  const shot = signedIn ? null : await shoot(page, viewport);
+export async function finishPage({ id, read, page, seen, viewport, signedIn, origins, mask = [], shoot = takeShot }) {
+  const shot = signedIn ? null : await shoot(page, viewport, mask); // the mask targets are covered for the picture only
   const away = leftTo(page, seen, origins); // a redirect between the read and the picture would put another site's picture in scout/
   if (away) return { ok: false, wall: away, entry: emptyEntry(id, read.digest.url, away, seen, signedIn) };
   const note = read.wall === null ? null : signedIn ? wallKind(read.wall) : read.wall; // only the consent notice gets here

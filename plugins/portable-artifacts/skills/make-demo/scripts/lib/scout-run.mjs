@@ -86,7 +86,8 @@ async function walk(options, queue, skipped) {
  */
 export async function runScout({ browser, spec, state = null, now = () => new Date() }) {
   const origins = originsOf(spec);
-  const options = { browser, origins, viewport: spec.viewport ?? DEFAULT_VIEWPORT, state, signedIn: state !== null };
+  const mask = spec.mask ?? [];
+  const options = { browser, origins, viewport: spec.viewport ?? DEFAULT_VIEWPORT, state, signedIn: state !== null, mask };
   const { queue, skipped } = startQueue(spec, origins);
   const walked = await walk(options, queue, skipped);
   if (walked.stop) return { ok: false, reason: walked.stop };
@@ -97,6 +98,7 @@ export async function runScout({ browser, spec, state = null, now = () => new Da
     origins,
     session: spec.session ?? null,
     named: (spec.pages ?? []).map((p) => new URL(p, spec.source.url).href),
+    mask, // a plan made for another mask is stale (plan-rows.mjs)
     scoutedAt: now().toISOString(),
     stepped,
     pages: [mergeSteppedSeen(walked.pages[0], seen), ...walked.pages.slice(1)],

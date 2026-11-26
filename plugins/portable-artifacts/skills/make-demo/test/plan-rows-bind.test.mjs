@@ -105,6 +105,37 @@ test('type, select and press on a password field are errors that point at sessio
   assert.deepEqual(planRows(specOf([{ id: 'pw', do: 'hover', target: { role: 'textbox', name: 'Password' } }]), scout).errors, [], 'control: hover is allowed');
 });
 
+// ---- mask is bound by the hash, and a scout made for another mask is stale ----
+
+test('adding, changing or removing a mask entry changes the hash (mask is not a word field)', () => {
+  const scoutFor = (mask) => scoutOf([page({ controls: [control({ name: 'Go' })] })], { mask });
+  const specFor = (mask) => specOf([{ id: 'go', do: 'hover', target: { role: 'button', name: 'Go' } }], mask === undefined ? {} : { mask });
+  const none = hashOf(specFor(undefined), scoutFor([]));
+  const one = hashOf(specFor([{ css: '#card' }]), scoutFor([{ css: '#card' }]));
+  const other = hashOf(specFor([{ css: '#card2' }]), scoutFor([{ css: '#card2' }]));
+  const two = hashOf(specFor([{ css: '#card' }, { role: 'heading', name: 'Account' }]), scoutFor([{ css: '#card' }, { role: 'heading', name: 'Account' }]));
+  assert.equal(new Set([none, one, other, two]).size, 4);
+  assert.equal(hashOf(specFor([]), scoutFor([])), none, 'an empty mask is no mask');
+});
+
+test('a scout made for another mask is stale: run scout again', () => {
+  const steps = [{ id: 'go', do: 'hover', target: { role: 'button', name: 'Go' } }];
+  const scout = (mask) => scoutOf([page({ controls: [control({ name: 'Go' })] })], mask === undefined ? {} : { mask });
+  const stale = [
+    [specOf(steps, { mask: [{ css: '#card' }] }), scout([])],
+    [specOf(steps, { mask: [{ css: '#card' }] }), scout(undefined)],
+    [specOf(steps), scout([{ css: '#card' }])],
+    [specOf(steps, { mask: [{ css: '#card' }] }), scout([{ css: '#other' }])],
+  ];
+  for (const [spec, made] of stale) {
+    const result = planRows(spec, made);
+    assert.match(result.errors[0]?.message ?? '', /other mask; run scout again/);
+    assert.deepEqual(result.rows, []);
+  }
+  assert.deepEqual(planRows(specOf(steps), scout(undefined)).errors, [], 'control: no mask on either side, scout.json without the field (made before it existed)');
+  assert.deepEqual(planRows(specOf(steps, { mask: [{ css: '#card' }] }), scout([{ css: '#card' }])).errors, []);
+});
+
 // ---- css in errors (F13) ----
 
 test('an error that names a css cuts it from the left; the list of controls that match is whole', () => {

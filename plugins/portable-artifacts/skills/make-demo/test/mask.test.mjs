@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { maskText, maskPath } from '../scripts/lib/mask.mjs';
+import { maskText, maskPath, maskRanges, MASK_PATTERNS } from '../scripts/lib/mask.mjs';
 
 test('maskText masks an email, long numbers and a key', () => {
   assert.equal(maskText('maria.ostrowski@example.test'), '<email>');
@@ -46,4 +46,27 @@ test('maskPath masks an id segment', () => {
   assert.equal(maskPath('/docs/v2'), '/docs/v2');
   assert.equal(maskPath('/'), '/');
   assert.equal(maskPath('/year/2026'), '/year/2026');
+});
+
+// ---- maskRanges: where maskText would change a text (it runs in a page, so its patterns are passed in) ----
+
+const SAMPLES = [
+  'maria.ostrowski@example.test', '+44 7700 900123', '4111 1111 1111 1111', 'key_demo_7f3a91c2d85e40b6a1f9',
+  'Mail maria.ostrowski@example.test or call +44 7700 900123', 'Open 12 tasks in 2026', 'Internationalization and localization settings',
+  '4111–1111–1111–1111', 'a1234567890123456789 b', 'plain words only', '', 'x@y.zz and 1234567',
+];
+
+test('maskRanges finds a range exactly where maskText changes the text, and the ranges are what maskText replaces', () => {
+  for (const text of SAMPLES) {
+    const ranges = maskRanges(text, MASK_PATTERNS);
+    assert.equal(ranges.length > 0, maskText(text) !== text, JSON.stringify(text));
+    for (const [from, to] of ranges) assert.ok(from >= 0 && to > from && to <= text.length, `range inside ${JSON.stringify(text)}`);
+  }
+  const text = 'Mail maria.ostrowski@example.test or call +44 7700 900123';
+  assert.deepEqual(maskRanges(text, MASK_PATTERNS).map(([a, b]) => text.slice(a, b)), ['maria.ostrowski@example.test', '+44 7700 900123']);
+});
+
+test('maskRanges runs from its own source text: it holds no outside name but the patterns it is given', () => {
+  const rebuilt = new Function(`return (${maskRanges.toString()})`)();
+  assert.deepEqual(rebuilt('call +44 7700 900123', JSON.parse(JSON.stringify(MASK_PATTERNS))), [[5, 20]]);
 });

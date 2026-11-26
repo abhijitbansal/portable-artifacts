@@ -20,6 +20,25 @@ export function maskText(text) {
     .replace(NUMBER_RUN, (run) => (digitCount(run) >= NUMBER_DIGITS ? '<number>' : run));
 }
 
+/** The patterns of maskText as plain strings and a number, so a page can run them (take-mask.mjs): one source of truth. */
+export const MASK_PATTERNS = { email: EMAIL.source, key: KEY.source, number: NUMBER_RUN.source, numberDigits: NUMBER_DIGITS };
+
+/**
+ * The [from, to) ranges of `text` that maskText replaces: every email, every key (a token with a digit and a letter), every run with
+ * `numberDigits` digits. They are found on the text as it is, so a range may overlap another (a key inside an email); a caller covers
+ * the union. SELF-CONTAINED ON PURPOSE: it is sent to a page as source text, so it names nothing outside its two arguments.
+ */
+export function maskRanges(text, patterns) {
+  const ranges = [];
+  const add = (source, keeps) => {
+    for (const match of String(text).matchAll(new RegExp(source, 'g'))) if (keeps(match[0])) ranges.push([match.index, match.index + match[0].length]);
+  };
+  add(patterns.email, () => true);
+  add(patterns.key, (token) => /\d/.test(token) && /[A-Za-z]/.test(token));
+  add(patterns.number, (run) => (run.match(/\d/g) ?? []).length >= patterns.numberDigits);
+  return ranges;
+}
+
 const decoded = (text) => {
   try {
     return decodeURIComponent(text);
