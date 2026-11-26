@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Take fixture</title>
+<style>
+  body { font: 20px system-ui; margin: 20px; }
+  #status { opacity: 1; transition: opacity 0.3s linear; }
+  #status.fade { opacity: 0.2; }
+  #hov:hover { background: #fc0; }
+  .tall { height: 2000px; }
+</style>
+<h1>Take fixture</h1>
+<p><input type="text" aria-label="Your name" id="field"></p>
+<p><select aria-label="Colour" id="pick"><option value="red">Red</option><option value="green">Green</option></select></p>
+<p><button type="button" id="go">Reveal</button> <span id="status">Waiting</span></p>
+<p><button type="button" id="hov">Hover me</button></p>
+<p><button type="button" id="later">Leave later</button></p>
+<p id="log">no key yet</p>
+<p><a href="next.html">Next page</a> <a href="/take/file.txt" download>Get file</a></p>
+<form action="/take/save" method="post"><input type="hidden" name="note" value="hello"><button type="submit">Save note</button></form>
+<form action="{{OTHER}}/foreign/" method="post"><button type="submit">Send away</button></form>
+<div class="tall"></div>
+<script>
+  const status = document.getElementById('status');
+  document.getElementById('go').addEventListener('click', () => status.classList.add('fade'));
+  status.addEventListener('transitionend', () => { status.textContent = 'Revealed'; });
+  document.getElementById('later').addEventListener('click', () => setTimeout(() => location.assign('next.html'), 100));
+  const field = document.getElementById('field');
+  field.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('log').textContent = `enter:${field.value}`;
+  });
+</script>

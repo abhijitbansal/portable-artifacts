@@ -202,8 +202,9 @@ export async function installStepper(page, { fps = 30, startTime = 0, stepDeadli
     async report() {
       return sumReports(await inEveryFrame(page, scanRealTime));
     },
-    async settle({ stillFrames = Math.round(fps * SETTLE_SECONDS), maxFrames = Math.round(fps * SETTLE_CAP_SECONDS), maxRealMs = SETTLE_REAL_CAP_MS } = {}) {
-      return settleLoop({ stillFrames, maxFrames, maxRealMs }, { page, watch, guarded, advanceOnce, countTimersDue });
+    // `onStep`, when given, is awaited after each advance, before settle's own screenshot (a take stores its frame there).
+    async settle({ stillFrames = Math.round(fps * SETTLE_SECONDS), maxFrames = Math.round(fps * SETTLE_CAP_SECONDS), maxRealMs = SETTLE_REAL_CAP_MS, onStep = null } = {}) {
+      return settleLoop({ stillFrames, maxFrames, maxRealMs }, { page, watch, guarded, advanceOnce, countTimersDue, onStep });
     },
   };
 }
@@ -262,7 +263,7 @@ function createDriver(page, watch, { fps, stepDeadlineMs }) {
 }
 
 /** Step until the picture is still for `stillFrames` frames with nothing pending, or a cap. Never throws for a stuck page. */
-async function settleLoop({ stillFrames, maxFrames, maxRealMs }, { page, watch, guarded, advanceOnce, countTimersDue }) {
+async function settleLoop({ stillFrames, maxFrames, maxRealMs }, { page, watch, guarded, advanceOnce, countTimersDue, onStep }) {
   const began = Date.now();
   let previous = null;
   let still = 0;
@@ -275,6 +276,7 @@ async function settleLoop({ stillFrames, maxFrames, maxRealMs }, { page, watch, 
       if (Date.now() - began >= maxRealMs) return result(true, 'time');
       const { startedRequests } = await guarded(advanceOnce, 'a settle step');
       used += 1;
+      if (onStep) await onStep();
       const shot = await guarded(() => page.screenshot(SETTLE_SHOT), 'a settle screenshot');
       lastTimersDue = await guarded(countTimersDue, 'reading timers');
       const same = previous !== null && shot.equals(previous) && startedRequests === 0 && watch.pending.size === 0 && lastTimersDue === 0;

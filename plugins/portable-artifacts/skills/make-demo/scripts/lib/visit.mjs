@@ -1,6 +1,7 @@
 // A guarded, read-only visit: one fresh browser context for one page.
 //   - Service workers are blocked, downloads refused, permissions none, dialogs dismissed, popups closed (each counted).
 //   - A navigation of a page's main frame that leaves `origins`, or is not a GET, is aborted before it is sent, and written to `refused`.
+//     (A take opts in to `posts` and `downloads`, see openVisit; a scout never does.)
 //     That covers a script that moves the page, a link and a form submitted by script. A server redirect is not covered: its GET goes out
 //     before it can be refused (scout-page.mjs then takes no digest; a test pins this).
 //     A popup's navigation is refused the same way and listed with `popup: true`; it does not make the visit page unusable.
@@ -50,12 +51,12 @@ function mainNavigation(request, own) {
   return frame === own.page?.mainFrame() ? 'own' : 'popup';
 }
 
-async function decide(route, { origins, seen, own }) {
+async function decide(route, { origins, seen, own, posts }) {
   const request = route.request();
   const method = request.method();
   const url = new URL(request.url());
   const navigation = mainNavigation(request, own);
-  if (navigation !== null && (!origins.includes(url.origin) || method !== 'GET')) {
+  if (navigation !== null && (!origins.includes(url.origin) || (method !== 'GET' && !posts))) {
     seen.refused.push({ method: listedMethod(method), origin: url.origin, path: maskPath(url.pathname), ...(navigation === 'popup' ? { popup: true } : {}) });
     return route.abort('blockedbyclient');
   }
@@ -68,7 +69,10 @@ function watchPage(page, seen) {
     seen.dialogs += 1;
     dialog.dismiss().catch(() => {});
   });
-  page.on('download', () => { seen.downloads += 1; });
+  page.on('download', (download) => {
+    seen.downloads += 1;
+    seen.downloadQueue?.push(download); // only a visit opened with `downloads: true` has a queue
+  });
   page.on('websocket', () => { seen.sockets += 1; });
   page.on('pageerror', () => { seen.errors += 1; });
   page.on('console', (message) => { if (message.type() === 'error') seen.errors += 1; });
@@ -76,14 +80,21 @@ function watchPage(page, seen) {
 
 /**
  * Open a guarded context and its page. `state` is a stored sign-in (storageState) or null. The caller closes `context`.
- * Origins are bare origins; `viewport` is { width, height }.
+ * Origins are bare origins; `viewport` is { width, height }. Three opt-ins for a take, all off for a scout:
+ *   scale      the context's deviceScaleFactor (1: the browser's own default).
+ *   posts      a main-frame navigation that is not a GET (a submitted form) goes through when its origin is in `origins`; off-origin stays refused.
+ *   downloads  downloads are accepted and each Playwright `Download` is pushed to `seen.downloadQueue` (the caller saves it); `seen.downloads` still counts.
  */
-export async function openVisit(browser, { viewport, origins, state = null }) {
-  const context = await browser.newContext({ viewport, storageState: state ?? undefined, serviceWorkers: 'block', acceptDownloads: false, permissions: [] });
+export async function openVisit(browser, { viewport, origins, state = null, scale = 1, posts = false, downloads = false }) {
+  const context = await browser.newContext({
+    viewport, storageState: state ?? undefined, serviceWorkers: 'block', acceptDownloads: downloads, permissions: [],
+    ...(scale === 1 ? {} : { deviceScaleFactor: scale }),
+  });
   const seen = newSeen();
+  if (downloads) seen.downloadQueue = [];
   const own = { page: null }; // the route is set before the page exists
   try {
-    await context.route('**/*', (route) => decide(route, { origins, seen, own }).catch(() => {}));
+    await context.route('**/*', (route) => decide(route, { origins, seen, own, posts }).catch(() => {}));
     const page = await context.newPage();
     own.page = page;
     watchPage(page, seen);

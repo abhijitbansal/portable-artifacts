@@ -186,7 +186,7 @@ export function maskedAddress(address) {
 const NAME_MAX = 60;
 
 /** A name or heading, masked. Over NAME_MAX characters it is body text (a card that is one link), so only its length is kept: `<text N>`. */
-function maskName(text) {
+export function maskName(text) {
   const masked = [...maskText(text)];
   return masked.length > NAME_MAX ? `<text ${masked.length}>` : masked.join('');
 }
@@ -205,7 +205,7 @@ function addressWasCut(address) {
  * A signed-in control. Its name is only its length when the element held a field (its accessible name may carry what the field holds)
  * and for every option (a list's options are values). `hrefCut` says the stored address lost a query, a hash or an id.
  */
-function maskControl(control) {
+export function maskControl(control) {
   const { holdsField, ...c } = control;
   const name = (holdsField || c.role === 'option') && c.name !== '' ? `<text ${[...String(c.name)].length}>` : maskName(c.name);
   return { ...c, name, href: maskedAddress(c.href), ...(c.href ? { hrefCut: addressWasCut(c.href) } : {}), formAction: maskedAddress(c.formAction) };

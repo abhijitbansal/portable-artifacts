@@ -110,6 +110,19 @@ function dangerRoute(world, req, res, pathname) {
   return send(res, 200, DONE_PAGE);
 }
 
+/** The take pages: POST /take/save records the body length and redirects; /take/file.txt is a download. */
+function takeRoute(world, req, res, pathname) {
+  if (pathname === '/take/file.txt') return send(res, 200, 'take fixture file\n', 'text/plain', { 'content-disposition': 'attachment; filename="file.txt"' });
+  if (pathname !== '/take/save' || req.method !== 'POST') return false;
+  let length = 0;
+  req.on('data', (chunk) => { length += chunk.length; });
+  req.on('end', () => {
+    world.saves = [...world.saves, length];
+    send(res, 303, '', HTML, { location: '/take/saved.html' });
+  });
+  return true;
+}
+
 /** Pages made by a handler, not read from a file. */
 function dynamicRoute(world, res, pathname) {
   const seen = (p) => world.log.filter((r) => r.path === p).length;
@@ -127,7 +140,7 @@ function handleMain(world, req, res) {
   const pathname = pathOf(req);
   if (pathname === null) return send(res, 400, 'bad request', 'text/plain');
   world.log.push({ method: req.method, path: pathname });
-  if (dynamicRoute(world, res, pathname) || loginRoute(world, req, res, pathname) || dangerRoute(world, req, res, pathname)) return true;
+  if (dynamicRoute(world, res, pathname) || loginRoute(world, req, res, pathname) || dangerRoute(world, req, res, pathname) || takeRoute(world, req, res, pathname)) return true;
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed', 'text/plain');
   const file = fileFor(pathname);
   if (!file) return send(res, 404, NOT_FOUND_PAGE);
@@ -155,7 +168,7 @@ const closeServer = (server) => new Promise((done) => { server.closeAllConnectio
 
 /** Start both servers. `requests()` lists every request seen since the start or the last `reset()`. */
 export async function startSites() {
-  const world = { log: [], signedIn: false, deleted: [], submitted: 0, otherOrigin: '' };
+  const world = { log: [], signedIn: false, deleted: [], submitted: 0, saves: [], otherOrigin: '' };
   const main = await listen((req, res) => handleMain(world, req, res));
   // A WebSocket upgrade is logged and refused: a test then sees whether a page ever reached the server with one.
   main.on('upgrade', (req, socket) => {
@@ -169,7 +182,9 @@ export async function startSites() {
     otherOrigin: world.otherOrigin,
     requests: () => world.log.map((r) => ({ ...r })),
     state: () => ({ signedIn: world.signedIn, deleted: [...world.deleted], submitted: world.submitted }),
-    reset() { Object.assign(world, { log: [], signedIn: false, deleted: [], submitted: 0 }); },
+    /** Body lengths of each POST /take/save, kept apart from state(), which tests compare whole. */
+    saves: () => [...world.saves],
+    reset() { Object.assign(world, { log: [], signedIn: false, deleted: [], submitted: 0, saves: [] }); },
     close: () => Promise.all([closeServer(main), closeServer(other)]).then(() => undefined),
   };
 }
