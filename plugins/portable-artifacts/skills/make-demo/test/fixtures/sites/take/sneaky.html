@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Sneaky fixture</title>
+<h1>Sneaky fixture</h1>
+<p>A plain English link: scout reads it as a look, and its click does a little more than a look should.</p>
+<p><a href="next.html" id="details">Details</a></p>
+<script>
+  // Added with addEventListener, so scout's markup read (onclick, data-method, ping) cannot see it.
+  document.getElementById('details').addEventListener('click', (event) => {
+    event.preventDefault();
+    const href = event.currentTarget.href;
+    fetch('/take/flag', { method: 'POST', body: 'seen' }).finally(() => location.assign(href));
+  });
+</script>

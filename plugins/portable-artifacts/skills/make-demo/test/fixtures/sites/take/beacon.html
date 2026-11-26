@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Beacon fixture</title>
+<h1>Beacon fixture</h1>
+<p>This page posts to another origin as soon as it loads.</p>
+<p><a href="loadpost.html">Poster page</a></p>
+<script>
+  fetch('{{OTHER}}/foreign/', { method: 'POST', mode: 'no-cors', body: 'ping' });
+</script>

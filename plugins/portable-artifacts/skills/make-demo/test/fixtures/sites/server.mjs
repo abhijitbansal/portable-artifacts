@@ -120,9 +120,39 @@ function dangerRoute(world, req, res, pathname) {
   return send(res, 200, DONE_PAGE);
 }
 
-/** The take pages: POST /take/save records the body length and redirects; /take/file.txt is a download. */
+const BIG_DOWNLOAD_BYTES = 101 * 1024 * 1024; // just over the 100 MB a take keeps
+const BIG_CHUNK = Buffer.alloc(1024 * 1024);
+
+/** A download made on the fly, never a file on disk: BIG_DOWNLOAD_BYTES of zeros, written as the client reads them. */
+function streamBigDownload(res) {
+  res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': BIG_DOWNLOAD_BYTES, 'content-disposition': 'attachment; filename="big.bin"', 'cache-control': 'no-store' });
+  let sent = 0;
+  let closed = false;
+  res.on('close', () => { closed = true; });
+  const pump = () => {
+    while (!closed && sent < BIG_DOWNLOAD_BYTES) {
+      sent += BIG_CHUNK.length;
+      if (!res.write(BIG_CHUNK)) return void res.once('drain', pump);
+    }
+    if (!closed) res.end();
+  };
+  pump();
+  return true;
+}
+
+/**
+ * The take pages: POST /take/save records the body length and redirects; /take/flag records a POST; /take/file.txt, /take/odd.txt (a
+ * hostile suggested name) and /take/big.bin are downloads.
+ */
 function takeRoute(world, req, res, pathname) {
   if (pathname === '/take/file.txt') return send(res, 200, 'take fixture file\n', 'text/plain', { 'content-disposition': 'attachment; filename="file.txt"' });
+  if (pathname === '/take/odd.txt') return send(res, 200, 'odd\n', 'text/plain', { 'content-disposition': "attachment; filename*=UTF-8''..%2F..%2Fx%0Ay.txt" });
+  if (pathname === '/take/big.bin') return streamBigDownload(res);
+  if (pathname === '/take/ping' && req.method === 'POST') return send(res, 204, '');
+  if (pathname === '/take/flag' && req.method === 'POST') {
+    world.flags += 1;
+    return send(res, 204, '');
+  }
   if (pathname !== '/take/save' || req.method !== 'POST') return false;
   let length = 0;
   req.on('data', (chunk) => { length += chunk.length; });
@@ -156,6 +186,8 @@ function handleMain(world, req, res) {
   if (!file) return send(res, 404, NOT_FOUND_PAGE);
   const body = fs.readFileSync(file);
   const type = TYPES[path.extname(file)] ?? 'application/octet-stream';
+  // A test may change a /take/ page after scout has read it (sites.rewriteHtml), so a control can vanish between scout and take.
+  if (path.extname(file) === '.html' && world.rewrite && pathname.startsWith('/take/')) return send(res, 200, world.rewrite(body.toString('utf8')).replaceAll(OTHER_MARK, world.otherOrigin), type);
   // A page may link to the other server, whose port is only known at run time: {{OTHER}} is its origin.
   if (path.extname(file) === '.html' && body.includes(OTHER_MARK)) return send(res, 200, body.toString('utf8').replaceAll(OTHER_MARK, world.otherOrigin), type);
   return send(res, 200, body, type);
@@ -178,7 +210,7 @@ const closeServer = (server) => new Promise((done) => { server.closeAllConnectio
 
 /** Start both servers. `requests()` lists every request seen since the start or the last `reset()`. */
 export async function startSites() {
-  const world = { log: [], signedIn: false, deleted: [], submitted: 0, saves: [], otherOrigin: '' };
+  const world = { log: [], signedIn: false, deleted: [], submitted: 0, saves: [], flags: 0, rewrite: null, otherOrigin: '' };
   const main = await listen((req, res) => handleMain(world, req, res));
   // A WebSocket upgrade is logged and refused: a test then sees whether a page ever reached the server with one.
   main.on('upgrade', (req, socket) => {
@@ -194,7 +226,11 @@ export async function startSites() {
     state: () => ({ signedIn: world.signedIn, deleted: [...world.deleted], submitted: world.submitted }),
     /** Body lengths of each POST /take/save, kept apart from state(), which tests compare whole. */
     saves: () => [...world.saves],
-    reset() { Object.assign(world, { log: [], signedIn: false, deleted: [], submitted: 0, saves: [] }); },
+    /** How many POST /take/flag the sneaky page sent. */
+    flags: () => world.flags,
+    /** From now on every /take/ page is served through `fn(html)`; `reset()` ends it. */
+    rewriteHtml(fn) { world.rewrite = fn; },
+    reset() { Object.assign(world, { log: [], signedIn: false, deleted: [], submitted: 0, saves: [], flags: 0, rewrite: null }); },
     close: () => Promise.all([closeServer(main), closeServer(other)]).then(() => undefined),
   };
 }
