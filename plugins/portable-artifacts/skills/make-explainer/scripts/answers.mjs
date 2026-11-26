@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // node scripts/answers.mjs <plan.json> <answers.json | saved-page.html> [--json]
-// --json prints one line: { ok, errors, warnings, errorCount, warningCount, summary }.
+// --json prints one line: { ok, errors, warnings, errorCount, warningCount, summary, choices }; choices is
+// { verdict, approvals: { [id]: 'approve' | 'changes' | 'reject' | null } }, or null when there are errors.
 // Check a plan-answers/1 file (from the plan page's Copy or Download, or read out of a page saved with
 // "Save as HTML") against its plan and print a summary.
 // exit 0 ok (warnings are printed), 1 the plan or the answers have errors, 2 usage/IO
@@ -9,16 +10,16 @@ import { loadSpec, validateSpec, exitSpecUsage } from './lib/spec.mjs';
 import { checkAnswers } from './lib/answers.mjs';
 import { UsageError, parseCli } from '../shared/cli.mjs';
 
-const USAGE = 'node scripts/answers.mjs <plan.json> <answers.json | saved-page.html> [--json] (--json prints { ok, errors, warnings, errorCount, warningCount, summary })';
+const USAGE = 'node scripts/answers.mjs <plan.json> <answers.json | saved-page.html> [--json] (--json prints { ok, errors, warnings, errorCount, warningCount, summary, choices })';
 const OPTIONS = { json: { type: 'boolean' } };
 const MAX_ANSWERS_BYTES = 2 * 1024 * 1024; // a real answers file is a few kilobytes
 const MAX_SAVED_PAGE_BYTES = 32 * 1024 * 1024; // a saved page is a whole page: inlined images (1.5 MiB each, base64) and charts
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // `errors` and `warnings` are the entries shown; the counts are the true totals (see checkAnswers).
-function print({ ok, errors, warnings, errorCount, warningCount, summary }, { json, label }) {
+function print({ ok, errors, warnings, errorCount, warningCount, summary, choices }, { json, label }) {
   if (json) {
-    process.stdout.write(`${JSON.stringify({ ok, errors, warnings, errorCount, warningCount, summary })}\n`);
+    process.stdout.write(`${JSON.stringify({ ok, errors, warnings, errorCount, warningCount, summary, choices })}\n`);
     return;
   }
   const hidden = (count, shown) => (count > shown.length ? `… ${count - shown.length} more\n` : '');
@@ -85,7 +86,7 @@ async function check(planFile, answersFile) {
   const { spec, dir } = loadSpec(planFile);
   const answers = /\.html?$/i.test(answersFile) ? loadSavedPage(answersFile) : loadSpec(answersFile).spec;
   const plan = await validateSpec(spec, { dir });
-  if (!plan.ok) return { ok: false, errors: plan.errors, warnings: plan.warnings, errorCount: plan.errors.length, warningCount: plan.warnings.length, summary: '' };
+  if (!plan.ok) return { ok: false, errors: plan.errors, warnings: plan.warnings, errorCount: plan.errors.length, warningCount: plan.warnings.length, summary: '', choices: null };
   const checked = checkAnswers(spec, answers);
   return { ok: checked.errorCount === 0, ...checked };
 }

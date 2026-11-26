@@ -200,15 +200,28 @@ function safeAjvErrors(raw) {
 }
 
 // The result: the first MAX_SHOWN real errors and warnings, with the true totals beside them (the caller says how
-// many are hidden; there is no pseudo-entry in the lists).
-function result(errors, warnings, summary) {
+// many are hidden; there is no pseudo-entry in the lists). `choices` is null unless the file has no errors.
+function result(errors, warnings, summary, choices = null) {
   return {
     errors: errors.slice(0, MAX_SHOWN),
     warnings: warnings.slice(0, MAX_SHOWN),
     errorCount: errors.length,
     warningCount: warnings.length,
     summary,
+    choices,
   };
+}
+
+// The verdict and, for every approval in the plan, its answer; null where the approval is not answered. A choice that is
+// set on an unanswered row is ignored, as the summary ignores it.
+function choicesOf(file, { items, matched }) {
+  const approvals = {};
+  for (const item of items.values()) {
+    if (item.type !== 'approval') continue;
+    const row = matched.get(item.id);
+    approvals[item.id] = row?.answered === true && APPROVAL_CHOICES.includes(row.choice) ? row.choice : null;
+  }
+  return { verdict: file.verdict, approvals };
 }
 
 // More rows than the limit: the file is cut to the limit before Ajv sees it, and the row count is the FIRST error.
@@ -220,10 +233,11 @@ function oversizedRows(answers) {
 
 /**
  * Check an answers file against its plan.
- * -> { errors, warnings, errorCount, warningCount, summary }. `errors` and `warnings` hold the first 20 real
+ * -> { errors, warnings, errorCount, warningCount, summary, choices }. `errors` and `warnings` hold the first 20 real
  * entries { path, message }; `errorCount` and `warningCount` are the true totals. `summary` is plain text for the
  * agent that acts on the answers; it is empty when the file is not plan-answers/1, and starts with a line saying
- * not to act on it when the file has errors.
+ * not to act on it when the file has errors. `choices` is { verdict, approvals: { [id]: 'approve' | 'changes' |
+ * 'reject' | null } } when the file has no errors, else null; an approval that is not answered is null.
  */
 export function checkAnswers(spec, answers) {
   const big = oversizedRows(answers);
@@ -237,5 +251,6 @@ export function checkAnswers(spec, answers) {
   const matches = matchRows(spec, answers.answers, sink);
   if (answers.reviewer.trim() === '') sink.warnings.push({ path: 'reviewer', message: 'the reviewer name is empty; the file does not say who answered' });
   const summary = summarise(spec, answers, matches);
-  return result(sink.errors, sink.warnings, sink.errors.length > 0 ? `${INVALID_PREFIX}\n${summary}` : summary);
+  if (sink.errors.length > 0) return result(sink.errors, sink.warnings, `${INVALID_PREFIX}\n${summary}`);
+  return result(sink.errors, sink.warnings, summary, choicesOf(answers, matches));
 }

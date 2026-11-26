@@ -236,7 +236,7 @@ test('round trip on the example: answer every item in the page, export, and answ
   for (const s of answerable) assert.match(r.stdout, new RegExp(`^${s.id}: `, 'm'));
   assert.match(r.stdout, /^verdict: approve-with-changes$/m);
   const json = JSON.parse(node('answers.mjs', [EXAMPLE, file, '--json']).stdout);
-  assert.deepEqual(Object.keys(json), ['ok', 'errors', 'warnings', 'errorCount', 'warningCount', 'summary']);
+  assert.deepEqual(Object.keys(json), ['ok', 'errors', 'warnings', 'errorCount', 'warningCount', 'summary', 'choices']);
   assert.equal(json.ok, true);
 });
 

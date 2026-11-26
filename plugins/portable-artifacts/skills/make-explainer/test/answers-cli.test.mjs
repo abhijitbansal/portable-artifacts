@@ -63,9 +63,9 @@ test('an invalid plan exits 1 with the plan\'s own errors', () => {
   assert.match(r.stdout, /^key: /m);
 });
 
-test('--json prints { ok, errors, warnings, errorCount, warningCount, summary }', () => {
+test('--json prints { ok, errors, warnings, errorCount, warningCount, summary, choices }', () => {
   const ok = JSON.parse(run(write('plan.json', plan), write('ok.json', answers()), '--json').stdout);
-  assert.deepEqual(Object.keys(ok), ['ok', 'errors', 'warnings', 'errorCount', 'warningCount', 'summary']);
+  assert.deepEqual(Object.keys(ok), ['ok', 'errors', 'warnings', 'errorCount', 'warningCount', 'summary', 'choices']);
   assert.equal(ok.errorCount, 0);
   assert.equal(ok.ok, true);
   assert.match(ok.summary, /storage: A save server \(override\)/);
@@ -153,7 +153,7 @@ test('wrong argument count or an unknown flag exits 2 with the usage', () => {
     const r = run(...args);
     assert.equal(r.status, 2, args.join(' '));
     assert.match(r.stderr, /usage: node scripts\/answers\.mjs <plan\.json> <answers\.json \| saved-page\.html> \[--json\]/);
-    assert.match(r.stderr, /--json prints \{ ok, errors, warnings, errorCount, warningCount, summary \}/, 'the usage names the --json shape');
+    assert.match(r.stderr, /--json prints \{ ok, errors, warnings, errorCount, warningCount, summary, choices \}/, 'the usage names the --json shape');
   }
 });
 
