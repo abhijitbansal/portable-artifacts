@@ -17,3 +17,25 @@ export function runExplainer(name, argv) {
   if (run.error) throw run.error;
   return run.status ?? 2;
 }
+
+const MAX_JSON_BYTES = 8 * 1024 * 1024; // answers.mjs prints a few kilobytes; a flood is an error, not a buffer
+
+/**
+ * Run it with `argv` and `--json` in it: stdout is captured (stderr passes through) and its one JSON line is parsed.
+ * -> { status, result }. No line, more than one, or a line that is not a JSON object throws: a caller never acts on a
+ * guess about what the script said. The thrown message holds no text from the script's output.
+ */
+export function runExplainerJson(name, argv) {
+  const run = spawnSync(process.execPath, [explainerScript(name), ...argv], { stdio: ['inherit', 'pipe', 'inherit'], encoding: 'utf8', maxBuffer: MAX_JSON_BYTES });
+  if (run.error) throw run.error;
+  const lines = run.stdout.split('\n').filter((line) => line.trim() !== '');
+  if (lines.length !== 1) throw new Error(`make-explainer ${name} printed ${lines.length} lines on stdout, not the one JSON line expected (exit ${run.status ?? 'none'})`);
+  let result;
+  try {
+    result = JSON.parse(lines[0]);
+  } catch {
+    throw new Error(`make-explainer ${name} printed a line that is not JSON (exit ${run.status ?? 'none'})`);
+  }
+  if (result === null || typeof result !== 'object' || Array.isArray(result)) throw new Error(`make-explainer ${name} printed JSON that is not an object`);
+  return { status: run.status ?? 2, result };
+}
