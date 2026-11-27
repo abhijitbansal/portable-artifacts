@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "keynote",
+  "format": "16:9",
+  "voice": {
+    "name": "af_heart"
+  },
+  "sound": "on",
+  "music": {
+    "bed": "drift",
+    "bpm": 90
+  },
+  "seed": 43,
+  "shots": [
+    {
+      "id": "open",
+      "show": "statement",
+      "kicker": "Harbor",
+      "say": "Every project, on one *board*."
+    },
+    {
+      "id": "tour",
+      "show": "walk",
+      "src": "walk-take",
+      "title": "Harbor",
+      "frame": "window",
+      "say": "Here is the board, every project at a glance. The activity tab shows what changed this week. Search takes a project's name or number. Pointing at a card picks it out. And one click adds a new project.",
+      "steps": [{ "id": "open" }, { "id": "tab" }, { "id": "search" }, { "id": "hover" }, { "id": "add" }],
+      "stops": [{ "to": "step:tab" }, { "to": "step:hover" }, { "to": "step:add" }, { "to": "whole" }],
+      "lift": [{ "step": "hover" }],
+      "on": [{ "at": "sentence:3", "do": "circle", "target": "step:search" }]
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Your projects, all in one place.",
+      "ask": "harbor.example/board",
+      "mark": "Harbor"
+    }
+  ]
+}
