@@ -8,6 +8,7 @@ import { pathJoin } from '../../../shared/errors.mjs';
 import { resolveLook } from '../../../engine/graph/film.mjs';
 import { prepareMap } from './map.mjs';
 import { prepareCode } from './code.mjs';
+import { prepareWalk } from './walk.mjs';
 
 /**
  * The preparer of each kind that declares `prepared: true`, by kind name:
@@ -15,7 +16,7 @@ import { prepareCode } from './code.mjs';
  * shot (`places[1].at`); `look`: the film's resolved look, whose kind data a preparer may read (the map's `recentre`).
  * It must be deterministic (same shot and look, same JSON) and never touch the network.
  */
-export const PREPARERS = Object.freeze({ map: prepareMap, code: prepareCode });
+export const PREPARERS = Object.freeze({ map: prepareMap, code: prepareCode, walk: prepareWalk });
 
 // A preparer's path ("places[1].at", "word") under the shot's: shots[3].places[1].at.
 const fullPath = (index, rel) => String(rel).split('.').reduce((acc, part) => {
