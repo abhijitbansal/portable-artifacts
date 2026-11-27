@@ -6,7 +6,7 @@
 // Parked in keynote and desk (look.kinds.walk.experimental) until its look gate passes.
 import { registries } from '../registry.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
-import { AnchorError } from '../script/anchors.mjs';
+import { AnchorError, SECONDS_RE, showValue } from '../script/anchors.mjs';
 import { FORMATS } from '../formats.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
 import { fieldNode, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks, unmarked } from './shared.mjs';
@@ -18,7 +18,7 @@ import { liftNodes } from './walk-lift.mjs';
 import { walkDevices } from './walk-marks.mjs';
 import { liftsOf, walkSetup, walkLayout } from './walk-layout.mjs';
 import { walkReview } from './walk-review.mjs';
-import { walkMinSeconds } from './walk-time.mjs';
+import { WALK_AT_MAX, walkMinSeconds } from './walk-time.mjs';
 
 const KIND = 'walk';
 const STEPS_MAX = 40;
@@ -77,6 +77,28 @@ function nameProblems(shot) {
   ];
 }
 
+const SIGNED_OFFSET_RE = /[+-](?:\d+(?:\.\d+)?|\.\d+)$/;
+
+// The seconds an anchor gives outright: a number, a numeric string, or the `+<s>` of a word or sentence form; else 0.
+function givenSeconds(ref) {
+  if (typeof ref === 'number') return ref;
+  if (typeof ref !== 'string') return 0;
+  const text = SECONDS_RE.test(ref) ? ref : SIGNED_OFFSET_RE.exec(ref)?.[0];
+  return text === undefined ? 0 : Number(text);
+}
+
+// A step, stop or lift `at` further out than WALK_AT_MAX seconds would stretch the film (the shot stretches to its steps, so no
+// `hold` cap reaches it): refused at its field.
+function farProblems(shot) {
+  const far = (ref, path) => (givenSeconds(ref) > WALK_AT_MAX
+    ? [{ path, message: `at ${showValue(ref)} is past ${WALK_AT_MAX} s, and a walk shot stretches to its anchors; name a second up to ${WALK_AT_MAX}` }] : []);
+  return [
+    ...shot.steps.flatMap((s, i) => far(s.at, `steps.${i}.at`)),
+    ...(shot.stops ?? []).flatMap((s, i) => far(s.at, `stops.${i}.at`)),
+    ...(shot.lift ?? []).flatMap((l, i) => far(l.at, `lift.${i}.at`)),
+  ];
+}
+
 function anchorProblems(shot, at) {
   return [
     ...shot.steps.flatMap((s, i) => anchorProblem(s.at, `steps.${i}.at`, at)),
@@ -86,7 +108,7 @@ function anchorProblems(shot, at) {
 }
 
 function shotProblems(shot, { look, at, format, recording } = {}) {
-  return [...kindSupportProblems(KIND, look), ...filmProblems({ format, recording }), ...endProblems(shot), ...nameProblems(shot), ...anchorProblems(shot, at)];
+  return [...kindSupportProblems(KIND, look), ...filmProblems({ format, recording }), ...endProblems(shot), ...nameProblems(shot), ...farProblems(shot), ...anchorProblems(shot, at)];
 }
 
 // `walkMinSeconds` with the look's lifts; a shot whose anchors do not parse has no minimum (the validator says so).

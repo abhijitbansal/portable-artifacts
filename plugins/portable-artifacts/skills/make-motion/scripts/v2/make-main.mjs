@@ -6,7 +6,7 @@ import { parseMakeArgs } from './cli.mjs';
 import { listEntries, formatList, COMMON_SHOT_FIELDS } from './list.mjs';
 import { runMake } from './run.mjs';
 import { readingLines } from './voice/reading.mjs';
-import { runBatch } from './batch.mjs';
+import { batchTextLines, runBatch } from './batch.mjs';
 import { runPreview } from './viewer-run.mjs';
 import { absolutePaths, describeError, errorReport, formatText, outlineText } from './report.mjs';
 
@@ -93,15 +93,14 @@ function reportCrash(options, fatal) {
   process.exitCode = EXIT_MACHINE;
 }
 
-// --batch: one line per row (or the refusals), or the batch report under --json. A crash while it ran is its error instead.
+// --batch: one line per row, with a notice line for a row that plays a signed-in take (or the refusals), or the batch report under --json. A crash while it ran is its error instead.
 async function executeBatch(options, controller, guarded) {
   const { report, exitCode } = await runBatch(options, { signal: controller.signal, log, runRow: runMake });
   if (guarded.fatal) return reportCrash(options, guarded.fatal);
   if (options.json) say(JSON.stringify(report));
   else {
     for (const e of report.errors) log(`make: ${e}`);
-    for (const row of report.rows) say(`row ${row.index}: ${row.status} ${row.file}`);
-    if (report.manifest) say(`manifest: ${report.manifest}`);
+    for (const line of batchTextLines(report)) say(line);
   }
   process.exitCode = exitCode;
 }

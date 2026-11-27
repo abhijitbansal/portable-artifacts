@@ -1,8 +1,10 @@
 // The smallest text a step's box shows, in CSS px, for take.json's `textPx` (make-motion compares it with what a film makes of it).
-//   smallestText(page, box)  box is { x, y, width, height } in viewport px, or null  ->  a number rounded to 0.5, or null
+//   smallestText(page, box)  box is { x, y, width, height } in viewport px, or null  ->  a number rounded to 0.5 (above 0, at most
+//   4096: the range make-motion's take reader accepts), or null
 // Visible text nodes and filled fields whose rects cross the box, in the main frame only: text in a canvas, an image or another origin's
 // frame is not measured. One `evaluate` and no clock step, so it costs no film time. It returns a number, never the text.
 const ROUND_TO = 2; // halves
+const TEXT_PX_MAX = 4096; // make-motion scripts/v2/take.mjs TEXT_PX_MAX
 
 /** Runs in the page, so it can use nothing outside itself. */
 function measure(box) {
@@ -35,5 +37,7 @@ function measure(box) {
 export async function smallestText(page, box) {
   if (box === null || box === undefined) return null;
   const smallest = await page.evaluate(measure, box);
-  return smallest === null ? null : Math.round(smallest * ROUND_TO) / ROUND_TO;
+  if (smallest === null) return null;
+  const rounded = Math.round(smallest * ROUND_TO) / ROUND_TO;
+  return rounded > 0 && rounded <= TEXT_PX_MAX ? rounded : null; // a size make-motion's take reader refuses would lose the whole take
 }

@@ -40,7 +40,7 @@ async function buildOnce(options, work, io) {
   const audio = await masterSoundFile({ film, timeline, voice: stages.made ?? undefined, sound: stages.sound ?? undefined, work: dir, signal: io.signal });
   const { clips } = stages.loaded; // decoded by previewStages into `dir`
   const tags = stampTags({ generatedBy: film.generatedBy, flags: options.provenance ?? {}, provenance: film.provenance });
-  return { built: { loaded: stages.loaded, audio, clips, notice: stages.notice, provenance: tags.comment ?? '' }, dir };
+  return { built: { loaded: stages.loaded, audio, clips, notice: stages.notice, provenance: tags.comment ?? '' }, notices: stages.notices ?? [], dir };
 }
 
 const stopped = (signal) => new Promise((resolve) => {
@@ -63,6 +63,7 @@ function watchFilm(options, work, viewer, io, first) {
           return;
         }
         viewer.update(next.built);
+        for (const notice of next.notices) io.log(`make: notice: ${notice}`); // an edit may add a signed-in take: stderr, stdout is the first build's
         rmSync(current, { recursive: true, force: true });
         current = next.dir;
       } catch (err) {
@@ -80,7 +81,8 @@ function watchFilm(options, work, viewer, io, first) {
 /**
  * @param {object} options parseMakeArgs's result with `preview` (and `open`)
  * @param {{ signal?: AbortSignal, log?: Function, say?: (line: string) => void, opener?: (url: string) => void,
- *   synthesise?: Function, watchMs?: number }} io say prints the URL line (or `{ ok, preview: { url } }` with --json)
+ *   synthesise?: Function, watchMs?: number }} io say prints a `notice:` line per signed-in take, then the URL line (or
+ *   `{ ok, preview: { url }, notices? }` with --json)
  * @returns {Promise<{ exitCode: number, findings?: string[], error?: string }>}
  */
 export async function runPreview(options, io = {}) {
@@ -98,7 +100,12 @@ export async function runPreview(options, io = {}) {
     if (first.errors) return { exitCode: EXIT_NOT_OK, findings: first.errors };
     const viewer = await startViewer(first.built);
     try {
-      say(options.json ? JSON.stringify({ ok: true, preview: { url: viewer.url } }) : `preview: ${viewer.url}`);
+      const { notices } = first;
+      if (options.json) say(JSON.stringify({ ok: true, preview: { url: viewer.url }, ...(notices.length > 0 ? { notices } : {}) }));
+      else {
+        for (const notice of notices) say(`notice: ${notice}`); // before the URL: whoever opens it has been told first
+        say(`preview: ${viewer.url}`);
+      }
       if (options.open) opener(viewer.url);
       const unwatch = watchFilm(options, work, viewer, { ...io, log }, first.dir);
       await stopped(io.signal);

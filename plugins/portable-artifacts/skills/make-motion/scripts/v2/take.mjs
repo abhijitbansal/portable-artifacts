@@ -7,7 +7,7 @@ import { closeSync, constants, fstatSync, openSync, readSync, realpathSync, stat
 import path from 'node:path';
 import { fileInside, MISSING_CODES } from './inside.mjs';
 import { SpecError, isPlainObject, quote } from './spec-common.mjs';
-import { checkFrameFiles } from './take-frames.mjs';
+import { checkFrameFiles, guarded } from './take-frames.mjs';
 
 export const TAKE_JSON_MAX = 8 * 1024 * 1024;
 export const MAX_FRAMES = 6000;
@@ -16,7 +16,7 @@ const FPS = 30;
 const SCALE_MAX = 3;
 const VIEWPORT_WIDTH = [320, 1920];
 const VIEWPORT_HEIGHT = [320, 1200];
-const TEXT_PX = [1, 200];
+const TEXT_PX_MAX = 4096; // CSS px: any size above 0 up to this (a 15vw hero headline is 288); it only feeds a "text too small" finding
 const BOX_SIDE_MAX = 16384; // px of one side of a step's box: a long list may be taller than the viewport
 const FRAME_NAME = /^[0-9a-f]{16}\.(?:jpg|png)$/;
 const STEP_ID = /^[a-z][a-z0-9-]{0,39}$/;
@@ -46,25 +46,31 @@ function takeFolder(specDir, src, f) {
   const root = realpathSync(specDir);
   const dir = realOrNull(path.resolve(root, src), f, 'src');
   const notFolder = `src ${quote(src)} is not a folder inside the film's folder`;
-  if (dir === null || !dir.startsWith(root + path.sep) || !statSync(dir).isDirectory()) f(notFolder);
+  if (dir === null || !dir.startsWith(root + path.sep) || !isFolder(dir, 'src', f)) f(notFolder);
   return dir;
 }
 
 // take.json as text, by its size first: opened without following a link, sized by the open file, read for exactly that many bytes.
+// A filesystem failure the take can cause (a link loop, no permission) is refused with its code only, never its path.
 function takeJsonText(dir, f) {
-  const file = fileInside(dir, path.join(dir, 'take.json'));
-  if (file === null) f('take.json is not a file inside the take folder');
-  const fd = openSync(file, OPEN_FLAGS);
-  try {
-    const { size } = fstatSync(fd);
-    if (size > TAKE_JSON_MAX) f(`take.json is ${size} bytes; at most ${TAKE_JSON_MAX}`);
-    const bytes = Buffer.alloc(size);
-    readSync(fd, bytes, 0, size, 0);
-    return bytes.toString('utf8');
-  } finally {
-    closeSync(fd);
-  }
+  return guarded('take.json', f, () => {
+    const file = fileInside(dir, path.join(dir, 'take.json'));
+    if (file === null) f('take.json is not a file inside the take folder');
+    const fd = openSync(file, OPEN_FLAGS);
+    try {
+      const { size } = fstatSync(fd);
+      if (size > TAKE_JSON_MAX) f(`take.json is ${size} bytes; at most ${TAKE_JSON_MAX}`);
+      const bytes = Buffer.alloc(size);
+      readSync(fd, bytes, 0, size, 0);
+      return bytes.toString('utf8');
+    } finally {
+      closeSync(fd);
+    }
+  });
 }
+
+// `target` is a folder: a filesystem failure on the way (no permission) is the take's to fix, said with its code only.
+const isFolder = (target, label, f) => guarded(label, f, () => statSync(target).isDirectory());
 
 function parseTake(text, f) {
   let root;
@@ -165,7 +171,7 @@ function readStep(step, i, previous, { count, viewport }, f) {
   const startIndex = Math.max(step.startFrame - 1, 0);
   if (previous && startIndex < previous.settledIndex) f(`${at}.startFrame (${step.startFrame}) is before steps[${i - 1}] settles (its settledIndex is ${previous.settledIndex})`);
   const textPx = step.textPx ?? null;
-  if (textPx !== null && !numIn(textPx, ...TEXT_PX)) f(`${at}.textPx must be null or a number from ${TEXT_PX[0]} to ${TEXT_PX[1]}`);
+  if (textPx !== null && !(numIn(textPx, 0, TEXT_PX_MAX) && textPx > 0)) f(`${at}.textPx must be null or a number above 0 and up to ${TEXT_PX_MAX}`);
   return {
     id: step.id, do: step.do, startIndex, actIndex: Math.max(step.actFrame - 1, 0), settledIndex: step.settledIndex,
     pointer: readPointer(step.pointer, at, viewport, f), box: readBox(step.box, at, viewport, f), textPx,
@@ -175,7 +181,7 @@ function readStep(step, i, previous, { count, viewport }, f) {
 // Check 5's folder: frames/ resolves to a folder inside the take folder.
 function framesFolder(dir, f) {
   const framesDir = realOrNull(path.join(dir, 'frames'), f, 'frames/');
-  if (framesDir === null || !framesDir.startsWith(dir + path.sep) || !statSync(framesDir).isDirectory()) f('frames/ is not a folder inside the take folder');
+  if (framesDir === null || !framesDir.startsWith(dir + path.sep) || !isFolder(framesDir, 'frames/', f)) f('frames/ is not a folder inside the take folder');
   return framesDir;
 }
 

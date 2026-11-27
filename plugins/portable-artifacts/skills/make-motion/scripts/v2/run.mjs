@@ -528,7 +528,8 @@ async function previewVoice(film, specDir, options, state, io) {
 /**
  * The stages a preview runs before it serves the page (scripts/v2/viewer-run.mjs): validate, voice, timeline and sound
  * as a render does, the cue and bed WAVs written into `work` (the caller's folder, which it removes). -> { loaded, made,
- * sound, notice, findings }: `loaded` null when the film is at fault (`findings` then say why).
+ * sound, notice, notices, findings }: `loaded` null when the film is at fault (`findings` then say why); `notices` the
+ * signed-in take lines of a render's report (signedInNotices).
  */
 export async function previewStages(options, { work, signal, log = () => {}, synthesise = synthesiseFilm } = {}) {
   const state = newState();
@@ -545,7 +546,8 @@ export async function previewStages(options, { work, signal, log = () => {}, syn
   if (clips === null) return failed();
   const planned = wantsSound(film, clips) ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
   if (planned === null) return failed();
-  return { loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made: voice.made, sound: planned.sound, notice: voice.notice, findings: state.findings };
+  const notices = signedInNotices(film, loaded.prepared); // a walk shot on a signed-in take: the preview serves its frames too
+  return { loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made: voice.made, sound: planned.sound, notice: voice.notice, notices, findings: state.findings };
 }
 
 // ---- the outline ---------------------------------------------------------------------------------------------------------

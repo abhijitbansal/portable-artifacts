@@ -3,7 +3,7 @@
 // at `shots[<i>].src` whose message names the take field that broke.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SpecError } from '../../scripts/v2/spec.mjs';
@@ -138,6 +138,31 @@ test('take.json: missing and not JSON are refused', () => {
   refuses(() => read(specDir), /take\.json is not a file inside the take folder/);
 });
 
+test('take.json that is a link loop, or has no read permission, is refused as a SpecError with its code and no path', () => {
+  const loop = takeIn();
+  rmSync(path.join(loop.takeDir, 'take.json'));
+  symlinkSync(path.join(loop.takeDir, 'loop2'), path.join(loop.takeDir, 'take.json'));
+  symlinkSync(path.join(loop.takeDir, 'take.json'), path.join(loop.takeDir, 'loop2'));
+  refuses(() => read(loop.specDir), /^take\.json cannot be read \(ELOOP\)$/);
+  const locked = takeIn();
+  chmodSync(path.join(locked.takeDir, 'take.json'), 0o000);
+  try {
+    refuses(() => read(locked.specDir), /^take\.json cannot be read \(EACCES\)$/);
+  } finally {
+    chmodSync(path.join(locked.takeDir, 'take.json'), 0o644);
+  }
+});
+
+test('a take folder or frames/ that cannot be searched is refused as a SpecError, not a raw error', () => {
+  const closed = takeIn();
+  chmodSync(closed.takeDir, 0o000);
+  try {
+    refuses(() => read(closed.specDir), /cannot be read \(EACCES\)/);
+  } finally {
+    chmodSync(closed.takeDir, 0o755);
+  }
+});
+
 test('take.json of 8 MiB + 1 is refused by its size, before it is read', () => {
   const { specDir, takeDir } = takeIn();
   truncateSync(path.join(takeDir, 'take.json'), TAKE_JSON_MAX + 1); // not JSON any more: a parse would say so
@@ -220,9 +245,17 @@ test('pointer, box and textPx out of bounds or not numbers are refused', () => {
   refusesEdit(stepEdit(1, { box: { x: 0, y: 0, width: -1, height: 5 } }), /steps\[1\]\.box\.width/);
   refusesEdit(stepEdit(1, { box: { x: 5000, y: 0, width: 5, height: 5 } }), /steps\[1\]\.box\.x/);
   refusesEdit(stepEdit(1, { box: { x: 0, y: 0, width: 5 } }), /steps\[1\]\.box\.height/);
-  refusesEdit(stepEdit(1, { textPx: 0 }), /steps\[1\]\.textPx must be null or a number from 1 to 200/);
-  refusesEdit(stepEdit(1, { textPx: 201 }), /steps\[1\]\.textPx/);
+  refusesEdit(stepEdit(1, { textPx: 0 }), /steps\[1\]\.textPx must be null or a number above 0 and up to 4096/);
+  refusesEdit(stepEdit(1, { textPx: -3 }), /steps\[1\]\.textPx/);
+  refusesEdit(stepEdit(1, { textPx: 4097 }), /steps\[1\]\.textPx/);
   refusesEdit(stepEdit(1, { textPx: 'big' }), /steps\[1\]\.textPx/);
+});
+
+test('a textPx of 288 (a hero headline), 0.5 and 4096 read: make-demo writes sizes like these', () => {
+  for (const textPx of [288, 0.5, 4096]) {
+    const { specDir } = takeIn(stepEdit(1, { textPx }));
+    assert.equal(read(specDir).steps[1].textPx, textPx);
+  }
 });
 
 test('an error repeats at most a short, quoted piece of the take', () => {

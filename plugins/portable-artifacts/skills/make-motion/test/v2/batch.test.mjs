@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import '../../scripts/v2/list.mjs';
-import { BATCH_MAX_ROWS, BatchError, outPathFor, readRows, runBatch } from '../../scripts/v2/batch.mjs';
+import { BATCH_MAX_ROWS, BatchError, batchTextLines, outPathFor, readRows, runBatch } from '../../scripts/v2/batch.mjs';
 
 const VARS = { name: { type: 'string', default: 'Ada' } };
 const FILM = { version: 2, vars: VARS, shots: [{ id: 'hi', show: 'statement', say: 'Welcome, {{name}}.' }] };
@@ -161,6 +161,27 @@ test('an interrupted row stops the batch: no later row renders, the exit is 130,
   assert.equal(exitCode, 130);
   assert.equal(report.ok, false);
   assert.deepEqual(manifestOf('ab').rows.map((r) => [r.index, r.status]), [[1, 'ok']]);
+});
+
+const NOTICE = 'shot "w" plays a signed-in take: its frames, sheets and film are the user\'s to look at; do not open them.';
+
+test('a row whose film plays a signed-in take keeps its notices in the manifest and in the batch report; a row without keeps none', async () => {
+  const options = batchOf('notice', [{ name: 'A' }, { name: 'B' }], 'nt');
+  const io = {
+    log: () => {},
+    launch: async () => ({ close: async () => {} }),
+    runRow: async (o) => ({ report: { ok: true, output: null, findings: [], ...(o.values.name === 'A' ? { notices: [NOTICE] } : {}) }, exitCode: 0 }),
+  };
+  const { report } = await runBatch(options, io);
+  const manifest = manifestOf('nt');
+  assert.deepEqual(manifest.rows.map((r) => r.notices), [[NOTICE], undefined]);
+  assert.deepEqual(report.rows.map((r) => r.notices), [[NOTICE], undefined]);
+});
+
+test('the batch text says each notice once, as "notice: ..." after the row that has it, in make.mjs wording', () => {
+  const rows = [{ index: 1, status: 'ok', file: 'a.mp4', notices: [NOTICE] }, { index: 2, status: 'ok', file: 'b.mp4', notices: [NOTICE] }, { index: 3, status: 'ok', file: 'c.mp4' }];
+  assert.deepEqual(batchTextLines({ rows, manifest: 'm.json', errors: [] }),
+    ['row 1: ok a.mp4', `notice: ${NOTICE}`, 'row 2: ok b.mp4', 'row 3: ok c.mp4', 'manifest: m.json']);
 });
 
 test('an exit 130 row without an aborted signal still stops the batch', async () => {

@@ -48,6 +48,22 @@ test('a null box, and a box with no text in it, give null', T, async () => {
   assert.equal(await smallestText(page, { x: 5000, y: 5000, width: 40, height: 40 }), null);
 });
 
+test('a size make-motion reads comes back (288 px hero text); one it refuses (past 4096, or rounding to 0) is null', T, async () => {
+  const lone = await context.newPage();
+  try {
+    const sizeOf = async (px) => {
+      await lone.setContent(`<body style="margin:0"><div style="position:fixed;left:0;top:0;font-size:${px}px;line-height:1">Hi</div></body>`);
+      return smallestText(lone, { x: 0, y: 0, width: 400, height: 400 });
+    };
+    assert.equal(await sizeOf(288), 288);
+    assert.equal(await sizeOf(4096), 4096);
+    assert.equal(await sizeOf(5000), null);
+    assert.equal(await sizeOf(0.2), null);
+  } finally {
+    await lone.close();
+  }
+});
+
 test('hidden text does not count', T, async () => {
   const card = await page.locator('.card').first().boundingBox();
   await page.evaluate(() => { for (const el of document.querySelectorAll('.card .caption')) el.style.visibility = 'hidden'; });

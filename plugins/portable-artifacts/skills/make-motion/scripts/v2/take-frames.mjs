@@ -79,7 +79,7 @@ function checkFile(file, ext, label, claim, f) {
 }
 
 // A filesystem failure a take can cause (a link loop, no permission) is the take's to fix, said with its code only.
-function guarded(label, f, fn) {
+export function guarded(label, f, fn) {
   try {
     return fn();
   } catch (err) {

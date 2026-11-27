@@ -156,7 +156,8 @@ async function renderRow(row, { options, io, browser }) {
     if (exitCode === EXIT_INTERRUPTED) return { entry: null, interrupted: true };
     const status = report.error ? 'failed' : report.ok ? 'ok' : 'findings';
     const written = status === 'failed' ? null : (report.output ?? null);
-    return { entry: { ...row, status, sha256: written === null ? null : sha256(written), findings: report.findings ?? [], ...(report.error ? { error: report.error.message } : {}) }, interrupted: false };
+    const notices = report.notices?.length > 0 ? { notices: report.notices } : {}; // a row that plays a signed-in take: runMake's notices
+    return { entry: { ...row, status, sha256: written === null ? null : sha256(written), findings: report.findings ?? [], ...notices, ...(report.error ? { error: report.error.message } : {}) }, interrupted: false };
   } catch (err) {
     if (io.signal?.aborted) return { entry: null, interrupted: true };
     return { entry: { ...row, status: 'failed', sha256: null, findings: [], error: String(err?.message ?? err).split('\n')[0] }, interrupted: false };
@@ -172,6 +173,19 @@ function writeManifest(file, entries) {
   } finally {
     rmSync(partial, { force: true });
   }
+}
+
+/**
+ * The text a batch prints on stdout: a line per row, each notice once as `notice: <text>` (the report's own wording) after the
+ * first row that has it, then the manifest's path.
+ */
+export function batchTextLines({ rows, manifest }) {
+  const told = new Set();
+  const lines = rows.flatMap((row) => [
+    `row ${row.index}: ${row.status} ${row.file}`,
+    ...(row.notices ?? []).filter((n) => !told.has(n) && told.add(n)).map((n) => `notice: ${n}`),
+  ]);
+  return manifest ? [...lines, `manifest: ${manifest}`] : lines;
 }
 
 /**
@@ -204,7 +218,7 @@ export async function runBatch(options, io) {
   }
   const manifest = path.join(path.dirname(path.resolve(options.out)), 'manifest.json');
   writeManifest(manifest, entries); // an interrupted batch still lists the rows that finished
-  const rows = entries.map(({ index, status, file, sha256: hash }) => ({ index, status, file, sha256: hash }));
+  const rows = entries.map(({ index, status, file, sha256: hash, notices }) => ({ index, status, file, sha256: hash, ...(notices ? { notices } : {}) }));
   if (interrupted) return { report: { ok: false, manifest, rows, errors: [`interrupted after ${entries.length} of ${plan.rows.length} rows`] }, exitCode: EXIT_INTERRUPTED };
   const ok = entries.every((e) => e.status === 'ok');
   return { report: { ok, manifest, rows, errors: [] }, exitCode: ok ? EXIT_OK : EXIT_NOT_OK };

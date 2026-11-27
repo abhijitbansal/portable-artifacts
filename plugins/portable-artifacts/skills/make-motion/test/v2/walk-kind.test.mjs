@@ -9,7 +9,7 @@ import { isParkedKind, listedKinds } from '../../engine/looks/index.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { signedInNotices } from '../../scripts/v2/report.mjs';
-import { walkFrameTrack } from '../../engine/kinds/walk-time.mjs';
+import { walkFrameTrack, walkMinSeconds, walkProblems } from '../../engine/kinds/walk-time.mjs';
 import { walkSetup } from '../../engine/kinds/walk-layout.mjs';
 import { all, expandIn, filmOf } from './helpers/kinds.mjs';
 import { EXAMPLES_DIR, STEPS, committed, expandWalk, handShot, handTake, reviewCtx, walkFilm, walkShot } from './helpers/walk.mjs';
@@ -101,6 +101,29 @@ test('an anchor that does not parse on a step, a stop or a lift is an error at i
   for (const path of ['shots[0].steps[0].at', 'shots[0].stops[0].at', 'shots[0].lift[0].at']) assert.ok(errors.some((e) => e.startsWith(`${path}: `)), `${path}: ${errors.join(' | ')}`);
 });
 
+test('a walk at in seconds past 180 is refused on a step, a stop and a lift, naming its field; 180 and the sentence forms are fine', () => {
+  const steps = (at) => [{ id: 'open' }, { id: 'tab', at }, ...STEPS.slice(2).map((id) => ({ id }))];
+  for (const at of [180.5, 1e7, '1000000', 'start+999999']) {
+    const step = errorsOf(walkFilm(walkShot({ steps: steps(at) })));
+    assert.ok(step.some((e) => e.startsWith('shots[0].steps[1].at: ') && e.includes('180')), `step ${at}: ${step.join(' | ')}`);
+    const stop = errorsOf(walkFilm(walkShot({ stops: [{ to: 'whole', at }] })));
+    assert.ok(stop.some((e) => e.startsWith('shots[0].stops[0].at: ') && e.includes('180')), `stop ${at}: ${stop.join(' | ')}`);
+    const lift = errorsOf(walkFilm(walkShot({ lift: [{ step: 'tab', at }] })));
+    assert.ok(lift.some((e) => e.startsWith('shots[0].lift[0].at: ') && e.includes('180')), `lift ${at}: ${lift.join(' | ')}`);
+  }
+  assert.deepEqual(errorsOf(walkFilm(walkShot({ stops: [{ to: 'whole', at: 180 }] }))).filter((e) => /\.at: /.test(e) && e.includes('180')), []);
+  assert.deepEqual(errorsOf(walkFilm(walkShot({ steps: steps('sentence:1+2') }))), []);
+});
+
+test('walkMinSeconds is capped at the natural length plus 180 s, whatever the anchors say', () => {
+  const data = handTake([60, 60], [[10, 10, 100, 40], [500, 300, 100, 40]]);
+  const shot = { ...handShot(data), steps: [{ id: 's0' }, { id: 's1', at: 1e7 }] };
+  const least = walkMinSeconds(shot, { sentences: [], words: [], seconds: 5, prepared: data });
+  assert.equal(least, 5 + 180);
+  const small = walkMinSeconds(handShot(data), { sentences: [], words: [], seconds: 5, prepared: data });
+  assert.ok(small < 5 + 180, `a normal shot is not touched: ${small}`);
+});
+
 // ---- the preparer's problems reach the user ----
 
 test('a take that fits prepares with no problem', () => {
@@ -127,6 +150,20 @@ test('a step the take lacks, and steps out of the take\'s order, are problems at
   const order = problemsOf(walkFilm(walkShot({ say: 'A. B.', steps: [{ id: 'tab' }, { id: 'open' }] })));
   assert.equal(order.length, 1);
   assert.ok(order[0].startsWith('shots[0].steps[1].id: ') && order[0].includes('take\'s order'));
+});
+
+test('a lift on a step whose box has no area, or lies wholly off the page, is a problem like a null box', () => {
+  const boxes = { zeroWidth: { x: 80, y: 100, width: 0, height: 40 }, zeroHeight: { x: 80, y: 100, width: 60, height: 0 }, left: { x: -60, y: 100, width: 60, height: 40 },
+    right: { x: 960, y: 100, width: 60, height: 40 }, above: { x: 80, y: -40, width: 60, height: 40 }, below: { x: 80, y: 540, width: 60, height: 40 } };
+  for (const [name, box] of Object.entries(boxes)) {
+    const data = handTake([30, 30], [[10, 10, 100, 40], [500, 300, 100, 40]]);
+    data.steps[1].box = box;
+    const problems = walkProblems({ ...handShot(data), lift: [{ step: 's1' }] }, {}, data);
+    assert.deepEqual(problems.map((p) => [p.path, p.message]), [['lift[0].step', 'lift on step s1: the take has no box for it']], name);
+  }
+  const edge = handTake([30, 30], [[10, 10, 100, 40], [500, 300, 100, 40]]);
+  edge.steps[1].box = { x: -59, y: 539, width: 60, height: 40 }; // reaches one px into the page
+  assert.deepEqual(walkProblems({ ...handShot(edge), lift: [{ step: 's1' }] }, {}, edge), []);
 });
 
 test('a film with no say is not held to a sentence count', () => {

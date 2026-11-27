@@ -23,6 +23,8 @@ export const MOVE_SECONDS = 0.8;
 export const RESULT_HOLD = 1;
 /** The least seconds the shot holds the whole picture before it ends, when its last stop is the whole picture. */
 export const WHOLE_HOLD = 1.5;
+/** The most seconds a step, stop or lift `at` may name (the validator), and how far past its natural length a shot may stretch. */
+export const WALK_AT_MAX = 180;
 /** The prefix of a stop that goes to a step. */
 export const STEP_PREFIX = 'step:';
 
@@ -50,9 +52,13 @@ export function keptFrames(data, step) {
   return kept;
 }
 
+// Whether a step's box has area and reaches into the viewport (layout cuts any other to nothing: no lift can be built on it).
+const hasDrawnBox = (box, viewport) => box !== null && box.width > 0 && box.height > 0
+  && box.x + box.width > 0 && box.x < viewport.width && box.y + box.height > 0 && box.y < viewport.height;
+
 /**
  * What stops `shot`'s steps from being played on `data`, as { path, message } with the path from the shot: a step id the
- * take lacks, steps out of the take's order, a lift on a step the take has no box for, and (for a shot with a say) some
+ * take lacks, steps out of the take's order, a lift on a step the take has no box for (none, no area, or wholly off the page), and (for a shot with a say) some
  * steps without `at` while the sentence count is not the step count.
  */
 export function walkProblems(shot, timing, data) {
@@ -68,7 +74,7 @@ export function walkProblems(shot, timing, data) {
     }
   });
   (shot.lift ?? []).forEach((lift, i) => {
-    if (byId.get(lift.step) !== undefined && byId.get(lift.step).box === null) {
+    if (byId.get(lift.step) !== undefined && !hasDrawnBox(byId.get(lift.step).box, data.viewport)) {
       problems.push({ path: `lift[${i}].step`, message: `lift on step ${lift.step}: the take has no box for it` });
     }
   });
@@ -204,5 +210,5 @@ export function walkMinSeconds(shot, { sentences, words, seconds, prepared }, { 
   if (prepared === undefined || prepared === null) return undefined;
   const timing = { sentences, words, duration: seconds };
   if (walkProblems(shot, timing, prepared).length > 0) return undefined;
-  return walkPlan(shot, timing, prepared, { lifts }).end;
+  return Math.min(walkPlan(shot, timing, prepared, { lifts }).end, (seconds ?? 0) + WALK_AT_MAX); // defensive: whatever the anchors say
 }
