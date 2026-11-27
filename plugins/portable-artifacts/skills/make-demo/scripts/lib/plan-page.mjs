@@ -102,13 +102,14 @@ const changeRow = (row, ctx) => [row.n, row.effect, row.useCase, row.do, targetC
 
 function summary(spec, rows, hash) {
   const counts = tally(rows);
-  const text = `Nothing has been clicked. Approving this page approves exactly these ${rows.length} rows, bound by the hash ${code(hash)}. Recording is not built yet.`;
+  const text = `Nothing has been clicked. Approving this page approves exactly these ${rows.length} rows, bound by the hash ${code(hash)}. After your yes, the take records exactly these rows.`;
   return {
     type: 'tldr', title: 'Nothing has run; the yes binds these rows', label: 'Plan', tone: counts.danger > 0 ? 'warn' : 'neutral', text,
     points: [
       `Site ${code(new URL(spec.source.url).host)}, rights ${spec.rights}, session ${spec.session ?? 'none'}.`,
       `${counts.look} look, ${counts.change} change, ${counts.danger} danger.`,
       'Each danger row has its own approval below.',
+      'Answer every approval row before you choose Approve.',
     ],
   };
 }

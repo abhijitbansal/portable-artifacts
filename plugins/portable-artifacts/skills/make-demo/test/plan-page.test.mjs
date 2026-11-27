@@ -52,8 +52,10 @@ test('the plan says nothing has been clicked, shows the hash, says recording is 
   assert.match(tldr.text, /Nothing has been clicked/);
   assert.ok(tldr.text.includes(result.hash));
   assert.match(tldr.text, /approves exactly these 7 rows/);
-  assert.match(tldr.text, /Recording is not built yet/);
+  assert.match(tldr.text, /After your yes, the take records exactly these rows\./);
+  assert.doesNotMatch(tldr.text, /not built yet/);
   const points = tldr.points.join(' ');
+  assert.ok(tldr.points.includes('Answer every approval row before you choose Approve.'), tldr.points.join(' | '));
   assert.match(points, /own/);
   assert.match(points, /session none/);
   assert.match(points, /3 look, 2 change, 2 danger/);
