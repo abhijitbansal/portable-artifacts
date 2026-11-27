@@ -13,6 +13,9 @@ import { reviewFilm } from '../../scripts/v2/review.mjs';
 import { walkPlan, LIFT_LEAD } from '../../engine/kinds/walk-time.mjs';
 import { walkGeometry, liftsOf } from '../../engine/kinds/walk-layout.mjs';
 import { shotContext } from '../../engine/graph/film.mjs';
+import { layeredCamera, pointThroughCamera } from '../../engine/graph/camera.mjs';
+import { registries } from '../../engine/registry.mjs';
+import { sample } from '../../engine/time/track.mjs';
 import { encodePng } from '../../scripts/lib/png-write.mjs';
 import { writeSyntheticTake, frameName, SIDE } from './helpers/synthetic-take.mjs';
 import { canvasOf, measure } from './helpers/kinds.mjs';
@@ -128,6 +131,26 @@ test('inside the lift the lifted crop\'s pixel is the frame\'s pixel at the box 
   assert.deepEqual(await pixelAt(session.page, frameAt(start - 0.1), ox, oy), COLOURS[3], 'and not before it');
   assert.deepEqual(session.errors, []);
   assert.deepEqual(session.blocked, []);
+});
+
+test('the lifted card has rounded corners: a pixel just inside its corner is the scrim, not the crop; the middle of its top edge is the crop', async (t) => {
+  const loaded = loadFilm(path.join(dir, 'lift.json'));
+  const session = await open(t, 'lift.json');
+  if (!session) return;
+  const shot = loaded.film.shots[0];
+  const ctx = shotContext({ film: loaded.film, index: 0, timeline: loaded.timeline, canvas: canvasOf('16:9'), measure, assets: new Map(), prepared: loaded.prepared });
+  const out = registries.kinds.get('walk').expand(shot, ctx);
+  const plan = walkPlan(shot, loaded.timeline.shots[0], loaded.prepared.w, { lifts: liftsOf(shot, ctx.look) });
+  const at = plan.steps[2].end + LIFT_LEAD + 0.4 + ctx.look.kinds.walk.lift.hold / 2;
+  const group = out.nodes.flatMap(function flat(n) { return [n, ...n.children.flatMap(flat)]; }).find((n) => n.id === 'w.lift0');
+  const cam = layeredCamera(out.camera, 'test')(at);
+  const [bw, bh] = [out.boxes['step:search'][2], out.boxes['step:search'][3]];
+  const [s, y] = [sample(group.tracks.scale, at), sample(group.tracks.y, at)];
+  const [left, top] = pointThroughCamera([group.props.x - (bw * s) / 2, y - (bh * s) / 2], cam, ctx.canvas);
+  const [right] = pointThroughCamera([group.props.x + (bw * s) / 2, y], cam, ctx.canvas);
+  const corner = await pixelAt(session.page, frameAt(at), left + 1.5, top + 1.5);
+  assert.ok(dimmed(corner, BOX_COLOUR), `the corner pixel is not the crop: ${corner}`);
+  assert.deepEqual(await pixelAt(session.page, frameAt(at), (left + right) / 2, top + 2), BOX_COLOUR, 'the top edge, mid way, is the crop');
 });
 
 test('the film reviews with no page error and no mechanical finding, with the lift too', async (t) => {

@@ -85,13 +85,15 @@ A stop moves the camera over 0.8 s, eased in and out.
 - **The whole picture comes first.** No stop's move starts until the shot has shown the whole picture for 2.0 s after its incoming cut
   ends (the shot's own `cut`; with none, from the shot's start). The steps still play on their sentences; only the camera waits.
 - `step:<id>` frames a *context region*, not the bare box: the step's box grown to at least 45% of the picture's width and height
-  (the looks use 70% wide and 45% high; the shot's last step 92% by 80%, since the result of the last click can appear anywhere),
+  (the looks use 70% wide and 45% high; the shot's last step 99% by 80% with no pad, since the result of the last click can appear
+  anywhere: the page's width fills the frame, as large as the page's own margins allow, so the card the click adds is in frame whole and
+  its text still reads),
   centred on the box and kept inside the picture. The camera zooms to fit that region inside the look's title-safe pad (`pushPad`),
   never past the take's own pixels. It lands when the step starts, or at its `at`. A step with no box of its own counts as `whole`.
 - Once the zoom fills the frame the pan is clamped so no ground shows beside the picture. A frame edge that would fall within 10%
   of the picture's own edge (the `snap` of the look) goes onto that edge: a page keeps its margin there, so no word is sliced. The
-  fixture's gate films slice no word at their stops (`test/v2/walk-pose.test.mjs`); another take's layout may still put an edge
-  through text, so look at the sheets.
+  fixture's gate films slice no word at any film frame of any stop hold or lift hold (`test/v2/walk-frames.test.mjs`; a mid-move frame
+  may slice for a moment); another take's layout may still put an edge through text, so look at the sheets.
 - `whole` goes back to the whole picture. With no `at`, the camera stays on the previous stop's step until its result has held
   1.0 s, then the move takes 0.8 s. A first `whole` stop with no `at` is the start of the shot and moves nothing. When the last stop
   is a `whole`, the shot holds the whole picture at least 1.5 s before it ends.
@@ -104,11 +106,15 @@ A stop moves the camera over 0.8 s, eased in and out.
 
 - The cursor is drawn, an arrow in the look's ink with a paper keyline and a soft shadow so it reads on white, 5% of the canvas high
   (measured on the arrow's own path). It first shows at the first step that has a pointer and a box, travels over the 10 frames before each
-  click, and dips as it clicks. A `click` also draws a ring in the look's accent. A step with no box leaves it where it was. It never
-  leaves the frame.
-- A lift crops the step's settled frame at the step's box. It comes up over 0.4 s from `at` (default 0.5 s after the step ends),
-  scales to 1.12x, rises 1.5% of the canvas height, holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear
-  shadow of the look's own and the rest dims under a darker scrim (`keynote` and `desk`: `kinds.walk.lift`).
+  click, and dips as it clicks (never under 4% of the canvas height, also in the whole-picture pull-back). A `click` also draws a
+  ripple ring: the look's `ripple` (ink, thick) on a wider paper keyline, so it reads on white UI and on the page's blue button. A step
+  with no box leaves the cursor where it was. It never leaves the frame.
+- A lift crops the step's settled frame at the step's box, drawn through a rounded rectangle of the look's `lift.radius` (page px; the
+  page's own card corner), so no square corner shows; the crop never shows a pixel outside the box. It comes up over 0.4 s from `at`
+  (default 0.5 s after the step ends), scales to 1.1x, rises (the look's `rise`, held to 60% of the card's own growth so the raised
+  card still covers its slot), holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear shadow of the look's own
+  and the rest dims under a darker scrim with no hole: the card's own slot is dimmed too and the raised card covers it, so no outline
+  of the slot shows (`keynote` and `desk`: `kinds.walk.lift`).
 - The camera eases its zoom down with the card so the card can scale within the take's own pixels (camera zoom at most the native zoom
   over the card's scale), and keeps the whole card inside the title-safe pad. At every frame the card's scale is held to the native
   zoom over the camera's, so a lift never draws past the take's own pixels; a take with no room to zoom keeps the camera and the card
@@ -122,10 +128,12 @@ the whole picture. The default target is `screen` (the frame). Devices: `--list 
 number inside it.
 
 A mark aimed at a step is cleared: it fades out when the next played step starts, or 2.0 s after it is drawn if that is sooner, and it
-is never left up over a lift (it clears as the lift starts). The look styles it as an overlay (`kinds.walk.mark`): in `keynote` the
-accent at full weight outside the box, with a glow under it, so it does not read as the page's own focus outline; in `desk` the ink, drawn
-inside the box it is aimed at. A mark aimed at `screen` is the device as built. The draw-on lands on `at`, so aim the mark at the
-sentence of its step (`sentence:<n>` counts from 0).
+is never left up over a lift (it clears as the lift starts). A mark never starts to draw before its step acts: its landing moves
+later, so its first stroke is on the step's act. The look styles it as an overlay (`kinds.walk.mark`): in `keynote` a rounded rectangle
+of the look's radius in ink, a moderate stroke 3 units outside the box (so it does not double the page's own blue focus border), with a
+soft glow under it; in `desk` the hand circle in ink, fitted inside the field. Both keep out of the title-safe pad of the frame while the
+camera rests. A mark aimed at `screen` is the device as built. The draw-on lands on `at`, so aim the mark at the sentence of its step
+(`sentence:<n>` counts from 0).
 
 ## Findings
 

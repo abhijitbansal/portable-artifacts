@@ -11,7 +11,7 @@ import { layeredCamera } from '../graph/camera.mjs';
 import { kindData } from '../looks/index.mjs';
 import { cutEnd, defaultCamera } from './camera.mjs';
 import { HOLD_MIN, LIFT_MOVES, MOVE_SECONDS, STEP_PREFIX, wholeLanding } from './walk-time.mjs';
-import { WHOLE, liftPose, stepPose } from './walk-pose.mjs';
+import { WHOLE, liftPose, liftRise, stepPose } from './walk-pose.mjs';
 
 export { MOVE_SECONDS, STEP_PREFIX };
 /** The seconds of the whole picture the shot holds, after its incoming cut ends, before any stop moves the camera. */
@@ -70,9 +70,14 @@ function inOrder(stops, lifts) {
   return events;
 }
 
-// The context a step stop frames, as shares of the picture (look data `context`): `width` and `height` for a step; `last` ({ width, height })
-// for the shot's last step, whose result can appear anywhere on the page and is held before the pull-back.
-const sharesOf = ({ context }, isLast) => (isLast ? { share: context.last.width, heightShare: context.last.height } : { share: context.width, heightShare: context.height });
+// The context a step stop frames, as shares of the picture (look data `context`) and the pad it keeps (px): `width` and `height` and the
+// look's `pushPad` for a step; `last` ({ width, height, pad? }) for the shot's last step, whose result can appear anywhere on the page and
+// is held before the pull-back (its `pad`, in units, is smaller than the look's: the whole page width fills the frame, as large as the
+// page's own margins allow, so its text still reads).
+function sharesOf({ context, pushPad }, isLast, unit) {
+  if (!isLast) return { share: context.width, heightShare: context.height, pad: pushPad * unit };
+  return { share: context.last.width, heightShare: context.last.height, pad: (context.last.pad ?? pushPad) * unit };
+}
 
 const wishStart = (e) => (e.kind === 'lift' ? e.lift.start : e.land - MOVE_SECONDS);
 
@@ -109,7 +114,7 @@ function liftMove(keys, e, state, ctx, geo, look) {
   const box = geo.stepBoxes.get(lift.step);
   if (!box || look.lift === undefined) return state;
   const start = Math.max(lift.start, state.free);
-  const pose = liftPose(ctx, geo, box, state.was, { scale: look.lift.scale, pad: look.pushPad * ctx.unit, snap: look.snap, rise: look.lift.rise * ctx.canvas.h, at: start + LIFT_HALF });
+  const pose = liftPose(ctx, geo, box, state.was, { scale: look.lift.scale, pad: look.pushPad * ctx.unit, snap: look.snap, rise: liftRise(look.lift, box, ctx.canvas.h), at: start + LIFT_HALF });
   if (samePose(pose, state.was, ctx.canvas)) return state;
   addKey(keys, { t: start, ...state.was });
   addKey(keys, { t: start + LIFT_HALF, ...poseKey(pose), ease: MOVE_EASE });
@@ -139,7 +144,7 @@ export function planStops(shot, ctx, { geo, plan, data, lifts = [] }) {
     }
     if (state.lift !== undefined && e.land - MOVE_SECONDS > state.lift.lift.end + EPSILON) state = settleLift(keys, state);
     const box = e.id === undefined ? null : geo.stepBoxes.get(e.id) ?? null;
-    const pose = box === null ? { ...WHOLE, wanted: 1, cap: Infinity } : stepPose(ctx, geo, box, { ...sharesOf(look, e.id === shot.steps.at(-1).id), pad: look.pushPad * ctx.unit, snap: look.snap, at: e.land });
+    const pose = box === null ? { ...WHOLE, wanted: 1, cap: Infinity } : stepPose(ctx, geo, box, { ...sharesOf(look, e.id === shot.steps.at(-1).id, ctx.unit), snap: look.snap, at: e.land });
     const fate = stopFate(e, events[i + 1], { pose, ...state, windows, canvas: ctx.canvas });
     if (fate.noRoom !== true && fate.dropped !== true) {
       addKey(keys, { t: fate.start, ...state.was });

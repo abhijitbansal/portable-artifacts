@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { layeredCamera, pointThroughCamera } from '../../engine/graph/camera.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { LIFT_MOVES } from '../../engine/kinds/walk-time.mjs';
+import { liftRise } from '../../engine/kinds/walk-pose.mjs';
 import { all } from './helpers/kinds.mjs';
 import { committed, expandWalk, walkFilm, walkShot } from './helpers/walk.mjs';
 
@@ -71,15 +72,17 @@ test('claim 1 holds at every film frame of the lift: camera zoom times the card\
   }
 });
 
-test('the card rises: about 1.5% of the canvas height up at the peak, back to the box when it returns', () => {
+test('the card rises (the look\'s rise, held under 60% of its own growth so it still covers its slot): up at the peak, back to the box when it returns', () => {
   for (const look of ['keynote', 'desk']) {
     const out = outOf(look);
     const { start, peak, end } = spanOf(out);
     const group = byId(out, 'w.lift0');
     const [, by, , bh] = out.boxes['step:hover'];
     const centre = by + bh / 2;
+    const rise = liftRise(out.ctx.look.kinds.walk.lift, out.boxes['step:hover'], out.ctx.canvas.h);
+    assert.ok(rise > 0 && rise <= out.ctx.look.kinds.walk.lift.rise * out.ctx.canvas.h + 1e-9, `${look}: a rise, ${rise}`);
     assert.ok(Math.abs(sample(group.tracks.y, start) - centre) < 1e-6, `${look}: on the box at the start`);
-    assert.ok(Math.abs(centre - sample(group.tracks.y, peak) - 0.015 * out.ctx.canvas.h) < 1e-6, `${look}: risen at the peak`);
+    assert.ok(Math.abs(centre - sample(group.tracks.y, peak) - rise) < 1e-6, `${look}: risen at the peak`);
     assert.ok(Math.abs(sample(group.tracks.y, end) - centre) < 1e-6, `${look}: down at the end`);
   }
 });

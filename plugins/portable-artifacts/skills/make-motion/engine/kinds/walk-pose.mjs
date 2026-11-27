@@ -79,6 +79,14 @@ export function stepPose(ctx, geo, box, { share, heightShare = share, pad, snap 
   return { x: pan.x - drift, y: pan.y, zoom, wanted, cap };
 }
 
+const COVER_SHARE = 0.6; // a card rises at most this share of its own growth, so it still reaches past its slot's bottom edge
+
+/**
+ * The px a lifted card rises: the look's `lift.rise` (a share of the canvas height), held to COVER_SHARE of the card's
+ * vertical growth (`lift.scale` about its centre), so the raised card always covers its slot, corners included.
+ */
+export const liftRise = (lift, [, , , bh], canvasH) => Math.min(lift.rise * canvasH, (COVER_SHARE * (lift.scale - 1) * bh) / HALF);
+
 /**
  * The pose a lift on `box` holds, from the pose `was` the camera is at: the zoom eased down to the lesser of its own, the
  * take's native zoom over the card's `scale` (so the card scales within the take's pixels) and the fit of the card scaled

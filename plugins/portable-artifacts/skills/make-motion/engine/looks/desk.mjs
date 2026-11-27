@@ -159,10 +159,12 @@ export const desk = {
     // the lift's scale and hold seconds (starting values). Gate round 1: `pushPad` and `context` frame a step stop, the lift
     // rises `rise` of the canvas height on its own ink `layers` (desk's card device has none) over an ink scrim, and the
     // `mark` circle is drawn in ink (the film's one accent is the highlighter) inside the box it is aimed at (`fit`)
+    // Gate round 2: as keynote's (see there): the lift's `radius` (page px), the whole-width last step, the `ripple` in ink
     walk: {
-      experimental: true, fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.92, height: 0.8 } },
-      lift: { scale: 1.12, hold: 1.2, rise: 0.015, dim: 0.4, scrim: 'ink', layers: [{ color: 'ink', alpha: 0.1, reach: 12, dy: 5 }, { color: 'ink', alpha: 0.14, reach: 70, dy: 32 }] },
+      experimental: true, fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } },
+      lift: { scale: 1.1, hold: 1.2, rise: 0.005, radius: 12, dim: 0.4, scrim: 'ink', layers: [{ color: 'ink', alpha: 0.1, reach: 12, dy: 5 }, { color: 'ink', alpha: 0.14, reach: 70, dy: 32 }] },
       mark: { circle: { color: 'ink' }, fit: 0.8 },
+      ripple: { color: 'ink', width: 0.14, keyline: 'paper' },
     },
     // map (engine/kinds/map.mjs): a printed sheet (`card`) with the land in paper, ink hairline borders `borderWidth`
     // units, highlights under the highlighter (multiply), red pins; the title on columns 1 to `titleTo` at the largest of

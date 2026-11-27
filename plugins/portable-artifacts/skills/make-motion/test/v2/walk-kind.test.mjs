@@ -33,11 +33,12 @@ test('look data: the frame keys copied from each look\'s screen, a wide share, a
   for (const name of ['keynote', 'desk']) {
     const look = registries.looks.get(name);
     for (const key of ['fill', 'line', 'lineWidth', 'dots', 'pill', 'text', 'urlText', 'wideShare']) assert.equal(look.kinds.walk[key], look.kinds.screen[key], `${name}.${key}`);
-    const { lift, pushPad, context, snap, mark } = look.kinds.walk;
-    assert.deepEqual([lift.scale, lift.hold, lift.rise], [1.12, 1.2, 0.015]);
+    const { lift, pushPad, context, snap, mark, ripple } = look.kinds.walk;
+    assert.deepEqual([lift.scale, lift.hold, lift.rise, lift.radius], [1.1, 1.2, 0.005, 12]);
     assert.ok(lift.layers.length >= 2 && lift.dim > 0 && typeof lift.scrim === 'string', `${name}: the lift's own shadow layers and scrim`);
-    assert.deepEqual([pushPad, snap, context], [60, 0.1, { width: 0.7, height: 0.45, last: { width: 0.92, height: 0.8 } }]);
-    assert.equal(typeof mark.circle.color, 'string', `${name}: the mark's style`);
+    assert.deepEqual([pushPad, snap, context], [60, 0.1, { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } }]);
+    assert.equal(typeof (mark.rounded ?? mark.circle).color, 'string', `${name}: the mark's style`);
+    assert.deepEqual([ripple.color, ripple.keyline], ['ink', 'paper'], `${name}: the ripple's ink on a paper keyline`);
   }
 });
 
@@ -224,7 +225,7 @@ test('the review says nothing without the prepared take', () => {
 });
 
 test('text size: page text that shows under 26 px at a stop the take\'s pixels stop short: the message says lift it', () => {
-  const data = { ...handTake([30, 30], [[40, 40, 120, 60], [400, 200, 120, 60]], { textPx: 5 }), width: 1920, height: 1080, scale: 2 }; // a take at 2x: its native zoom is under the push
+  const data = { ...handTake([30, 30, 30], [[40, 40, 120, 60], [400, 200, 120, 60], [700, 400, 120, 60]], { textPx: 5 }), width: 1920, height: 1080, scale: 2 }; // a take at 2x: its native zoom is under the push (s1 is not the last step)
   const found = reviewOf(filmOfWalk(data, { stops: [{ to: 'step:s1' }] }), data);
   assert.equal(found.length, 1, found.join(' | '));
   assert.match(found[0], /^stops\[0\]: step "s1": page text of 5 px shows at \d+(\.\d)? px at its stop; the take's own resolution stops the push at \d\.\dx; lift it instead$/);

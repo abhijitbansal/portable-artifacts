@@ -53,7 +53,7 @@ test('the camera stays on the last step\'s stop until its result has held, then 
     for (const t of [last.act, last.end, last.end + 0.5, last.end + RESULT_HOLD - 0.01]) {
       assert.ok(Math.abs(cam(t).zoom - atStop.zoom) < 1e-9 && Math.abs(cam(t).x - atStop.x) < 25, `${look}: still on the stop at ${t.toFixed(2)}`);
     }
-    assert.ok(atStop.zoom > 1.5, `${look}: the add stop is a close framing`);
+    assert.ok(atStop.zoom > 1.2, `${look}: the add stop is a close framing (the page fills the frame): ${atStop.zoom}`);
     const whole = last.end + RESULT_HOLD + MOVE_SECONDS;
     assert.ok(cam(whole).zoom < 1 + 1e-9, `${look}: whole at ${whole.toFixed(2)}`);
     assert.ok(out.timing.duration >= whole + WHOLE_HOLD - 1e-9, `${look}: the shot is ${out.timing.duration}, the whole view needs until ${(whole + WHOLE_HOLD).toFixed(2)}`);
@@ -65,6 +65,6 @@ test('on the committed take the add stop frames the add click: the camera is on 
   const out = expandWalk(walkFilm(walkShot({ stops: [{ to: 'step:tab' }, { to: 'step:hover' }, { to: 'step:add' }, { to: 'whole' }], lift: [{ step: 'hover' }] })), { w: committed() });
   const add = out.plan.steps[4];
   const cam = layeredCamera(out.camera, 'test');
-  assert.ok(cam(add.act).zoom > 1.5, `zoomed at the click: ${cam(add.act).zoom}`);
-  assert.ok(cam(add.end + RESULT_HOLD - 0.05).zoom > 1.5, 'and while its result holds');
+  assert.ok(cam(add.act).zoom > 1.2, `zoomed at the click: ${cam(add.act).zoom}`);
+  assert.ok(cam(add.end + RESULT_HOLD - 0.05).zoom > 1.2, 'and while its result holds');
 });

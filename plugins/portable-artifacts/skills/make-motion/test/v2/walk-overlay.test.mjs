@@ -140,7 +140,7 @@ test('it travels over the GLIDE frames before act on one curve from the previous
 
 // ---- the ripple ----
 
-test('a click step adds a ripple ring in the look\'s accent, 0.5 to 2 times the cursor size over 0.4 s; other steps add none', () => {
+test('a click step adds a ripple ring in the look\'s ripple colour,0.5 to 2 times the cursor size over 0.4 s; other steps add none', () => {
   const data = THREE();
   data.steps[1] = { ...data.steps[1], do: 'hover' };
   const out = expandHand(data);
@@ -148,7 +148,7 @@ test('a click step adds a ripple ring in the look\'s accent, 0.5 to 2 times the 
   assert.deepEqual(ids, ['w.ripple0', 'w.ripple2'], 'the click steps only');
   const ripple = out.nodes.find((n) => n.id === 'w.ripple2');
   assert.equal(ripple.props.fixed, true);
-  assert.equal(byId(out, 'w.ripple2.ring').props.stroke, out.ctx.look.palette.accent);
+  assert.equal(byId(out, 'w.ripple2.ring').props.stroke, out.ctx.look.palette[out.ctx.look.kinds.walk.ripple.color]);
   const { act } = out.plan.steps[2];
   near(sample(ripple.tracks.scale, act), 0.5, 'starts at half the cursor size');
   near(sample(ripple.tracks.scale, act + 0.4), 2, 'ends at twice the cursor size');
@@ -225,7 +225,7 @@ test('its seconds are the ones walk-time counts in `until`, by default and with 
   assert.ok(HOLD_MIN < LIFT_LEAD + LIFT_MOVES + hold);
 });
 
-test('the rest dims with the focus device for as long as the lift is up, and the hole is under the lifted card', () => {
+test('the rest dims with the look\'s lift scrim for as long as the lift is up', () => {
   const out = expandWalk(walkFilm(LIFT_SHOT()), { w: committed() });
   const { hold } = out.ctx.look.kinds.walk.lift;
   const start = out.plan.steps[1].end + LIFT_LEAD;
@@ -238,11 +238,7 @@ test('the rest dims with the focus device for as long as the lift is up, and the
   assert.equal(sample(dim.tracks.opacity, start + 0.4 + hold / 2), 1);
   assert.equal(sample(dim.tracks.opacity, start + 0.8 + hold + 0.01), 0);
   assert.ok(sample(scrim.tracks.opacity, start + 0.4 + hold / 2) > 0, 'the scrim is up while the lift is');
-  const [bx, by, , bh] = out.boxes['step:tab'];
-  const rise = out.ctx.look.kinds.walk.lift.rise * out.ctx.canvas.h;
-  const holes = scrim.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
-  assert.ok(holes.some((v) => Math.abs(v - (bx + rise)) < 0.01), 'the hole\'s left edge is the box\'s, drawn in by the rise');
-  assert.ok(holes.some((v) => Math.abs(v - (by + bh - rise)) < 0.01), 'and its bottom edge, so the risen, scaled card always covers it');
+  assert.equal(scrim.props.d.match(/M/g).length, 1, 'no hole: the card\'s own slot is dimmed too, and the raised card covers it');
 });
 
 test('a lift on a step the take has no box for is a preparer problem at the lift\'s step, not silent nodes', () => {
@@ -288,12 +284,13 @@ test('every lift of a shot is drawn, each under its own id', () => {
 
 // ---- `on` devices aimed at a step ----
 
-test('a circle on step:search is the circle device, in the walk look\'s mark style, built round that step\'s mapped box', () => {
+test('desk: a circle on step:search is the circle device, in the walk look\'s mark style, built round that step\'s mapped box (fitted)', () => {
   const prepared = { w: committed() };
-  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] })), prepared);
-  const box = out.boxes['step:search'];
-  assert.notDeepEqual(box, out.boxes.image, 'the step has a box of its own');
+  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] }), { look: 'desk' }), prepared);
   const { look } = out.ctx;
+  const whole = out.boxes['step:search'];
+  assert.notDeepEqual(whole, out.boxes.image, 'the step has a box of its own');
+  const box = [whole[0] + (whole[2] * (1 - look.kinds.walk.mark.fit)) / 2, whole[1], whole[2] * look.kinds.walk.mark.fit, whole[3]];
   const styled = { ...look, devices: { ...look.devices, circle: { ...look.devices.circle, ...look.kinds.walk.mark.circle } } };
   const built = registries.devices.get('circle').build({ id: 'w.on0', box, at: out.ctx.at('sentence:3'), look: styled, unit: out.ctx.unit, seed: out.ctx.seed, measure: out.ctx.measure });
   const group = all(out.nodes).find((n) => n.id === 'w.on0.clear');
@@ -305,6 +302,6 @@ test('a circle on step:search is the circle device, in the walk look\'s mark sty
   const [left, right, top, bottom] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   const slack = 0.01; // the path is written to two decimals
   assert.ok(left <= box[0] + slack && right >= box[0] + box[2] - slack && top <= box[1] + slack && bottom >= box[1] + box[3] - slack, `round the box: ${[left, top, right, bottom]} vs ${box}`);
-  near((left + right) / 2, box[0] + box[2] / 2, 'centred on the box (x)', 2);
-  near((top + bottom) / 2, box[1] + box[3] / 2, 'centred on the box (y)', 2);
+  near((left + right) / 2, box[0] + box[2] / 2, 'centred on the box (x)', 6); // a hand circle runs on past where it began
+  near((top + bottom) / 2, box[1] + box[3] / 2, 'centred on the box (y)', 6);
 });

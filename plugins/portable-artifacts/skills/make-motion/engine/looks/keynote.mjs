@@ -212,11 +212,16 @@ export const keynote = {
     // a step stop (screen's own), `context` the share of the picture a step stop frames at least; the lift rises `rise` of
     // the canvas height on its own `layers` (a clear shadow) over a scrim of `scrim` at `dim`; `mark` styles the `on`
     // marks aimed at a step (the circle device's keys, a `glow` stroke under it) so they read as an overlay, not as the
-    // page's own focus outline
+    // page's own focus outline. Gate round 2: the lift crop is drawn through a rounded rectangle of `radius` page px (the
+    // fixture's card corner), scales 1.1 and rises at most `rise` (walk-pose.mjs liftRise holds it to what still covers the
+    // slot); the last step's context is the page's width less 1% with no pad (as large as the page's own margins allow, so its text still reads, and the card its click adds is in frame); a mark on a step is a
+    // `rounded` rectangle (units, in ink: the page's own focus border is blue, and an accent ring beside it read as a doubled border) a `gap` outside the box, not the circle device; a click `ripple` is ink on a paper
+    // keyline (share of the cursor's size), never the accent the page's own buttons use
     walk: {
-      experimental: true, elevated: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.92, height: 0.8 } },
-      lift: { scale: 1.12, hold: 1.2, rise: 0.015, dim: 0.4, scrim: 'ink', layers: [{ color: 'shade', alpha: 0.18, reach: 14, dy: 6 }, { color: 'shade', alpha: 0.22, reach: 90, dy: 40 }] },
-      mark: { circle: { color: 'accent', width: 6, pad: 8 }, glow: { alpha: 0.3, widen: 2.6 } },
+      experimental: true, elevated: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } },
+      lift: { scale: 1.1, hold: 1.2, rise: 0.005, radius: 12, dim: 0.4, scrim: 'ink', layers: [{ color: 'shade', alpha: 0.18, reach: 14, dy: 6 }, { color: 'shade', alpha: 0.22, reach: 90, dy: 40 }] },
+      mark: { rounded: { color: 'ink', width: 3, gap: 3, radius: 12 }, glow: { alpha: 0.18, widen: 1.8 } },
+      ripple: { color: 'ink', width: 0.14, keyline: 'paper' },
     },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to
     // hold a third place name, a creative finding on the first render)

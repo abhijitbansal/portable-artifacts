@@ -200,14 +200,26 @@ function drawPath(ctx, n) {
 // props.video ({ count }) makes the picture a video clip's decoded frame: the one the node's `frame` value names
 // (engine/kinds/media-clip.mjs frameIndexOf), which the stage loaded before the draw (env.frames).
 function drawImage(ctx, n, assets, frames) {
-  const { src, w, h, clip } = n.props;
+  const { src, w, h, clip, round } = n.props;
   const image = n.props.video ? frames(src, frameIndexOf(n.frame ?? 0, n.props.video.count)) : assets.get(src);
   if (!image) throw new Error(`image node "${n.id}": no loaded picture for src "${src}"`);
   if (n.props.silhouette) return drawSilhouette(ctx, image, n.props);
-  if (clip === undefined) return ctx.drawImage(image, 0, 0, w ?? image.width, h ?? image.height);
+  if (clip === undefined) return drawRounded(ctx, round, [w ?? image.width, h ?? image.height], (...to) => ctx.drawImage(image, ...to));
   const ok = Array.isArray(clip) && clip.length === 4 && clip.every(Number.isFinite) && clip[2] > 0 && clip[3] > 0;
   if (!ok) throw new Error(`image node "${n.id}": clip must be [sx, sy, sw, sh] in image pixels with sw, sh > 0, got ${JSON.stringify(clip)}`);
-  return ctx.drawImage(image, ...clip, 0, 0, w ?? clip[2], h ?? clip[3]);
+  return drawRounded(ctx, round, [w ?? clip[2], h ?? clip[3]], (...to) => ctx.drawImage(image, ...clip, ...to));
+}
+
+// props.round = a corner radius in the image's drawn px: the picture is drawn only inside its own rounded rectangle (a
+// card's corners, so the frame's square corners do not show). Without it, `draw` is called as it was, with no clip.
+function drawRounded(ctx, round, [w, h], draw) {
+  if (!(round > 0)) return draw(0, 0, w, h);
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(0, 0, w, h, Math.min(round, w / HALF, h / HALF));
+  ctx.clip();
+  draw(0, 0, w, h);
+  return ctx.restore();
 }
 
 // props.silhouette ({ color, spread }) on an image: the picture's own shape in flat `color` (its alpha kept, its colours

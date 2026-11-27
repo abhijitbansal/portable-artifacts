@@ -1,7 +1,7 @@
 // The walk shot's cursor and its click ripple: kind-internal nodes the take does not carry (its frames are page pictures
 // without a pointer). The cursor is an arrow in the look's ink with a paper keyline, 5% of the canvas high, that goes to
 // each step that has a box and a pointer: over the GLIDE frames before the step's act it travels on one quadratic curve from
-// the previous pointer, at act it dips to 0.9, and a `click` step adds a ripple ring in the look's accent. Both nodes are
+// the previous pointer, at act it dips to 0.9, and a `click` step adds a ripple ring (the look's kinds.walk.ripple: ink on a paper keyline; the accent without it). Both nodes are
 // top-level and `fixed` (the camera leaves them where they are put), so every position is the page point through the image
 // map and then through the shot's own camera, keyed once per film frame; it is clamped to stay inside the frame. Pure and
 // DOM-free.
@@ -22,6 +22,7 @@ const BEND = 0.2; // of the glide's length: how far the curve bows from the stra
 const GLIDE_EASE = 'inOutCubic';
 const DIP = Object.freeze({ scale: 0.9, before: 0.04, hold: 0.12, after: 0.06 }); // s, around act
 const RIPPLE = Object.freeze({ from: 0.5, to: 2, seconds: 0.4, width: 0.08, ease: 'outCubic' }); // sizes are times the cursor's
+const KEYLINE_WIDEN = 2; // the ripple's paper keyline is this many times its ring's stroke
 const EPSILON = 1e-9;
 
 // The steps the cursor goes to, in order: those with a box and a pointer in the take. A step with no box keeps the cursor
@@ -120,13 +121,19 @@ function rippleNode(shot, { target, path, cam, ctx, size }) {
   const end = act + RIPPLE.seconds;
   const { x, y, first: [x0, y0] } = positionTracks(keyTimes(act, end, fps, []), path, cam, canvas, size);
   const id = `${shot.id}.ripple${target.index}`;
-  const ring = node('path', `${id}.ring`, { d: circlePath(size / HALF), stroke: look.palette.accent, strokeWidth: RIPPLE.width * size });
+  const rippleLook = look.kinds?.walk?.ripple;
+  const d = circlePath(size / HALF);
+  const width = (rippleLook?.width ?? RIPPLE.width) * size;
+  // the look's ripple data (ink, thick) on a wider paper keyline, so it reads on white UI and on a blue button; a look without
+  // ripple data keeps the accent ring
+  const ring = node('path', `${id}.ring`, { d, stroke: look.palette[rippleLook?.color ?? 'accent'], strokeWidth: width });
+  const keyline = rippleLook === undefined ? [] : [node('path', `${id}.keyline`, { d, stroke: look.palette[rippleLook.keyline ?? 'paper'], strokeWidth: width * KEYLINE_WIDEN })];
   const tracks = {
     x, y,
     scale: track([{ t: act, v: RIPPLE.from }, { t: end, v: RIPPLE.to, ease: RIPPLE.ease }]),
     opacity: track([{ t: 0, v: 0 }, { t: act, v: 0 }, { t: act, v: 1 }, { t: end, v: 0 }]),
   };
-  return node('group', id, { fixed: true, x: x0, y: y0 }, { tracks, children: [ring] });
+  return node('group', id, { fixed: true, x: x0, y: y0 }, { tracks, children: [...keyline, ring] });
 }
 
 /**

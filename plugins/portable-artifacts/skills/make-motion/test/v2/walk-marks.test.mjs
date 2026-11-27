@@ -11,7 +11,7 @@ import { committed, expandWalk, handShot, handTake, walkFilm, walkShot } from '.
 const near = (actual, wanted, label, tolerance = 1e-6) => assert.ok(Math.abs(actual - wanted) < tolerance, `${label}: ${actual} is not ${wanted}`);
 const byId = (out, id) => all(out.nodes).find((n) => n.id === id);
 const THREE = () => handTake([30, 30, 30], [[40, 40, 120, 60], [400, 200, 120, 60], [760, 420, 120, 60]]);
-const MARK = (extra = {}) => ({ at: 1.5, do: 'circle', target: 'step:s1', ...extra });
+const MARK = (extra = {}) => ({ at: 2, do: 'circle', target: 'step:s1', ...extra });
 
 // the group a mark is drawn in and the second it is gone by (the last second its opacity is above 0)
 function clearOf(out, id = 'w.on0.clear') {
@@ -28,7 +28,7 @@ test('the mark clears when the next played step starts, if that is sooner than M
   const { gone, last } = clearOf(out);
   near(out.plan.steps[2].start, 3, 'the next step starts at 3');
   near(gone, 3, 'gone by the next step\'s start');
-  assert.ok(last < gone && last > 1.5, 'and up before that');
+  assert.ok(last < gone && last > 2, 'and up before that');
   assert.equal(sample(byId(out, 'w.on0.clear').tracks.opacity, 3.01), 0);
   assert.equal(sample(byId(out, 'w.on0.clear').tracks.opacity, 1.6), 1);
 });
@@ -36,7 +36,8 @@ test('the mark clears when the next played step starts, if that is sooner than M
 test('the mark clears after MARK_SECONDS when the next step starts later', () => {
   const data = THREE();
   const out = expandWalk(walkFilm(handShot(data, { steps: [{ id: 's0' }, { id: 's1' }, { id: 's2', at: 9 }], on: [MARK()] })), { w: data });
-  near(clearOf(out).gone, 1.5 + MARK_SECONDS, '2.0 s after it is drawn');
+  const landed = Math.max(2, out.plan.steps[1].act + out.ctx.look.moves.draw.dur); // not before the step acts
+  near(clearOf(out).gone, landed + MARK_SECONDS, '2.0 s after it is drawn');
 });
 
 test('a mark aimed after the next step has started is gone as it lands, never a track out of order', () => {
@@ -47,14 +48,14 @@ test('a mark aimed after the next step has started is gone as it lands, never a 
 
 test('a mark on the last step clears after MARK_SECONDS', () => {
   const data = THREE();
-  const out = expandWalk(walkFilm(handShot(data, { on: [MARK({ at: 3, target: 'step:s2' })] })), { w: data });
-  near(clearOf(out).gone, 3 + MARK_SECONDS, 'no next step');
+  const out = expandWalk(walkFilm(handShot(data, { on: [MARK({ at: 4, target: 'step:s2' })] })), { w: data });
+  near(clearOf(out).gone, 4 + MARK_SECONDS, 'no next step');
 });
 
 test('the mark is not drawn over a lift: it clears when a lift starts', () => {
   const data = THREE();
-  const out = expandWalk(walkFilm(handShot(data, { steps: [{ id: 's0' }, { id: 's1' }, { id: 's2', at: 9 }], lift: [{ step: 's1', at: 2.2 }], on: [MARK()] })), { w: data });
-  near(clearOf(out).gone, 2.2, 'gone as the lift starts');
+  const out = expandWalk(walkFilm(handShot(data, { steps: [{ id: 's0' }, { id: 's1' }, { id: 's2', at: 9 }], lift: [{ step: 's1', at: 2.6 }], on: [MARK()] })), { w: data });
+  near(clearOf(out).gone, 2.6, 'gone as the lift starts');
 });
 
 test('a mark aimed at the screen is the device as built, never cleared by the walk', () => {
@@ -64,27 +65,47 @@ test('a mark aimed at the screen is the device as built, never cleared by the wa
   assert.ok(out.nodes.some((n) => n.id.startsWith('w.on0')));
 });
 
-test('keynote: the ring is the look\'s accent at full weight with a glow stroke under it, wider than the ring and not the page\'s outline', () => {
+const numbersOf = (d) => d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+
+test('keynote: the mark on a step is a rounded rectangle of the look\'s radius and a moderate stroke, drawn outside the box by a small gap, with a glow under it', () => {
   const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] })), { w: committed() });
   const { mark } = out.ctx.look.kinds.walk;
-  const rings = all(out.nodes).filter((n) => /^w\.on0\.[ab]$/.test(n.id));
-  const glows = all(out.nodes).filter((n) => /^w\.on0\.[ab]\.glow$/.test(n.id));
-  assert.equal(rings.length, 2);
-  assert.equal(glows.length, 2);
-  for (const ring of rings) {
-    assert.equal(ring.props.stroke, out.ctx.look.palette[mark.circle.color]);
-    near(ring.props.strokeWidth, mark.circle.width * out.ctx.unit, 'ring width');
-  }
-  for (const glow of glows) {
-    assert.equal(glow.props.stroke, out.ctx.look.palette[mark.circle.color]);
-    near(glow.props.strokeWidth, mark.circle.width * mark.glow.widen * out.ctx.unit, 'glow width');
-    assert.equal(glow.props.opacity, mark.glow.alpha);
-  }
-  const group = byId(out, 'w.on0.clear');
-  assert.ok(group.children.indexOf(glows[0]) < group.children.indexOf(rings[0]), 'the glow is drawn under the ring');
+  const { unit } = out.ctx;
+  const ring = byId(out, 'w.on0');
+  const glow = byId(out, 'w.on0.glow');
+  assert.equal(ring.props.stroke, out.ctx.look.palette[mark.rounded.color]);
+  near(ring.props.strokeWidth, mark.rounded.width * unit, 'stroke');
+  assert.ok(ring.props.strokeWidth <= 5 * unit, 'moderate: not the heavy 6 of round 2');
+  assert.ok(/Q/.test(ring.props.d), 'rounded corners');
   const box = out.boxes['step:search'];
-  const ring = rings[0].props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
-  assert.ok(Math.min(...ring.filter((_, i) => i % 2 === 0)) <= box[0] - mark.circle.pad * out.ctx.unit + 0.01, 'outside the field it is drawn on, by the look\'s pad');
+  const gap = mark.rounded.gap * unit, round = (mark.rounded.radius + mark.rounded.gap) * unit;
+  const [x0, y0, ...rest] = numbersOf(ring.props.d);
+  near(x0, box[0] - gap + round, 'the top edge starts a corner radius in', 0.01);
+  near(y0, box[1] - gap, 'above the box by the gap', 0.01);
+  assert.ok(Math.min(...numbersOf(ring.props.d).filter((_, i) => i % 2 === 0)) >= box[0] - gap - 0.01, 'no further out than the gap');
+  assert.ok(rest.length > 0);
+  assert.ok(gap >= ring.props.strokeWidth, 'clear of the app\'s own focus border: the stroke sits outside the box');
+  near(glow.props.strokeWidth, mark.rounded.width * mark.glow.widen * unit, 'glow width');
+  assert.equal(glow.props.opacity, mark.glow.alpha);
+  assert.ok(glow.props.strokeWidth / 2 <= gap + ring.props.strokeWidth / 2, 'the glow does not reach the box either');
+  const group = byId(out, 'w.on0.clear');
+  assert.ok(group.children.indexOf(glow) < group.children.indexOf(ring), 'the glow is drawn under the ring');
+});
+
+test('a mark on a step never starts to draw before the step\'s act, in both looks', () => {
+  for (const look of ['keynote', 'desk']) {
+    const out = expandWalk(walkFilm(walkShot({ on: [{ at: 0.2, do: 'circle', target: 'step:search' }] }), { look }), { w: committed() });
+    const act = out.plan.steps[2].act;
+    const drawn = byId(out, 'w.on0').tracks.draw.points;
+    assert.ok(drawn[0].t >= act - 1e-6, `${look}: first drawn at ${drawn[0].t}, the step acts at ${act}`);
+    assert.ok(drawn.at(-1).t >= act + 0.3, `${look}: and it lands after it`);
+  }
+});
+
+test('a mark aimed after the step\'s act is drawn where it is aimed', () => {
+  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:4', do: 'circle', target: 'step:search' }] })), { w: committed() });
+  assert.ok(out.ctx.at('sentence:4') > out.plan.steps[2].act + 1, 'the sentence is well after the act');
+  near(byId(out, 'w.on0').tracks.draw.points.at(-1).t, out.ctx.at('sentence:4'), 'lands on its second');
 });
 
 test('desk: the circle is in ink (the film\'s one accent is the highlighter), fitted inside the box it is aimed at', () => {

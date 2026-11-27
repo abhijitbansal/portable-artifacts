@@ -21,6 +21,36 @@ test('the drawn arrow is 5% of the canvas height on its own path bounds, tip at 
   }
 });
 
+test('the cursor never draws smaller than 4% of the canvas height (the pull-back keeps it): its size is constant and its dip stays above 0.9', () => {
+  for (const look of ['keynote', 'desk']) {
+    const out = expandWalk(walkFilm(walkShot({ stops: [{ to: 'step:tab' }, { to: 'whole' }] }), { look }), { w: committed() });
+    const cursor = out.nodes.find((n) => n.id === 'w.cursor');
+    const arrow = all(out.nodes).find((n) => n.id === 'w.cursor.arrow');
+    const least = Math.min(...cursor.tracks.scale.points.map((p) => p.v));
+    assert.ok(boundsOf(arrow.props.d).h * least >= 0.04 * out.ctx.canvas.h, `${look}: ${boundsOf(arrow.props.d).h * least} px`);
+    assert.equal(cursor.props.fixed, true, `${look}: fixed to the frame, so the camera does not shrink it`);
+  }
+});
+
+test('the click ripple reads on white UI and on the blue button: the look\'s ripple data (ink, thick) over a paper keyline, never the accent', () => {
+  for (const look of ['keynote', 'desk']) {
+    const out = expandWalk(walkFilm(walkShot(), { look }), { w: committed() });
+    const { palette, kinds } = out.ctx.look;
+    const size = 0.05 * out.ctx.canvas.h;
+    const ids = all(out.nodes).filter((n) => /^w\.ripple\d+$/.test(n.id)).map((n) => n.id);
+    assert.ok(ids.length >= 2, `${look}: ripples on the click steps`);
+    for (const id of ids) {
+      const ring = all(out.nodes).find((n) => n.id === `${id}.ring`);
+      const keyline = all(out.nodes).find((n) => n.id === `${id}.keyline`);
+      assert.equal(ring.props.stroke, palette[kinds.walk.ripple.color], `${look} ${id}: the look's ripple colour`);
+      assert.notEqual(ring.props.stroke, palette.accent, `${look} ${id}: not the accent (the button is that colour)`);
+      assert.ok(ring.props.strokeWidth >= 0.12 * size, `${look} ${id}: thick, ${ring.props.strokeWidth}`);
+      assert.equal(keyline.props.stroke, palette.paper, `${look} ${id}: a paper keyline`);
+      assert.ok(keyline.props.strokeWidth > ring.props.strokeWidth, `${look} ${id}: wider than the ring`);
+    }
+  }
+});
+
 test('the arrow has a soft shadow: ink at low alpha, offset down and right, drawn under it, in both looks', () => {
   for (const look of ['keynote', 'desk']) {
     const out = expandWalk(walkFilm(walkShot(), { look }), { w: committed() });

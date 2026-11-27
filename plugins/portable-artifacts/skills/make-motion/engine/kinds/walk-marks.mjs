@@ -1,12 +1,14 @@
 // The `on` devices of a walk shot (shared.mjs onDevices builds them): a mark aimed at a step (`target: 'step:<id>'`) is drawn
-// as the look's walk data styles it (kinds.walk.mark: the circle device's own keys over the look's, a `glow` stroke under it,
-// `fit` the share of the box's width the circle is drawn on, so a hand circle stays inside a field beside a button) and
-// is cleared: it fades out when the next played step starts, or MARK_SECONDS after it is drawn if that is sooner, and never
-// stays up over a lift (it clears as the first lift after it starts). A mark aimed at `screen` is the device as built. Pure and
-// DOM-free.
+// as the look's walk data styles it (kinds.walk.mark: `rounded`, a rounded rectangle outside the box by a small gap, or the
+// circle device's own keys over the look's; a `glow` stroke under it; `fit` the share of the box's width the circle is drawn
+// on, so a hand circle stays inside a field beside a button). A mark never starts to draw before its step acts (its landing
+// moves later so its first stroke is on the act), and is cleared: it fades out when the next played step starts, or
+// MARK_SECONDS after it is drawn if that is sooner, and never stays up over a lift (it clears as the first lift after it
+// starts). A mark aimed at `screen` is the device as built. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { onDevices } from './shared.mjs';
+import { colourOf, landing, roundedRect } from '../devices/shared.mjs';
+import { buildDevice, onDevices } from './shared.mjs';
 import { STEP_PREFIX } from './walk-time.mjs';
 
 /** The seconds a mark on a step stays up, at most. */
@@ -43,6 +45,22 @@ function clearing(device, id, { clear, at, glow }) {
   return { ...device, nodes: [node('group', `${id}.clear`, {}, { tracks: { opacity }, children: withGlow(device.nodes, glow) })] };
 }
 
+// The rounded-rectangle mark (look data kinds.walk.mark.rounded: { color, width, gap, radius }, all in units): a stroke
+// `gap` outside `box`, its corners concentric with a box corner of `radius`, drawn on landing on `at`.
+function roundedMark(id, { box, at, look, unit, rounded }) {
+  const [x, y, w, h] = box;
+  const gap = rounded.gap * unit;
+  const d = roundedRect(x - gap, y - gap, w + HALF * gap, h + HALF * gap, (rounded.radius + rounded.gap) * unit);
+  const step = look.hand ? look.moves.draw.step : undefined;
+  return [node('path', id, { d, stroke: colourOf(look, rounded.color), strokeWidth: rounded.width * unit, lineJoin: 'round' }, { tracks: { draw: landing(at, look.moves.draw, 0, 1, step) }, step })];
+}
+
+// One step-aimed mark as a device: { nodes, target, at, before, camera }.
+function stepMark(shot, ctx, { item, j, box, at, rounded }) {
+  if (rounded !== undefined && item.do === 'circle') return { nodes: roundedMark(`${shot.id}.on${j}`, { box, at, look: ctx.look, unit: ctx.unit, rounded }), before: null, target: item.target, at };
+  return { ...buildDevice(shot, ctx, { item, j, box, at }), before: null, target: item.target, at };
+}
+
 /**
  * The shot's `on` devices ({ nodes, before, camera, target, at } each, as onDevices gives them), the ones aimed at a step
  * styled and cleared as above. `setup` is walkSetup's ({ look, plan, lifts }), `boxes` the shot's boxes.
@@ -53,11 +71,16 @@ export function walkDevices(shot, ctx, setup, boxes) {
   const styled = { ...ctx, look: markLook(ctx.look, data.mark) };
   const onStep = (item) => (item.target ?? 'screen').startsWith(STEP_PREFIX);
   const plain = onDevices(shot, ctx, { boxes, defaultTarget: 'screen', skip: onStep });
-  const marks = onDevices(shot, styled, { boxes: stepBoxes, defaultTarget: 'screen', skip: (item) => !onStep(item) });
-  const ids = (shot.on ?? []).map((item, j) => [item, j]).filter(([item]) => onStep(item)).map(([, j]) => j);
-  const cleared = marks.map((d, k) => {
-    const index = shot.steps.findIndex((s) => `${STEP_PREFIX}${s.id}` === d.target);
-    return clearing(d, `${shot.id}.on${ids[k]}`, { clear: clearSecond(d.at, index, { plan, lifts }), at: d.at, glow: data.mark?.glow });
+  const indexOf = (item) => shot.steps.findIndex((s) => `${STEP_PREFIX}${s.id}` === item.target);
+  const marks = (shot.on ?? []).flatMap((item, j) => {
+    if (!onStep(item)) return [];
+    const box = stepBoxes[item.target];
+    if (!box) throw new Error(`shot "${shot.id}": on[${j}] target "${item.target}" has no box (have: ${Object.keys(stepBoxes).join(', ')})`);
+    const index = indexOf(item);
+    // not before the step acts: the first stroke (the draw move before `at`) starts no earlier than its act
+    const at = Math.max(ctx.at(item.at), (plan.steps[index]?.act ?? 0) + ctx.look.moves.draw.dur);
+    const device = stepMark(shot, styled, { item, j, box, at, rounded: data.mark?.rounded });
+    return [clearing(device, `${shot.id}.on${j}`, { clear: clearSecond(at, index, { plan, lifts }), at, glow: data.mark?.glow })];
   });
-  return [...plain, ...cleared];
+  return [...plain, ...marks];
 }
