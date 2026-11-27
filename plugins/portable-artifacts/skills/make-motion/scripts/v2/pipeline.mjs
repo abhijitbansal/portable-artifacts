@@ -66,6 +66,6 @@ export function loadFilm(specPath, { registries = defaultRegistries, values = {}
   const film = withFilmDefaults(spec, registries);
   const { prepared, problems } = prepareFilm(film, { filmDir: specDir, kinds: registries.kinds });
   if (problems.length > 0) throw new SpecError(problems);
-  const timeline = buildTimeline(film, { fps: film.fps, modes: registries.modes });
+  const timeline = buildTimeline(film, { fps: film.fps, modes: registries.modes, kinds: registries.kinds, prepared });
   return { film, timeline, specDir, prepared, timingJudged: film.voice === undefined };
 }

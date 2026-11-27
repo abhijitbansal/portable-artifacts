@@ -184,6 +184,16 @@ function kindPace(look, shot, pace) {
   return Number.isFinite(kindTail) && kindTail > pace.tail ? { ...pace, tail: kindTail } : pace;
 }
 
+// The least seconds a shot's kind needs (kind.minSeconds, absent for every kind but `walk`), 0 when it names none. The
+// kind gets its sentences and words, its natural seconds, its prepared data and the film's look, and reads nothing else.
+function kindMinSeconds(shot, { kinds, film, modes, prepared, natural, sentences, words }) {
+  if (!kinds.has(shot.show)) return 0;
+  const hook = kinds.get(shot.show).minSeconds;
+  if (typeof hook !== 'function') return 0;
+  const least = hook(shot, { sentences, words, seconds: natural, prepared: prepared?.[shot.id], look: filmLook(film, { modes }) });
+  return Number.isFinite(least) ? least : 0;
+}
+
 const toFrames = (seconds, fps) => Math.ceil(Math.max(MIN_SHOT_SECONDS, seconds) * fps - FRAME_EPSILON);
 
 // { wpm, tail } of the registered mode `name`; the registry's own error for an unknown one.
@@ -415,8 +425,12 @@ function narrationShifted(film, timeline, ctx) {
  * moved by s frames carries narrationAt = -s / fps (narrationStart adds it), each of its words' sound times gains it, and the
  * shown times are clamped into the shot. A shift that leaves a shot under 1 s or under its cut throws a PlacementError at
  * the field (not for a recording, which sets where its words fall).
+ * A kind may declare `minSeconds(shot, { sentences, words, seconds, prepared, look })` (the `walk` kind does, from its take): a
+ * shot of that kind lasts at least that long, so its picture is never cut short by its words. `prepared` is the preparers'
+ * data by shot id (scripts/v2/prepare; default none) and `kinds` the registry the hook is looked up in. No other kind has the
+ * hook, so no other shot moves.
  */
-export function buildTimeline(given, { fps, modes = registries.modes, words, recording = false, cuts = registries.cuts } = {}) {
+export function buildTimeline(given, { fps, modes = registries.modes, words, recording = false, cuts = registries.cuts, kinds = registries.kinds, prepared = {} } = {}) {
   if (!Number.isFinite(fps) || fps <= 0) throw new RangeError(`fps must be a positive number, got ${fps}`);
   if (!Array.isArray(given.shots)) throw new TypeError('film.shots must be an array');
   // an emphasis device the look does not draw becomes the look's emphasis on its word (kinds/emphasis-fallback.mjs)
@@ -430,7 +444,8 @@ export function buildTimeline(given, { fps, modes = registries.modes, words, rec
 
   let startFrame = 0;
   const shots = film.shots.map((shot, index) => {
-    const { seconds, words: shotWords, sentences } = timedShot(shot, shotPace(film, shot, pace), words, index);
+    const { seconds: natural, words: shotWords, sentences } = timedShot(shot, shotPace(film, shot, pace), words, index);
+    const seconds = Math.max(natural, kindMinSeconds(shot, { kinds, film, modes, prepared, natural, sentences, words: shotWords }));
     const frames = toFrames(seconds, fps);
     const entry = {
       id: shot.id,

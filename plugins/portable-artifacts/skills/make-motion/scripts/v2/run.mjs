@@ -239,10 +239,10 @@ async function recordVoice(film, specDir, state, io) {
 // anchors that depends on time is judged on it (validateFilm could not: it had only estimated times). Those errors make
 // the film invalid: they become findings in the validator's path form and null is returned; the report still says what
 // timeline was built.
-async function timelineFor(film, made, state, log) {
+async function timelineFor(film, made, state, log, prepared) {
   try {
     return await stage(state, log, 'timeline', () => {
-      const timeline = buildTimeline(film, { fps: film.fps, words: made?.sidecar.shots, recording: made?.recording !== undefined });
+      const timeline = buildTimeline(film, { fps: film.fps, words: made?.sidecar.shots, recording: made?.recording !== undefined, prepared });
       Object.assign(state, { timed: timeline.timed, frames: timeline.frameCount });
       const errors = made ? timedAnchorErrors(film, timeline) : [];
       if (errors.length > 0) throw new SpecError(errors);
@@ -539,7 +539,7 @@ export async function previewStages(options, { work, signal, log = () => {}, syn
   const { film, specDir } = loaded;
   const voice = film.voice === undefined ? { made: null, notice: null } : await previewVoice(film, specDir, options, state, io);
   if (film.voice !== undefined && voice.made === null && voice.notice === null) return failed();
-  const timeline = await timelineFor(film, voice.made, state, log);
+  const timeline = await timelineFor(film, voice.made, state, log, loaded.prepared);
   if (!timeline) return failed();
   const clips = clipUses(film).length === 0 ? [] : await clipStage(loaded, timeline, state, io, clipCacheDir(options));
   if (clips === null) return failed();
@@ -601,7 +601,7 @@ async function execute(options, state, io) {
     // --compare-looks: the anchor must be a shot of the film, judged now; no voice is made, so every look is drawn on estimated timing
     checkSlice({ shot: options.compareLooks }, film, loaded.timeline);
     io.log('make: --compare-looks: no voice was made; every cell uses estimated timing');
-    if (await timelineFor(film, null, state, io.log)) await makeCompare(options, state, io);
+    if (await timelineFor(film, null, state, io.log, loaded.prepared)) await makeCompare(options, state, io);
     return;
   }
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so. So does --estimated
@@ -612,7 +612,7 @@ async function execute(options, state, io) {
     : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
   if (voiced && made === null) return;
   io.signal?.throwIfAborted(); // the voice can take minutes, and a cache hit returns whatever the signal
-  const timeline = await timelineFor(film, made, state, io.log);
+  const timeline = await timelineFor(film, made, state, io.log, loaded.prepared);
   if (!timeline) return;
   if (options.outline || options.outlineMeasured) {
     const drawn = outlineTimeline(loaded, timeline);
