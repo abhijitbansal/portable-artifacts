@@ -97,7 +97,7 @@ Sharing: the MP4 is one file you can send as is; the preview page is for this ma
 
 ## Looking things up
 
-Look here before you invent a field. `node <skill-dir>/scripts/make.mjs --list kinds` prints every kind of shot with its fields and one example to copy; `--list looks`, `modes`, `devices`, `moves`, `cuts`, `fields` and `voices` print the rest. `--all` adds the parked kinds (and any experimental look; there is none today). The sixteen kinds are `statement`, `number`, `clipping`, `end`, `list`, `quote`, `compare`, `chart`, `media`, `screen`, `map`, `diagram`, `timeline`, `code`, `feed` and `free`. `free` takes raw nodes, for what the others do not cover.
+Look here before you invent a field. `node <skill-dir>/scripts/make.mjs --list kinds` prints every kind of shot with its fields and one example to copy; `--list looks`, `modes`, `devices`, `moves`, `cuts`, `fields` and `voices` print the rest. `--all` adds the parked kinds (and any experimental look; there is none today). The seventeen kinds are `statement`, `number`, `clipping`, `end`, `list`, `quote`, `compare`, `chart`, `media`, `screen`, `map`, `diagram`, `timeline`, `code`, `feed`, `free` and `walk` (a make-demo take, parked; references/walk.md). `free` takes raw nodes, for what the others do not cover.
 
 Each look serves the modes it names, and some kinds are not drawn in some looks. A parked kind renders with a note and the report's `kinds` lists it. An excluded kind is refused with the looks that have it. This table is checked against the code:
 

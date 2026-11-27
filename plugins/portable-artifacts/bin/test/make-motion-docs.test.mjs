@@ -35,7 +35,7 @@ export function referenceDocs() {
 }
 const DOCS = ['SKILL.md', 'README.md', ...referenceDocs()];
 const SECTION_OF = { skill: 'SKILL.md', schema: 'references/schema.md', migrating: 'references/migrating.md' };
-const COUNT_WORDS = { 7: 'seven', 16: 'sixteen' };
+const COUNT_WORDS = { 7: 'seven', 17: 'seventeen' };
 
 // The text under "## <heading>" up to the next "## ", or null.
 export function section(md, heading) {
@@ -309,11 +309,15 @@ export function lookRowProblems(md, heading) {
   return out;
 }
 
-/** What SKILL.md claims about looks and kinds that the registry does not say: its table and its list of kinds. */
+/**
+ * What SKILL.md claims about looks and kinds that the registry does not say: its table and its list of kinds. The list names
+ * every registered kind, the parked ones too (`walk`, parked in every look that has it, is not in `--list kinds` without
+ * `--all`); the table below it is about the listed kinds.
+ */
 export function lookClaimProblems(md) {
   const out = lookRowProblems(md, 'Looking things up');
   const lookup = section(md, 'Looking things up') ?? '';
-  const kinds = listedKinds();
+  const kinds = registries.kinds.names();
   const named = ticks((lookup.match(/The (\w+) kinds are ([^\n]*?)\.(?: |\n)/) ?? [])[2] ?? '');
   if (JSON.stringify(sorted(named)) !== JSON.stringify(sorted(kinds))) out.push(`the kinds it lists: ${named.join(', ')}`);
   const word = (lookup.match(/The (\w+) kinds are/) ?? [])[1];
@@ -325,6 +329,8 @@ test('SKILL.md lists the looks, their modes, the kinds, and the parked and exclu
   assert.deepEqual(lookClaimProblems(read('SKILL.md')), []);
   assert.equal(lookNames().length, 7);
   assert.equal(listedKinds().length, 16);
+  assert.equal(registries.kinds.names().length, 17);
+  assert.ok(!listedKinds().includes('walk') && registries.kinds.names().includes('walk'), 'walk is registered and parked everywhere, so only --all lists it');
 });
 
 test('README.md has the same looks table under "Looks", checked against the code', () => {
@@ -355,8 +361,8 @@ test('guardrail: a wrong look, mode, parked kind, excluded kind or kind count in
   assert.match(lookClaimProblems(md.replace('| `ledger` |', '| `lodger` |')).join(), /lodger/);
   assert.match(lookClaimProblems(md.replace(row, row.replace('`chart`, ', ''))).join(), /marker: parked/);
   assert.match(lookClaimProblems(md.replace(row, row.replace('`screen`', '`media`'))).join(), /marker: excluded/);
-  assert.match(lookClaimProblems(md.replace('The sixteen kinds are', 'The fifteen kinds are')).join(), /fifteen/);
-  assert.match(lookClaimProblems(md.replace('`feed` and `free`', '`free`')).join(), /the kinds it lists/);
+  assert.match(lookClaimProblems(md.replace('The seventeen kinds are', 'The sixteen kinds are')).join(), /sixteen/);
+  assert.match(lookClaimProblems(md.replace('`free` and `walk`', '`free`')).join(), /the kinds it lists/);
 });
 
 // ---- schema.md: root fields, shot fields, report, exit codes ---------------------------------------------------------
