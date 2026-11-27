@@ -145,7 +145,17 @@ make-motion's `walk` shot plays a take as a film shot (make-motion's `references
 - **A covered value shows as its grey cover at any zoom.** Frames are drawn as stored, so a cover box stays a grey box when the
   camera pushes in.
 - **The reader checks headers and first bytes.** It checks each frame's header and its first bytes, not a full decode. A corrupt
-  frame fails in the page, with its name.
+  frame fails in the page; the error does not always name the frame. A JPEG's EXIF orientation is not read, so a turned frame
+  can decode at another size than the one checked.
+- **The server rechecks place, not content.** Every request checks that the frame still resolves inside the take's `frames/`
+  folder. It does not check the file's size or type again, so a file swapped in during a render is served as it is. The take is
+  read again when the server starts, so a take changed between prepare and render is served as it is then. Hard links pass the
+  folder check.
+- **The signed-in rule trusts the take.** The notice comes from the take's own `signedIn` flag. The rule is the agent's to keep:
+  make-motion still writes sheets and the film.
+- **A box with no area keeps the picture whole.** A step whose box has no width or height, or lies off the page, has its marks
+  and stops on the whole picture.
+- **At most 4 takes a film**, counted by how `src` is spelled, and checked when the render starts, after the voice is made.
 - **Walk stops make no sound in this phase.**
 - **The text finding on a 3x take is narrow.** The push is capped at the take's own resolution, where text shows at three times
   its page size, so the finding "page text of <n> px shows at <m> px at its stop" fires at a stop only for text under about 9 px.
