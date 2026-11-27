@@ -9,7 +9,7 @@ import { isParkedKind, listedKinds } from '../../engine/looks/index.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { signedInNotices } from '../../scripts/v2/report.mjs';
-import { walkFrameTrack, HOLD_MIN } from '../../engine/kinds/walk-time.mjs';
+import { walkFrameTrack } from '../../engine/kinds/walk-time.mjs';
 import { walkSetup } from '../../engine/kinds/walk-layout.mjs';
 import { all, expandIn, filmOf } from './helpers/kinds.mjs';
 import { EXAMPLES_DIR, STEPS, committed, expandWalk, handShot, handTake, reviewCtx, walkFilm, walkShot } from './helpers/walk.mjs';
@@ -33,7 +33,11 @@ test('look data: the frame keys copied from each look\'s screen, a wide share, a
   for (const name of ['keynote', 'desk']) {
     const look = registries.looks.get(name);
     for (const key of ['fill', 'line', 'lineWidth', 'dots', 'pill', 'text', 'urlText', 'wideShare']) assert.equal(look.kinds.walk[key], look.kinds.screen[key], `${name}.${key}`);
-    assert.deepEqual(look.kinds.walk.lift, { scale: 1.12, hold: 1.2 });
+    const { lift, pushPad, context, snap, mark } = look.kinds.walk;
+    assert.deepEqual([lift.scale, lift.hold, lift.rise], [1.12, 1.2, 0.015]);
+    assert.ok(lift.layers.length >= 2 && lift.dim > 0 && typeof lift.scrim === 'string', `${name}: the lift's own shadow layers and scrim`);
+    assert.deepEqual([pushPad, snap, context], [60, 0.1, { width: 0.7, height: 0.45, last: { width: 0.92, height: 0.8 } }]);
+    assert.equal(typeof mark.circle.color, 'string', `${name}: the mark's style`);
   }
 });
 
@@ -199,73 +203,6 @@ test('the shot stretches to its steps: its timeline entry lasts at least the pla
 
 const filmOfWalk = (data, extra = {}) => walkFilm(handShot(data, extra));
 
-// ---- camera stops ----
-
-const stopsOf = (shot, data) => {
-  const out = expandWalk(walkFilm(shot), { w: data });
-  return { out, layer: out.camera.at(-1), plan: out.plan };
-};
-// three steps of one second each, no say: they start at 0, 1.5 and 3 (each holds HOLD_MIN after its last frame)
-const THREE = () => handTake([30, 30, 30], [[40, 40, 120, 60], [400, 200, 120, 60], [760, 420, 120, 60]]);
-const keyAt = (layer, t) => layer.find((k) => Math.abs(k.t - t) < 1e-9 && k.zoom !== undefined);
-
-test('no stops: the camera is the look\'s own', () => {
-  const data = THREE();
-  const out = expandWalk(filmOfWalk(data), { w: data });
-  assert.equal(out.camera.length, 1, 'the keynote drift alone');
-});
-
-test('a step stop lands on its step\'s start, in 0.8 s, on the in-out cubic ease, to the push the box gets', () => {
-  const data = THREE();
-  const { layer, plan, out } = stopsOf(handShot(data, { stops: [{ to: 'step:s1' }] }), data);
-  near(plan.steps[1].start, 1.5, 'step 1 starts');
-  const landing = keyAt(layer, 1.5);
-  assert.ok(landing, JSON.stringify(layer));
-  assert.equal(landing.ease, 'inOutCubic');
-  assert.ok(landing.zoom > 1);
-  const before = layer.filter((k) => k.t < 1.5).at(-1);
-  near(before.t, 0.7, 'the move starts 0.8 s before');
-  assert.deepEqual([before.x, before.y, before.zoom], [0, 0, 1]);
-  assert.ok(layer.every((k, i) => i === 0 || layer[i - 1].t <= k.t), 'keys in time order');
-  assert.ok(out.camera.length === 2);
-});
-
-test('a stop with an `at` lands there instead', () => {
-  const data = THREE();
-  const { layer } = stopsOf(handShot(data, { stops: [{ to: 'step:s2', at: 2.6 }] }), data);
-  assert.ok(keyAt(layer, 2.6), JSON.stringify(layer));
-});
-
-test('a whole stop with no at lands HOLD_MIN after the previous stop\'s step ends; a first whole stop is the shot start', () => {
-  const data = THREE();
-  const { layer, plan } = stopsOf(handShot(data, { stops: [{ to: 'step:s1' }, { to: 'whole' }] }), data);
-  const landing = keyAt(layer, plan.steps[1].end + HOLD_MIN);
-  assert.ok(landing, JSON.stringify(layer));
-  assert.deepEqual([landing.x, landing.y, landing.zoom], [0, 0, 1]);
-  const first = stopsOf(handShot(data, { stops: [{ to: 'whole' }, { to: 'step:s1' }] }), data);
-  assert.ok(keyAt(first.layer, first.plan.steps[1].start), 'a first whole stop takes no move, so the next lands on its step');
-  assert.ok(first.layer.every((k) => k.zoom === undefined || k.t === 0 || k.t >= 0.7 - 1e-9));
-});
-
-test('a move never starts inside a step\'s hold: it starts when the hold ends, and lands 0.8 s later', () => {
-  const data = THREE();
-  // step 0 ends at 1.0 and holds until 1.5; a landing at 2.0 would start at 1.2, inside the hold
-  const { layer, plan } = stopsOf(handShot(data, { stops: [{ to: 'step:s2', at: 2 }] }), data);
-  near(plan.steps[0].end, 1, 'step 0 ends');
-  const landing = layer.find((k) => k.ease === 'inOutCubic');
-  near(landing.t, 1.5 + 0.8, 'lands 0.8 s after the hold ends');
-  assert.ok(layer.some((k) => Math.abs(k.t - 1.5) < 1e-9 && k.zoom === 1), 'and starts at 1.5');
-});
-
-test('a stop that cannot land before the next one starts moving is dropped', () => {
-  const data = THREE();
-  const { layer, out } = stopsOf(handShot(data, { stops: [{ to: 'step:s1', at: 1.5 }, { to: 'step:s2', at: 1.6 }] }), data);
-  const moves = layer.filter((k) => k.ease === 'inOutCubic');
-  assert.equal(moves.length, 1, 'only the second stop has a move');
-  near(moves[0].t, 1.6, 'the second stop lands on its at');
-  assert.ok(out.camera.length === 2);
-});
-
 // ---- findings ----
 
 const reviewOf = (film, data) => walk.review(film.shots[0], reviewCtx(film, { w: data })).map((f) => `${f.path}: ${f.message}`);
@@ -287,7 +224,7 @@ test('the review says nothing without the prepared take', () => {
 });
 
 test('text size: page text that shows under 26 px at a stop the take\'s pixels stop short: the message says lift it', () => {
-  const data = handTake([30, 30], [[40, 40, 120, 60], [400, 200, 120, 60]], { textPx: 5 });
+  const data = { ...handTake([30, 30], [[40, 40, 120, 60], [400, 200, 120, 60]], { textPx: 5 }), width: 1920, height: 1080, scale: 2 }; // a take at 2x: its native zoom is under the push
   const found = reviewOf(filmOfWalk(data, { stops: [{ to: 'step:s1' }] }), data);
   assert.equal(found.length, 1, found.join(' | '));
   assert.match(found[0], /^stops\[0\]: step "s1": page text of 5 px shows at \d+(\.\d)? px at its stop; the take's own resolution stops the push at \d\.\dx; lift it instead$/);
@@ -323,7 +260,7 @@ test('the gate film\'s setup on the committed take (two step stops, a whole retu
     const film = walkFilm(shot, { look });
     assert.deepEqual(walk.review(shot, reviewCtx(film, prepared)), [], look);
     const stops = walkSetup(shot, expandWalk(film, prepared).ctx).planned.stops;
-    assert.ok(stops.filter((s) => s.id !== undefined).every((s) => s.wanted > s.cap), `${look}: every step stop wants more than the take carries, and that is not a finding`);
+    assert.ok(stops.filter((s) => s.id !== undefined).every((s) => Math.abs(s.zoom - Math.min(s.wanted, s.cap)) < 1e-9), `${look}: every step stop is the fit of its context, at most the take carries`);
   }
 });
 

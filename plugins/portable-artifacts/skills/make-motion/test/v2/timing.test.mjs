@@ -268,8 +268,13 @@ test('no existing film moves: every example film\'s timeline is the one frozen b
   const names = exampleFiles();
   assert.ok(names.length > 20);
   for (const name of names) {
-    const { film } = loadFilm(path.join(EXAMPLES, name));
-    for (const options of [{}, { prepared: {}, kinds: walkKinds() }, { prepared: { nothing: TAKE }, kinds: walkKinds() }]) {
+    const { film, prepared } = loadFilm(path.join(EXAMPLES, name));
+    // a film with a walk shot is frozen as loadFilm builds it, stretched to its take (the hook's purpose): its own prepared data
+    // goes in; every other film is built with none, and must not move
+    const variants = Object.keys(prepared).length > 0
+      ? [{ prepared }] // the real walk kind (the registry's own), since the stub above reads no look data
+      : [{}, { prepared: {}, kinds: walkKinds() }, { prepared: { nothing: TAKE }, kinds: walkKinds() }];
+    for (const options of variants) {
       const tl = buildTimeline(film, { fps: film.fps, modes: registries.modes, ...options });
       assert.equal(firstDifference(digestOf(tl), frozen[name]), null, name);
     }

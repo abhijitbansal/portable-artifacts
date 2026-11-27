@@ -91,6 +91,17 @@ function dipTrack(targets) {
   return track(keys);
 }
 
+// A soft shadow under the arrow so it reads on white: the arrow's shape in the look's ink at low alpha, stacked at growing
+// stroke widths (no blur filter), offset down and right.
+const SHADOW = Object.freeze({ dx: 0.05, dy: 0.08, alpha: 0.07, widths: [0.34, 0.22, 0.1] }); // shares of the arrow's height
+
+function shadowNodes(shot, { size, look }) {
+  const d = arrowPath(size);
+  return SHADOW.widths.map((width, i) => node('path', `${shot.id}.cursor.shadow${i}`, {
+    d, fill: look.palette.ink, stroke: look.palette.ink, strokeWidth: width * size, opacity: SHADOW.alpha, x: SHADOW.dx * size, y: SHADOW.dy * size,
+  }));
+}
+
 function cursorNode(shot, { targets, path, cam, ctx, size }) {
   const { look, canvas, timing, fps } = ctx;
   const first = targets[0];
@@ -99,7 +110,7 @@ function cursorNode(shot, { targets, path, cam, ctx, size }) {
   const fade = Math.min(FADE_IN, first.act - first.from);
   const opacity = track([{ t: 0, v: 0 }, { t: first.from, v: 0 }, { t: first.from + fade, v: 1 }]);
   const arrow = node('path', `${shot.id}.cursor.arrow`, { d: arrowPath(size), fill: look.palette.ink, stroke: look.palette.paper, strokeWidth: KEYLINE * size });
-  return node('group', `${shot.id}.cursor`, { fixed: true, x: x0, y: y0 }, { tracks: { x, y, scale: dipTrack(targets), opacity }, children: [arrow] });
+  return node('group', `${shot.id}.cursor`, { fixed: true, x: x0, y: y0 }, { tracks: { x, y, scale: dipTrack(targets), opacity }, children: [...shadowNodes(shot, { size, look }), arrow] });
 }
 
 // A ring at the click: RIPPLE.from to RIPPLE.to times the cursor's size over RIPPLE.seconds, fading out, fixed on the point.

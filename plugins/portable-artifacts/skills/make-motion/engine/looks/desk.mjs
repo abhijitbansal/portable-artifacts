@@ -156,8 +156,14 @@ export const desk = {
     // push masks the rest with the paper at `pushDim` (1: the region alone at rest, no part-cut UI at the frame edge)
     screen: { fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56, pushDim: 1 },
     // walk (engine/kinds/walk.mjs, parked until its look gate): screen's frame keys, the framed picture's `wideShare`, and
-    // the lift's scale and hold seconds (starting values)
-    walk: { experimental: true, fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, lift: { scale: 1.12, hold: 1.2 } },
+    // the lift's scale and hold seconds (starting values). Gate round 1: `pushPad` and `context` frame a step stop, the lift
+    // rises `rise` of the canvas height on its own ink `layers` (desk's card device has none) over an ink scrim, and the
+    // `mark` circle is drawn in ink (the film's one accent is the highlighter) inside the box it is aimed at (`fit`)
+    walk: {
+      experimental: true, fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.92, height: 0.8 } },
+      lift: { scale: 1.12, hold: 1.2, rise: 0.015, dim: 0.4, scrim: 'ink', layers: [{ color: 'ink', alpha: 0.1, reach: 12, dy: 5 }, { color: 'ink', alpha: 0.14, reach: 70, dy: 32 }] },
+      mark: { circle: { color: 'ink' }, fit: 0.8 },
+    },
     // map (engine/kinds/map.mjs): a printed sheet (`card`) with the land in paper, ink hairline borders `borderWidth`
     // units, highlights under the highlighter (multiply), red pins; the title on columns 1 to `titleTo` at the largest of
     // `titleSteps`, the map beside it; on a tall frame the places keyed: numbered ink discs (`keyFill`, numbers in

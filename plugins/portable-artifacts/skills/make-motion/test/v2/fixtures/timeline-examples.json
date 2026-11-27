@@ -1154,6 +1154,82 @@
    }
   ]
  },
+ "gate-walk-desk.json": {
+  "sha": "1ac5f48e748c68b0ced07458b1de8118962922cbff6c028849d8e625699642dd",
+  "top": {
+   "fps": "624b60c58c9d",
+   "duration": "949cd8e2c926",
+   "frameCount": "81f27f8a7d87",
+   "timed": "53c7890a0add"
+  },
+  "shots": [
+   {
+    "id": "35ff74aeea25",
+    "index": "5feceb66ffc8",
+    "start": "5feceb66ffc8",
+    "end": "7bcfa36d3022",
+    "duration": "7bcfa36d3022",
+    "words": "3febb14f7829",
+    "sentences": "c81a334a4607"
+   },
+   {
+    "id": "eacbe1227668",
+    "index": "6b86b273ff34",
+    "start": "7bcfa36d3022",
+    "end": "6e5701db9f9e",
+    "duration": "395ba3f40bdc",
+    "words": "ff1dfd883dc7",
+    "sentences": "c6141178fb59"
+   },
+   {
+    "id": "97959247360c",
+    "index": "d4735e3a265e",
+    "start": "6e5701db9f9e",
+    "end": "949cd8e2c926",
+    "duration": "0faf54c7569c",
+    "words": "a8de804f8288",
+    "sentences": "b17bf833e717"
+   }
+  ]
+ },
+ "gate-walk-keynote.json": {
+  "sha": "7dacb7ad7aa7dc6f1509adbbea989a418c2a918d28083770ede8d767524f4f5c",
+  "top": {
+   "fps": "624b60c58c9d",
+   "duration": "0fbc19f6d118",
+   "frameCount": "4cc3d9cba463",
+   "timed": "53c7890a0add"
+  },
+  "shots": [
+   {
+    "id": "35ff74aeea25",
+    "index": "5feceb66ffc8",
+    "start": "5feceb66ffc8",
+    "end": "d34df99343cb",
+    "duration": "d34df99343cb",
+    "words": "3febb14f7829",
+    "sentences": "c81a334a4607"
+   },
+   {
+    "id": "eacbe1227668",
+    "index": "6b86b273ff34",
+    "start": "d34df99343cb",
+    "end": "c7d4acadfe96",
+    "duration": "395ba3f40bdc",
+    "words": "ff1dfd883dc7",
+    "sentences": "c6141178fb59"
+   },
+   {
+    "id": "97959247360c",
+    "index": "d4735e3a265e",
+    "start": "c7d4acadfe96",
+    "end": "0fbc19f6d118",
+    "duration": "0faf54c7569c",
+    "words": "a8de804f8288",
+    "sentences": "b17bf833e717"
+   }
+  ]
+ },
  "how-it-works.json": {
   "sha": "500f07d6ca36a9a3daacccc8376ac066b0037e4ab1c4533f3a9dbcfad905ff8d",
   "top": {

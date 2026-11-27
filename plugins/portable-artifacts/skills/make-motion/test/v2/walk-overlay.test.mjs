@@ -6,6 +6,7 @@ import { registries } from '../../engine/registry.mjs';
 import { layeredCamera, pointThroughCamera } from '../../engine/graph/camera.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { GLIDE, HOLD_MIN, LIFT_LEAD, LIFT_MOVES } from '../../engine/kinds/walk-time.mjs';
+import { walkSetup } from '../../engine/kinds/walk-layout.mjs';
 import { all } from './helpers/kinds.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { EXAMPLES_DIR, committed, expandWalk, handShot, handTake, walkFilm, walkShot } from './helpers/walk.mjs';
@@ -81,7 +82,7 @@ test('it is keyed once per film frame while it is on', () => {
 
 test('it stays inside the frame at full push on a corner step', () => {
   const data = handTake([30, 30], [[20, 20, 100, 40], [820, 440, 100, 40]]);
-  const out = expandHand(data, { stops: [{ to: 'step:s0' }] });
+  const out = expandHand(data, { steps: [{ id: 's0' }, { id: 's1', at: 5 }], stops: [{ to: 'step:s0' }] });
   const act = out.plan.steps[1].act;
   const [px, py] = through(out, data.steps[1].pointer, act);
   const { w, h } = out.ctx.canvas;
@@ -224,9 +225,9 @@ test('its seconds are the ones walk-time counts in `until`, by default and with 
   assert.ok(HOLD_MIN < LIFT_LEAD + LIFT_MOVES + hold);
 });
 
-test('the rest dims with the focus device for as long as the lift is up, and the hole is the lifted card', () => {
+test('the rest dims with the focus device for as long as the lift is up, and the hole is under the lifted card', () => {
   const out = expandWalk(walkFilm(LIFT_SHOT()), { w: committed() });
-  const { hold, scale } = out.ctx.look.kinds.walk.lift;
+  const { hold } = out.ctx.look.kinds.walk.lift;
   const start = out.plan.steps[1].end + LIFT_LEAD;
   const dim = out.nodes.find((n) => n.id === 'w.lift0.dim');
   assert.ok(dim, 'a dim group before the lift');
@@ -237,11 +238,11 @@ test('the rest dims with the focus device for as long as the lift is up, and the
   assert.equal(sample(dim.tracks.opacity, start + 0.4 + hold / 2), 1);
   assert.equal(sample(dim.tracks.opacity, start + 0.8 + hold + 0.01), 0);
   assert.ok(sample(scrim.tracks.opacity, start + 0.4 + hold / 2) > 0, 'the scrim is up while the lift is');
-  const [bx, by, bw, bh] = out.boxes['step:tab'];
-  const [cx, cy] = [bx + bw / 2, by + bh / 2];
+  const [bx, by, , bh] = out.boxes['step:tab'];
+  const rise = out.ctx.look.kinds.walk.lift.rise * out.ctx.canvas.h;
   const holes = scrim.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
-  assert.ok(holes.some((v) => Math.abs(v - (cx - (bw * scale) / 2)) < 0.01), 'the hole\'s left edge is the lifted card\'s');
-  assert.ok(holes.some((v) => Math.abs(v - (cy + (bh * scale) / 2)) < 0.01), 'and its bottom edge');
+  assert.ok(holes.some((v) => Math.abs(v - (bx + rise)) < 0.01), 'the hole\'s left edge is the box\'s, drawn in by the rise');
+  assert.ok(holes.some((v) => Math.abs(v - (by + bh - rise)) < 0.01), 'and its bottom edge, so the risen, scaled card always covers it');
 });
 
 test('a lift on a step the take has no box for is a preparer problem at the lift\'s step, not silent nodes', () => {
@@ -257,13 +258,17 @@ const drawnScale = (out, id = 'w.lift0') => {
   return layeredCamera(out.camera, 'test')(peak).zoom * sample(group.tracks.scale, peak);
 };
 
-test('a lift never draws past the take\'s native pixels: at a capped stop its scale is held to what the take carries', () => {
-  const out = expandWalk(walkFilm(LIFT_SHOT({ stops: [{ to: 'step:tab' }] })), { w: committed() });
+test('a lift never draws past the take\'s native pixels: at a capped stop the camera eases down and the card keeps the look\'s scale', () => {
+  const shot = LIFT_SHOT({ steps: [{ id: 'open' }, { id: 'tab' }, { id: 'search', at: 9 }, { id: 'hover' }, { id: 'add' }], stops: [{ to: 'step:tab' }] });
+  const out = expandWalk(walkFilm(shot), { w: { ...committed(), width: 1920, height: 1080, scale: 2 } }); // a take at 2x: its pixels cap the stop
   const native = out.data.width / out.boxes.image[2];
-  const zoom = layeredCamera(out.camera, 'test')(out.plan.steps[1].end + LIFT_LEAD + 0.4).zoom;
-  assert.ok(zoom * out.ctx.look.kinds.walk.lift.scale > native, 'the look\'s scale alone would pass the native pixels');
+  const { scale } = out.ctx.look.kinds.walk.lift;
+  const stop = walkSetup(shot, out.ctx).planned.stops[0];
+  assert.ok(stop.zoom * scale > native, 'the stop\'s zoom with the look\'s scale would pass the native pixels');
   assert.ok(drawnScale(out) <= native + 1e-6, `${drawnScale(out)} vs native ${native}`);
-  const room = expandWalk(walkFilm(LIFT_SHOT({ stops: [{ to: 'step:tab' }] }), { look: 'keynote' }), { w: { ...committed(), width: 5760, height: 3240, scale: 6 } });
+  const group = out.nodes.find((n) => n.id === 'w.lift0');
+  near(sample(group.tracks.scale, out.plan.steps[1].end + LIFT_LEAD + 0.4), scale, 'the card still scales to the look\'s scale');
+  const room = expandWalk(walkFilm(shot, { look: 'keynote' }), { w: { ...committed(), width: 5760, height: 3240, scale: 6 } });
   const roomy = room.data.width / room.boxes.image[2];
   near(drawnScale(room), room.ctx.look.kinds.walk.lift.scale * layeredCamera(room.camera, 'test')(room.plan.steps[1].end + LIFT_LEAD + 0.4).zoom, 'with room above the push the look\'s scale holds');
   assert.ok(drawnScale(room) <= roomy + 1e-6);
@@ -283,13 +288,16 @@ test('every lift of a shot is drawn, each under its own id', () => {
 
 // ---- `on` devices aimed at a step ----
 
-test('a circle on step:search is the circle device built round that step\'s mapped box', () => {
+test('a circle on step:search is the circle device, in the walk look\'s mark style, built round that step\'s mapped box', () => {
   const prepared = { w: committed() };
   const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] })), prepared);
   const box = out.boxes['step:search'];
   assert.notDeepEqual(box, out.boxes.image, 'the step has a box of its own');
-  const built = registries.devices.get('circle').build({ id: 'w.on0', box, at: out.ctx.at('sentence:3'), look: out.ctx.look, unit: out.ctx.unit, seed: out.ctx.seed, measure: out.ctx.measure });
-  const drawn = out.nodes.filter((n) => n.id.startsWith('w.on0'));
+  const { look } = out.ctx;
+  const styled = { ...look, devices: { ...look.devices, circle: { ...look.devices.circle, ...look.kinds.walk.mark.circle } } };
+  const built = registries.devices.get('circle').build({ id: 'w.on0', box, at: out.ctx.at('sentence:3'), look: styled, unit: out.ctx.unit, seed: out.ctx.seed, measure: out.ctx.measure });
+  const group = all(out.nodes).find((n) => n.id === 'w.on0.clear');
+  const drawn = group.children.filter((n) => !n.id.endsWith('.glow'));
   assert.equal(drawn.length, built.nodes.length);
   assert.deepEqual(drawn, built.nodes);
   const numbers = drawn.flatMap((n) => n.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number));

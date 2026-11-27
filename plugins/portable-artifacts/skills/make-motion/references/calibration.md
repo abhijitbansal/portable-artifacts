@@ -54,9 +54,9 @@ Removed from the "reads empty" set after viewing: `look-cosmos` `giants` (empty 
 
 ## The outline rules, `cut-variety` and `sameness`
 
-Both rules read the spec alone, so the table is a run of `node scripts/make.mjs references/examples/v2/<film>.json --outline --json` on every example film (30 films), counting the findings of each rule before any cap (`sameness` is capped at 2 a film for each of its three forms, kind, cut and move, which two examples reach, `cuts-pop` and `whats-new`, each with 2 findings of the kind form, and none exceeds). The constants are `MIN_SEAMS` 4 (a film with fewer cuts is never judged: three cuts make any one of them "more than two thirds"), `REPEATED_CUT_SHARE` 2/3 and `SAME_RUN` 3, in `engine/review/outline.mjs`. The plain `cut` has no window and never counts as the repeated cut.
+Both rules read the spec alone, so the table is a run of `node scripts/make.mjs references/examples/v2/<film>.json --outline --json` on every example film (32 films), counting the findings of each rule before any cap (`sameness` is capped at 2 a film for each of its three forms, kind, cut and move, which two examples reach, `cuts-pop` and `whats-new`, each with 2 findings of the kind form, and none exceeds). The constants are `MIN_SEAMS` 4 (a film with fewer cuts is never judged: three cuts make any one of them "more than two thirds"), `REPEATED_CUT_SHARE` 2/3 and `SAME_RUN` 3, in `engine/review/outline.mjs`. The plain `cut` has no window and never counts as the repeated cut.
 
-The bound is the one the composition rules use: if more than a third of the films were flagged, the rule would teach the agent to ignore it. Result: `cut-variety` flags 0 of 30 films, `sameness` flags 2 of 30 (7%), so both stay. Only `sameness` is measured by this table: no example flags `cut-variety`, so its 2/3 share is the plan's number, listed as `unmeasured` in the rules page.
+The bound is the one the composition rules use: if more than a third of the films were flagged, the rule would teach the agent to ignore it. Result: `cut-variety` flags 0 of 32 films, `sameness` flags 2 of 32 (6%), so both stay. Only `sameness` is measured by this table: no example flags `cut-variety`, so its 2/3 share is the plan's number, listed as `unmeasured` in the rules page.
 
 The table was first taken before the showreels were rewritten (task F1b): `showreel-pro` (9 shots) then raised 2 findings (5 `clipping` shots in a row, and the same move, `highlight`, on all 5) and `showreel-viral` (8 shots) raised 2 (5 `media` shots in a row, and the same move, `sweep`, on all 5), so `sameness` flagged 4 of 29 films (14%). The rewrite, which has to show the five pictures and every new feature, breaks each run with another kind (pro: the code shot moved between the pictures, a diagram shot and a statement added; viral: a phone-framed screen shot), so neither film raises a finding now and neither is in the table. The rows below are the table as it stands after that rewrite; the 4 of 29 above is the number the rule was kept on.
 
@@ -65,7 +65,9 @@ The table was first taken before the showreels were rewritten (task F1b): `showr
 | `cuts-pop` | 16 | no | 2 | 4 `statement` shots in a row, then 3 |
 | `whats-new` | 30 | no | 3 | 7 `media` shots in a row, then 3 `clipping` shots, which also arrive by one slide (`redrawn-diagram` to `redrawn-scene`) three times running |
 | `how-it-works` | 15 | no | 0 | |
-| the other 27 films, the two showreels among them (11 and 8 shots) | 2 to 16 | no | 0 | |
+| the other 29 films, the two showreels among them (11 and 8 shots) and the two walk gate films (3 shots each) | 2 to 16 | no | 0 | |
+
+`gate-walk-keynote` and `gate-walk-desk` were added to this table on 2026-11-27 by the same run (`--outline --json`: no outline finding, no other finding); the composition sweep above was not re-run on them.
 
 Each finding is a true one: a run of one kind. The films are left as they are, and `test/v2/review-outline.test.mjs` lists the findings (`KNOWN`). `whats-new` is the only example with a run of one windowed cut, so `cut-variety` itself is held by its unit tests and not by an example.
 

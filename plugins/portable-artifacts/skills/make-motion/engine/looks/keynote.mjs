@@ -208,8 +208,16 @@ export const keynote = {
     screen: { lift: { share: 0.8, pad: 24, alt: { share: 0.62, headShare: 0.8 } }, trim: 0.005, tallSweep: false, pushPad: 60, sweep: true, pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
     // walk (engine/kinds/walk.mjs, parked until its look gate): the frame keys are screen's own (the take is drawn in
     // the same browser frame), `wideShare` the framed picture's share of the room's width, `lift` the settled crop's
-    // scale and the seconds it holds (starting values, to be set by the gate)
-    walk: { experimental: true, elevated: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, lift: { scale: 1.12, hold: 1.2 } },
+    // scale and the seconds it holds (starting values, to be set by the gate). Gate round 1: `pushPad` the title-safe pad of
+    // a step stop (screen's own), `context` the share of the picture a step stop frames at least; the lift rises `rise` of
+    // the canvas height on its own `layers` (a clear shadow) over a scrim of `scrim` at `dim`; `mark` styles the `on`
+    // marks aimed at a step (the circle device's keys, a `glow` stroke under it) so they read as an overlay, not as the
+    // page's own focus outline
+    walk: {
+      experimental: true, elevated: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.92, height: 0.8 } },
+      lift: { scale: 1.12, hold: 1.2, rise: 0.015, dim: 0.4, scrim: 'ink', layers: [{ color: 'shade', alpha: 0.18, reach: 14, dy: 6 }, { color: 'shade', alpha: 0.22, reach: 90, dy: 40 }] },
+      mark: { circle: { color: 'accent', width: 6, pad: 8 }, glow: { alpha: 0.3, widen: 2.6 } },
+    },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to
     // hold a third place name, a creative finding on the first render)
     map: { titleAbove: true, titleStepsWide: [4, 3], sourceFace: 'text', sourceStep: 1, sourcePrefix: true, sourceAt: 'title', card: true, land: '#dfe1e8', borders: 'card', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'card' },

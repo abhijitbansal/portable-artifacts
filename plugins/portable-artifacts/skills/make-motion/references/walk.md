@@ -55,9 +55,11 @@ Example, on the fixture take:
   "steps": [{ "id": "open" }, { "id": "tab" }, { "id": "search" }, { "id": "hover" }, { "id": "add" }],
   "stops": [{ "to": "step:tab" }, { "to": "step:add" }, { "to": "whole" }],
   "lift": [{ "step": "hover" }],
-  "on": [{ "at": "sentence:3", "do": "circle", "target": "step:search" }]
+  "on": [{ "at": "sentence:2", "do": "circle", "target": "step:search" }]
 }
 ```
+
+The example circles the search field on its sentence: `sentence:<n>` counts from 0, so the third sentence is `sentence:2`.
 
 ## Timing
 
@@ -70,6 +72,7 @@ Example, on the fixture take:
 - If the step before it, with its hold, ends later than its sentence starts, the step starts then. An action longer than its
   words stretches the shot. The shot lasts until the last step's hold ends.
 - A shot with no `say` plays its steps one after the other.
+- A shot whose last stop is `whole` lasts until that stop has landed and the whole picture has held 1.5 s (see Stops). The shot stretches to fit.
 - A shot may play fewer steps than the take has, in the take's order. A take step skipped between two played ones is a finding
   (below). A step id the take lacks, or steps out of the take's order, is refused: `step "nope" is not a step of the take (it
   has: open, tab, search, hover, add)`, and `step "tab" comes after "add" in the shot but before "add" in the take: steps follow
@@ -79,29 +82,50 @@ Example, on the fixture take:
 
 A stop moves the camera over 0.8 s, eased in and out.
 
-- `step:<id>` pushes onto that step's box and lands when that step starts, or at its `at`. The push stops where the take's own
-  pixels run out: the camera never shows a frame larger than the take drew it. A step with no box of its own counts as `whole`.
-- `whole` goes back to the whole picture. With no `at` it lands 0.5 s after the previous stop's step ends. A first `whole`
-  stop with no `at` is the start of the shot and moves nothing.
-- A move never starts while a step's last frame holds (the 0.5 s after it ends) or during a `scroll` step. It starts later.
+- **The whole picture comes first.** No stop's move starts until the shot has shown the whole picture for 2.0 s after its incoming cut
+  ends (the shot's own `cut`; with none, from the shot's start). The steps still play on their sentences; only the camera waits.
+- `step:<id>` frames a *context region*, not the bare box: the step's box grown to at least 45% of the picture's width and height
+  (the looks use 70% wide and 45% high; the shot's last step 92% by 80%, since the result of the last click can appear anywhere),
+  centred on the box and kept inside the picture. The camera zooms to fit that region inside the look's title-safe pad (`pushPad`),
+  never past the take's own pixels. It lands when the step starts, or at its `at`. A step with no box of its own counts as `whole`.
+- Once the zoom fills the frame the pan is clamped so no ground shows beside the picture. A frame edge that would fall within 10%
+  of the picture's own edge (the `snap` of the look) goes onto that edge: a page keeps its margin there, so no word is sliced. The
+  fixture's gate films slice no word at their stops (`test/v2/walk-pose.test.mjs`); another take's layout may still put an edge
+  through text, so look at the sheets.
+- `whole` goes back to the whole picture. With no `at`, the camera stays on the previous stop's step until its result has held
+  1.0 s, then the move takes 0.8 s. A first `whole` stop with no `at` is the start of the shot and moves nothing. When the last stop
+  is a `whole`, the shot holds the whole picture at least 1.5 s before it ends.
+- A move never starts while a step's last frame holds (the 0.5 s after it ends), during a `scroll` step, or while a lift is up (until
+  its card starts back). It starts later.
 - A stop that cannot land before the next one starts moving is dropped, and is a finding.
 - A stop or lift that names a step not in the shot is refused: `no step "serch" in this shot; did you mean "search"? (steps: open, tab, search, hover, add)`.
 
 ## Cursor and lift
 
-- The cursor is drawn, an arrow in the look's ink, 5% of the canvas high. It first shows at the first step that has a pointer and
-  a box, travels over the 10 frames before each click, and dips as it clicks. A `click` also draws a ring in the look's accent.
-  A step with no box leaves it where it was. It never leaves the frame.
-- A lift crops the step's settled frame at the step's box. It comes up over 0.4 s from `at` (default 0.5 s after the step
-  ends), holds for the look's hold, goes back over 0.4 s, and dims the rest (`keynote` and `desk`: up to 1.12x, held 1.2 s). It never scales past the take's own pixels: at a
-  stop that already shows the take's resolution it only dims the rest. The lift's seconds count in the step's hold. A lift on a
-  step the take has no box for is refused: `lift on step open: the take has no box for it`.
+- The cursor is drawn, an arrow in the look's ink with a paper keyline and a soft shadow so it reads on white, 5% of the canvas high
+  (measured on the arrow's own path). It first shows at the first step that has a pointer and a box, travels over the 10 frames before each
+  click, and dips as it clicks. A `click` also draws a ring in the look's accent. A step with no box leaves it where it was. It never
+  leaves the frame.
+- A lift crops the step's settled frame at the step's box. It comes up over 0.4 s from `at` (default 0.5 s after the step ends),
+  scales to 1.12x, rises 1.5% of the canvas height, holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear
+  shadow of the look's own and the rest dims under a darker scrim (`keynote` and `desk`: `kinds.walk.lift`).
+- The camera eases its zoom down with the card so the card can scale within the take's own pixels (camera zoom at most the native zoom
+  over the card's scale), and keeps the whole card inside the title-safe pad. At every frame the card's scale is held to the native
+  zoom over the camera's, so a lift never draws past the take's own pixels; a take with no room to zoom keeps the camera and the card
+  at 1x. The lift's seconds count in the step's hold. A lift on a step the take has no box for is refused:
+  `lift on step open: the take has no box for it`.
 
 ## Marks
 
 `on` works as on any shot, with the target `step:<id>`: the device aims at that step's whole box. A step with no box of its own is
 the whole picture. The default target is `screen` (the frame). Devices: `--list devices`. A mark is on a step's box, not on one
 number inside it.
+
+A mark aimed at a step is cleared: it fades out when the next played step starts, or 2.0 s after it is drawn if that is sooner, and it
+is never left up over a lift (it clears as the lift starts). The look styles it as an overlay (`kinds.walk.mark`): in `keynote` the
+accent at full weight outside the box, with a glow under it, so it does not read as the page's own focus outline; in `desk` the ink, drawn
+inside the box it is aimed at. A mark aimed at `screen` is the device as built. The draw-on lands on `at`, so aim the mark at the
+sentence of its step (`sentence:<n>` counts from 0).
 
 ## Findings
 

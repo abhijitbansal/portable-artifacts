@@ -17,6 +17,14 @@ export const HOLD_MIN = 0.5;
 export const LIFT_MOVES = 0.8;
 /** Seconds after a step's end that a lift without an `at` starts. */
 export const LIFT_LEAD = 0.5;
+/** The seconds a camera move takes. */
+export const MOVE_SECONDS = 0.8;
+/** The seconds the last step's result holds on its own stop before the camera goes to the whole picture. */
+export const RESULT_HOLD = 1;
+/** The least seconds the shot holds the whole picture before it ends, when its last stop is the whole picture. */
+export const WHOLE_HOLD = 1.5;
+/** The prefix of a stop that goes to a step. */
+export const STEP_PREFIX = 'step:';
 
 const sentenceCount = (n) => `${n} sentence${n === 1 ? '' : 's'}`;
 const stepCount = (n) => `${n} step${n === 1 ? '' : 's'}`;
@@ -89,11 +97,30 @@ function liftSeconds(lifts, id, end, anchor) {
 }
 
 /**
+ * The second a whole stop (with no `at`) lands that follows the stop on `step` ({ end, until } from the plan): the camera
+ * stays on the step until its result has held RESULT_HOLD (and, for a lifted step, until the lift starts to return), then
+ * the move takes MOVE_SECONDS.
+ */
+export const wholeLanding = ({ end, until }) => Math.max(end + RESULT_HOLD, until - LIFT_MOVES / 2) + MOVE_SECONDS;
+
+// The earliest second the shot may end for its closing whole stop: the whole picture holds WHOLE_HOLD after it lands. A shot
+// that does not end on a whole stop, or whose last whole stop is its first (the shot start), asks for nothing.
+function closingEnd(shot, steps, anchor) {
+  const stops = shot.stops ?? [];
+  const last = stops.at(-1);
+  if (last?.to !== 'whole') return 0;
+  if (last.at !== undefined) return anchor(last.at) + WHOLE_HOLD;
+  const before = stops.at(-2);
+  const step = before === undefined || before.to === 'whole' ? undefined : steps.find((s) => s.id === before.to.slice(STEP_PREFIX.length));
+  return step === undefined ? 0 : wholeLanding(step) + WHOLE_HOLD;
+}
+
+/**
  * Where each of `shot.steps` starts, acts and ends, in shot seconds, and where the shot ends (`end`, the last step's
- * `until`). `timing` is the shot's { words, sentences, duration }; a step without `at` takes its sentence's start, or 0 in
- * a shot with no say. `start` is the later of that and the previous step's `until`, the end of its hold:
- * `until = end + max(HOLD_MIN, lift seconds)`. `lifts` is [{ step, at?, hold }]. Throws for a step id the take lacks
- * (walkProblems says so first).
+ * `until`, or later for a closing whole stop: closingEnd). `timing` is the shot's { words, sentences, duration }; a step
+ * without `at` takes its sentence's start, or 0 in a shot with no say. `start` is the later of that and the previous step's
+ * `until`, the end of its hold: `until = end + max(HOLD_MIN, lift seconds)`. `lifts` is [{ step, at?, hold }]. Throws for a
+ * step id the take lacks (walkProblems says so first).
  */
 export function walkPlan(shot, timing, data, { lifts = [] } = {}) {
   const byId = takeSteps(data);
@@ -109,7 +136,23 @@ export function walkPlan(shot, timing, data, { lifts = [] } = {}) {
     until = end + Math.max(HOLD_MIN, liftSeconds(lifts, ref.id, end, anchor));
     return { id: ref.id, start, act: start + kept.filter((k) => k < take.actIndex).length / data.fps, end, until };
   });
-  return { steps, end: until };
+  return { steps, end: Math.max(until, closingEnd(shot, steps, anchor)) };
+}
+
+/**
+ * The seconds each of `shot.lift`'s lifts is up: [{ k, step, index, start, end }] with `k` the lift's place in the shot's
+ * lifts and `index` its step's place in the shot. `lifts` is liftsOf's ([{ step, at?, hold }]); a lift starts on its `at`,
+ * else LIFT_LEAD after its step ends, and lasts the moves and the hold (the same seconds `until` counts). A lift on a step
+ * the shot lacks is left out.
+ */
+export function liftSpans(shot, timing, plan, lifts) {
+  const anchor = anchorOf(shot, timing);
+  return lifts.flatMap((lift, k) => {
+    const index = shot.steps.findIndex((s) => s.id === lift.step);
+    if (index < 0) return [];
+    const start = lift.at === undefined ? plan.steps[index].end + LIFT_LEAD : anchor(lift.at);
+    return [{ k, step: lift.step, index, start, end: start + LIFT_MOVES + (lift.hold ?? 0) }];
+  });
 }
 
 // [{ first, length }]: the runs of consecutive indexes in `kept`.

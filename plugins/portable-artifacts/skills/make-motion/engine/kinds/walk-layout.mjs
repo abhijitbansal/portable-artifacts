@@ -10,7 +10,7 @@ import { kindData } from '../looks/index.mjs';
 import { frameNodes, outerOf } from './screen-frame.mjs';
 import { roomOf, fitFramed } from './screen-layout.mjs';
 import { planStops } from './walk-camera.mjs';
-import { walkPlan, walkFrameTrack } from './walk-time.mjs';
+import { walkPlan, walkFrameTrack, liftSpans } from './walk-time.mjs';
 
 const HALF = 2;
 const CHROME_FADE = 0.25; // s: the chrome texts leave as the first push begins, so none is cut at the frame's edge
@@ -51,16 +51,17 @@ export function walkGeometry(shot, ctx, prepared) {
 }
 
 /**
- * Everything a walk shot's expansion and review read: { data, look, geo, plan, planned }. `data` is the prepared take, `look`
- * the look's walk data, `geo` the geometry, `plan` the steps' seconds (walkPlan, the look's lifts included) and `planned`
- * the camera stops (planStops). `ctx` is a kind's ctx (`prepared`: the take, `timing`, `at`, `look`, `canvas`, `unit`).
+ * Everything a walk shot's expansion and review read: { data, look, geo, plan, lifts, planned }. `data` is the prepared
+ * take, `look` the look's walk data, `geo` the geometry, `plan` the steps' seconds (walkPlan, the look's lifts included),
+ * `lifts` the seconds each lift is up (liftSpans) and `planned` the camera stops (planStops). `ctx` is a kind's ctx (`prepared`: the take, `timing`, `at`, `look`, `canvas`, `unit`).
  */
 export function walkSetup(shot, ctx) {
   const data = kindData(ctx.look, 'walk');
   const prepared = ctx.prepared;
   const plan = walkPlan(shot, ctx.timing, prepared, { lifts: liftsOf(shot, ctx.look) });
   const geo = walkGeometry(shot, { ...ctx, data }, prepared);
-  return { data: prepared, look: data, geo, plan, planned: planStops(shot, ctx, { geo, plan, data: prepared }) };
+  const lifts = liftSpans(shot, ctx.timing, plan, liftsOf(shot, ctx.look));
+  return { data: prepared, look: data, geo, plan, lifts, planned: planStops(shot, ctx, { geo, plan, data: prepared, lifts }) };
 }
 
 // The chrome texts (title, url) fading out over CHROME_FADE seconds from `from`.

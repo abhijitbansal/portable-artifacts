@@ -177,7 +177,7 @@ test('every capped rule is capped by exactly one function', () => {
   for (const id of CAPPED_HERE) assert.equal(RULES.find((r) => r.id === id)?.capped, true, `${id} is registered as capped`);
 });
 
-// The outline findings of the shipped example films (30 films, the calibration table of references/calibration.md): "<rule> <node> <path>".
+// The outline findings of the shipped example films (32 films, the calibration table of references/calibration.md): "<rule> <node> <path>".
 // No film raises cut-variety. Every film not named here raises nothing. Each sameness form is capped on its own, so no
 // film here is cut by the cap (the three forms of one film are three entries at most).
 const KNOWN = Object.freeze({
@@ -191,7 +191,7 @@ const KNOWN = Object.freeze({
 
 test('the shipped example films raise only the outline findings named in KNOWN, and the two showreels raise none', () => {
   const files = readdirSync(EXAMPLES).filter((name) => name.endsWith('.json')).sort();
-  assert.equal(files.length, 30, 'a film added to the examples is calibrated into references/calibration.md first');
+  assert.equal(files.length, 32, 'a film added to the examples is calibrated into references/calibration.md first');
   for (const name of files) {
     const { film: f, timeline } = loadFilm(path.join(EXAMPLES, name));
     const found = outlineFindings(f, timeline).map((x) => `${x.rule} ${x.node} ${x.path}`);
