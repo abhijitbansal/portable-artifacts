@@ -35,7 +35,7 @@ import { SLICE_SKIPPED, checkSlice, isSlice, sliceOf, slicePath } from './slice.
 import { comparePath, memoiseMusicInput, writeComparison } from './compare.mjs';
 import { writeSubtitles } from './subtitles.mjs';
 import { logoThrowFinding, pictureLoadFinding } from './picture-finding.mjs';
-import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
+import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, signedInNotices, validationFinding } from './report.mjs';
 
 const MS_PER_SECOND = 1000;
 const MILLIS_DECIMALS = 1000;
@@ -589,6 +589,8 @@ async function execute(options, state, io) {
   // so does a parked kind (or chart type) in the film's look: one line each, and the report's `kinds`
   state.kinds = experimentalKinds(film);
   for (const entry of state.kinds) io.log(experimentalKindLine(entry));
+  // a walk shot on a signed-in take: the report says its frames, sheets and film are the user's to look at
+  state.notices = signedInNotices(film, loaded.prepared);
   // an emphasis device the look does not draw takes the look's own emphasis: one info line per event, never a finding
   for (const entry of withLookEmphasis(film).moved) io.log(fallbackNotice(resolveLook(film).name, entry));
   // --poster and --inspect: a reference that names nothing in the film is refused on the estimated timeline, before any voice is made.

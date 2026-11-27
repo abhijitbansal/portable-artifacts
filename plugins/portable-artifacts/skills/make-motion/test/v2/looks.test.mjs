@@ -450,14 +450,15 @@ test('pop sounds are the brief values: click, whoosh and impact cuts, a pop high
 });
 
 // The device names the kinds send through their `events` hook, as each declares them in `eventDevices` (a list's items).
+// (screen and walk both declare `zoom`, so the list is not unique: the sounds cover each name once)
 const kindDevices = () => registries.kinds.names().flatMap((k) => registries.kinds.get(k).eventDevices ?? []);
 
 test('every look names a sound (or null) for exactly the registered cuts, the registered devices and the devices kinds declare, and its sounds are frozen', () => {
   assert.deepEqual(registries.cuts.names().sort(), [...KNOWN_CUTS].sort(), 'the look index registers the cuts it checks against');
   assert.equal(registries.devices.names().length, 17, 'the look index registers the devices it checks against (nine, six second-wave, two treatments)');
-  assert.deepEqual(kindDevices(), ['item', 'turn', 'zoom', 'pin', 'link', 'node', 'event', 'change', 'output', 'message'], 'the list kind declares its item event, compare its turn, screen its zoom, map its pin and link, diagram its node, timeline its event, code its change and output, feed its message');
+  assert.deepEqual(kindDevices(), ['item', 'turn', 'zoom', 'pin', 'link', 'node', 'event', 'change', 'output', 'message', 'zoom'], 'the list kind declares its item event, compare its turn, screen its zoom, map its pin and link, diagram its node, timeline its event, code its change and output, feed its message, walk its zoom');
   assert.ok(kindDevices().every((d) => !registries.devices.has(d)), 'a kind\'s event device is not also a registered device');
-  const wanted = [...registries.devices.names(), ...kindDevices()].sort();
+  const wanted = [...new Set([...registries.devices.names(), ...kindDevices()])].sort();
   for (const name of lookNames()) {
     const { sounds } = registries.looks.get(name);
     assert.deepEqual(Object.keys(sounds.cut).sort(), registries.cuts.names().sort(), `${name} sounds.cut`);

@@ -157,7 +157,8 @@ test('--list kinds gives each kind its summary, fields and an example, and each 
   const run = make(['--list', 'kinds', '--json']);
   assert.equal(run.status, 0);
   const { entries, common } = parse(run);
-  assert.deepEqual(entries.map((e) => e.name), registries.kinds.names());
+  // walk is parked in every look, so only --all lists it (walk-kind.test.mjs)
+  assert.deepEqual(entries.map((e) => e.name), registries.kinds.names().filter((name) => name !== 'walk'));
   assert.ok(common.some((f) => f.name === 'id' && f.required));
   const specDir = mkdtempSync(path.join(tmpdir(), 'mm-v2-list-'));
   try {

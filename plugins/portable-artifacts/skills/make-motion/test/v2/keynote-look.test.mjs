@@ -68,7 +68,8 @@ test('the field is the mesh in the two washes at half strength', () => {
   assert.equal(look().palette.wash2, BLOB_B);
 });
 
-const EXAMPLES = Object.freeze(registries.kinds.names().map((kind) => {
+// walk is parked in keynote and its example needs a take: walk-kind.test.mjs covers it
+const EXAMPLES = Object.freeze(registries.kinds.names().filter((kind) => kind !== 'walk').map((kind) => {
   const example = listEntries('kinds').find((e) => e.name === kind)?.example ?? registries.kinds.get(kind).example;
   return { kind, shot: example.src === undefined ? example : { ...example, src: 'shot.png' } };
 }));

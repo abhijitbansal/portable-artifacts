@@ -37,7 +37,7 @@ const shownTexts = (nodes) => all(nodes).flatMap((n) => [
   ...(typeof n.props.text === 'string' ? [n.props.text] : []),
 ]);
 
-const KINDS = registries.kinds.names().filter((name) => name !== 'code' && name !== 'free').map((name) => [name, registries.kinds.get(name)]);
+const KINDS = registries.kinds.names().filter((name) => name !== 'code' && name !== 'free' && name !== 'walk') // walk: its example needs a take.map((name) => [name, registries.kinds.get(name)]);
 for (const [name, kind] of KINDS.filter(([, k]) => k.example)) {
   for (const look of LOOKS) {
     for (const format of FORMATS) {

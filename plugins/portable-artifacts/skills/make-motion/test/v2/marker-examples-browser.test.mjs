@@ -55,7 +55,7 @@ after(() => rmSync(specDir, { recursive: true, force: true }));
 
 test('the sweep covers every kind marker ships: sixteen less screen and code (excluded) and those parked in it', () => {
   assert.equal(registries.kinds.names().filter((kind) => supportsKind(look, kind)).length, 14);
-  assert.deepEqual(registries.kinds.names().filter((kind) => !supportsKind(look, kind)).sort(), ['code', 'screen']);
+  assert.deepEqual(registries.kinds.names().filter((kind) => !supportsKind(look, kind)).sort(), ['code', 'screen', 'walk']); // walk is excluded like screen
   assert.equal(SHIPPED.length + registries.kinds.names().filter((kind) => isParkedKind(look, kind)).length, 14);
 });
 

@@ -81,7 +81,7 @@ test('no desk or pop node carries props.glow or props.radial, in any kind\'s exa
     for (const format of ['16:9', '9:16']) {
       for (const kind of registries.kinds.names()) {
         const example = registries.kinds.get(kind).example;
-        if (!example) continue;
+        if (!example || kind === 'walk') continue; // walk's example needs a take (walk-kind.test.mjs)
         // pictures by the helpers' stand-in (a 1600 x 1000 shot.png)
         const shot = JSON.parse(JSON.stringify({ id: 'x', ...example }).replace(/"src":"[^"]*"/g, '"src":"shot.png"'));
         const film = filmOf([shot], lookName, format);

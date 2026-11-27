@@ -76,7 +76,7 @@ export async function openSession({ film, timeline, specDir, prepared, clips = [
     await guardNetwork(page, new URL(server.url).origin, (url) => blocked.push(url));
     await page.goto(server.url);
     const info = await page.evaluate(() => window.__ready);
-    return { page, info, film, timeline, errors, blocked, close };
+    return { page, info, film, timeline, prepared, errors, blocked, close };
   } catch (err) {
     await close();
     throw err;

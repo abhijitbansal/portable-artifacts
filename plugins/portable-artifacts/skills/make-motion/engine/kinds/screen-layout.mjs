@@ -28,7 +28,7 @@ export const frameFor = (shot, picture) => shot.frame ?? defaultFrame(picture);
 export const isTwoPanel = (shot, picture, canvas) => !isWide(canvas) && frameFor(shot, picture) !== 'phone';
 
 // The room a screen composes in, in px: the platform safe band (pop on 9:16), else the margins over a captions band.
-function roomOf(ctx) {
+export function roomOf(ctx) {
   const { look, canvas, unit } = ctx;
   const rect = compositionRect(ctx);
   if (rect.safe) return { x: rect.left, y: rect.top, w: rect.w, h: rect.h };
@@ -38,7 +38,7 @@ function roomOf(ctx) {
 }
 
 // The image box whose frame is as large as fits a w x h space at (x, y), centred in it.
-function fitFramed(frame, unit, picture, { x, y, w, h }) {
+export function fitFramed(frame, unit, picture, { x, y, w, h }) {
   const c = chromeOf(frame, unit);
   const scale = Math.min((w - HALF * c.side) / picture.width, (h - c.top - c.bottom) / picture.height);
   const iw = picture.width * scale, ih = picture.height * scale;
@@ -338,7 +338,7 @@ function liftLayout(shot, ctx, { picture, zoom, frame, image, boxes, target }) {
 }
 
 // The zoom at which the drawn picture shows one picture pixel per frame pixel: a push past it is a soft upscale.
-const nativeZoom = (picture, image) => (NATIVE * picture.width) / image[2];
+export const nativeZoom = (picture, image) => (NATIVE * picture.width) / image[2];
 
 // A push's mask (look.kinds.screen.pushDim, desk: the paper whole): the paper over everything but the region, rising
 // with the push, so at rest the frame holds the region alone and no part-cut panel or text sits at the frame's edge.

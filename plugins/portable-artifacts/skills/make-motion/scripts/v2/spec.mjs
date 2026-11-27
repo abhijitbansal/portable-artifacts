@@ -203,12 +203,20 @@ function resolveLook(spec, mode, regs) {
   return { look: found.value, errors: [{ path: 'look', message: `look "${name}" does not serve mode "${mode}" (it serves: ${serves.join(', ')})` }] };
 }
 
+// What a kind's rules may need to know of the film: its format (as written, else its mode's default) and whether one
+// recording narrates it (kind.validate's `format` and `recording`).
+function filmFacts(spec, regs) {
+  const mode = modeName(spec, regs);
+  const format = typeof spec.format === 'string' ? spec.format : mode === null ? undefined : regs.modes.get(mode).defaultFormat;
+  return { format, recording: isRecordingVoice(spec.voice) };
+}
+
 function resolveContext(spec, specDir, regs) {
   const mode = modeName(spec, regs);
   const fps = spec.fps === undefined ? DEFAULT_FPS : FPS_CHOICES.find((f) => f === spec.fps) ?? null;
   const { look, errors } = resolveLook(spec, mode, regs);
   // A voiced film's anchors land on measured times, known only after synthesis: timedAnchorErrors checks them then.
-  return { ctx: { mode, fps, look, regs, specDir, voiced: isPlainObject(spec.voice) }, errors };
+  return { ctx: { mode, fps, look, regs, specDir, voiced: isPlainObject(spec.voice), film: filmFacts(spec, regs) }, errors };
 }
 
 // --- shots ---
@@ -471,7 +479,7 @@ function timedKindErrors(film, timeline, regs) {
     if (!isPlainObject(shot) || typeof shot.show !== 'string' || !regs.kinds.has(shot.show)) return [];
     const entry = timeline.shots[index] ?? null;
     const kind = regs.kinds.get(shot.show);
-    return checkKindRules(boundedShot(shot), pathJoin('shots', index), { look }, { kind, entry, shapeIsValid: true });
+    return checkKindRules(boundedShot(shot), pathJoin('shots', index), { look, film: filmFacts(film, regs) }, { kind, entry, shapeIsValid: true });
   });
 }
 
@@ -501,11 +509,11 @@ function checkSrcFields(shot, base, kind, specDir) {
 
 // A kind's own rules (kind.validate(shot, { look, at }) -> [{ path, message }] with paths relative to the shot, such as
 // "regions.q" or "on.1.at"), run on a shot whose shape is already valid. `at` resolves an anchor in the shot, or is
-// null when the shot's length is not known.
+// null when the shot's length is not known. `format` and `recording` are the film's (filmFacts).
 function checkKindRules(shot, base, ctx, { kind, entry, shapeIsValid }) {
   if (!shapeIsValid || typeof kind?.validate !== 'function') return [];
   const at = entry === null ? null : (ref) => resolveAnchor(ref, entry);
-  return kind.validate(shot, { look: ctx.look, at }).map(({ path: rel, message }) => ({
+  return kind.validate(shot, { look: ctx.look, at, ...ctx.film }).map(({ path: rel, message }) => ({
     path: String(rel).split('.').reduce((acc, part) => pathJoin(acc, /^\d+$/.test(part) ? Number(part) : part), base),
     message,
   }));

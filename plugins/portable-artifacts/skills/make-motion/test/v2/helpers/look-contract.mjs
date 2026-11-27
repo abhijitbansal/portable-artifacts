@@ -67,7 +67,7 @@ function fontProblems(role, font) {
 }
 
 // The device names a look's sounds.device must cover: every registered device and every kind's event devices.
-const soundDevices = () => sorted([...registries.devices.names(), ...registries.kinds.names().flatMap((k) => registries.kinds.get(k).eventDevices ?? [])]);
+const soundDevices = () => sorted([...new Set([...registries.devices.names(), ...registries.kinds.names().flatMap((k) => registries.kinds.get(k).eventDevices ?? [])])]); // screen and walk both declare zoom
 
 const filmIn = (name, mode, format) => ({ version: 2, mode, look: name, format, shots: [{ id: 'a', show: 'statement', say: 'One line to check the look.' }] });
 

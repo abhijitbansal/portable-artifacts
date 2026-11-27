@@ -31,7 +31,8 @@ const timesOf = (duration) => [...Array.from({ length: Math.floor(duration / AUD
 
 // The example of every kind ledger supports (from the registry: a hidden look is in no listing), its picture swapped for
 // the test's stand-in screenshot.
-const EXAMPLES = Object.freeze(registries.kinds.names().map((kind) => {
+// walk is not one of them: ledger has no data for it, and its example needs a take (walk-kind.test.mjs).
+const EXAMPLES = Object.freeze(registries.kinds.names().filter((kind) => kind !== 'walk').map((kind) => {
   const entry = listEntries('kinds').find((e) => e.name === kind);
   const example = entry?.example ?? registries.kinds.get(kind).example;
   return { kind, shot: example.src === undefined ? example : { ...example, src: 'shot.png' } };
@@ -58,7 +59,7 @@ for (const format of FORMATS) {
 
 // free draws only what its author gives it (its example is one bar): no look composes it.
 test('the kinds parked in ledger are exactly the ones this file exempts', () => {
-  assert.deepEqual(registries.kinds.names().filter((kind) => look().kinds[kind]?.experimental === true), [...PARKED_IN_LEDGER]);
+  assert.deepEqual(registries.kinds.names().filter((kind) => look().kinds[kind]?.experimental === true), [...PARKED_IN_LEDGER]); // ledger has no walk data
 });
 for (const { kind, shot } of EXAMPLES.filter((e) => e.kind !== 'free' && !PARKED_IN_LEDGER.includes(e.kind))) {
   test(`ledger ${kind} at 9:16 leaves at most 35 percent of the composition height empty`, () => {

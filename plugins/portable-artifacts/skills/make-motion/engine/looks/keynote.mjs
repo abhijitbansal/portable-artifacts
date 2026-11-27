@@ -206,6 +206,10 @@ export const keynote = {
     // the page's grey above and beside it and the panel's border, the strip and the double edge of the sheet); `tallSweep`
     // false: no band of light on a tall region card (grown past the card it showed as two pale rectangles outside the ring)
     screen: { lift: { share: 0.8, pad: 24, alt: { share: 0.62, headShare: 0.8 } }, trim: 0.005, tallSweep: false, pushPad: 60, sweep: true, pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
+    // walk (engine/kinds/walk.mjs, parked until its look gate): the frame keys are screen's own (the take is drawn in
+    // the same browser frame), `wideShare` the framed picture's share of the room's width, `lift` the settled crop's
+    // scale and the seconds it holds (starting values, to be set by the gate)
+    walk: { experimental: true, elevated: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, lift: { scale: 1.12, hold: 1.2 } },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to
     // hold a third place name, a creative finding on the first render)
     map: { titleAbove: true, titleStepsWide: [4, 3], sourceFace: 'text', sourceStep: 1, sourcePrefix: true, sourceAt: 'title', card: true, land: '#dfe1e8', borders: 'card', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'card' },

@@ -92,6 +92,15 @@ export function experimentalKinds(film) {
   return [...seen.values()];
 }
 
+/**
+ * What the report says about the takes a film plays: one line per walk shot whose take was recorded signed in (the
+ * preparer's data has `signedIn: true`), for the report's `notices`. The model never opens such a take's frames, nor the
+ * sheets or the film made from them, so the line says whose they are.
+ */
+export const signedInNotices = (film, prepared) => (film.shots ?? [])
+  .filter((shot) => shot.show === 'walk' && prepared?.[shot.id]?.signedIn === true)
+  .map((shot) => `shot "${shot.id}" plays a signed-in take: its frames, sheets and film are the user's to look at; do not open them.`);
+
 /** The line make says, once per parked kind a film uses (the report carries the same in `kinds`). */
 export const experimentalKindLine = ({ name, type, look }) => (type === undefined
   ? `make: kind "${name}" is experimental in look "${look}": it renders, but it is not one of the listed kinds and may change`
@@ -143,6 +152,7 @@ export function reportOf(state) {
     ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
     ...(state.look ? { look: state.look } : {}),
     ...(state.kinds?.length > 0 ? { kinds: state.kinds } : {}),
+    ...(state.notices?.length > 0 ? { notices: state.notices } : {}), // a film that plays a signed-in take: signedInNotices
     ...(state.error === null ? {} : { error: state.error }),
   };
 }
@@ -241,6 +251,7 @@ export function outlineText(outline, note, findings) {
 export function formatText(report, { sheetsDir }) {
   const lines = [verdict(report)];
   for (const f of report.findings) lines.push(findingLine(f));
+  for (const notice of report.notices ?? []) lines.push(`notice: ${notice}`); // before every early return: a comparison draws the take too
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   // a comparison writes one picture (or none, when no look can draw the shot): never sheets or a video, so no such lines
   if (report.stages.some((s) => s.name === 'compare')) return [...lines, ...(report.compare ? [compareLine(report.compare)] : [])].join('\n');

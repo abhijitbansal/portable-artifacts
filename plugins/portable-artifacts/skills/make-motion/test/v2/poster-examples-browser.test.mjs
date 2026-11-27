@@ -54,7 +54,7 @@ before(() => {
 after(() => rmSync(specDir, { recursive: true, force: true }));
 
 test('the sweep covers every kind poster ships', () => {
-  assert.deepEqual(SHIPPED, registries.kinds.names().filter((kind) => !isParkedKind(look, kind)));
+  assert.deepEqual(SHIPPED, registries.kinds.names().filter((kind) => kind !== 'walk' && !isParkedKind(look, kind))); // walk: no poster data
 });
 
 for (const [format, mode] of CASES) {

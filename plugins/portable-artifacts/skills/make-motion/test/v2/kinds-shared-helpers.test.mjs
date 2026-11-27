@@ -45,7 +45,7 @@ test('a snapped plain tag (the pop quote attribution) takes a scale step, never 
 // Each kind's own files: its module and the ones named after it (clipping also owns its close-ups and region marks).
 const KIND_FILES = Object.freeze({
   free: [], statement: [], number: [], end: [], list: [], quote: [], compare: [], chart: [], clipping: [], media: [], screen: [], map: [],
-  diagram: [], timeline: [], code: [], feed: [],
+  diagram: [], timeline: [], code: [], feed: [], walk: [],
 });
 // editorial.mjs: the editorial family's columns and bounds, canvas or 9:16 safe zone (its own module: see its header)
 // camera.mjs, highlighter.mjs, plain-tag.mjs: split out of shared.mjs by responsibility (review B M21); values.mjs: the
@@ -56,7 +56,9 @@ const KIND_FILES = Object.freeze({
 // styles (looks-four Task 1); stack-turn.mjs: the turned stack, part of stack.mjs's composition (statement and list,
 // looks-four Task 7 round three); strike.mjs: the beat bar under a hero on a spoken word, chart, code, diagram and compare
 // (gate-poster-2 ruling 3: one builder, the stack's beat bar)
-const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'stack-turn.mjs','slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs', 'camera.mjs', 'highlighter.mjs', 'plain-tag.mjs', 'values.mjs', 'arrivals.mjs', 'close-ups.mjs', 'region-mark.mjs', 'clipping-rules.mjs', 'emphasis.mjs', 'emphasis-flags.mjs', 'emphasis-fallback.mjs', 'strike.mjs', 'underline.mjs']);
+const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'stack-turn.mjs','slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs', 'camera.mjs', 'highlighter.mjs', 'plain-tag.mjs', 'values.mjs', 'arrivals.mjs', 'close-ups.mjs', 'region-mark.mjs', 'clipping-rules.mjs', 'emphasis.mjs', 'emphasis-flags.mjs', 'emphasis-fallback.mjs', 'strike.mjs', 'underline.mjs', 'screen-frame.mjs', 'screen-layout.mjs']);
+// screen-frame.mjs and screen-layout.mjs: the browser chrome, the room and the fit of a framed picture, which the walk kind
+// draws a take in as the screen kind draws a screenshot (plan 2026-11-26-make-demo-p3 Task 5: reused, not copied)
 
 test('no kind imports another kind\'s file: what several kinds use lives in the shared modules (shared, stack, slug, words, editorial, secondary, camera, highlighter, plain-tag, values, arrivals, close-ups, region-mark, clipping-rules)', async () => {
   const { readdirSync } = await import('node:fs');
@@ -92,7 +94,8 @@ test('every text field of every kind refuses a blank string: its schema says not
   assert.equal(typeof NOT_BLANK, 'string', 'shared.mjs names the not-blank pattern');
   let fields = 0;
   // an id (a diagram node's id, the node a highlight names) takes the id pattern, which refuses a blank string too
-  const refusesBlank = (s) => s.pattern === NOT_BLANK || s.pattern === HERO_SCHEMA.pattern;
+  // (walk's step ids and stop targets take their own patterns, which refuse a blank string too)
+  const refusesBlank = (s) => s.pattern === NOT_BLANK || s.pattern === HERO_SCHEMA.pattern || (typeof s.pattern === 'string' && !new RegExp(s.pattern).test('   '));
   for (const name of registries.kinds.names()) {
     for (const [at, s] of textFields(registries.kinds.get(name).schema)) { fields += 1; assert.ok(refusesBlank(s), `${name}.${at}: pattern ${s.pattern}`); }
   }

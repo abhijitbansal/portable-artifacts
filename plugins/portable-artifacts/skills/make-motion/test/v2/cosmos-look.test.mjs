@@ -46,7 +46,7 @@ test('cosmos is listed (un-parked after the final gate review), shipping the fir
   assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo"; did you mean "cosmos"? (have: desk, pop, cosmos, ledger, poster, keynote, marker)' });
   for (const kind of FIRST_WAVE) assert.deepEqual(kindSupportProblems(kind, look()), [], kind);
   const desk = registries.looks.get('desk');
-  const later = registries.kinds.names().filter((kind) => kindSupportProblems(kind, desk).length === 0 && !FIRST_WAVE.includes(kind));
+  const later = registries.kinds.names().filter((kind) => kindSupportProblems(kind, desk).length === 0 && !FIRST_WAVE.includes(kind) && kind !== 'walk'); // walk is parked in every look: no listed look supports it
   assert.ok(later.includes('media') && later.includes('screen'), later.join());
   for (const kind of later.filter((k) => kindSupportProblems(k, look()).length > 0)) {
     assert.match(kindSupportProblems(kind, look())[0].message, new RegExp(`^kind "${kind}" is not supported by look "cosmos"; the looks that support it: desk, pop`));
@@ -134,7 +134,7 @@ test('sounds are the brief values, one for every registered cut, device and kind
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'ding');
   assert.deepEqual(Object.keys(sounds.cut).sort(), registries.cuts.names().sort());
-  assert.deepEqual(Object.keys(sounds.device).sort(), [...registries.devices.names(), ...kindDevices()].sort());
+  assert.deepEqual(Object.keys(sounds.device).sort(), [...new Set([...registries.devices.names(), ...kindDevices()])].sort()); // screen and walk both declare zoom
 });
 
 // ---- contrast ----

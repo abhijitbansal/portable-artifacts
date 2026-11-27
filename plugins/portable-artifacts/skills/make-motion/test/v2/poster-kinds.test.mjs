@@ -43,7 +43,8 @@ const OPEN = Object.freeze({
 });
 const openTodo = (list, key) => (OPEN[list].includes(key) ? { todo: `open work: ${list} (see the OPEN note)` } : {});
 
-const EXAMPLES = Object.freeze(registries.kinds.names().map((kind) => {
+// walk is not one of them: poster has no data for it, and its example needs a take (walk-kind.test.mjs).
+const EXAMPLES = Object.freeze(registries.kinds.names().filter((kind) => kind !== 'walk').map((kind) => {
   const entry = listEntries('kinds').find((e) => e.name === kind);
   const example = entry?.example ?? registries.kinds.get(kind).example;
   return { kind, shot: example.src === undefined ? example : { ...example, src: 'shot.png' } };

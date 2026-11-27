@@ -35,7 +35,7 @@ lookContract(NAME, {
   ],
   banned: [['ink', 'accent2'], ['accent', 'accent2'], ['accent2', 'accent'], ['accent2', 'ink']],
   secondaryMin: 52,
-  kinds: registries.kinds.names(),
+  kinds: registries.kinds.names().filter((kind) => kind !== 'walk'), // poster has no walk data
   // number: at 9:16 in viral its digits overflow poster's numeral floor (poster.mjs); parked in poster alone
   // feed: the tall reply card blank 1.3 to 2.2 s at the final gate (gate-poster-3); parked in poster alone
   parked: { number: true, feed: true },

@@ -376,7 +376,8 @@ export function kindFinding(shot, index, timing, f) {
 // chart kind says a chart breaks an honesty rule (kind: 'mechanical', which fails the run like any mechanical finding).
 // `pictures` maps a src to the [width, height] the page loaded it at (session.info.pictures); `asset(src)` reads it as
 // { width, height }, or undefined for a src the page did not load (a kind's review says nothing it cannot know).
-function kindFindings(film, timeline, pictures = {}) {
+// `prepared`: the film's prepared data by shot id (scripts/v2/prepare), whose entry for a shot a kind of `prepared: true` reads.
+function kindFindings(film, timeline, pictures = {}, prepared = {}) {
   const [w, h] = canvasSize(film);
   const asset = (src) => (Array.isArray(pictures[src]) ? { width: pictures[src][0], height: pictures[src][1] } : undefined);
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
@@ -386,7 +387,7 @@ function kindFindings(film, timeline, pictures = {}) {
     const timing = timeline.shots[index];
     const look = lookOfShot(film, index); // the shot's own look (its ground's palette, for a look that paints one a shot)
     // viralInsets: the platform safe zone the stage composes a viral look in (compositionRect), for a kind that sizes to it
-    return review(shot, { look, mode, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h }, asset, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) }).map((f) => kindFinding(shot, index, timing, f));
+    return review(shot, { look, mode, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h }, asset, prepared: prepared?.[shot.id], viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) }).map((f) => kindFinding(shot, index, timing, f));
   });
 }
 
@@ -513,7 +514,7 @@ export async function reviewFilm({ session, signal, slice = null }) {
   const still = pacingFindings(film, timeline, await heldFlags(session, signal, slice));
   const loop = slice === null ? await loopFindings(session) : []; // root loop: true (loop.mjs)
   const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings
-  const found = [...deduped, ...covers, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
+  const found = [...deduped, ...covers, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures, session.prepared), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop, ...(slice === null ? outlineFindings(film, timeline) : [])];
   const inside = slice === null ? found : found.filter((f) => reported(slice, timeline.fps, f)); // only what is about the slice
   return capCreative(inside).sort((a, b) => a.t - b.t);
 }

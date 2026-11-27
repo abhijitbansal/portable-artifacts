@@ -64,7 +64,7 @@ function groundUnder(sampled, text) {
   const under = leaves.slice(0, at).filter((n) => n.type === 'path' && /^#[0-9a-f]{6}$/i.test(n.props.fill ?? '') && n.opacity >= 1 && holds(n.bbox));
   return under.at(-1)?.props.fill ?? null;
 }
-const WALKED = Object.freeze(registries.kinds.names().filter((k) => !['free', 'number'].includes(k))); // number: parked
+const WALKED = Object.freeze(registries.kinds.names().filter((k) => !['free', 'number', 'walk'].includes(k))); // number: parked; walk: no poster data, needs a take
 for (const kind of WALKED) {
   for (const format of ['16:9', '9:16']) {
     test(`poster ${kind} at ${format}: no text under step 3 on a display-only pair, on every ground`, () => {

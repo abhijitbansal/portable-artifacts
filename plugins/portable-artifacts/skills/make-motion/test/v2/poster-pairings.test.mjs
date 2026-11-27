@@ -56,7 +56,7 @@ export function weakMarks(sampled) {
   });
 }
 
-const KINDS =Object.freeze(registries.kinds.names().filter((k) => k !== 'free'));
+const KINDS =Object.freeze(registries.kinds.names().filter((k) => k !== 'free' && k !== 'walk')); // walk: no poster data, needs a take
 for (const kind of KINDS) {
   for (const [format, mode] of CASES) {
     test(`poster ${kind} at ${format} in ${mode}: no text, plate or mark on a banned pairing, on every ground`, () => {

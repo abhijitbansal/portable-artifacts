@@ -97,12 +97,13 @@ export const FILMS_2 = Object.freeze(['gate-cosmos', 'gate-cosmos-viral']);
 // the mode a look's one-shot film is made in, per format: cosmos serves both, pro wide and viral tall (its gate films)
 const MODES_2 = Object.freeze({ desk: { '16:9': 'pro', '9:16': 'pro' }, pop: { '16:9': 'viral', '9:16': 'viral' }, cosmos: { '16:9': 'pro', '9:16': 'viral' } });
 
-// The kinds a look's examples are frozen for: every registered kind in desk and pop; in cosmos the kinds that read no
-// look data and the ones it has kinds.<kind> data for.
+// The kinds a look's examples are frozen for: the kinds that read no look data and the ones the look has kinds.<kind> data
+// for (every registered kind in desk and pop until walk, which pop has no data for; desk's walk example is new, so it is
+// not in the fixture).
 export function kindsFor2(registries, look) {
   const names = registries.kinds.names();
-  if (look !== 'cosmos') return names;
-  const data = registries.looks.get('cosmos').kinds ?? {};
+  // (every look but the three it was made for has walk data only in desk and keynote: pop has none, so it is left out there)
+  const data = registries.looks.get(look).kinds ?? {};
   return names.filter((name) => registries.kinds.get(name).lookData !== true || (data[name] !== null && typeof data[name] === 'object'));
 }
 

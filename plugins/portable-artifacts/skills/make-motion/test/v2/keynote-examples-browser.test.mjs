@@ -57,7 +57,7 @@ after(() => rmSync(specDir, { recursive: true, force: true }));
 
 test('the sweep covers every kind keynote ships: sixteen less the two it parks (number, clipping; screen un-parked by n2)', () => {
   assert.equal(SHIPPED.length, 14);
-  assert.deepEqual(registries.kinds.names().filter((kind) => isParkedKind(look, kind)).sort(), ['clipping', 'number']);
+  assert.deepEqual(registries.kinds.names().filter((kind) => isParkedKind(look, kind)).sort(), ['clipping', 'number', 'walk']); // walk: parked until its look gate (walk-kind.test.mjs)
 });
 
 for (const format of FORMATS) {

@@ -27,7 +27,7 @@ lookContract(NAME, {
   // the rule colour is decoration: never text, never a mark
   banned: [['rule', 'paper'], ['rule', WHITE]],
   secondaryMin: 46,
-  kinds: registries.kinds.names(),
+  kinds: registries.kinds.names().filter((kind) => kind !== 'walk'), // ledger has no walk data
   // number: its tall composition leaves 76% of the height empty (ledger-kinds.test.mjs); parked in ledger alone
   parked: { number: true },
   // listed after its gate (looks-four Task 5): ship after fixes on both films, the cosmos precedent (gate record)

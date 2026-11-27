@@ -20,7 +20,7 @@ const OPTS = Object.freeze({
   banned: [['rule', 'paper']],
   secondaryMin: 0,
   kinds: Object.keys(desk.kinds),
-  parked: {},
+  parked: { walk: true }, // desk parks walk until its look gate
 });
 
 const check = (key, name = NAME, opts = OPTS, env) => contractChecks(name, opts, env).find((c) => c.key === key);

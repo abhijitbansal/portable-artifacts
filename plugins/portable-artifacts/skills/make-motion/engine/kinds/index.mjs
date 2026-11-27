@@ -19,3 +19,4 @@ import './diagram.mjs';
 import './timeline.mjs';
 import './code.mjs';
 import './feed.mjs';
+import './walk.mjs';

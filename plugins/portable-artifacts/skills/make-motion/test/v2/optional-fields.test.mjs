@@ -13,7 +13,7 @@ import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { expandIn, filmOf } from './helpers/kinds.mjs';
 
 const SPEC_DIR = fileURLToPath(new URL('../../references/examples/v2', import.meta.url));
-const PREPARED = Object.freeze(['map', 'code']); // kinds whose example needs the prepare step
+const PREPARED = Object.freeze(['map', 'code', 'walk']); // kinds whose example needs the prepare step (walk's names the committed take in SPEC_DIR)
 const FORMATS = Object.freeze(['16:9', '9:16']);
 const KEPT = Object.freeze(['id', 'show']);
 
