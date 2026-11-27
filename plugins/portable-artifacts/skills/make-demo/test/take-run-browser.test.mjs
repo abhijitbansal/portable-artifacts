@@ -129,7 +129,7 @@ test('take.json holds the plan key, the context and one entry per step, and surv
   assert.equal(result.startedAt, new Date(0).toISOString());
   assert.deepEqual({ viewport: result.viewport, scale: result.scale, fps: result.fps, mode: result.mode, signedIn: result.signedIn, again: result.again }, { viewport: VIEWPORT, scale: 3, fps: 30, mode: 'stepped', signedIn: false, again: [] });
   const typed = result.steps.find((s) => s.id === 't');
-  assert.deepEqual(Object.keys(typed).sort(), ['actFrame', 'box', 'boxMoved', 'covered', 'do', 'effect', 'id', 'pointer', 'settle', 'settleFrame', 'settledIndex', 'startFrame']);
+  assert.deepEqual(Object.keys(typed).sort(), ['actFrame', 'box', 'boxMoved', 'covered', 'do', 'effect', 'id', 'pointer', 'settle', 'settleFrame', 'settledIndex', 'startFrame', 'textPx']);
   assert.equal(typed.do, 'type');
   assert.equal(typed.effect, 'change');
   assert.equal(typed.covered, 0, 'signed out with no mask: nothing covered');

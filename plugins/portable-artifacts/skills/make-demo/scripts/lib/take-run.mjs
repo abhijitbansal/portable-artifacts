@@ -22,6 +22,8 @@
 // Frames: after every step (pointer, typing and settle steps alike) the page is covered (take-mask.mjs), shot at scale 3 as a JPEG,
 // uncovered and stored. Film frame f is `frames[f - 1]`; `steps[].settledIndex` is the index of the step's last frame, which is the
 // settled picture of that step (the two agree unless a step was lost to a navigation, so use settledIndex).
+// `steps[].textPx` is the smallest visible text size in the step's box after its settle, in CSS px, or null (no box, no text, no page
+// left to ask): take-text.mjs.
 // Downloads are saved as `downloads/<row id>-<k><ext>` (ext: the last `.xxx` of the suggested name when it is 1 to 8 letters or digits),
 // a file over 100 MB is deleted and listed `skipped: 'too large'`. A name the site suggested is never a path.
 // Signed in, take.json holds no text from the page that scout.json does not: stop reasons from an error are the error's name only,
@@ -37,6 +39,7 @@ import { frameStore } from './frames.mjs';
 import { originsOf } from './spec.mjs';
 import { maskText } from './mask.mjs';
 import { failureReason } from './scout-stepped.mjs';
+import { smallestText } from './take-text.mjs';
 
 const FPS = 30;
 const SCALE = 3;
@@ -156,7 +159,7 @@ function reasonOf(error, signedIn) {
 
 // ---- the rows ----------------------------------------------------------------------------------------------------------------------
 
-const stepEntry = (row, result, ctx) => ({
+const stepEntry = (row, result, ctx, textPx) => ({
   id: row.id,
   do: row.do,
   effect: row.effect,
@@ -169,7 +172,17 @@ const stepEntry = (row, result, ctx) => ({
   covered: ctx.tally.covered,
   settle: result.settle,
   settledIndex: ctx.store.index().length - 1,
+  textPx,
 });
+
+/** The smallest text in the step's box after its settle. A page that is gone or stuck has none to measure: null, the take's own stop says why. */
+async function textSizeOf(page, box) {
+  try {
+    return await smallestText(page, box);
+  } catch {
+    return null;
+  }
+}
 
 /** One row: null when the take goes on, or the `stopped` it ends with. */
 async function runRow(ctx, row) {
@@ -185,7 +198,7 @@ async function runRow(ctx, row) {
     return { row: row.id, reason: reasonOf(error, ctx.signedIn) };
   }
   ctx.pointer = result.pointer;
-  ctx.steps.push(stepEntry(row, result, ctx));
+  ctx.steps.push(stepEntry(row, result, ctx, await textSizeOf(ctx.page, result.box)));
   await keepDownloads(ctx, row);
   return stuck(ctx, row, result) ?? movedAway(ctx, row, before) ?? movedOff(ctx, row) ?? sentWrite(ctx, row, before);
 }
