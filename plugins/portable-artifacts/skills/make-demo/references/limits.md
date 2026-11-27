@@ -128,6 +128,28 @@ A take runs the approved rows and keeps frames (`references/take.md`). It does w
 - **The take is not a proof.** The hash shows drift between the plan, the answers and `demo.json`; it does not stop an agent that
   forges an answers file (see below).
 
+## The walk shot
+
+make-motion's `walk` shot plays a take as a film shot (make-motion's `references/walk.md`). What it does not do yet:
+
+- **16:9 only.** A tall canvas is refused: "walk needs a wide frame (16:9) for now".
+- **Not with one recording.** A film narrated by one recording is refused: its shots cannot stretch to their steps.
+- **Only `keynote` and `desk`, and parked there.** `walk` is parked in both looks until its look gate passes. Every other look
+  refuses it.
+- **No captured parts.** A lift is a crop of the step's frame, so it is no sharper than the frame. It never scales past the
+  take's own pixels: at a stop that already shows the take's resolution, a lift only dims the rest.
+- **Marks are on a step's whole box.** A highlight, circle or underline goes on the step's box, not on one number inside it.
+- **Idle means identical frame files.** Idle stretches are cut where the same file repeats. A blinking caret or a spinner makes a
+  still screen play at real speed.
+- **`textPx` is the main frame only.** Text in a canvas, an image or another origin's frame is not measured.
+- **A covered value shows as its grey cover at any zoom.** Frames are drawn as stored, so a cover box stays a grey box when the
+  camera pushes in.
+- **The reader checks headers and first bytes.** It checks each frame's header and its first bytes, not a full decode. A corrupt
+  frame fails in the page, with its name.
+- **Walk stops make no sound in this phase.**
+- **The text finding on a 3x take is narrow.** The push is capped at the take's own resolution, where text shows at three times
+  its page size, so the finding "page text of <n> px shows at <m> px at its stop" fires at a stop only for text under about 9 px.
+
 ## The hash
 
 The plan's hash covers `demo.json` (without its word-only fields) and each step's page, effect and resolved control (its role,

@@ -58,9 +58,14 @@ to end, then run it again.
 - `take.json`: `version`, `planKey` (`demo-<hash>`), `startedAt`, `viewport`, `scale` (3), `fps` (30), `mode` (`stepped`),
   `signedIn`; `frames` (file names in order); `steps` (one per row that finished: `id`, `do`, `effect`, `startFrame`, `actFrame`,
   `settleFrame`, `settledIndex` (the index in `frames` of the step's settled picture), `pointer`, `box`, `boxMoved`, `covered`,
-  `settle`); `ran` (`{ id, effect }` of every row whose act began, a row cut off afterwards included: the record `--again`
+  `settle`, `textPx`); `ran` (`{ id, effect }` of every row whose act began, a row cut off afterwards included: the record `--again`
   reads); `stopped` (`null`, or `{ row, reason }`); `again` (rows run a second time); `seen` (`origins`, `requests`,
   `refused`, `dialogs`, `popups`, `downloads`, `errors`); `bytes` (the distinct frames only, not downloads).
+- `textPx` (in each step): the smallest visible text size inside the step's box, in CSS px, rounded to half a pixel. It is
+  measured once, after the step settles, in the main frame, from the page's computed font sizes. It is a number only, never the
+  text. make-motion's `walk` shot reads it to say when page text would show too small. It is `null` when the step has no box,
+  when no text crosses the box, and when the page was gone or stuck at the measure. Text in a canvas, an image or another
+  origin's frame is not measured. The field is optional: a `take.json` without it is read as `null`, and `version` stays 1.
 - `frames/`: the pictures, JPEG at quality 90 and 3x scale. Identical pictures are stored once.
 - `downloads/`: each file the site offered, saved as `<row id>-<k><ext>` under a name of our own (the suggested name is data and
   is never a path). A file over 100 MB is deleted and listed as `too large`.
