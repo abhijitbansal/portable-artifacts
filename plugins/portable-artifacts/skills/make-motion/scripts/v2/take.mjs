@@ -5,7 +5,7 @@
 // take-frames.mjs. Paths stay in Node: `Take` carries `dir` and `framesDir`, the preparer drops them.
 import { closeSync, constants, fstatSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileInside } from './server.mjs';
+import { fileInside, MISSING_CODES } from './inside.mjs';
 import { SpecError, isPlainObject, quote } from './spec-common.mjs';
 import { checkFrameFiles } from './take-frames.mjs';
 
@@ -22,7 +22,6 @@ const FRAME_NAME = /^[0-9a-f]{16}\.(?:jpg|png)$/;
 const STEP_ID = /^[a-z][a-z0-9-]{0,39}$/;
 const STEP_DO_MAX = 20;
 const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
-const MISSING = new Set(['ENOENT', 'ENOTDIR']);
 
 const intIn = (v, [lo, hi]) => Number.isInteger(v) && v >= lo && v <= hi;
 const numIn = (v, lo, hi) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
@@ -33,7 +32,7 @@ function realOrNull(target, f, label) {
   try {
     return realpathSync(target);
   } catch (err) {
-    if (MISSING.has(err.code)) return null;
+    if (MISSING_CODES.has(err.code)) return null;
     if (typeof err.code !== 'string') throw err;
     return f(`${label} cannot be read (${err.code})`);
   }

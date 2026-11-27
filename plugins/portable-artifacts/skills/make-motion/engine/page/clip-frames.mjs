@@ -6,6 +6,10 @@
 import { frameIndexOf } from '../kinds/media-clip.mjs';
 
 const CACHE_MAX = 48; // decoded frames kept: a cut window's two shots and a smear's samples fit with room to spare
+// Decoded pixels kept (about 400 MB at 4 bytes each): twelve 3840 x 2160 frames or forty-eight 1920 x 1080 ones, so a
+// large take cannot grow the cache by count alone. A frame the next draw shows is never evicted.
+const CACHE_MAX_PIXELS = 100_000_000;
+const pixelsOf = (bitmap) => bitmap.width * bitmap.height;
 
 // Every { src, n } the sampled trees show.
 function shownFrames(trees) {
@@ -47,9 +51,12 @@ export function createClipFrames(clips) {
         if (!index.has(src)) throw new Error(`clip "${src}" is not one of the film's clips`);
         if (!cache.has(key(src, n))) cache.set(key(src, n), await load(src, n));
       }
+      let pixels = 0;
+      for (const bitmap of cache.values()) pixels += pixelsOf(bitmap);
       for (const [k, bitmap] of cache) {
-        if (cache.size <= CACHE_MAX) break;
+        if (cache.size <= CACHE_MAX && pixels <= CACHE_MAX_PIXELS) break;
         if (keep.has(k)) continue;
+        pixels -= pixelsOf(bitmap);
         bitmap.close();
         cache.delete(k);
       }

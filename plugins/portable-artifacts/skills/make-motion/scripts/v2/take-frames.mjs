@@ -5,7 +5,7 @@
 // decoded here. Node only.
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import path from 'node:path';
-import { fileInside } from './server.mjs';
+import { fileInside } from './inside.mjs';
 import { quote } from './spec-common.mjs';
 
 export const MAX_FRAME_BYTES = 16 * 1024 * 1024;

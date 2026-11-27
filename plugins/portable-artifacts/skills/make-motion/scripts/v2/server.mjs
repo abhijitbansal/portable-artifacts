@@ -11,6 +11,8 @@ import { registries } from '../../engine/registry.mjs';
 import '../../engine/kinds/index.mjs';
 import { srcsOfShot, IMAGE_EXTENSIONS as ASSET_EXTENSIONS } from '../../engine/assets.mjs';
 import { assetInfo } from './asset-info.mjs';
+import { fileInside } from './inside.mjs';
+import { readTake } from './take.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ENGINE_DIR = realpathSync(path.join(SKILL_ROOT, 'engine'));
@@ -40,7 +42,8 @@ const SAFE_PATH = /^\/(?:[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-
 const ASSET_ROUTE = /^\/asset\/(0|[1-9]\d*)$/; // a canonical index: not 00, 1.0 or 1e1
 const CLIP_ROUTE = /^\/clip\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/; // /clip/<clip index>/<frame index>, both canonical
 export const MAX_IMAGES = 64; // distinct images a film may use
-const MISSING_CODES = new Set(['ENOENT', 'ENOTDIR']);
+export const MAX_TAKES = 4; // distinct take folders (walk shots) a film may use
+export { fileInside }; // moved to inside.mjs (no import cycle with take.mjs); importers of server.mjs keep working
 
 function reply(res, status, text) {
   res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
@@ -63,20 +66,6 @@ function sendFile(ctx, req, res, file) {
   return stream.pipe(res);
 }
 
-// The real path of `file` when it is a regular file inside `root` (symlinks resolved), else null. A missing file is
-// null; any other filesystem error is real and propagates.
-export function fileInside(root, file) {
-  let real;
-  try {
-    real = realpathSync(file);
-    if (!real.startsWith(root + path.sep) || !statSync(real).isFile()) return null;
-  } catch (err) {
-    if (MISSING_CODES.has(err.code)) return null;
-    throw err;
-  }
-  return real;
-}
-
 // `rel` is already a safe relative path; `extensions` is what may be served from `root`.
 function serveUnder(ctx, req, res, root, rel, extensions) {
   if (!extensions.has(path.extname(rel).toLowerCase())) return reply(res, 404, 'not found');
@@ -93,11 +82,12 @@ function serveAsset(ctx, req, res, asset) {
 }
 
 // Frame n of the film's k-th clip (scripts/v2/clips.mjs decoded it, once, into a folder of this run): a PNG named by
-// its index alone, served only while it still resolves to a file inside that folder.
+// its index alone; or, for a take (clip.names), the file take.json names. Served only while it still resolves to a
+// file inside that folder.
 function serveClipFrame(ctx, req, res, k, n) {
   const clip = ctx.clips[k];
   if (!clip || n >= clip.count) return reply(res, 404, 'not found');
-  const file = fileInside(clip.root, path.join(clip.root, clipFrameName(n)));
+  const file = fileInside(clip.root, path.join(clip.root, clip.names?.[n] ?? clipFrameName(n)));
   return file ? sendFile(ctx, req, res, file) : reply(res, 404, 'not found');
 }
 
@@ -228,9 +218,29 @@ function clipList(clips) {
   };
 }
 
+// The film's take folders, one per distinct `src` of a `walk` shot (found by `show`, so a take is served whatever the
+// kind registry holds). Each is read again here (take.mjs: the reader checks every frame file), and served like a clip:
+// frame n is names[n] under the take's real frames folder. The list leaves out every path.
+function takeList(film, specDir) {
+  const takes = new Map();
+  film.shots.forEach((shot, i) => {
+    if (shot.show !== 'walk' || takes.has(shot.src)) return;
+    takes.set(shot.src, readTake(specDir, shot.src, { owner: `shots[${i}]` }));
+  });
+  if (takes.size > MAX_TAKES) throw new Error(`a film may use at most ${MAX_TAKES} takes; this one names ${takes.size}`);
+  const all = [...takes.values()];
+  return {
+    served: all.map((t) => ({ root: t.framesDir, count: t.names.length, names: t.names })),
+    listed: all.map((t) => ({ src: t.src, count: t.names.length, width: t.width, height: t.height, from: 0, fps: t.fps })),
+  };
+}
+
 // What /film.json says and what the routes serve, for one version of the film.
 function filmState({ film, timeline, specDir, prepared = {}, clips = [] }) {
-  const { served, listed } = clipList(clips);
+  const video = clipList(clips);
+  const takes = takeList(film, specDir);
+  const served = [...video.served, ...takes.served];
+  const listed = [...video.listed, ...takes.listed];
   const { srcs, files } = assetList(film, specDir, new Set(listed.map((c) => c.src)));
   // the pictures with transparency, read from their headers (asset-info.mjs): ctx.asset(src).alpha in the page
   const alpha = srcs.filter((src, n) => assetInfo(files[n].file).alpha);
