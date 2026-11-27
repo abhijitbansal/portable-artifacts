@@ -7,6 +7,7 @@ import { registries } from '../../../engine/registry.mjs';
 import { buildTimeline } from '../../../engine/script/timing.mjs';
 import { shotContext } from '../../../engine/graph/film.mjs';
 import { walkPlan } from '../../../engine/kinds/walk-time.mjs';
+import { liftsOf } from '../../../engine/kinds/walk-layout.mjs';
 import { prepareFilm } from '../../../scripts/v2/prepare/index.mjs';
 import { canvasOf, viralOf, measure, FPS } from './kinds.mjs';
 
@@ -41,13 +42,14 @@ export function handTake(frames, boxes, { textPx = 14 } = {}) {
 export const handShot = (data, extra = {}) => ({ id: 'w', show: 'walk', src: 'take', hold: 5, steps: data.steps.map((s) => ({ id: s.id })), ...extra });
 
 /** Shot 0 of `film` expanded with `prepared` ({ w: data }): { ...expand output, ctx, timing, plan, data }. */
-export function expandWalk(film, prepared, { lifts = [] } = {}) {
+export function expandWalk(film, prepared, { lifts } = {}) {
   const timeline = buildTimeline(film, { fps: FPS, prepared });
   const canvas = canvasOf(film.format);
   const ctx = shotContext({ film, index: 0, timeline, canvas, measure, assets: new Map(), viralInsets: viralOf(canvas), prepared });
   const shot = film.shots[0];
   const timing = timeline.shots[0];
-  return { ...registries.kinds.get('walk').expand(shot, ctx), ctx, timing, timeline, plan: walkPlan(shot, timing, prepared.w, { lifts }), data: prepared.w };
+  const plan = walkPlan(shot, timing, prepared.w, { lifts: lifts ?? liftsOf(shot, ctx.look) });
+  return { ...registries.kinds.get('walk').expand(shot, ctx), ctx, timing, timeline, plan, data: prepared.w };
 }
 
 /** The review ctx the film review gives a kind (scripts/v2/review.mjs), for shot 0, with the prepared data. */

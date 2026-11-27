@@ -10,6 +10,7 @@ import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { signedInNotices } from '../../scripts/v2/report.mjs';
 import { walkFrameTrack, HOLD_MIN } from '../../engine/kinds/walk-time.mjs';
+import { walkSetup } from '../../engine/kinds/walk-layout.mjs';
 import { all, expandIn, filmOf } from './helpers/kinds.mjs';
 import { EXAMPLES_DIR, STEPS, committed, expandWalk, handShot, handTake, reviewCtx, walkFilm, walkShot } from './helpers/walk.mjs';
 
@@ -24,7 +25,8 @@ test('walk is registered and parked in keynote and desk, so no listing shows it'
   assert.ok(registries.kinds.has('walk'));
   for (const look of ['keynote', 'desk']) assert.ok(isParkedKind(registries.looks.get(look), 'walk'), `${look} parks walk`);
   assert.ok(!listedKinds().includes('walk'));
-  assert.deepEqual([walk.srcFields, walk.lookData, walk.prepared, walk.showsWords, walk.numbered, walk.eventDevices], [[], true, true, false, false, ['zoom']]);
+  // no event devices: the sound plan gets no prepared data, so walk stops are silent (a known limit)
+  assert.deepEqual([walk.srcFields, walk.lookData, walk.prepared, walk.showsWords, walk.numbered, walk.eventDevices, walk.events], [[], true, true, false, false, undefined, undefined]);
 });
 
 test('look data: the frame keys copied from each look\'s screen, a wide share, and the lift', () => {
@@ -284,12 +286,18 @@ test('the review says nothing without the prepared take', () => {
   assert.deepEqual(walk.review(film.shots[0], { ...reviewCtx(film, { w: committed() }), prepared: undefined }), []);
 });
 
-test('text size: page text that shows under 26 px at its stop', () => {
+test('text size: page text that shows under 26 px at a stop the take\'s pixels stop short: the message says lift it', () => {
   const data = handTake([30, 30], [[40, 40, 120, 60], [400, 200, 120, 60]], { textPx: 5 });
   const found = reviewOf(filmOfWalk(data, { stops: [{ to: 'step:s1' }] }), data);
-  const text = found.filter((f) => TEXT_RE.test(f));
-  assert.equal(text.length, 1, found.join(' | '));
-  assert.match(text[0], /^stops\[0\]: step "s1": page text of 5 px shows at \d+(\.\d)? px at its stop; push closer or lift it$/);
+  assert.equal(found.length, 1, found.join(' | '));
+  assert.match(found[0], /^stops\[0\]: step "s1": page text of 5 px shows at \d+(\.\d)? px at its stop; the take's own resolution stops the push at \d\.\dx; lift it instead$/);
+});
+
+test('text size: page text that shows under 26 px at a stop with room to push: push closer or lift it', () => {
+  const data = handTake([30, 30, 30], bigBoxes, { textPx: 5 });
+  const found = reviewOf(filmOfWalk(data, { stops: [{ to: 'step:s1' }] }), data);
+  assert.equal(found.length, 1, found.join(' | '));
+  assert.match(found[0], /^stops\[0\]: step "s1": page text of 5 px shows at \d+(\.\d)? px at its stop; push closer or lift it$/);
 });
 
 test('text size: readable text, an unknown size and a whole stop are silent', () => {
@@ -301,16 +309,22 @@ test('text size: readable text, an unknown size and a whole stop are silent', ()
   assert.deepEqual(reviewOf(filmOfWalk(tiny, { stops: [{ to: 'whole', at: 1.5 }] }), tiny).filter((f) => TEXT_RE.test(f)), []);
 });
 
-test('stop past resolution: a small box wants more than the take carries', () => {
+test('there is no standalone resolution finding: a small box that wants more than the take carries is silent when its text reads', () => {
   const data = handTake([30, 30], [[40, 40, 120, 60], [400, 200, 120, 60]]);
-  const found = reviewOf(filmOfWalk(data, { stops: [{ to: 'step:s1' }] }), data).filter((f) => /wants/.test(f));
-  assert.equal(found.length, 1);
-  assert.match(found[0], /^stops\[0\]: stop 1 wants 3\.2x; the take carries \d\.\dx$/);
+  assert.deepEqual(reviewOf(filmOfWalk(data, { stops: [{ to: 'step:s1' }] }), data), []);
+  const unknown = handTake([30, 30], [[40, 40, 120, 60], [400, 200, 120, 60]], { textPx: null });
+  assert.deepEqual(reviewOf(filmOfWalk(unknown, { stops: [{ to: 'step:s1' }] }), unknown), [], 'an unknown text size at a capped stop gets no finding');
 });
 
-test('stop past resolution: a box the take carries is silent', () => {
-  const data = handTake([30, 30, 30], bigBoxes);
-  assert.deepEqual(reviewOf(filmOfWalk(data, { stops: [{ to: 'step:s1' }] }), data).filter((f) => /wants/.test(f)), []);
+test('the gate film\'s setup on the committed take (two step stops, a whole return, a lift, a circle) has zero findings in both looks', () => {
+  const prepared = { w: committed() };
+  const shot = walkShot({ stops: [{ to: 'step:tab' }, { to: 'step:add' }, { to: 'whole' }], lift: [{ step: 'hover' }], on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] });
+  for (const look of ['keynote', 'desk']) {
+    const film = walkFilm(shot, { look });
+    assert.deepEqual(walk.review(shot, reviewCtx(film, prepared)), [], look);
+    const stops = walkSetup(shot, expandWalk(film, prepared).ctx).planned.stops;
+    assert.ok(stops.filter((s) => s.id !== undefined).every((s) => s.wanted > s.cap), `${look}: every step stop wants more than the take carries, and that is not a finding`);
+  }
 });
 
 test('action leaves the frame: a step whose box is off screen at the pushed camera', () => {

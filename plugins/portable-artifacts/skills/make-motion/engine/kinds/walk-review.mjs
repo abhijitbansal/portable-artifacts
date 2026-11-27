@@ -1,6 +1,6 @@
 // What the review says about a walk shot (the kind's `review` hook; creative advice, never mechanical): page text too
-// small at its stop, a stop that asks for more than the take's pixels carry, a step whose action leaves the frame, a take
-// step the shot jumps across, and a stop that has no room to move or cannot land. It reads the same setup the expansion
+// small at its stop (with the take's own resolution named when it stopped the push), a step whose action leaves the frame,
+// a take step the shot jumps across, and a stop that has no room to move or cannot land. It reads the same setup the expansion
 // does (walk-layout.mjs walkSetup) from the prepared take, so it says nothing without one. Pure and DOM-free.
 import { pointThroughCamera } from '../graph/camera.mjs';
 import { unitOf } from '../units.mjs';
@@ -15,7 +15,12 @@ const SAMPLE_SECONDS = 0.1; // the camera is looked at this often over a step's 
 const number = (n) => Number(n.toFixed(1));
 const stopNumber = (s) => s.index + 1;
 
-// Page text of a known size that shows under READABLE_PX at its step stop.
+// Has the take's own resolution stopped this stop's push short of what its box asked for?
+const isCapped = (s) => Number.isFinite(s.cap) && s.wanted > s.cap * RESOLUTION_SLACK;
+
+// Page text of a known size that shows under READABLE_PX at its step stop. Where the take's pixels also stopped the push, the
+// message says so and points at the lift: pushing closer would only soften the frame. A stop whose text size is unknown
+// gets no finding, capped or not: there is no standalone "wants Nx" finding (it fired at every stop of a high-resolution take).
 function textFindings(setup, canvas) {
   const [, , iw] = setup.geo.image;
   return setup.planned.stops.filter((s) => s.id !== undefined && !s.dropped).flatMap((s) => {
@@ -23,14 +28,10 @@ function textFindings(setup, canvas) {
     if (!Number.isFinite(textPx)) return [];
     const shown = textPx * (iw / setup.geo.viewport.width) * s.zoom * (REFERENCE_HEIGHT / canvas.h);
     if (shown >= READABLE_PX) return [];
-    return [{ path: `stops[${s.index}]`, at: s.land, message: `step "${s.id}": page text of ${textPx} px shows at ${number(shown)} px at its stop; push closer or lift it` }];
+    const advice = isCapped(s) ? `the take's own resolution stops the push at ${number(s.cap)}x; lift it instead` : 'push closer or lift it';
+    return [{ path: `stops[${s.index}]`, at: s.land, message: `step "${s.id}": page text of ${textPx} px shows at ${number(shown)} px at its stop; ${advice}` }];
   });
 }
-
-// A push that asks for more than the take carries (the zoom stops at the take's own pixels).
-const resolutionFindings = (setup) => setup.planned.stops
-  .filter((s) => s.id !== undefined && !s.dropped && Number.isFinite(s.cap) && s.wanted > s.cap * RESOLUTION_SLACK)
-  .map((s) => ({ path: `stops[${s.index}]`, at: s.land, message: `stop ${stopNumber(s)} wants ${number(s.wanted)}x; the take carries ${number(s.cap)}x` }));
 
 const inside = ([x, y], canvas) => x >= 0 && y >= 0 && x <= canvas.w && y <= canvas.h;
 
@@ -72,5 +73,5 @@ export function walkReview(shot, ctx) {
   if (!ctx.prepared || !ctx.look?.kinds?.walk) return [];
   const full = { ...ctx, unit: unitOf(ctx.canvas), captions: false };
   const setup = walkSetup(shot, full);
-  return [...textFindings(setup, ctx.canvas), ...resolutionFindings(setup), ...leaveFindings(shot, setup, full), ...jumpFindings(shot, ctx.prepared), ...stopFindings(setup)];
+  return [...textFindings(setup, ctx.canvas), ...leaveFindings(shot, setup, full), ...jumpFindings(shot, ctx.prepared), ...stopFindings(setup)];
 }

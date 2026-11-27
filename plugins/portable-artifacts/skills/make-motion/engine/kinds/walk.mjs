@@ -10,8 +10,11 @@ import { AnchorError } from '../script/anchors.mjs';
 import { FORMATS } from '../formats.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
 import { fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks, unmarked } from './shared.mjs';
+import { layeredCamera } from '../graph/camera.mjs';
 import { defaultCamera } from './camera.mjs';
 import { STEP_PREFIX } from './walk-camera.mjs';
+import { cursorNodes } from './walk-cursor.mjs';
+import { liftNodes } from './walk-lift.mjs';
 import { liftsOf, walkSetup, walkLayout } from './walk-layout.mjs';
 import { walkReview } from './walk-review.mjs';
 import { walkMinSeconds } from './walk-time.mjs';
@@ -95,17 +98,21 @@ function minSeconds(shot, context) {
   }
 }
 
-// The expansion: the framed take, the camera stops and the `on` devices on `screen` or `step:<id>`. Cursor and lift nodes
-// join `laid.nodes` here.
+// The expansion: the framed take, the lifts, the camera stops and the `on` devices on `screen` or `step:<id>`, with the cursor
+// and its ripples over all of it. The cursor follows the shot's whole camera, devices' layers included, so the camera is
+// made once here.
 function expandWalk(shot, ctx) {
   assertNoBlanks(shot, KIND);
   const { look, timing, unit } = ctx;
   const setup = walkSetup(shot, ctx);
   const laid = walkLayout(shot, { ...ctx, data: kindData(look, KIND) }, setup);
   const devices = onDevices(shot, ctx, { boxes: laid.boxes, defaultTarget: 'screen' });
+  const camera = [...defaultCamera(look, timing, unit), ...laid.camera, ...deviceCamera(devices)];
+  const cam = layeredCamera(camera, `shot "${shot.id}" overlays`);
+  const overlay = cursorNodes(shot, ctx, setup, cam);
   return {
-    nodes: placeDevices([fieldNode(shot, ctx), ...laid.nodes], devices),
-    camera: [...defaultCamera(look, timing, unit), ...laid.camera, ...deviceCamera(devices)],
+    nodes: [...placeDevices([fieldNode(shot, ctx), ...laid.nodes, ...liftNodes(shot, ctx, setup, cam)], devices), ...overlay],
+    camera,
     boxes: laid.boxes,
     hero: `${shot.id}.screen`,
     background: look.palette.paper,
@@ -148,8 +155,7 @@ registries.kinds.add(KIND, {
   review: walkReview,
   minSeconds,
   expand: (shot, ctx) => expandWalk(unmarked(shot), ctx),
-  // a stop's arrival is the `zoom` device event the looks name a sound for; the sound plan does not read the take yet, so no `events`
-  eventDevices: Object.freeze(['zoom']),
+  // no `events` hook: the sound plan is not given the prepared take, so it cannot time a stop's arrival; walk stops are silent
   lookData: true, // a look ships it only with a kinds.walk entry (engine/looks/index.mjs listedKinds)
   prepared: true,
   numbered: false,

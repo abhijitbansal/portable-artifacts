@@ -134,7 +134,7 @@ test('sounds are the brief values, one for every registered cut, device and kind
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'ding');
   assert.deepEqual(Object.keys(sounds.cut).sort(), registries.cuts.names().sort());
-  assert.deepEqual(Object.keys(sounds.device).sort(), [...new Set([...registries.devices.names(), ...kindDevices()])].sort()); // screen and walk both declare zoom
+  assert.deepEqual(Object.keys(sounds.device).sort(), [...registries.devices.names(), ...kindDevices()].sort());
 });
 
 // ---- contrast ----

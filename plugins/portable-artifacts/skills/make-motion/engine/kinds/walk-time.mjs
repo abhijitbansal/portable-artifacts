@@ -44,8 +44,8 @@ export function keptFrames(data, step) {
 
 /**
  * What stops `shot`'s steps from being played on `data`, as { path, message } with the path from the shot: a step id the
- * take lacks, steps out of the take's order, and (for a shot with a say) some steps without `at` while the sentence
- * count is not the step count.
+ * take lacks, steps out of the take's order, a lift on a step the take has no box for, and (for a shot with a say) some
+ * steps without `at` while the sentence count is not the step count.
  */
 export function walkProblems(shot, timing, data) {
   const byId = takeSteps(data);
@@ -59,6 +59,11 @@ export function walkProblems(shot, timing, data) {
       problems.push({ path: `steps[${i}].id`, message: `step "${ref.id}" comes after "${before.id}" in the shot but before "${before.id}" in the take: steps follow the take's order` });
     }
   });
+  (shot.lift ?? []).forEach((lift, i) => {
+    if (byId.get(lift.step) !== undefined && byId.get(lift.step).box === null) {
+      problems.push({ path: `lift[${i}].step`, message: `lift on step ${lift.step}: the take has no box for it` });
+    }
+  });
   const sentences = timing.sentences?.length ?? 0;
   if (sentences > 0 && sentences !== shot.steps.length && shot.steps.some((s) => s.at === undefined)) {
     problems.push({ path: 'steps', message: `${stepCount(shot.steps.length)}, ${sentenceCount(sentences)}: give each step a sentence or an at` });
@@ -70,6 +75,9 @@ export function walkProblems(shot, timing, data) {
 const secondsOf = (ref, shot, timing) => Math.max(0, anchorSeconds(ref, {
   id: shot.id, words: timing.words ?? [], sentences: timing.sentences ?? [], duration: timing.duration ?? 0,
 }));
+
+/** (ref) => the shot seconds an anchor names, as walkPlan reads it (the lift's drawing starts on the same second). */
+export const anchorOf = (shot, timing) => (ref) => secondsOf(ref, shot, timing);
 
 // Seconds from a step's end to the end of its longest lift: its wait, the moves, the hold.
 function liftSeconds(lifts, id, end, anchor) {
