@@ -89,14 +89,28 @@ function fit(text) {
   return `${cut}\n…`;
 }
 
-/** One page of scout.json as printed text, at most PRINT_BYTES. States how many controls are left out of the file and of the print. */
-export function printDigest(page) {
+// One line, after the first page's headings. `brand` is scout.json's root `brand`: null is a third-party scout (nothing was read),
+// { name: null, accent: null } is a page that gave neither. Page text, so every piece goes through agentText.
+function brandLine(brand) {
+  if (brand === null) return 'brand: not read (third-party)';
+  const parts = [];
+  if (brand.name) parts.push(`name "${agentText(brand.name.text, { max: NAME_MAX })}" (${agentText(brand.name.from.source, { max: NAME_MAX })})`);
+  if (brand.accent) parts.push(`accent ${agentText(brand.accent.color, { max: NAME_MAX })} (${agentText(brand.accent.from.source, { max: NAME_MAX })})`);
+  return agentText(parts.length === 0 ? 'brand: none found' : `brand: ${parts.join(', ')}`, { max: HEADINGS_LINE_MAX });
+}
+
+/**
+ * One page of scout.json as printed text, at most PRINT_BYTES. States how many controls are left out of the file and of the print.
+ * `{ brand }` (the first page only; undefined prints no line) adds the brand line after the headings.
+ */
+export function printDigest(page, { brand } = {}) {
   const head = [
     `${page.id} ${agentText(page.url, { max: ADDRESS_MAX })} lang=${page.lang === null ? 'none' : agentText(page.lang, { max: 20 })} title "${agentText(page.title, { max: NAME_MAX })}"`,
     `wall: ${page.wall === null ? 'none' : agentText(page.wall, { max: ADDRESS_MAX })}`,
     `video: ${page.video ? 'playing' : 'none'}`,
     ...framesLine(page.frames ?? []),
     headingsLine(page.headings),
+    ...(brand === undefined ? [] : [brandLine(brand)]),
     `controls: ${page.controls.length} listed, left ${page.left} (past the cap of ${CONTROL_CAP})`,
   ];
   const footer = doneLines(page);

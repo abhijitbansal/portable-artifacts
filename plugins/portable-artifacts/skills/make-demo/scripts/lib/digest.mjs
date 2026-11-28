@@ -148,7 +148,7 @@ const originOfFrame = (frame) => {
 export const frameOrigins = (page) => [...new Set(page.frames().filter((f) => f !== page.mainFrame()).map(originOfFrame).filter(Boolean))];
 
 /**
- * Read the page as it is: { digest, wall, loginForm }. `digest` has no id, no shot and no counts of what the page did (the walk adds
+ * Read the page as it is: { digest, wall, brandFacts, loginForm }. `digest` has no id, no shot and no counts of what the page did (the walk adds
  * them). `wall` is wallReason's text, which may quote the page: the caller prints it only as a kind when signed in. `loginForm` is
  * true when a password field can be seen. Controls carry their effect, computed from the real names and addresses; masking comes after.
  */
@@ -166,6 +166,7 @@ export async function digestPage(page, { origins, statuses = [], requestedUrl })
   return {
     digest: { url: pageUrl, lang: doc.lang, title, video: doc.video, frames, headings, controls: listed, left },
     wall,
+    brandFacts: { title, siteName: doc.siteName, themeColor: doc.themeColor }, // raw, in memory only: brand.mjs cleans them, scout.json keeps the proposal
     loginForm: await page.evaluate(hasVisiblePassword),
   };
 }

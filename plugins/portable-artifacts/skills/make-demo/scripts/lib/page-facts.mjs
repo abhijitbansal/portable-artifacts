@@ -64,10 +64,17 @@ export function readFacts(el) {
   }
 }
 
-/** What the document shows apart from controls: the language, the scroll offset, and whether a video plays. */
+/**
+ * What the document shows apart from controls: the language, the scroll offset, whether a video plays, and the page's own brand
+ * hints: `themeColor` (the first theme-color meta's content, at most 64 characters) and `siteName` (the first og:site_name meta's
+ * content, at most 200), or null. Raw attributes: brand.mjs cleans them outside the page, and the page's own cleaning is not trusted.
+ */
 export function readDocument() {
+  const meta = (selector, max) => (document.querySelector(selector)?.getAttribute('content') ?? '').slice(0, max) || null;
   return {
     lang: document.documentElement.getAttribute('lang') || null,
+    themeColor: meta('meta[name="theme-color" i]', 64),
+    siteName: meta('meta[property="og:site_name" i]', 200),
     scrollX: Math.round(window.scrollX),
     scrollY: Math.round(window.scrollY),
     video: [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended && v.readyState > 2),

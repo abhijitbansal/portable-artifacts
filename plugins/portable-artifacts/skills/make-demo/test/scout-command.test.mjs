@@ -90,7 +90,9 @@ test('signed out: prints each page, then the path of scout.json; writes the pict
   assert.equal(lines.at(-1), out, 'the path of scout.json is the last line');
   assert.match(r.stdout, /^p1 /m);
   assert.match(r.stdout, /^p2 /m);
+  assert.equal(r.stdout.match(/^brand: /gm).length, 1, 'one brand line, for the first page only');
   const scout = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.ok('brand' in scout && scout.brand !== null, 'scout.json has a root brand (own rights, so not null)');
   assert.ok(scout.pages.length >= 2, 'the start page and the named page at least');
   const usable = scout.pages.filter((p) => p.wall === null);
   assert.ok(usable.length >= 2 && usable.length <= scout.pages.length);

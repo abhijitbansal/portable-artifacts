@@ -1,5 +1,5 @@
 // Read one page of the demo site, read-only, and say whether it is usable. Returns
-//   { ok: true, entry, shot, links }   entry is the page of scout.json; shot a JPEG buffer or null; links the raw controls (signed out only)
+//   { ok: true, entry, shot, links, brandFacts }   entry is the page of scout.json; shot a JPEG buffer or null; links the raw controls (signed out only); brandFacts the raw title, site name and theme-color, in memory only
 //   { ok: false, wall, entry }         the page is unusable: `wall` is why, `entry` is its (empty) page of scout.json
 // What makes a page unusable: it moved to another origin (left to <origin>), did not load, is a wall (every wallReason but the consent
 // notice, which is only noted), or, with a session, asks for a sign-in (not signed in).
@@ -95,5 +95,6 @@ export async function finishPage({ id, read, page, seen, viewport, signedIn, ori
   const note = read.wall === null ? null : signedIn ? wallKind(read.wall) : read.wall; // only the consent notice gets here
   const whole = { id, ...read.digest, wall: note, shot: shot ? `scout/${id}.jpg` : null, ...counts(seen) };
   const entry = signedIn ? maskDigest(whole) : whole;
-  return { ok: true, entry, shot, links: signedIn ? [] : read.digest.controls, linkLang: read.digest.lang, linkPage: read.digest.url };
+  // brandFacts are the page's raw title, site name and theme-color: for the brand proposal only (brand.mjs), never written as they are
+  return { ok: true, entry, shot, links: signedIn ? [] : read.digest.controls, linkLang: read.digest.lang, linkPage: read.digest.url, brandFacts: read.brandFacts };
 }

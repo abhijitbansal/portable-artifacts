@@ -14,6 +14,8 @@ import { originsOf } from './spec.mjs';
 import { visitPage } from './scout-page.mjs';
 import { steppedLoad, mergeSteppedSeen } from './scout-stepped.mjs';
 import { documentOf, pageIdentity } from './page-identity.mjs';
+import { maskName } from './digest.mjs';
+import { proposeBrand } from './brand.mjs';
 
 export { writeScout } from './scout-write.mjs';
 
@@ -60,12 +62,14 @@ async function walk(options, queue, skipped) {
   const pages = [];
   const shots = new Map();
   const queued = new Set(queue.map((q) => pageIdentity(q.url)));
+  let brandFacts = null; // the first page's, for the brand proposal
   for (let i = 0; i < queue.length && pages.length < MAX_PAGES; i += 1) {
     const id = `p${pages.length + 1}`;
     const result = await visitPage(options.browser, { ...options, url: queue[i].url, id });
     if (!result.ok && pages.length === 0) return { stop: `the start page: ${result.wall}` };
     pages.push({ ...result.entry, ...(queue[i].entry === null ? {} : { fromEntry: queue[i].entry }) });
     if (!result.ok) continue;
+    if (pages.length === 1) brandFacts = result.brandFacts;
     if (result.shot) shots.set(id, result.shot);
     if (signedIn) continue;
     const sorted = sortLinks(result, origins);
@@ -77,7 +81,7 @@ async function walk(options, queue, skipped) {
       }
     }
   }
-  return { pages, shots };
+  return { pages, shots, brandFacts };
 }
 
 /**
@@ -92,6 +96,8 @@ export async function runScout({ browser, spec, state = null, now = () => new Da
   const walked = await walk(options, queue, skipped);
   if (walked.stop) return { ok: false, reason: walked.stop };
   const { stepped, seen } = await steppedLoad(browser, { ...options, url: spec.source.url });
+  // Signed in, the name passes through the same masking as the headings; the address is the masked one the page entry holds.
+  const brand = proposeBrand({ ...walked.brandFacts, url: walked.pages[0].url }, { rights: spec.rights, mask: options.signedIn ? maskName : undefined });
   const scout = {
     version: 1,
     url: spec.source.url,
@@ -101,6 +107,7 @@ export async function runScout({ browser, spec, state = null, now = () => new Da
     mask, // a plan made for another mask is stale (plan-rows.mjs)
     scoutedAt: now().toISOString(),
     stepped,
+    brand, // null for third-party (a third party's brand is not taken); else { name, accent }, each with where it came from
     pages: [mergeSteppedSeen(walked.pages[0], seen), ...walked.pages.slice(1)],
     skipped,
   };

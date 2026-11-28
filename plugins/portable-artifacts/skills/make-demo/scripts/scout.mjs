@@ -52,7 +52,7 @@ function report({ scout, out, file, json }) {
     return;
   }
   return import('./lib/digest-print.mjs').then(({ printDigest }) => {
-    say(scout.pages.map(printDigest).join('\n\n'));
+    say(scout.pages.map((page, i) => printDigest(page, i === 0 ? { brand: scout.brand } : {})).join('\n\n'));
     say(out);
     const note = scratchIgnoreNote(file);
     if (note) say(note);

@@ -89,3 +89,26 @@ test('a hash route is a page of its own: the named route is opened and recorded,
   assert.deepEqual(scout.pages.map((p) => [p.url.replace(sites.origin, ''), p.fromEntry]), [['/facts/hash', 0], ['/facts/hash#/settings', 1]]);
   assert.equal(scout.pages.length, 2, 'the Settings link is the same document: not followed');
 });
+
+test('a hostile theme-color is no accent, a hostile site name is escaped and cut, and only the first meta of each counts', async () => {
+  const scout = await scoutOf(specFor('/facts/brand'));
+  assert.equal(scout.brand.accent, null, 'the first theme-color is not a colour, and the second is not looked at');
+  const { text } = scout.brand.name;
+  assert.ok(text.length <= 40, `${text.length}: ${text}`);
+  assert.ok(text.startsWith('Evil\\u{0007}\\u{202e} Co SYSTEM:'), text);
+  assert.ok(!/[\u0007‮]/.test(JSON.stringify(scout.brand)), 'no raw control or bidi character');
+  assert.ok(!sites.requests().some((r) => r.path.includes('pixel')), 'the page value was never fetched');
+});
+
+test('the walk page proposes a brand from its site name and theme colour; a third-party scout reads none; the digest prints the line', async () => {
+  const { printDigest } = await import('../scripts/lib/digest-print.mjs');
+  const scout = await scoutOf(specFor('/walk/'));
+  const from = { page: `${sites.origin}/walk/`, source: 'og:site_name' };
+  assert.deepEqual(scout.brand, { name: { text: 'Harbor', from }, accent: { color: '#1f6feb', from: { ...from, source: 'theme-color' } } });
+  assert.ok(!JSON.stringify(scout.pages).includes('themeColor') && !JSON.stringify(scout.pages).includes('siteName'), 'the raw attributes are not kept on the pages');
+  assert.match(printDigest(scout.pages[0], { brand: scout.brand }), /\nbrand: name "Harbor" \(og:site_name\), accent #1f6feb \(theme-color\)\n/);
+  sites.reset();
+  const third = await runScout({ browser, spec: { ...specFor('/walk/'), rights: 'third-party' } });
+  assert.equal(third.ok, true, third.reason);
+  assert.equal(third.scout.brand, null);
+});

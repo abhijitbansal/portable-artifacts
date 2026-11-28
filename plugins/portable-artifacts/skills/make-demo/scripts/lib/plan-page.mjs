@@ -180,6 +180,26 @@ function approvals(rows, ctx) {
   }));
 }
 
+// The brand the plan carries, one row per key, under the approval line so the plan's yes covers it (the hash binds `brand`). The source is
+// scout's proposal only while the value equals it; any other value is the author's. Page text (the proposal's page address) is code.
+function brandRows(brand, scout, ctx) {
+  const source = (proposed, from) => {
+    if (!proposed || !from || proposed !== from.value) return 'your words';
+    return `scout: ${code(from.source)} on ${code(shown(from.page, ctx.startOrigin), { max: ADDRESS_MAX })}`;
+  };
+  const name = scout.brand?.name;
+  const accent = scout.brand?.accent;
+  return [
+    ...(brand.name === undefined ? [] : [['name', code(brand.name), source(brand.name, name && { value: name.text, ...name.from })]]),
+    ...(brand.accent === undefined ? [] : [['accent', code(brand.accent), source(brand.accent, accent && { value: accent.color, ...accent.from })]]),
+  ];
+}
+
+function brandSection(spec, scout, ctx) {
+  if (spec.brand === undefined) return [];
+  return [table('The yes covers this brand', 'Brand', ['part', 'value', 'source'], brandRows(spec.brand, scout, ctx), 'It reaches the film only because this plan showed it. The accent is shown as hex text.')];
+}
+
 /**
  * The explainer spec for a click plan. `result` is planRows' answer (no errors); `pictures` maps a page id to the path of its picture
  * beside the plan (signed out only; a signed-in plan shows none whatever is passed).
@@ -204,6 +224,7 @@ export function planPage(spec, scout, result, pictures = new Map()) {
       ...requestsSection(scout),
       ...skippedSection(scout, signedIn),
       ...approvals(rows, ctx),
+      ...brandSection(spec, scout, ctx),
       { type: 'verdict', id: 'verdict', title: 'Approve, change or stop this plan', label: 'Your verdict', text: `Approve exactly these ${rows.length} rows, bound by the hash ${code(hash)}?` },
     ],
   };
