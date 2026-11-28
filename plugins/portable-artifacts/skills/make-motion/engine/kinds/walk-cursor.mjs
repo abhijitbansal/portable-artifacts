@@ -4,9 +4,10 @@
 // (no pointer in the whole take: no cursor). It travels to each such step on one quadratic curve from the previous pointer,
 // over at least TRAVEL_MIN seconds before the step's act: the travel starts early, borrowing from the previous step's hold,
 // but never before that step's act and never while a lift holds its card up (not until the card starts back down). At act
-// it dips to 0.9, and a `click` step adds a ripple: a thin outline ring (the look's kinds.walk.ripple: ink on a paper keyline;
-// the accent without it) that starts RIPPLE.from times the cursor's size and grows outward, fading, so the clicked label stays
-// readable. Both nodes are top-level and `fixed` (the camera leaves them where they are put), so every position is the page
+// it dips to 0.9, and a `click` step adds a ripple: an outline ring (the look's kinds.walk.ripple: ink on a paper keyline;
+// the accent without it) that starts RIPPLE.from times the cursor's size and grows outward, opaque then fading, so the clicked
+// label stays readable. After a click the cursor leaves its label: see withParking. Before the first pointer it rests on REST,
+// moved under any step box it lands in. Both nodes are top-level and `fixed` (the camera leaves them where they are put), so every position is the page
 // point through the image map and then through the shot's own camera, keyed once per film frame; it is clamped to stay inside
 // the frame. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
@@ -25,8 +26,12 @@ const BEND = 0.2; // of the glide's length: how far the curve bows from the stra
 const GLIDE_EASE = 'inOutCubic';
 const DIP = Object.freeze({ scale: 0.9, before: 0.04, hold: 0.12, after: 0.06 }); // s, around act
 // the ring's diameter is `from` times the cursor's at the click and `to` times it after `seconds`; `width` (of the cursor's size) is its stroke
-const RIPPLE = Object.freeze({ from: 1.6, to: 2.6, seconds: 0.4, width: 0.04, ease: 'outCubic' });
+// the ring is fully opaque for its first `solid` seconds, then fades out by `seconds`
+const RIPPLE = Object.freeze({ from: 1.6, to: 2.6, seconds: 0.45, solid: 0.15, width: 0.08, ease: 'outCubic' });
 const KEYLINE_WIDEN = 2; // the ripple's paper keyline is this many times its ring's stroke
+// off a clicked label: `stay` s at most on the clicked spot, `ease` s to the parked point; a rest point inside a step box goes
+// under it by a cursor size over `under`
+const PARK = Object.freeze({ stay: 0.4, ease: 0.3, under: 4 });
 const EPSILON = 1e-9;
 
 /** Where the cursor rests before its first pointer, as shares of the page (viewport) width and height. */
@@ -66,17 +71,56 @@ function bowOf(a, b) {
 
 const quadratic = (a, c, b, u) => [0, 1].map((k) => (1 - u) ** 2 * a[k] + 2 * (1 - u) * u * c[k] + u ** 2 * b[k]);
 
+// After a click the cursor leaves the label it clicked: it stays on the spot STAY s at most, then eases over EASE_OFF s to
+// the point one cursor size down and right of it (kept inside the picture). When the next travel sets off sooner than that
+// ease can finish, the cursor stays on the click until the travel (no half ease): `off` is { from, to, point } or absent.
+function withParking(targets, { image, size }) {
+  const room = [image[0] + image[2] - ARROW_WIDTH * size, image[1] + image[3] - size]; // the lowest tip that keeps the arrow inside
+  return targets.map((g, j) => {
+    if (!g.click) return g;
+    const from = Math.min(g.act + PARK.stay, (targets[j + 1]?.from ?? Infinity) - PARK.ease);
+    if (from < g.act - EPSILON) return g;
+    return { ...g, off: { from, to: from + PARK.ease, point: [Math.min(g.point[0] + size, room[0]), Math.min(g.point[1] + size, room[1])] } };
+  });
+}
+
+// The legs the pointer takes, in time order: { from, to, a, b, bow }, each from where the last one left it. A travel bows; a
+// move off a label is straight.
+function legsOf(targets, rest) {
+  let at = rest;
+  return targets.flatMap((g) => {
+    const legs = [{ from: g.from, to: g.act, a: at, b: g.point, bow: true }];
+    at = g.point;
+    if (g.off !== undefined) {
+      legs.push({ from: g.off.from, to: g.off.to, a: g.point, b: g.off.point, bow: false });
+      at = g.off.point;
+    }
+    return legs;
+  });
+}
+
 // (t) => the pointer on the drawn picture at shot second t: `rest` before the first travel starts.
 function pathOf(targets, rest) {
   const glide = ease(GLIDE_EASE);
+  const legs = legsOf(targets, rest);
   return (t) => {
-    const j = targets.findLastIndex((g) => g.from <= t + EPSILON);
+    const j = legs.findLastIndex((l) => l.from <= t + EPSILON);
     if (j < 0) return rest;
-    const g = targets[j];
-    if (t >= g.act - EPSILON || g.act - g.from < EPSILON) return g.point;
-    const prev = j === 0 ? rest : targets[j - 1].point;
-    return quadratic(prev, bowOf(prev, g.point), g.point, glide((t - g.from) / (g.act - g.from)));
+    const { from, to, a, b, bow } = legs[j];
+    if (t >= to - EPSILON || to - from < EPSILON) return b;
+    return quadratic(a, bow ? bowOf(a, b) : [(a[0] + b[0]) / HALF, (a[1] + b[1]) / HALF], b, glide((t - from) / (to - from)));
   };
+}
+
+// Where the cursor rests before its first travel: REST on the page, moved to just under any step box it lands in.
+function restOf({ geo }, shot, size) {
+  const { viewport, image } = geo;
+  const point = geo.mapPoint({ x: REST.x * viewport.width, y: REST.y * viewport.height });
+  const boxes = shot.steps.map(({ id }) => geo.stepBoxes.get(id)).filter(Boolean);
+  const inside = ([x, y, w, h]) => point[0] >= x && point[0] <= x + w && point[1] >= y && point[1] <= y + h;
+  boxes.forEach((box) => { if (inside(box)) point[1] = box[1] + box[3] + size / PARK.under; });
+  point[1] = Math.min(point[1], image[1] + image[3] - size);
+  return point;
 }
 
 // The shot seconds that get a key: `from` and `to`, every film frame between, and the `extra` seconds (each act).
@@ -129,8 +173,8 @@ function cursorNode(shot, { targets, path, cam, ctx, size }) {
   return node('group', `${shot.id}.cursor`, { fixed: true, x: x0, y: y0 }, { tracks: { x, y, scale: dipTrack(targets) }, children: [...shadowNodes(shot, { size, look }), arrow] });
 }
 
-// A thin ring at the click: drawn RIPPLE.from times the cursor's size across and scaled out to RIPPLE.to over RIPPLE.seconds,
-// fading out, fixed on the point. The ring is outline only, so the label under it reads on the click frame.
+// A ring at the click: drawn RIPPLE.from times the cursor's size across and scaled out to RIPPLE.to over RIPPLE.seconds, opaque
+// for RIPPLE.solid then fading out, fixed on the point. The ring is outline only, so the label under it reads on the click frame.
 function rippleNode(shot, { target, cam, ctx, size }) {
   const { look, canvas, fps } = ctx;
   const { act } = target;
@@ -141,14 +185,14 @@ function rippleNode(shot, { target, cam, ctx, size }) {
   const rippleLook = look.kinds?.walk?.ripple;
   const d = circlePath((RIPPLE.from * size) / HALF);
   const width = (rippleLook?.width ?? RIPPLE.width) * size;
-  // the look's ripple data (ink, thin) on a wider paper keyline, so it reads on white UI and on a blue button; a look without
+  // the look's ripple data (ink, 0.08) on a wider paper keyline, so it reads on white UI and on a blue button; a look without
   // ripple data keeps the accent ring
   const ring = node('path', `${id}.ring`, { d, stroke: look.palette[rippleLook?.color ?? 'accent'], strokeWidth: width });
   const keyline = rippleLook === undefined ? [] : [node('path', `${id}.keyline`, { d, stroke: look.palette[rippleLook.keyline ?? 'paper'], strokeWidth: width * KEYLINE_WIDEN })];
   const tracks = {
     x, y,
     scale: track([{ t: act, v: 1 }, { t: end, v: RIPPLE.to / RIPPLE.from, ease: RIPPLE.ease }]),
-    opacity: track([{ t: 0, v: 0 }, { t: act, v: 0 }, { t: act, v: 1 }, { t: end, v: 0 }]),
+    opacity: track([{ t: 0, v: 0 }, { t: act, v: 0 }, { t: act, v: 1 }, { t: act + RIPPLE.solid, v: 1 }, { t: end, v: 0 }]),
   };
   return node('group', id, { fixed: true, x: x0, y: y0 }, { tracks, children: [...keyline, ring] });
 }
@@ -159,11 +203,11 @@ function rippleNode(shot, { target, cam, ctx, size }) {
  * `ctx` a kind's ctx (look, canvas, timing, fps).
  */
 export function cursorNodes(shot, ctx, setup, cam) {
-  const targets = targetsOf(shot, setup);
-  if (targets.length === 0) return [];
-  const { viewport } = setup.geo;
-  const rest = setup.geo.mapPoint({ x: REST.x * viewport.width, y: REST.y * viewport.height });
+  const found = targetsOf(shot, setup);
+  if (found.length === 0) return [];
   const size = SIZE_SHARE * ctx.canvas.h;
+  const targets = withParking(found, { image: setup.geo.image, size });
+  const rest = restOf(setup, shot, size);
   const place = { path: pathOf(targets, rest), cam, ctx, size };
   const ripples = targets.filter((g) => g.click).map((target) => rippleNode(shot, { ...place, target }));
   return [...ripples, cursorNode(shot, { ...place, targets })];

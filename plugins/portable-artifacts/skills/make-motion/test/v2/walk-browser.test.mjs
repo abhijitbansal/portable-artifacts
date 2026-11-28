@@ -77,7 +77,8 @@ test('at a time inside step 2\'s hold, the canvas pixel at the mapped centre is 
   const session = await open(t);
   if (!session) return;
   const plan = walkPlan(loaded.film.shots[0], loaded.timeline.shots[0], loaded.prepared.w);
-  const hold = plan.steps[1].end + 0.25;
+  // late in the hold: the click ring (0.45 s from the act, 0.13 s before the step's end) is gone, and the cursor is on its way to step 3
+  const hold = plan.steps[1].end + 0.45;
   assert.ok(hold < plan.steps[2].start, 'the time is in step 2\'s hold');
   const geo = geometryOf(loaded);
   const [cx, cy] = geo.mapPoint({ x: 160, y: 160 }); // the centre of the 320 x 320 page

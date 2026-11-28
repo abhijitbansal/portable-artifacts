@@ -34,14 +34,18 @@ test('walk is registered and parked in keynote and desk, so no listing shows it'
 test('look data: the frame keys copied from each look\'s screen, a wide share, and the lift', () => {
   for (const name of ['keynote', 'desk']) {
     const look = registries.looks.get(name);
-    for (const key of ['fill', 'line', 'lineWidth', 'dots', 'pill', 'text', 'urlText', 'wideShare']) assert.equal(look.kinds.walk[key], look.kinds.screen[key], `${name}.${key}`);
-    const { lift, pushPad, context, snap, mark, ripple } = look.kinds.walk;
+    for (const key of ['fill', 'line', 'lineWidth', 'dots', 'pill', 'text', 'urlText']) assert.equal(look.kinds.walk[key], look.kinds.screen[key], `${name}.${key}`);
+    const { lift, pushPad, context, snap, mark, ripple, wideShare } = look.kinds.walk;
+    assert.equal(wideShare, 0.88, `${name}: the window takes 88% of the room's width (the screen kind keeps its own 0.78); the room's height may limit it`);
+    assert.equal(lift.dim, 0.3, `${name}: a light dim`);
     // scale 1.08 and wholeScale 1.04: the crop grown by 3 page px a side keeps the 10 px clearance (walk-lift-look.test.mjs)
     assert.deepEqual([lift.scale, lift.wholeScale, lift.hold, lift.rise, lift.radius], [1.08, 1.04, 1.2, 0.005, 12]);
     assert.ok(lift.layers.length >= 2 && lift.dim > 0 && typeof lift.scrim === 'string', `${name}: the lift's own shadow layers and scrim`);
     assert.deepEqual([pushPad, snap, context], [60, 0.1, { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } }]);
-    assert.equal(typeof (mark.rounded ?? mark.circle).color, 'string', `${name}: the mark's style`);
-    assert.deepEqual([ripple.color, ripple.keyline, ripple.width], ['ink', 'paper', 0.04], `${name}: the ripple's thin ink ring on a paper keyline`);
+    assert.equal(mark.circle.color, 'ink', `${name}: the mark is the circle device, in ink`);
+    assert.deepEqual(mark.ellipse, { factor: 1.45, clear: 8 }, `${name}: an ellipse about the box centre that clears the box by 8 units`);
+    assert.equal(mark.rounded, undefined, `${name}: no rounded rectangle`);
+    assert.deepEqual([ripple.color, ripple.keyline, ripple.width], ['ink', 'paper', 0.08], `${name}: the ripple's ink ring on a paper keyline`);
   }
 });
 

@@ -21,11 +21,10 @@
     {
       "id": "tour",
       "show": "walk",
-      "cut": "zoom",
+      "cut": "cut",
       "src": "walk-take",
-      "title": "Projects",
       "frame": "window",
-      "say": "Here is the board. The tabs switch the view. Search for 42 finds Mobile onboarding. Pointing at it lifts it off the board. And one click adds a new project.",
+      "say": "Here is the board. The Activity tab is one click away. Search for 42 marks Mobile onboarding. Pointing at it lifts it off the board. And one click adds a new project.",
       "steps": [{ "id": "open" }, { "id": "tab" }, { "id": "search" }, { "id": "hover" }, { "id": "add" }],
       "stops": [{ "to": "whole" }],
       "lift": [{ "step": "hover" }],
@@ -34,7 +33,7 @@
     {
       "id": "close",
       "show": "end",
-      "cut": "crossfade",
+      "cut": "cut",
       "say": "Try the board with your team. (1.5)",
       "ask": "harbor.example/board",
       "mark": "Harbor"

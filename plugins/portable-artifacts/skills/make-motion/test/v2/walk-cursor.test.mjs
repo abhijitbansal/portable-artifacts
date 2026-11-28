@@ -32,7 +32,7 @@ test('the cursor never draws smaller than 4% of the canvas height (the pull-back
   }
 });
 
-test('the click ripple reads on white UI and on the blue button: the look\'s ripple data (ink, thin) over a paper keyline, never the accent', () => {
+test('the click ripple reads on white UI and on the blue button: the look\'s ripple data (ink, 0.08) over a paper keyline, never the accent', () => {
   for (const look of ['keynote', 'desk']) {
     const out = expandWalk(walkFilm(walkShot(), { look }), { w: committed() });
     const { palette, kinds } = out.ctx.look;
@@ -44,7 +44,7 @@ test('the click ripple reads on white UI and on the blue button: the look\'s rip
       const keyline = all(out.nodes).find((n) => n.id === `${id}.keyline`);
       assert.equal(ring.props.stroke, palette[kinds.walk.ripple.color], `${look} ${id}: the look's ripple colour`);
       assert.notEqual(ring.props.stroke, palette.accent, `${look} ${id}: not the accent (the button is that colour)`);
-      assert.ok(ring.props.strokeWidth > 0 && ring.props.strokeWidth <= 0.06 * size, `${look} ${id}: thin (2 to 3 px at 1080p), ${ring.props.strokeWidth}`);
+      assert.ok(ring.props.strokeWidth >= 0.07 * size && ring.props.strokeWidth <= 0.09 * size, `${look} ${id}: about 0.08 of the cursor (a visible outline), ${ring.props.strokeWidth}`);
       assert.equal(keyline.props.stroke, palette.paper, `${look} ${id}: a paper keyline`);
       assert.ok(keyline.props.strokeWidth > ring.props.strokeWidth, `${look} ${id}: wider than the ring`);
     }

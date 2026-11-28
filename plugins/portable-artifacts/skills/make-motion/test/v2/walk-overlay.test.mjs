@@ -123,22 +123,87 @@ test('a take with no pointer at all has no cursor', () => {
   assert.equal(byId(out, 'w.cursor'), undefined);
 });
 
-test('a step with no box keeps the cursor where it was', () => {
+// the page point one cursor size down and right of `point` (the click's parked spot), in page px
+function parked(out, point) {
+  const size = 0.05 * out.ctx.canvas.h;
+  const k = out.boxes.image[2] / out.data.viewport.width; // drawn px per page px
+  return { x: point.x + size / k, y: point.y + size / k };
+}
+
+test('a step with no box keeps the cursor where it was (off the clicked label, on the parked spot)', () => {
   const data = THREE();
   data.steps[1] = { ...data.steps[1], box: null };
   const out = expandHand(data);
   const [from, to] = [out.plan.steps[1].start, out.plan.steps[1].end];
   for (const t of [from, (from + to) / 2, to - TRAVEL_MIN]) { // the travel to step 2 borrows the last TRAVEL_MIN s of this step
     const [x, y] = cursorAt(out, t);
-    const [ex, ey] = through(out, data.steps[0].pointer, t);
+    const [ex, ey] = through(out, parked(out, data.steps[0].pointer), t);
     near(x, ex, `x at ${t}`);
     near(y, ey, `y at ${t}`);
   }
 });
 
+test('after a click the cursor stays on the clicked spot at most 0.4 s, then eases for 0.3 s to a point one cursor size down and right, so the label reads', () => {
+  const data = THREE();
+  const out = expandHand(data);
+  const { act } = out.plan.steps[0];
+  const point = data.steps[0].pointer;
+  const at = (t, p) => { const [x, y] = cursorAt(out, t); const [ex, ey] = through(out, p, t); return Math.hypot(x - ex, y - ey); };
+  assert.ok(at(act + 0.4, point) < 0.05, 'still on the clicked spot 0.4 s after the click');
+  assert.ok(at(act + 0.55, point) > 3, 'on its way off mid-ease');
+  assert.ok(at(act + 0.7, parked(out, point)) < 0.5, `one cursor size down and right of the act point 0.7 s after the click (${at(act + 0.7, parked(out, point)).toFixed(2)} px off)`);
+  assert.ok(at(act + 0.9, parked(out, point)) < 0.5, 'and it stays there through the hold');
+});
+
+test('after a hover the cursor stays on the card (the lift needs it there)', () => {
+  const data = THREE();
+  data.steps[0] = { ...data.steps[0], do: 'hover' };
+  const out = expandHand(data);
+  const { act } = out.plan.steps[0];
+  const [x, y] = cursorAt(out, act + 0.9);
+  const [ex, ey] = through(out, data.steps[0].pointer, act + 0.9);
+  near(x, ex, 'x', 0.05);
+  near(y, ey, 'y', 0.05);
+});
+
+test('a next travel that sets off before the ease can finish leaves the cursor on the click: no half ease', () => {
+  const data = handTake([6, 6, 6], [[40, 40, 120, 60], [400, 200, 120, 60], [760, 420, 120, 60]]);
+  const out = expandHand(data);
+  const from = out.plan.steps[1].act - TRAVEL_MIN; // the next travel starts about 0.1 s after the click
+  assert.ok(from - out.plan.steps[0].act < 0.3, 'less than the 0.3 s an ease takes');
+  const [x, y] = cursorAt(out, from);
+  const [ex, ey] = through(out, data.steps[0].pointer, from);
+  near(x, ex, 'on the clicked spot when the travel sets off (x)', 1e-2);
+  near(y, ey, 'on the clicked spot when the travel sets off (y)', 1e-2);
+});
+
+test('the parked spot stays inside the picture: a click at its bottom right corner does not park off it', () => {
+  const data = handTake([30, 30], [[40, 40, 120, 60], [880, 480, 80, 60]]);
+  const out = expandHand(data);
+  const [ix, iy, iw, ih] = out.boxes.image;
+  const size = 0.05 * out.ctx.canvas.h;
+  const { act } = out.plan.steps[1];
+  const [x, y] = cursorAt(out, act + 0.9);
+  const slack = 0.1 * size; // the camera's resting drift moves the picture a few px
+  assert.ok(x >= ix - slack && x <= ix + iw - 0.6 * size + slack && y >= iy - slack && y <= iy + ih - size + slack, `the cursor at (${x.toFixed(1)}, ${y.toFixed(1)}) is inside the picture ${[ix, iy, ix + iw, iy + ih].map(Math.round)}`);
+});
+
+test('the rest point stays at 62% / 70% unless it lands inside a step box, then it goes just below that box', () => {
+  const data = handTake([30, 30], [[40, 40, 120, 60], [500, 300, 200, 150]]); // the second box holds (595, 378)
+  const out = expandHand(data);
+  const { width, height } = out.data.viewport;
+  assert.ok(REST.x * width > 500 && REST.x * width < 700 && REST.y * height > 300 && REST.y * height < 450, 'the rest point is inside the box');
+  const [, y] = cursorAt(out, 0);
+  const [, below] = through(out, { x: REST.x * width, y: 450 }, 0); // the box's bottom edge
+  assert.ok(y >= below - 1e-6, `the rest tip (${y.toFixed(1)}) is below the box (${below.toFixed(1)})`);
+  assert.ok(y < below + 0.05 * out.ctx.canvas.h, 'and close under it');
+  const [x] = cursorAt(out, 0);
+  near(x, through(out, { x: REST.x * width, y: 450 }, 0)[0], 'across it does not move', 1e-6);
+});
+
 test('it travels over the TRAVEL_MIN (0.6 s) before act on one curve from the previous pointer, and dips to 0.9 at act for 0.12 s', () => {
   const data = THREE();
-  data.steps = data.steps.map((s) => ({ ...s, actIndex: s.startIndex + 12 })); // twelve frames before act: the take's own glide
+  data.steps = data.steps.map((s, i) => ({ ...s, actIndex: s.startIndex + 12, do: i === 0 ? 'hover' : s.do })); // twelve frames before act: the take's own glide; step 0 hovers, so the cursor stays on its pointer
   const out = expandHand(data);
   const { act } = out.plan.steps[1];
   assert.ok(TRAVEL_MIN >= 0.6, `the least travel: ${TRAVEL_MIN}`);
@@ -165,7 +230,7 @@ test('it travels over the TRAVEL_MIN (0.6 s) before act on one curve from the pr
 
 test('the travel never starts while a lift holds its card up: it waits until the card starts back down', () => {
   const data = THREE();
-  data.steps = data.steps.map((s) => ({ ...s, actIndex: s.startIndex + 3 })); // act close to the step's start: 0.6 s back reaches into the lift
+  data.steps = data.steps.map((s, i) => ({ ...s, actIndex: s.startIndex + 3, do: i === 0 ? 'hover' : s.do })); // act close to the step's start: 0.6 s back reaches into the lift; the lifted step is hovered, so the cursor stays on the card
   const film = filmOfHand(data, { lift: [{ step: 's0' }] });
   const out = expandWalk(film, { w: data });
   const [span] = walkSetup(film.shots[0], out.ctx).lifts;
@@ -208,7 +273,7 @@ const boundsOf = (d) => {
   return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
 };
 
-test('a click step adds a thin outline ring that starts at 1.6 times the cursor and grows outward, fading, over 0.4 s, in both looks; other steps add none', () => {
+test('a click step adds a clearly visible outline ring (0.08 of the cursor, full opacity for 0.15 s) from 1.6 to 2.6 times the cursor, fading over 0.45 s, in both looks; other steps add none', () => {
   for (const look of ['keynote', 'desk']) {
     const data = THREE();
     data.steps[1] = { ...data.steps[1], do: 'hover' };
@@ -223,15 +288,19 @@ test('a click step adds a thin outline ring that starts at 1.6 times the cursor 
     assert.equal(ring.props.stroke, out.ctx.look.palette[out.ctx.look.kinds.walk.ripple.color]);
     const across = (t) => boundsOf(ring.props.d).w * sample(ripple.tracks.scale, t); // the ring's diameter on the canvas
     assert.ok(across(act) >= 1.6 * size - 0.5, `${look}: starts at ${(across(act) / size).toFixed(2)} times the cursor, at least 1.6`);
-    assert.ok(across(act + 0.4) > across(act) + 0.5 * size, `${look}: grows outward`);
-    const widest = ring.props.strokeWidth * sample(ripple.tracks.scale, act + 0.4);
-    assert.ok(widest <= 0.1 * size, `${look}: thin at its widest, ${widest.toFixed(2)} px against the cursor's ${size}`);
+    near(across(act + 0.45), 2.6 * size, `${look}: ends at 2.6 times the cursor`, 0.5);
+    // at act + 0.1 s: fully opaque, and a stroke a viewer sees (about 0.08 of the cursor's size, scaled with the ring)
+    const seen = ring.props.strokeWidth * sample(ripple.tracks.scale, act + 0.1);
+    assert.equal(sample(ripple.tracks.opacity, act + 0.1), 1, `${look}: fully opaque at act + 0.1 s`);
+    assert.ok(Math.abs(ring.props.strokeWidth - 0.08 * size) < 0.005 * size, `${look}: ring stroke ${ring.props.strokeWidth} is 0.08 of the cursor (${0.08 * size})`);
+    assert.ok(seen >= 0.08 * size && seen <= 0.14 * size, `${look}: the stroke seen at act + 0.1 s is ${seen.toFixed(2)} px against the cursor's ${size}`);
     const keyline = byId(out, 'w.ripple2.keyline');
-    assert.ok(keyline.props.strokeWidth * sample(ripple.tracks.scale, act + 0.4) <= 0.2 * size, `${look}: so is its paper keyline`);
+    assert.equal(keyline.props.stroke, out.ctx.look.palette.paper, `${look}: a paper keyline under it`);
+    assert.ok(keyline.props.strokeWidth > ring.props.strokeWidth, `${look}: wider than the ring`);
     assert.equal(sample(ripple.tracks.opacity, act - 0.01), 0, `${look}: not there before the click`);
-    assert.ok(sample(ripple.tracks.opacity, act + 0.2) < sample(ripple.tracks.opacity, act + 0.05), `${look}: fading`);
-    assert.equal(sample(ripple.tracks.opacity, act + 0.4 + 0.01), 0, `${look}: gone after 0.4 s`);
-    assert.ok(sample(ripple.tracks.opacity, act + 0.05) > 0);
+    assert.equal(sample(ripple.tracks.opacity, act + 0.15), 1, `${look}: opaque for its first 0.15 s`);
+    assert.ok(sample(ripple.tracks.opacity, act + 0.3) < 1 && sample(ripple.tracks.opacity, act + 0.3) > 0, `${look}: then fading`);
+    assert.equal(sample(ripple.tracks.opacity, act + 0.45 + 0.01), 0, `${look}: gone after 0.45 s`);
     const [rx, ry] = [sample(ripple.tracks.x, act), sample(ripple.tracks.y, act)];
     const [cx, cy] = through(out, data.steps[2].pointer, act);
     near(rx, cx, `${look}: ripple x`);
@@ -245,20 +314,22 @@ test('the ring stays on its click point for its whole 0.4 s, though the cursor h
   const { act } = out.plan.steps[0];
   assert.ok(out.plan.steps[1].act - TRAVEL_MIN < act + 0.3, 'the cursor is already travelling to step 1 while the ring is up');
   const ripple = out.nodes.find((n) => n.id === 'w.ripple0');
-  for (const t of [act, act + 0.1, act + 0.2, act + 0.3, act + 0.4]) {
+  for (const t of [act, act + 0.1, act + 0.2, act + 0.3, act + 0.45]) {
     const [ex, ey] = through(out, data.steps[0].pointer, t);
     near(sample(ripple.tracks.x, t), ex, `ring x at +${(t - act).toFixed(1)} s`, 1e-2);
     near(sample(ripple.tracks.y, t), ey, `ring y at +${(t - act).toFixed(1)} s`, 1e-2);
   }
 });
 
-test('on the click frame of "Add project" the ring is a hairline round the label, not a blot over it (at most 4 px of ink)', () => {
+test('on the click frame of "Add project" the ring is an outline round the label, not a blot over it (at most 0.1 of the cursor in ink, 1.6 times it across)', () => {
   const out = expandWalk(walkFilm(), { w: committed() });
   const ring = byId(out, 'w.ripple4.ring');
   const ripple = out.nodes.find((n) => n.id === 'w.ripple4');
   const { act } = out.plan.steps[4];
+  const size = 0.05 * out.ctx.canvas.h;
   const stroke = ring.props.strokeWidth * sample(ripple.tracks.scale, act);
-  assert.ok(stroke <= 4, `${stroke.toFixed(2)} px of ink at the click frame`);
+  assert.ok(stroke <= 0.1 * size, `${stroke.toFixed(2)} px of ink at the click frame`);
+  assert.ok(boundsOf(ring.props.d).w * sample(ripple.tracks.scale, act) >= 1.6 * size - 0.5, 'and it is wider than the label it rings');
 });
 
 test('the committed take ripples on its two click steps, tab and add, and not on typing or hovering', () => {

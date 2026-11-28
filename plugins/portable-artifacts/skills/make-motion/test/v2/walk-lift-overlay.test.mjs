@@ -9,6 +9,7 @@ import { HOLD_MIN, LIFT_LEAD, LIFT_MOVES } from '../../engine/kinds/walk-time.mj
 import { walkSetup } from '../../engine/kinds/walk-layout.mjs';
 import { LIFT_GROW } from '../../engine/kinds/walk-lift.mjs';
 import { liftAt } from '../../engine/kinds/walk-pose.mjs';
+import { CIRCLE_SCALE } from '../../engine/devices/marks.mjs';
 import { all } from './helpers/kinds.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { EXAMPLES_DIR, committed, expandWalk, walkFilm, walkShot } from './helpers/walk.mjs';
@@ -105,7 +106,7 @@ test('the rest dims with the look\'s lift scrim for as long as the lift is up', 
   assert.equal(scrim.props.d.match(/M/g).length, 1, 'no hole: the card\'s own slot is dimmed too, and the raised card covers it');
 });
 
-test('the dim covers the page picture only, not the ground round the frame, and rises with the card', () => {
+test('the dim covers the whole framed window, title bar included (no white seam), not the ground round it, and rises with the card, at 0.3', () => {
   for (const look of ['keynote', 'desk']) {
     const out = expandWalk(walkFilm(LIFT_SHOT(), { look }), { w: committed() });
     const { hold } = out.ctx.look.kinds.walk.lift;
@@ -113,12 +114,17 @@ test('the dim covers the page picture only, not the ground round the frame, and 
     const scrim = byId(out, 'w.lift0.focus');
     const nums = scrim.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
     const [xs, ys] = [nums.filter((_, i) => i % 2 === 0), nums.filter((_, i) => i % 2 === 1)];
-    const [ix, iy, iw, ih] = out.boxes.image;
+    const [ox, oy, ow, oh] = out.boxes.screen; // the frame: title bar and page
+    const [, iy] = out.boxes.image;
     const slack = 0.05;
-    assert.ok(Math.min(...xs) >= ix - slack && Math.max(...xs) <= ix + iw + slack, `${look}: across, ${Math.min(...xs)}..${Math.max(...xs)} within the picture ${ix}..${ix + iw}`);
-    assert.ok(Math.min(...ys) >= iy - slack && Math.max(...ys) <= iy + ih + slack, `${look}: down, ${Math.min(...ys)}..${Math.max(...ys)} within the picture ${iy}..${iy + ih}`);
-    assert.ok(Math.min(...xs) <= ix + slack && Math.max(...xs) >= ix + iw - slack && Math.min(...ys) <= iy + slack && Math.max(...ys) >= iy + ih - slack, `${look}: and it reaches every side of the picture`);
+    assert.ok(oy < iy - 10, `${look}: the frame has a title bar above the page`);
+    assert.ok(Math.min(...xs) >= ox - slack && Math.max(...xs) <= ox + ow + slack, `${look}: across, ${Math.min(...xs)}..${Math.max(...xs)} within the window ${ox}..${ox + ow}`);
+    assert.ok(Math.min(...ys) >= oy - slack && Math.max(...ys) <= oy + oh + slack, `${look}: down, ${Math.min(...ys)}..${Math.max(...ys)} within the window ${oy}..${oy + oh}`);
+    assert.ok(Math.min(...xs) <= ox + slack && Math.max(...xs) >= ox + ow - slack && Math.min(...ys) <= oy + slack && Math.max(...ys) >= oy + oh - slack, `${look}: and it reaches every side of the window, the title bar too`);
+    const cornerOut = nums.some((_, i) => i % 2 === 0 && Math.abs(nums[i] - ox) < 1 && Math.abs(nums[i + 1] - oy) < 1);
+    assert.equal(cornerOut, false, `${look}: the window's rounded top corner is not dimmed past its edge (no point on the square corner)`);
     const dim = out.ctx.look.kinds.walk.lift.dim;
+    assert.equal(dim, 0.3, `${look}: a lighter dim`);
     assert.equal(sample(scrim.tracks.opacity, start), 0, `${look}: nothing dimmed before the card starts to rise`);
     assert.ok(sample(scrim.tracks.opacity, start + 0.1) > 0 && sample(scrim.tracks.opacity, start + 0.1) < dim, `${look}: coming up with the card`);
     near(sample(scrim.tracks.opacity, start + LIFT_MOVES / 2), dim, `${look}: full as the card tops out`);
@@ -174,13 +180,17 @@ test('every lift of a shot is drawn, each under its own id', () => {
 
 // ---- `on` devices aimed at a step ----
 
-test('desk: a circle on step:search is the circle device, in the walk look\'s mark style, built round that step\'s mapped box (fitted)', () => {
+test('desk: a circle on step:search is the circle device, in the walk look\'s mark style, built round that step\'s mapped box grown so its ellipse clears the box', () => {
   const prepared = { w: committed() };
   const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] }), { look: 'desk' }), prepared);
-  const { look } = out.ctx;
+  const { look, unit } = out.ctx;
   const whole = out.boxes['step:search'];
   assert.notDeepEqual(whole, out.boxes.image, 'the step has a box of its own');
-  const box = [whole[0] + (whole[2] * (1 - look.kinds.walk.mark.fit)) / 2, whole[1], whole[2] * look.kinds.walk.mark.fit, whole[3]];
+  const { factor, clear } = look.kinds.walk.mark.ellipse;
+  // the device draws 1.25 of the box it is given about its centre: give it the box that makes the radii the look's
+  const [rx, ry] = [Math.max((whole[2] / 2) * factor, whole[2] / 2 + clear * unit), Math.max((whole[3] / 2) * factor, whole[3] / 2 + clear * unit)];
+  const [w, h] = [(2 * rx) / CIRCLE_SCALE, (2 * ry) / CIRCLE_SCALE];
+  const box = [whole[0] + whole[2] / 2 - w / 2, whole[1] + whole[3] / 2 - h / 2, w, h];
   const styled = { ...look, devices: { ...look.devices, circle: { ...look.devices.circle, ...look.kinds.walk.mark.circle } } };
   const built = registries.devices.get('circle').build({ id: 'w.on0', box, at: out.ctx.at('sentence:3'), look: styled, unit: out.ctx.unit, seed: out.ctx.seed, measure: out.ctx.measure });
   const group = all(out.nodes).find((n) => n.id === 'w.on0.clear');

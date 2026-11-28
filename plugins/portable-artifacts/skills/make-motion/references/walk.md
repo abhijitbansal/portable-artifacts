@@ -114,21 +114,25 @@ section says how a push behaves once one does.
 
 - The cursor is drawn, an arrow in the look's ink with a paper keyline and a soft shadow so it reads on white, 5% of the canvas high
   (measured on the arrow's own path). It is on from the shot's first frame, at rest 62% across and 70% down the page until it travels to
-  the first step that has a pointer and a box (a take with no pointer at all has no cursor). Each travel to a click takes at least
+  the first step that has a pointer and a box (a take with no pointer at all has no cursor); a rest point that lands inside a step's
+  box goes just under that box. Each travel to a click takes at least
   0.6 s, ending on the step's act: it starts early, borrowing from the previous step's hold, but never before that step's act and never
   while a lift holds its card up (it waits until the card starts back down). A step that acts within 0.6 s of the previous one's act
   travels for as long as that gap allows. The cursor dips as it clicks (never under 4% of the canvas height, also in the whole-picture
-  pull-back). A `click` also draws a ripple: a thin outline ring (the look's `ripple`, ink on a wider paper keyline, 2 to 3 px at 1080p)
-  that starts 1.6 times the cursor's size and grows outward to 2.6 times over 0.4 s, fading, so the clicked label stays readable on the
-  click frame and the ring still reads on white UI and on the page's blue button. A step with no box leaves the cursor where it was. It
-  never leaves the frame.
+  pull-back). A `click` also draws a ripple: an outline ring (the look's `ripple`, ink on a wider paper keyline; 0.08 of the cursor's
+  size thick, about 4 px at 1080p) that starts 1.6 times the cursor's size and grows outward to 2.6 times over 0.45 s, fully opaque
+  for its first 0.15 s and then fading, so it is seen, and the clicked label stays readable inside it. After a click the cursor
+  stays on the clicked spot at most 0.4 s, then eases over 0.3 s to a point one cursor size down and right of it (kept inside the
+  picture), so the label it clicked reads during the hold; when the next travel sets off sooner than that ease can finish, the cursor
+  stays on the click until then. After a hover it stays on the card (a lift needs it there). A step with no box leaves the cursor
+  where it was. It never leaves the frame.
 - A lift crops the step's settled frame at the step's box grown by 3 page px on each side (clamped to the frame, so the card's own
   border comes along), drawn through a rounded rectangle of the look's `lift.radius` plus 3 (page px; the page's own card corner, kept
   concentric), so no square corner shows; the crop never shows a pixel outside that box. It comes up over 0.4 s from `at`
   (default 0.5 s after the step ends), scales to 1.08x (1.04x at the whole view, with the camera at zoom 1: the look's `wholeScale`, so
   the raised card keeps 10 px off its neighbours), rises (the look's `rise`, `wholeRise` at the whole view, held to 60% of the card's
   own growth so the raised card still covers its slot), holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear
-  shadow of the look's own. The page picture (the framed screen: not the ground round the window) dims under a darker scrim with no
+  shadow of the look's own. The whole framed window, title bar included (not the ground round it), dims under a scrim of 0.3 with no
   hole, rising with the card and leaving as it returns: the card's own slot is dimmed too and the raised card covers it, so no
   outline of the slot shows (`keynote` and `desk`: `kinds.walk.lift`).
 - The camera eases its zoom down with the card so the card can scale within the take's own pixels (camera zoom at most the native zoom
@@ -145,11 +149,11 @@ number inside it.
 
 A mark aimed at a step is cleared: it fades out when the next played step starts, or 2.0 s after it is drawn if that is sooner, and it
 is never left up over a lift (it clears as the lift starts). A mark never starts to draw before its step acts: its landing moves
-later, so its first stroke is on the step's act. The look styles it as an overlay (`kinds.walk.mark`): in `keynote` a rounded rectangle
-of the look's radius in ink, a moderate stroke 10 units outside the box (a clear gap, so it reads as an annotation and not as the
-page's own blue focus border), with a soft glow under it, revealed around its path over 0.4 s; in `desk` the hand circle in ink, fitted
-inside the field. Both keep out of the title-safe pad of the frame while the
-camera rests. A mark aimed at `screen` is the device as built. The draw-on lands on `at`, so aim the mark at the sentence of its step
+later, so its first stroke is on the step's act. The look styles it as an overlay (`kinds.walk.mark`): a `circle` on a step is an ink
+ellipse drawn on by the circle device (in `keynote` a clean ellipse; in `desk` the hand circle), centred on the step box with radii of
+1.45 times half the box (so the box's corners are inside it), and at least 8 units past each side. The ellipse is wider than a wide
+field: it rings the whole box, not a part of it. Both keep out of the title-safe pad of the frame while the
+camera rests (on the old step stops, parked, a wide ellipse can reach past the frame's edge). A mark aimed at `screen` is the device as built. The draw-on lands on `at`, so aim the mark at the sentence of its step
 (`sentence:<n>` counts from 0).
 
 ## Findings
@@ -191,6 +195,10 @@ a line in the text report (`notice: ...`) and in `notices` with `--json`. Then:
 No captured parts: a lift is a crop and no sharper than the frame. Idle
 means identical frame files, so a blinking caret or a spinner plays at real speed. A covered value in the take shows as its
 grey cover at any zoom. Walk stops make no sound in this phase. The longer list: make-demo's `limits.md`, "The walk shot".
+
+The window is as large as fits the room at the look's `wideShare` (0.88 of the room's width): for a 16:9 take on the gate films the room's
+height (the look's grid margin) is what limits it, at 63% of the frame's width in `keynote` and 67% in `desk`, so a wider `wideShare`
+changes nothing until the take is wider than 16:9.
 
 Known limits the engine cannot fix (the take or the product decides them):
 

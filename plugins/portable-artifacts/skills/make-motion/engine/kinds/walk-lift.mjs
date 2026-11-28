@@ -3,7 +3,7 @@
 // to the look's kinds.walk.lift.scale over LIFT_MOVES / 2 seconds and rises lift.rise of the canvas height, on the look's own
 // shadow layers (lift.layers), holds lift.hold, and returns over the same time to the same box. The crop is drawn through a
 // rounded rectangle of lift.radius (page px) grown by LIFT_GROW, and the crop is the box grown by LIFT_GROW page px a side, so
-// the card's own border comes along. The page picture dims (not the ground round the window; no hole: the card covers its own
+// the card's own border comes along. The framed window dims, title bar too (not the ground round it; no hole: the card covers its own
 // slot), in the look's lift scrim colour and dim, from the card's rise until it returns. The camera eases its zoom
 // down with the card (walk-camera.mjs), so the card's scale, held at every film frame to the take's native zoom over the
 // camera's, never draws past the take's own pixels (claim 1). The crop is an image node on the take's frames (props.video)
@@ -16,12 +16,14 @@ import { registries } from '../registry.mjs';
 import { elevatedShadow } from '../devices/card.mjs';
 import { paperScrim } from './shared.mjs';
 import { nativeZoom } from './screen-layout.mjs';
+import { chromeOf } from './screen-frame.mjs';
 import { LIFT_MOVES } from './walk-time.mjs';
 import { liftAt, liftRise } from './walk-pose.mjs';
 
 const HALF = 2;
 const MOVE = LIFT_MOVES / HALF; // s, up and back
 const MOVE_EASE = 'inOutCubic';
+const CORNER_STEPS = 8; // line segments to a rounded corner of the dim's outline
 const EPSILON = 1e-9;
 /** The page px the lifted crop reaches past the step's box on each side, so the card's own border comes along. */
 export const LIFT_GROW = 3;
@@ -70,17 +72,27 @@ function cardNode(id, shot, { box, clip, take, data, look, ctx, span, sizing, ra
 // The look with the lift's own scrim: the colour and dim kinds.walk.lift names, in place of the focus device's.
 const scrimLook = (ctx, lift) => ({ ...ctx.look, devices: { ...ctx.look.devices, focus: { ...ctx.look.devices.focus, dim: lift.dim ?? ctx.look.devices.focus.dim, ...(lift.scrim === undefined ? {} : { scrim: lift.scrim }) } } });
 
-// The page picture dimmed (not the ground round the frame): the focus device's scrim (the look's lift colour and dim) over the
-// picture rectangle exactly as it is drawn (the frame draws the picture square, under its rounded outline, so the dim matches it
-// and leaves no bright corner), rising with the card (from the lift's start to the card's peak), on while the lift is up and
+// The framed window's outline, clockwise, as the frame draws it: the top corners rounded (`radius` px, the frame's body) and the
+// bottom corners square (the frame draws the picture square, under its rounded outline), so the dim covers the title bar and the
+// page and leaves neither a bright corner nor ground dimmed past the window's top corners.
+function windowOutline([x, y, w, h], radius) {
+  const corner = ([cx, cy], from) => Array.from({ length: CORNER_STEPS + 1 }, (_, k) => {
+    const angle = from + (k / CORNER_STEPS) * (Math.PI / HALF);
+    return [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)];
+  });
+  return [...corner([x + radius, y + radius], Math.PI), ...corner([x + w - radius, y + radius], -Math.PI / HALF), [x + w, y + h], [x, y + h]];
+}
+
+// The framed window dimmed, title bar included (not the ground round it): the focus device's scrim (the look's lift colour and
+// dim) over the window's outline, rising with the card (from the lift's start to the card's peak), on while the lift is up and
 // fading with its return. It has no hole: the card's own slot is dimmed too, and the raised card (which covers its slot,
 // walk-pose.mjs liftRise) is drawn over it, so no outline of the slot shows round the card. Camera moves carry it, as they
 // carry the picture.
 function dimNode(id, { ctx, span, look, geo }) {
   if (!registries.devices.get('focus').supports(ctx.look)) return [];
   const lift = scrimLook(ctx, look.lift);
-  const [x, y, w, h] = geo.image;
-  const scrim = paperScrim({ id: `${id}.focus`, cover: [[[x, y], [x + w, y], [x + w, y + h], [x, y + h]]], at: span.start + MOVE, dur: MOVE, opacity: lift.devices.focus.dim ?? DEFAULT_DIM, look: lift });
+  const outline = windowOutline(geo.outer, chromeOf(geo.frame, ctx.unit).radius);
+  const scrim = paperScrim({ id: `${id}.focus`, cover: [outline], at: span.start + MOVE, dur: MOVE, opacity: lift.devices.focus.dim ?? DEFAULT_DIM, look: lift });
   return [node('group', `${id}.dim`, {}, { tracks: { opacity: windowTrack(span.start, span.end, MOVE) }, children: [scrim] })];
 }
 

@@ -1155,11 +1155,11 @@
   ]
  },
  "gate-walk-desk.json": {
-  "sha": "5cc250b67fabca82ce1c8aeccbc885db49e62a31e540d250c511072ae4e76bc9",
+  "sha": "ecfd549c7b28a06af0490d9b6a1eea086507134659ce11c56e2ef526072e4ced",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "b17da6fddb78",
-   "frameCount": "b2cc86ae48fd",
+   "duration": "6cf09fa54269",
+   "frameCount": "182dc6b90f1c",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1176,16 +1176,16 @@
     "id": "eacbe1227668",
     "index": "6b86b273ff34",
     "start": "120f2637e696",
-    "end": "591b139bd8a4",
-    "duration": "ad78cb9f2d23",
-    "words": "cd647aad4810",
-    "sentences": "e15b703cb9c6"
+    "end": "b17ef6d19c7a",
+    "duration": "29e472a04c02",
+    "words": "b612a5637ac4",
+    "sentences": "3f5babfe3e51"
    },
    {
     "id": "97959247360c",
     "index": "d4735e3a265e",
-    "start": "591b139bd8a4",
-    "end": "b17da6fddb78",
+    "start": "b17ef6d19c7a",
+    "end": "6cf09fa54269",
     "duration": "d9cfac58960b",
     "words": "e16d1be4d262",
     "sentences": "61860bddea5b"
@@ -1193,11 +1193,11 @@
   ]
  },
  "gate-walk-keynote.json": {
-  "sha": "9e2ef98cc02f3c449d8bd405527cadff189281df30b4c70cd5df61bef8254b41",
+  "sha": "7d2fa3690c30dc86008c65522596f3a7d5fd88247e63eda00379ccdc3901c845",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "d9806955d529",
-   "frameCount": "1de4d95a81eb",
+   "duration": "925029071494",
+   "frameCount": "1ad269a743bd",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1214,16 +1214,16 @@
     "id": "eacbe1227668",
     "index": "6b86b273ff34",
     "start": "fc0581057f96",
-    "end": "4ecbf5754798",
-    "duration": "ad78cb9f2d23",
-    "words": "cd647aad4810",
-    "sentences": "e15b703cb9c6"
+    "end": "4523540f1504",
+    "duration": "29e472a04c02",
+    "words": "b612a5637ac4",
+    "sentences": "3f5babfe3e51"
    },
    {
     "id": "97959247360c",
     "index": "d4735e3a265e",
-    "start": "4ecbf5754798",
-    "end": "d9806955d529",
+    "start": "4523540f1504",
+    "end": "925029071494",
     "duration": "d9cfac58960b",
     "words": "e16d1be4d262",
     "sentences": "61860bddea5b"

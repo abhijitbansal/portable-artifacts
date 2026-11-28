@@ -36,7 +36,7 @@ test('the mark clears when the next played step starts, if that is sooner than M
 test('the mark clears after MARK_SECONDS when the next step starts later', () => {
   const data = THREE();
   const out = expandWalk(walkFilm(handShot(data, { steps: [{ id: 's0' }, { id: 's1' }, { id: 's2', at: 9 }], on: [MARK()] })), { w: data });
-  const landed = Math.max(2, out.plan.steps[1].act + out.ctx.look.kinds.walk.mark.rounded.dur); // not before the step acts
+  const landed = Math.max(2, out.plan.steps[1].act + out.ctx.look.moves.draw.dur); // not before the step acts
   near(clearOf(out).gone, landed + MARK_SECONDS, '2.0 s after it is drawn');
 });
 
@@ -67,49 +67,55 @@ test('a mark aimed at the screen is the device as built, never cleared by the wa
 
 const numbersOf = (d) => d.match(/-?\d+(?:\.\d+)?/g).map(Number);
 
-test('keynote: the mark on a step is a rounded rectangle of the look\'s radius and a moderate stroke, drawn outside the box by a small gap, with a glow under it', () => {
+// the box [x, y, w, h] the circle device is given round `box` so its ellipse has radii of half the box times `factor`, at least
+// `clear` units past each side, about the box's centre
+const ELLIPSE_FACTOR = 1.45;
+const CLEAR = 8;
+
+test('both looks: the mark on a step is an ink ellipse about the box centre that clears the box by at least 8 units on every side (drawn by the circle device, no rounded rectangle)', () => {
+  for (const look of ['keynote', 'desk']) {
+    const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] }), { look }), { w: committed() });
+    const { mark } = out.ctx.look.kinds.walk;
+    assert.deepEqual(mark.ellipse, { factor: ELLIPSE_FACTOR, clear: CLEAR }, `${look}: the look names the ellipse`);
+    assert.equal(mark.rounded, undefined, `${look}: no rounded rectangle`);
+    const path = byId(out, 'w.on0');
+    assert.equal(path.props.stroke, out.ctx.look.palette.ink, `${look}: in ink`);
+    assert.ok(!/Q/.test(path.props.d), `${look}: not a rounded rectangle`);
+    const box = out.boxes['step:search'];
+    const { unit } = out.ctx;
+    const nums = numbersOf(path.props.d);
+    const [xs, ys] = [nums.filter((_, i) => i % 2 === 0), nums.filter((_, i) => i % 2 === 1)];
+    const [left, right, top, bottom] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const [cx, cy] = [box[0] + box[2] / 2, box[1] + box[3] / 2];
+    near((left + right) / 2, cx, `${look}: centred across on the box`, 6 * unit);
+    near((top + bottom) / 2, cy, `${look}: centred down on the box (it sat low)`, 6 * unit);
+    const slack = 5 * unit; // the hand circle's own wobble and its overlapping end
+    assert.ok(left <= box[0] - CLEAR * unit + slack && right >= box[0] + box[2] + CLEAR * unit - slack, `${look}: clears the box's sides (${left.toFixed(1)}..${right.toFixed(1)} against ${box[0]}..${box[0] + box[2]})`);
+    assert.ok(top <= box[1] - CLEAR * unit + slack && bottom >= box[1] + box[3] + CLEAR * unit - slack, `${look}: clears the box's top and bottom (${top.toFixed(1)}..${bottom.toFixed(1)} against ${box[1]}..${box[1] + box[3]})`);
+    assert.ok(path.tracks.draw.points.at(-1).v === 1 && path.tracks.draw.points[0].v === 0, `${look}: drawn on`);
+  }
+});
+
+test('keynote: the ellipse is exact: radii of the half box times the factor (at least the 8 unit clearance), drawn on over the look\'s draw move', () => {
   const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] })), { w: committed() });
-  const { mark } = out.ctx.look.kinds.walk;
-  const { unit } = out.ctx;
-  const ring = byId(out, 'w.on0');
-  const glow = byId(out, 'w.on0.glow');
-  assert.equal(ring.props.stroke, out.ctx.look.palette[mark.rounded.color]);
-  near(ring.props.strokeWidth, mark.rounded.width * unit, 'stroke');
-  assert.ok(ring.props.strokeWidth <= 5 * unit, 'moderate: not the heavy 6 of round 2');
-  assert.ok(/Q/.test(ring.props.d), 'rounded corners');
   const box = out.boxes['step:search'];
-  const gap = mark.rounded.gap * unit, round = (mark.rounded.radius + mark.rounded.gap) * unit;
-  const [x0, y0, ...rest] = numbersOf(ring.props.d);
-  near(x0, box[0] - gap + round, 'the top edge starts a corner radius in', 0.01);
-  near(y0, box[1] - gap, 'above the box by the gap', 0.01);
-  assert.ok(Math.min(...numbersOf(ring.props.d).filter((_, i) => i % 2 === 0)) >= box[0] - gap - 0.01, 'no further out than the gap');
-  assert.ok(rest.length > 0);
-  assert.ok(gap >= ring.props.strokeWidth, 'clear of the app\'s own focus border: the stroke sits outside the box');
-  near(glow.props.strokeWidth, mark.rounded.width * mark.glow.widen * unit, 'glow width');
-  assert.equal(glow.props.opacity, mark.glow.alpha);
-  assert.ok(glow.props.strokeWidth / 2 <= gap + ring.props.strokeWidth / 2, 'the glow does not reach the box either');
-  const group = byId(out, 'w.on0.clear');
-  assert.ok(group.children.indexOf(glow) < group.children.indexOf(ring), 'the glow is drawn under the ring');
-});
-
-test('keynote: the mark stands a clear gap (10 units) off the box, so it is not read as the page\'s own focus border, and draws on over 0.4 s', () => {
-  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] })), { w: committed() });
-  const { mark } = out.ctx.look.kinds.walk;
-  assert.equal(mark.rounded.gap, 10);
-  assert.ok(mark.rounded.gap >= 3 * mark.rounded.width, 'at least three stroke widths clear of the box');
+  const { unit } = out.ctx;
+  const [rx, ry] = [Math.max((box[2] / 2) * ELLIPSE_FACTOR, box[2] / 2 + CLEAR * unit), Math.max((box[3] / 2) * ELLIPSE_FACTOR, box[3] / 2 + CLEAR * unit)];
+  const nums = numbersOf(byId(out, 'w.on0').props.d);
+  const [xs, ys] = [nums.filter((_, i) => i % 2 === 0), nums.filter((_, i) => i % 2 === 1)];
+  near(Math.max(...xs) - Math.min(...xs), 2 * rx, 'width', 0.05);
+  near(Math.max(...ys) - Math.min(...ys), 2 * ry, 'height', 0.05);
+  near((Math.max(...xs) + Math.min(...xs)) / 2, box[0] + box[2] / 2, 'centre x', 0.05);
+  near((Math.max(...ys) + Math.min(...ys)) / 2, box[1] + box[3] / 2, 'centre y', 0.05);
   const drawn = byId(out, 'w.on0').tracks.draw.points;
-  near(drawn.at(-1).t - drawn[0].t, 0.4, 'the stroke reveals around its path over 0.4 s', 1e-9);
-  assert.equal(drawn[0].v, 0);
-  assert.equal(drawn.at(-1).v, 1);
-  const glow = byId(out, 'w.on0.glow');
-  assert.deepEqual(glow.tracks.draw.points, drawn, 'the glow draws on with it');
+  near(drawn.at(-1).t - drawn[0].t, out.ctx.look.moves.draw.dur, 'the look\'s draw move', 1e-9);
 });
 
-test('keynote: a mark aimed before the step acts still starts its 0.4 s draw-on on the act', () => {
+test('a mark aimed before the step acts still starts its draw-on on the act', () => {
   const out = expandWalk(walkFilm(walkShot({ on: [{ at: 0.2, do: 'circle', target: 'step:search' }] })), { w: committed() });
   const drawn = byId(out, 'w.on0').tracks.draw.points;
   near(drawn[0].t, out.plan.steps[2].act, 'starts on the act', 1e-6);
-  near(drawn.at(-1).t, out.plan.steps[2].act + 0.4, 'and lands 0.4 s on', 1e-6);
+  near(drawn.at(-1).t, out.plan.steps[2].act + out.ctx.look.moves.draw.dur, 'and lands one draw move on', 1e-6);
 });
 
 test('a mark on a step never starts to draw before the step\'s act, in both looks', () => {
@@ -126,16 +132,4 @@ test('a mark aimed after the step\'s act is drawn where it is aimed', () => {
   const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:4', do: 'circle', target: 'step:search' }] })), { w: committed() });
   assert.ok(out.ctx.at('sentence:4') > out.plan.steps[2].act + 1, 'the sentence is well after the act');
   near(byId(out, 'w.on0').tracks.draw.points.at(-1).t, out.ctx.at('sentence:4'), 'lands on its second');
-});
-
-test('desk: the circle is in ink (the film\'s one accent is the highlighter), fitted inside the box it is aimed at', () => {
-  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] }), { look: 'desk' }), { w: committed() });
-  const { mark } = out.ctx.look.kinds.walk;
-  const path = all(out.nodes).find((n) => n.id === 'w.on0');
-  assert.equal(path.props.stroke, out.ctx.look.palette.ink);
-  const box = out.boxes['step:search'];
-  const xs = path.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 0);
-  const reach = ((box[2] * mark.fit) * 1.25) / 2; // the hand circle is 1.25 of its box, about the box's centre
-  assert.ok(Math.max(...xs) < box[0] + box[2] / 2 + reach + 30, 'it does not run on past the field into the neighbouring button');
-  assert.ok(Math.max(...xs) < box[0] + box[2] + 0.05 * box[2], `right end ${Math.max(...xs)} vs field end ${box[0] + box[2]}`);
 });
