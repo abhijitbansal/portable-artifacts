@@ -5,7 +5,7 @@
 // in Node (scripts/v2/take.mjs) and arrives as ctx.prepared, so no take path reaches the page. Pure and DOM-free.
 // Parked in keynote and desk (look.kinds.walk.experimental) until its look gate passes.
 import { registries } from '../registry.mjs';
-import { kindData, kindSupportProblems } from '../looks/index.mjs';
+import { kindData, kindSupportProblems, supportsKind } from '../looks/index.mjs';
 import { AnchorError, SECONDS_RE, showValue } from '../script/anchors.mjs';
 import { FORMATS } from '../formats.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
@@ -107,8 +107,15 @@ function anchorProblems(shot, at) {
   ];
 }
 
+// Pushes are parked: a stop onto a step is refused unless the look's `kinds.walk.pushes` is true (no look sets it yet). The camera
+// code for `step:` stops stays, so a look that turns pushes on gets them back.
+const PUSH_PARKED = 'a stop onto a step is parked: a push can cut the page\'s rows. Use "whole" and a lift';
+// A look with no walk data is refused by kindSupportProblems, so it gets no second finding here.
+const pushProblems = (shot, look) => (!supportsKind(look, KIND) || kindData(look, KIND).pushes === true ? []
+  : (shot.stops ?? []).flatMap((stop, i) => (stop.to === 'whole' ? [] : [{ path: `stops.${i}.to`, message: PUSH_PARKED }])));
+
 function shotProblems(shot, { look, at, format, recording } = {}) {
-  return [...kindSupportProblems(KIND, look), ...filmProblems({ format, recording }), ...endProblems(shot), ...nameProblems(shot), ...farProblems(shot), ...anchorProblems(shot, at)];
+  return [...kindSupportProblems(KIND, look), ...filmProblems({ format, recording }), ...endProblems(shot), ...pushProblems(shot, look), ...nameProblems(shot), ...farProblems(shot), ...anchorProblems(shot, at)];
 }
 
 // `walkMinSeconds` with the look's lifts; a shot whose anchors do not parse has no minimum (the validator says so).
@@ -151,11 +158,11 @@ function walkField(shot, id) {
 const ANCHOR = {}; // a number or an anchor string: the validator says which forms exist
 
 registries.kinds.add(KIND, {
-  summary: 'A take folder from make-demo (the real frames of a scripted walk through a product) played in a browser frame: step n plays on sentence n at real speed, idle stretches cut, the last frame held; stops move the camera onto a step. Experimental.',
+  summary: 'A take folder from make-demo (the real frames of a scripted walk through a product) played in a browser frame: step n plays on sentence n at real speed, idle stretches cut, the last frame held; the whole page stays in view and a lift raises a step\'s box. Experimental.',
   example: {
     // the committed fixture take (references/examples/v2/walk-take): five steps, one sentence each
     id: 'tour', show: KIND, src: 'walk-take', say: 'Open the page. Pick the tab. Type a word. Hover a card. Add it.',
-    steps: [{ id: 'open' }, { id: 'tab' }, { id: 'search' }, { id: 'hover' }, { id: 'add' }], stops: [{ to: 'step:search' }, { to: 'whole' }],
+    steps: [{ id: 'open' }, { id: 'tab' }, { id: 'search' }, { id: 'hover' }, { id: 'add' }], stops: [{ to: 'whole' }],
   },
   schema: {
     required: ['src', 'steps'],

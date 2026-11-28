@@ -1,8 +1,12 @@
 // The two gate films (references/examples/v2/gate-walk-keynote.json and gate-walk-desk.json) as the walk shot sees them: the
 // real timeline of the film, the shot's expansion, its setup, and the measured text of the fixture page, for tests that look
 // at every film frame of the tour. The text rectangles are in page px (960 x 540), measured on the take's settled frames.
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { registries } from '../../../engine/registry.mjs';
+import { buildTimeline } from '../../../engine/script/timing.mjs';
+import { withFilmDefaults } from '../../../scripts/v2/spec.mjs';
+import { prepareFilm } from '../../../scripts/v2/prepare/index.mjs';
 import { layeredCamera } from '../../../engine/graph/camera.mjs';
 import { shotContext } from '../../../engine/graph/film.mjs';
 import { walkSetup } from '../../../engine/kinds/walk-layout.mjs';
@@ -23,9 +27,26 @@ export const LIFTED_TEXT = PAGE_TEXT[8];
 /** The text the add click brings: card 4. */
 export const ADDED_TEXT = Object.freeze([CARD_TEXT(716)]);
 
-/** The tour shot of a gate film, expanded: { out, ctx, setup, shot, fps, window(t) }. */
-export function gateTour(file) {
-  const loaded = loadFilm(path.join(EXAMPLES_DIR, file));
+/** The stops and lift the gate films had before pushes were parked (kept so the push camera keeps its guards). */
+export const PUSHED = Object.freeze({
+  stops: Object.freeze([{ to: 'step:tab' }, { to: 'step:hover' }, { to: 'step:add' }, { to: 'whole' }]),
+  lift: Object.freeze([{ step: 'hover' }]),
+});
+
+// The film as loadFilm builds it, but with the tour shot's stops and lift of PUSHED and no validation (the validator refuses a
+// step stop now): defaults, the prepared take and the timeline, as loadFilm does them.
+function loadPushed(file) {
+  const specPath = path.join(EXAMPLES_DIR, file);
+  const raw = JSON.parse(readFileSync(specPath, 'utf8'));
+  const spec = { ...raw, shots: raw.shots.map((s) => (s.show === 'walk' ? { ...s, stops: [...PUSHED.stops], lift: [...PUSHED.lift] } : s)) };
+  const film = withFilmDefaults(spec, registries);
+  const { prepared } = prepareFilm(film, { filmDir: EXAMPLES_DIR, kinds: registries.kinds });
+  return { film, prepared, timeline: buildTimeline(film, { fps: film.fps, modes: registries.modes, kinds: registries.kinds, prepared }) };
+}
+
+/** The tour shot of a gate film, expanded: { out, ctx, setup, shot, fps, window(t) }. `pushed` plays the old step stops. */
+export function gateTour(file, { pushed = false } = {}) {
+  const loaded = pushed ? loadPushed(file) : loadFilm(path.join(EXAMPLES_DIR, file));
   const index = loaded.film.shots.findIndex((s) => s.show === 'walk');
   const ctx = shotContext({ film: loaded.film, index, timeline: loaded.timeline, canvas: canvasOf(loaded.film.format), measure, assets: new Map(), prepared: loaded.prepared });
   const shot = loaded.film.shots[index];

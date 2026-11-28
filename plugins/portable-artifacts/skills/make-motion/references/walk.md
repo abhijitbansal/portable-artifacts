@@ -36,7 +36,7 @@ is clamped or repaired. The error is at `shots[<i>].src` and names the take fiel
 | `src` | string | Required. The take folder, relative to the film's folder |
 | `steps` | 1 to 40 of `{ id, at? }` | Required. The take steps this shot plays, in the take's order. `id` is a take step id; `at` an anchor |
 | `frame` | `browser` (default), `window`, `none` | The frame the picture is drawn in |
-| `stops` | 0 to 12 of `{ to, at? }` | Camera stops. `to` is `whole` or `step:<id>` |
+| `stops` | 0 to 12 of `{ to, at? }` | Camera stops. `to` is `whole`; `step:<id>` is refused for now (Stops) |
 | `lift` | 0 to 4 of `{ step, at? }` | Lift the step's box out of the picture |
 | `title` | string, 1 to 40 characters | The browser frame's title |
 | `on` | as every shot | Marks. Targets are `screen` and `step:<id>`; the default is `screen` |
@@ -53,8 +53,8 @@ Example, on the fixture take:
   "title": "Harbor",
   "say": "Open the page. Open the activity tab. Type a number. Point at a card. Add a project.",
   "steps": [{ "id": "open" }, { "id": "tab" }, { "id": "search" }, { "id": "hover" }, { "id": "add" }],
-  "stops": [{ "to": "step:tab" }, { "to": "step:add" }, { "to": "whole" }],
-  "lift": [{ "step": "hover" }],
+  "stops": [{ "to": "whole" }],
+  "lift": [{ "step": "hover" }, { "step": "add" }],
   "on": [{ "at": "sentence:2", "do": "circle", "target": "step:search" }]
 }
 ```
@@ -81,6 +81,12 @@ The example circles the search field on its sentence: `sentence:<n>` counts from
 ## Stops
 
 A stop moves the camera over 0.8 s, eased in and out.
+
+**A stop onto a step is refused for now.** `{ "to": "step:tab" }` gives, at `stops[<n>].to`: `a stop onto a step is parked: a push
+can cut the page's rows. Use "whole" and a lift`. A push crops the picture, and the crop can cut through a row of the page. Keep
+the whole picture, which is `{ "to": "whole" }` or no stop at all, and lift the step you want read: a lift crops the step's own
+box and shows it whole. A look turns pushes back on with `kinds.walk.pushes: true`; no look sets it yet. The rest of this
+section says how a push behaves once one does.
 
 - **The whole picture comes first.** No stop's move starts until the shot has shown the whole picture for 2.0 s after its incoming cut
   ends (the shot's own `cut`; with none, from the shot's start). The steps still play on their sentences; only the camera waits.
@@ -170,6 +176,7 @@ a line in the text report (`notice: ...`) and in `notices` with `--json`. Then:
 
 ## Limits
 
-16:9 only. Not in a film narrated by one recording. No captured parts: a lift is a crop and no sharper than the frame. Idle
+16:9 only. Not in a film narrated by one recording. A stop onto a step is refused (Stops): the whole picture and lifts only.
+No captured parts: a lift is a crop and no sharper than the frame. Idle
 means identical frame files, so a blinking caret or a spinner plays at real speed. A covered value in the take shows as its
 grey cover at any zoom. Walk stops make no sound in this phase. The longer list: make-demo's `limits.md`, "The walk shot".

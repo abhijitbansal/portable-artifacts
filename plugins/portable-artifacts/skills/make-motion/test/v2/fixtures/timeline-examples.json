@@ -1155,11 +1155,11 @@
   ]
  },
  "gate-walk-desk.json": {
-  "sha": "9f71a483c0d999b57b2e8cd1d66a63be0b17505149d38b49e8940b1d1ad1900b",
+  "sha": "857683547993e6d38d432cc8c24206a2e511893d872e0a15de9c4818089dc065",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "3371ed60d776",
-   "frameCount": "75f7313c2014",
+   "duration": "b96908904a39",
+   "frameCount": "d536a8c1664f",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1176,16 +1176,16 @@
     "id": "eacbe1227668",
     "index": "6b86b273ff34",
     "start": "120f2637e696",
-    "end": "d86e0da98f89",
-    "duration": "8a80acc9373d",
+    "end": "44d833455983",
+    "duration": "594e48ba65d3",
     "words": "948fe9857cb1",
     "sentences": "f2f530588923"
    },
    {
     "id": "97959247360c",
     "index": "d4735e3a265e",
-    "start": "d86e0da98f89",
-    "end": "3371ed60d776",
+    "start": "44d833455983",
+    "end": "b96908904a39",
     "duration": "2912aa729c97",
     "words": "a8de804f8288",
     "sentences": "b17bf833e717"
@@ -1193,11 +1193,11 @@
   ]
  },
  "gate-walk-keynote.json": {
-  "sha": "a3a3d06015ed05ffb5aa0496a34d9c83620c9db4e45f2907b0cfd93867519c54",
+  "sha": "a98683424fb066d7f45bd617230540c84e30f6b5f6d1b13f2fbd389c00ff44c5",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "91b3fae17990",
-   "frameCount": "0fbc9039145b",
+   "duration": "69706bc1d737",
+   "frameCount": "6f90a5a0d323",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1214,16 +1214,16 @@
     "id": "eacbe1227668",
     "index": "6b86b273ff34",
     "start": "fc0581057f96",
-    "end": "a20fa123d4d8",
-    "duration": "8a80acc9373d",
+    "end": "88d26d9391bc",
+    "duration": "594e48ba65d3",
     "words": "948fe9857cb1",
     "sentences": "f2f530588923"
    },
    {
     "id": "97959247360c",
     "index": "d4735e3a265e",
-    "start": "a20fa123d4d8",
-    "end": "91b3fae17990",
+    "start": "88d26d9391bc",
+    "end": "69706bc1d737",
     "duration": "2912aa729c97",
     "words": "a8de804f8288",
     "sentences": "b17bf833e717"

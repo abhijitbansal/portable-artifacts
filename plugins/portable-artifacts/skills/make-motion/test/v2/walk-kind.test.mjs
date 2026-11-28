@@ -4,6 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { registries } from '../../engine/registry.mjs';
 import { isParkedKind, listedKinds } from '../../engine/looks/index.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
@@ -49,8 +51,50 @@ test('the example validates in keynote and desk', () => {
 });
 
 test('a shot with every field validates', () => {
-  const shot = walkShot({ title: 'Shop', frame: 'window', stops: [{ to: 'whole' }, { to: 'step:tab', at: 'sentence:1' }], lift: [{ step: 'search', at: 'word:word' }], on: [{ at: 'sentence:2', do: 'circle', target: 'step:search' }] });
+  const shot = walkShot({ title: 'Shop', frame: 'window', stops: [{ to: 'whole' }, { to: 'whole', at: 'sentence:1' }], lift: [{ step: 'search', at: 'word:word' }], on: [{ at: 'sentence:2', do: 'circle', target: 'step:search' }] });
   assert.deepEqual(errorsOf(walkFilm(shot)), []);
+});
+
+// ---- pushes are parked: a stop onto a step is refused unless the look's kinds.walk.pushes is true ----
+
+const PUSH_MESSAGE = 'a stop onto a step is parked: a push can cut the page\'s rows. Use "whole" and a lift';
+
+test('a stop onto a step is refused at stops[0].to in keynote and in desk', () => {
+  for (const look of ['keynote', 'desk']) {
+    const errors = errorsOf(walkFilm(walkShot({ stops: [{ to: 'step:tab' }] }), { look }));
+    assert.ok(errors.includes(`shots[0].stops[0].to: ${PUSH_MESSAGE}`), `${look}: ${errors.join(' | ')}`);
+  }
+});
+
+test('each stop onto a step is refused at its own index; whole stops are not', () => {
+  const errors = errorsOf(walkFilm(walkShot({ stops: [{ to: 'whole' }, { to: 'step:tab' }, { to: 'step:add' }] })));
+  assert.deepEqual(errors.filter((e) => e.includes('is parked')), [`shots[0].stops[1].to: ${PUSH_MESSAGE}`, `shots[0].stops[2].to: ${PUSH_MESSAGE}`]);
+});
+
+test('a look whose kinds.walk.pushes is true accepts a stop onto a step', () => {
+  const keynote = registries.looks.get('keynote');
+  const pushing = { ...keynote, kinds: { ...keynote.kinds, walk: { ...keynote.kinds.walk, pushes: true } } };
+  const shot = walkShot({ stops: [{ to: 'step:tab' }, { to: 'whole' }] });
+  const problems = (look) => walk.validate(shot, { look, format: '16:9' }).filter((p) => p.path.startsWith('stops.'));
+  assert.deepEqual(problems(pushing), []);
+  assert.deepEqual(problems(keynote).map((p) => p.path), ['stops.0.to']);
+});
+
+test('no look sets pushes yet', () => {
+  for (const name of ['keynote', 'desk']) assert.notEqual(registries.looks.get(name).kinds.walk.pushes, true, name);
+});
+
+test('both gate films and the kind\'s example validate, in whole stops and lifts only', () => {
+  for (const [file, look] of [['gate-walk-keynote.json', 'keynote'], ['gate-walk-desk.json', 'desk']]) {
+    const film = JSON.parse(readFileSync(path.join(EXAMPLES_DIR, file), 'utf8'));
+    assert.deepEqual(validateFilm(film, { specDir: EXAMPLES_DIR }).errors, [], file);
+    const tour = film.shots.find((s) => s.show === 'walk');
+    assert.deepEqual(tour.stops, [{ to: 'whole' }], `${file}: one whole stop`);
+    assert.deepEqual(tour.lift.map((l) => l.step), ['hover', 'add'], `${file}: lifts on hover and add`);
+    assert.equal(film.look, look);
+  }
+  assert.deepEqual(walk.example.stops, [{ to: 'whole' }]);
+  assert.deepEqual(errorsOf(walkFilm({ ...walk.example, src: 'walk-take' })), []);
 });
 
 test('steps: 1 to 40, each with an id; frame is browser, window or none; no other field', () => {
@@ -291,7 +335,7 @@ test('there is no standalone resolution finding: a small box that wants more tha
   assert.deepEqual(reviewOf(filmOfWalk(unknown, { stops: [{ to: 'step:s1' }] }), unknown), [], 'an unknown text size at a capped stop gets no finding');
 });
 
-test('the gate film\'s setup on the committed take (two step stops, a whole return, a lift, a circle) has zero findings in both looks', () => {
+test('the pushed gate setup (the old gate films: two step stops, a whole return, a lift, a circle; driven past validation) has zero findings in both looks', () => {
   const prepared = { w: committed() };
   const shot = walkShot({ stops: [{ to: 'step:tab' }, { to: 'step:add' }, { to: 'whole' }], lift: [{ step: 'hover' }], on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] });
   for (const look of ['keynote', 'desk']) {
@@ -299,6 +343,16 @@ test('the gate film\'s setup on the committed take (two step stops, a whole retu
     assert.deepEqual(walk.review(shot, reviewCtx(film, prepared)), [], look);
     const stops = walkSetup(shot, expandWalk(film, prepared).ctx).planned.stops;
     assert.ok(stops.filter((s) => s.id !== undefined).every((s) => Math.abs(s.zoom - Math.min(s.wanted, s.cap)) < 1e-9), `${look}: every step stop is the fit of its context, at most the take carries`);
+  }
+});
+
+test('the whole-and-lift gate setup on the committed take (a whole stop, lifts on hover and add, a circle) has zero findings in both looks', () => {
+  const prepared = { w: committed() };
+  const shot = walkShot({ stops: [{ to: 'whole' }], lift: [{ step: 'hover' }, { step: 'add' }], on: [{ at: 'sentence:2', do: 'circle', target: 'step:search' }] });
+  for (const look of ['keynote', 'desk']) {
+    const film = walkFilm(shot, { look });
+    assert.deepEqual(errorsOf(film), [], `${look}: validates`);
+    assert.deepEqual(walk.review(shot, reviewCtx(film, prepared)), [], look);
   }
 });
 
