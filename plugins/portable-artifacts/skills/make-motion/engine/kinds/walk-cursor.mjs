@@ -6,7 +6,7 @@
 // but never before that step's act and never while a lift holds its card up (not until the card starts back down). At act
 // it dips to 0.9, and a `click` step adds a ripple: an outline ring (the look's kinds.walk.ripple: ink on a paper keyline;
 // the accent without it) that starts RIPPLE.from times the cursor's size and grows outward, opaque then fading, so the clicked
-// label stays readable. After a click the cursor leaves its label: see withParking. Before the first pointer it rests on REST,
+// label stays readable. After a click the cursor stays on it until the result is on screen, then leaves its label: see withParking. Before the first pointer it rests on REST,
 // moved under any step box it lands in. Both nodes are top-level and `fixed` (the camera leaves them where they are put), so every position is the page
 // point through the image map and then through the shot's own camera, keyed once per film frame; it is clamped to stay inside
 // the frame. Pure and DOM-free.
@@ -29,9 +29,9 @@ const DIP = Object.freeze({ scale: 0.9, before: 0.04, hold: 0.12, after: 0.06 })
 // the ring is fully opaque for its first `solid` seconds, then fades out by `seconds`
 const RIPPLE = Object.freeze({ from: 1.6, to: 2.6, seconds: 0.45, solid: 0.15, width: 0.08, ease: 'outCubic' });
 const KEYLINE_WIDEN = 2; // the ripple's paper keyline is this many times its ring's stroke
-// off a clicked label: `stay` s at most on the clicked spot, `ease` s to the parked point; a rest point inside a step box goes
-// under it by a cursor size over `under`
-const PARK = Object.freeze({ stay: 0.4, ease: 0.3, under: 4 });
+// off a clicked label: `hold` s on the clicked spot after the result is on screen, `ease` s to the parked point; a rest point
+// inside a step box goes under it by a cursor size over `under`
+const PARK = Object.freeze({ hold: 0.3, ease: 0.3, under: 4 });
 const EPSILON = 1e-9;
 
 /** Where the cursor rests before its first pointer, as shares of the page (viewport) width and height. */
@@ -54,8 +54,8 @@ function targetsOf(shot, setup) {
   return shot.steps.flatMap(({ id }, index) => {
     const take = data.steps.find((s) => s.id === id);
     if (!take?.box || !take.pointer) return [];
-    const { act } = plan.steps[index];
-    return [{ index, point: geo.mapPoint(take.pointer), act, from: Math.max(act - TRAVEL_MIN, freeFrom(index, act, setup)), click: take.do === 'click' }];
+    const { act, end } = plan.steps[index];
+    return [{ index, point: geo.mapPoint(take.pointer), act, end, from: Math.max(act - TRAVEL_MIN, freeFrom(index, act, setup)), click: take.do === 'click' }];
   });
 }
 
@@ -71,15 +71,16 @@ function bowOf(a, b) {
 
 const quadratic = (a, c, b, u) => [0, 1].map((k) => (1 - u) ** 2 * a[k] + 2 * (1 - u) * u * c[k] + u ** 2 * b[k]);
 
-// After a click the cursor leaves the label it clicked: it stays on the spot STAY s at most, then eases over EASE_OFF s to
-// the point one cursor size down and right of it (kept inside the picture). When the next travel sets off sooner than that
-// ease can finish, the cursor stays on the click until the travel (no half ease): `off` is { from, to, point } or absent.
+// After a click the cursor stays exactly on the clicked spot until the step's result is on screen (its `end`, the last kept
+// frame) and PARK.hold s more, then leaves the label: it eases over PARK.ease s to the point one cursor size down and right of
+// it (kept inside the picture). When the next travel sets off before that ease can finish, the cursor goes straight from the
+// click into the travel (no half ease): `off` is { from, to, point } or absent.
 function withParking(targets, { image, size }) {
   const room = [image[0] + image[2] - ARROW_WIDTH * size, image[1] + image[3] - size]; // the lowest tip that keeps the arrow inside
   return targets.map((g, j) => {
     if (!g.click) return g;
-    const from = Math.min(g.act + PARK.stay, (targets[j + 1]?.from ?? Infinity) - PARK.ease);
-    if (from < g.act - EPSILON) return g;
+    const from = g.end + PARK.hold;
+    if (from + PARK.ease > (targets[j + 1]?.from ?? Infinity) + EPSILON) return g;
     return { ...g, off: { from, to: from + PARK.ease, point: [Math.min(g.point[0] + size, room[0]), Math.min(g.point[1] + size, room[1])] } };
   });
 }

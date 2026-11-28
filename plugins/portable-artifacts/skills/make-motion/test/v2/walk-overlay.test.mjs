@@ -135,7 +135,8 @@ test('a step with no box keeps the cursor where it was (off the clicked label, o
   data.steps[1] = { ...data.steps[1], box: null };
   const out = expandHand(data);
   const [from, to] = [out.plan.steps[1].start, out.plan.steps[1].end];
-  for (const t of [from, (from + to) / 2, to - TRAVEL_MIN]) { // the travel to step 2 borrows the last TRAVEL_MIN s of this step
+  assert.ok(out.plan.steps[0].end + 0.6 < from + 0.2, 'step 0\'s ease (its end + 0.3 s, then 0.3 s) is done by then');
+  for (const t of [from + 0.2, (from + to) / 2, to - TRAVEL_MIN]) { // the travel to step 2 borrows the last TRAVEL_MIN s of this step
     const [x, y] = cursorAt(out, t);
     const [ex, ey] = through(out, parked(out, data.steps[0].pointer), t);
     near(x, ex, `x at ${t}`);
@@ -143,16 +144,48 @@ test('a step with no box keeps the cursor where it was (off the clicked label, o
   }
 });
 
-test('after a click the cursor stays on the clicked spot at most 0.4 s, then eases for 0.3 s to a point one cursor size down and right, so the label reads', () => {
+test('after a click the cursor stays exactly on the clicked spot until the step\'s result is on screen (its end) and 0.3 s more, then eases for 0.3 s to a point one cursor size down and right', () => {
   const data = THREE();
   const out = expandHand(data);
-  const { act } = out.plan.steps[0];
-  const point = data.steps[0].pointer;
+  const { act, end } = out.plan.steps[2]; // the last step: nothing travels after it
+  const point = data.steps[2].pointer;
   const at = (t, p) => { const [x, y] = cursorAt(out, t); const [ex, ey] = through(out, p, t); return Math.hypot(x - ex, y - ey); };
-  assert.ok(at(act + 0.4, point) < 0.05, 'still on the clicked spot 0.4 s after the click');
-  assert.ok(at(act + 0.55, point) > 3, 'on its way off mid-ease');
-  assert.ok(at(act + 0.7, parked(out, point)) < 0.5, `one cursor size down and right of the act point 0.7 s after the click (${at(act + 0.7, parked(out, point)).toFixed(2)} px off)`);
-  assert.ok(at(act + 0.9, parked(out, point)) < 0.5, 'and it stays there through the hold');
+  for (let k = Math.ceil(act * FPS); k / FPS <= end + 0.3 + 1e-9; k += 1) {
+    assert.ok(at(k / FPS, point) < 0.05, `on the clicked spot at ${(k / FPS).toFixed(3)} s (act ${act.toFixed(2)}, end ${end.toFixed(2)})`);
+  }
+  assert.ok(at(end + 0.45, point) > 3, 'on its way off mid-ease');
+  assert.ok(at(end + 0.3 + 0.3, parked(out, point)) < 0.5, `one cursor size down and right of the act point 0.3 s after it sets off (${at(end + 0.6, parked(out, point)).toFixed(2)} px off)`);
+  assert.ok(at(end + 1, parked(out, point)) < 0.5, 'and it stays there through the hold');
+});
+
+test('a next travel that must set off before the result has held 0.3 s takes the cursor straight from the act point: no ease between', () => {
+  const data = THREE();
+  const out = expandHand(data);
+  const { act, end } = out.plan.steps[0];
+  const next = out.plan.steps[1].act - TRAVEL_MIN; // step 1 has a box: its travel sets off here
+  assert.ok(next < end + 0.3 + 0.3, 'the next travel sets off before an ease could finish');
+  for (let t = act; t <= next; t += 1 / FPS) {
+    const [x, y] = cursorAt(out, t);
+    const [ex, ey] = through(out, data.steps[0].pointer, t);
+    assert.ok(Math.hypot(x - ex, y - ey) < 0.05, `on the click at ${t.toFixed(3)} s, with no ease off it`);
+  }
+  const [x, y] = cursorAt(out, next + 0.2);
+  const [ex, ey] = through(out, data.steps[0].pointer, next + 0.2);
+  assert.ok(Math.hypot(x - ex, y - ey) > 2, 'and it is under way in the travel soon after');
+});
+
+test('both gate films: from the Add click to the result\'s end and 0.3 s more the cursor tip is exactly on the act point, then it moves off', () => {
+  for (const file of ['gate-walk-keynote.json', 'gate-walk-desk.json']) {
+    const tour = gateTour(file);
+    const { plan, geo, data } = tour.setup;
+    const { act, end } = plan.steps[4];
+    const point = geo.mapPoint(data.steps.find((s) => s.id === 'add').pointer);
+    const cursor = tour.out.nodes.find((n) => n.id === `${tour.shot.id}.cursor`);
+    const tip = (t) => [sample(cursor.tracks.x, t), sample(cursor.tracks.y, t)];
+    const dist = (t) => { const [x, y] = tip(t); const [ex, ey] = pointThroughCamera(point, tour.cam(t), tour.ctx.canvas); return Math.hypot(x - ex, y - ey); };
+    for (let k = Math.ceil(act * FPS); k / FPS <= end + 0.3 + 1e-9; k += 1) assert.ok(dist(k / FPS) <= 0.5, `${file}: ${dist(k / FPS).toFixed(2)} px off the act point at ${(k / FPS).toFixed(3)} s`);
+    assert.ok(dist(end + 0.3 + 0.3) > 0.5 * 0.05 * tour.ctx.canvas.h, `${file}: and it has moved off by the end of the ease`);
+  }
 });
 
 test('after a hover the cursor stays on the card (the lift needs it there)', () => {
@@ -183,7 +216,7 @@ test('the parked spot stays inside the picture: a click at its bottom right corn
   const [ix, iy, iw, ih] = out.boxes.image;
   const size = 0.05 * out.ctx.canvas.h;
   const { act } = out.plan.steps[1];
-  const [x, y] = cursorAt(out, act + 0.9);
+  const [x, y] = cursorAt(out, out.plan.steps[1].end + 1); // well after the ease (the result's end + 0.3 s, then 0.3 s)
   const slack = 0.1 * size; // the camera's resting drift moves the picture a few px
   assert.ok(x >= ix - slack && x <= ix + iw - 0.6 * size + slack && y >= iy - slack && y <= iy + ih - size + slack, `the cursor at (${x.toFixed(1)}, ${y.toFixed(1)}) is inside the picture ${[ix, iy, ix + iw, iy + ih].map(Math.round)}`);
 });

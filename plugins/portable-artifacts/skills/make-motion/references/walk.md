@@ -122,9 +122,10 @@ section says how a push behaves once one does.
   pull-back). A `click` also draws a ripple: an outline ring (the look's `ripple`, ink on a wider paper keyline; 0.08 of the cursor's
   size thick, about 4 px at 1080p) that starts 1.6 times the cursor's size and grows outward to 2.6 times over 0.45 s, fully opaque
   for its first 0.15 s and then fading, so it is seen, and the clicked label stays readable inside it. After a click the cursor
-  stays on the clicked spot at most 0.4 s, then eases over 0.3 s to a point one cursor size down and right of it (kept inside the
-  picture), so the label it clicked reads during the hold; when the next travel sets off sooner than that ease can finish, the cursor
-  stays on the click until then. After a hover it stays on the card (a lift needs it there). A step with no box leaves the cursor
+  stays exactly on the clicked spot until the step's result is on screen (the step's last kept frame) and 0.3 s more, so the click
+  reads as a click, then eases over 0.3 s to a point one cursor size down and right of it (kept inside the picture), so the label it
+  clicked reads during the hold; when the next travel must set off before that ease can finish, the cursor goes straight from the
+  click into that travel, with no ease. After a hover it stays on the card (a lift needs it there). A step with no box leaves the cursor
   where it was. It never leaves the frame.
 - A lift crops the step's settled frame at the step's box grown by 3 page px on each side (clamped to the frame, so the card's own
   border comes along), drawn through a rounded rectangle of the look's `lift.radius` plus 3 (page px; the page's own card corner, kept
