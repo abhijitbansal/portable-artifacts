@@ -9,6 +9,9 @@ import { siblingDir, SiblingError, siblingScript } from '../scripts/lib/siblings
 
 const EXAMPLE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../references/examples/walkthrough.demo.json');
 const example = () => structuredClone(loadSpec(EXAMPLE).spec);
+// The example without look, opening, ending and brand: for a test about another rule, where a changed origin, rights or session
+// would also trip a rule those fields carry (a fact's address, a third party's brand, a signed-in fact).
+const plain = () => { const { look, opening, ending, brand, ...rest } = example(); return rest; };
 const step = (extra) => ({ id: 'a-step', do: 'click', target: { css: '#x' }, ...extra });
 const withSteps = (steps) => ({ ...example(), useCases: [{ id: 'uc', title: 'A use case', steps: [{ id: 'go', do: 'goto', value: '/' }, ...steps] }] });
 const errorsOf = (spec) => validateSpec(spec).errors;
@@ -72,7 +75,7 @@ test('origins: 1 to 5 bare origins, and the URL origin is one of them', () => {
 
 test('originsOf defaults to the URL origin and returns what the file says otherwise', () => {
   assert.deepEqual(originsOf(example()), ['https://shop.example.test']);
-  const spec = example();
+  const spec = plain();
   delete spec.origins;
   spec.source.url = 'https://shop.example.test:8443/a/b';
   assert.deepEqual(originsOf(spec), ['https://shop.example.test:8443']);
@@ -85,7 +88,7 @@ test('rights is required and one of own, permitted, third-party', () => {
   delete spec.rights;
   failsAt(spec, 'rights');
   failsAt({ ...example(), rights: 'mine' }, 'rights');
-  for (const rights of ['own', 'permitted', 'third-party']) assert.deepEqual(errorsOf({ ...example(), rights }), []);
+  for (const rights of ['own', 'permitted', 'third-party']) assert.deepEqual(errorsOf({ ...plain(), rights }), []);
 });
 
 test('viewport is 320 to 1920 wide and 320 to 1200 high', () => {
@@ -97,7 +100,7 @@ test('viewport is 320 to 1920 wide and 320 to 1200 high', () => {
 });
 
 test('session is a short lower-case name', () => {
-  assert.deepEqual(errorsOf({ ...example(), session: 'shop-owner' }), []);
+  assert.deepEqual(errorsOf({ ...plain(), session: 'shop-owner' }), []);
   for (const session of ['Owner', '-x', '', 'a'.repeat(42), 'a/b', '../x']) failsAt({ ...example(), session }, 'session');
 });
 
@@ -212,6 +215,90 @@ test('a target is { role, name } or { css }, not both and not neither', () => {
 test('an unknown verb is an error that names the verbs', () => {
   const found = errorsOf(withSteps([{ id: 'b', do: 'drag', target: { css: '#x' } }]));
   assert.ok(found.some((e) => e.path.endsWith('.do') && /click/.test(e.message)), messages(withSteps([{ id: 'b', do: 'drag' }])));
+});
+
+// ---- look, opening, ending, brand (phase 4) ----
+
+const FACT = { text: 'Plans start at 5 dollars', value: 5, from: 'https://shop.example.test/pricing' };
+
+test('the example carries look, opening, ending and brand, and is valid', () => {
+  const spec = example();
+  for (const key of ['look', 'opening', 'ending', 'brand']) assert.ok(Object.hasOwn(spec, key), `the example holds ${key}`);
+  assert.deepEqual(validateSpec(spec), { ok: true, errors: [] });
+});
+
+test('look is keynote or desk', () => {
+  for (const look of ['keynote', 'desk']) assert.deepEqual(errorsOf({ ...example(), look }), [], look);
+  failsAt({ ...example(), look: 'pop' }, 'look');
+  failsAt({ ...example(), look: 7 }, 'look');
+});
+
+test('opening: a hook of 1 to 120 characters, up to 3 facts, the object closed', () => {
+  const hook = 'Find a plan in two clicks';
+  assert.deepEqual(errorsOf({ ...example(), opening: { hook } }), [], 'a hook alone');
+  assert.deepEqual(errorsOf({ ...example(), opening: { hook: 'x'.repeat(120) } }), [], '120 characters');
+  failsAt({ ...example(), opening: { hook: 'x'.repeat(121) } }, 'opening.hook');
+  failsAt({ ...example(), opening: { hook: '' } }, 'opening.hook');
+  failsAt({ ...example(), opening: { facts: [FACT] } }, 'opening');
+  failsAt({ ...example(), opening: { hook, extra: 1 } }, 'opening');
+  failsAt({ ...example(), opening: { hook, facts: [] } }, 'opening.facts');
+  const fact = (n) => ({ text: `Fact ${n}`, from: 'user' });
+  assert.deepEqual(errorsOf({ ...example(), opening: { hook, facts: [fact(1), fact(2), fact(3)] } }), [], 'three facts');
+  failsAt({ ...example(), opening: { hook, facts: [fact(1), fact(2), fact(3), fact(4)] } }, 'opening.facts');
+});
+
+test('a fact: text 1 to 80 characters, value a finite number, from user or an http(s) address, closed', () => {
+  const opening = (fact) => ({ ...example(), opening: { hook: 'A hook', facts: [fact] } });
+  assert.deepEqual(errorsOf(opening({ text: 'x'.repeat(80), from: 'user' })), [], '80 characters');
+  failsAt(opening({ text: 'x'.repeat(81), from: 'user' }), 'facts[0].text');
+  failsAt(opening({ text: '', from: 'user' }), 'facts[0].text');
+  failsAt(opening({ text: 'A fact' }), 'facts[0]');
+  failsAt(opening({ text: 'A fact', from: 'the internet' }), 'facts[0].from');
+  failsAt(opening({ text: 'A fact', from: 'ftp://shop.example.test/x' }), 'facts[0].from');
+  failsAt(opening({ text: 'A fact', from: 'user', value: '5' }), 'facts[0].value');
+  failsAt(opening({ text: 'A fact', from: 'user', extra: 1 }), 'facts[0]');
+  assert.deepEqual(errorsOf(opening({ text: 'A fact', from: 'user', value: 0.5 })), [], 'a value of 0.5');
+});
+
+test('ending: an ask of 1 to 60 characters, an optional say of 1 to 120, the object closed', () => {
+  assert.deepEqual(errorsOf({ ...example(), ending: { ask: 'x'.repeat(60) } }), [], '60 characters');
+  assert.deepEqual(errorsOf({ ...example(), ending: { ask: 'Try it free', say: 'x'.repeat(120) } }), [], 'a say of 120');
+  failsAt({ ...example(), ending: { ask: 'x'.repeat(61) } }, 'ending.ask');
+  failsAt({ ...example(), ending: { ask: '' } }, 'ending.ask');
+  failsAt({ ...example(), ending: { say: 'Bye' } }, 'ending');
+  failsAt({ ...example(), ending: { ask: 'Go', say: 'x'.repeat(121) } }, 'ending.say');
+  failsAt({ ...example(), ending: { ask: 'Go', extra: 1 } }, 'ending');
+});
+
+test('brand: a name of 1 to 40 characters and an accent of six lower-case hex digits, at least one key', () => {
+  assert.deepEqual(errorsOf({ ...example(), brand: { name: 'Harbor' } }), [], 'a name alone');
+  assert.deepEqual(errorsOf({ ...example(), brand: { accent: '#1f6feb' } }), [], 'an accent alone');
+  assert.deepEqual(errorsOf({ ...example(), brand: { name: 'x'.repeat(40) } }), [], '40 characters');
+  failsAt({ ...example(), brand: { name: 'x'.repeat(41) } }, 'brand.name');
+  failsAt({ ...example(), brand: { name: '' } }, 'brand.name');
+  failsAt({ ...example(), brand: {} }, 'brand');
+  for (const accent of ['#FFF', 'red', '#1F6FEB', '#12345', '#1f6febff', '1f6feb']) failsAt({ ...example(), brand: { accent } }, 'brand.accent');
+  failsAt({ ...example(), brand: { name: 'Harbor', logo: 'x.png' } }, 'brand');
+});
+
+test('a third-party demo carries no brand', () => {
+  const found = errorsOf({ ...example(), rights: 'third-party', brand: { name: 'Harbor' } });
+  assert.deepEqual(found.filter((e) => e.path === 'brand'), [{ path: 'brand', message: "a third party's brand is not taken: remove brand" }]);
+  const { brand, ...without } = example();
+  assert.deepEqual(errorsOf({ ...without, rights: 'third-party' }), [], 'no brand is fine');
+});
+
+test('a fact from an address must sit on an allowed origin', () => {
+  const opening = (from) => ({ ...example(), opening: { hook: 'A hook', facts: [{ text: 'A fact', from }] } });
+  assert.deepEqual(errorsOf(opening('https://shop.example.test/plans')), [], 'an allowed origin');
+  failsAt(opening('https://other.example.test/plans'), 'opening.facts[0].from');
+});
+
+test('signed in, a fact comes from the user', () => {
+  const opening = (from) => ({ ...example(), session: 'my-shop', opening: { hook: 'A hook', facts: [{ text: 'A fact', from }] } });
+  assert.deepEqual(errorsOf(opening('user')), [], 'user is fine');
+  const found = errorsOf(opening('https://shop.example.test/pricing'));
+  assert.ok(found.some((e) => e.path === 'opening.facts[0].from' && e.message === "signed in, a fact comes from the user's own words"), messages(opening('https://shop.example.test/pricing')));
 });
 
 test('siblingDir is the folder next to this skill; a missing sibling names the install command', () => {

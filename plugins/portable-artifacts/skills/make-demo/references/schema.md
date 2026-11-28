@@ -15,6 +15,10 @@ not listed here is an error. A worked file is in `examples/walkthrough.demo.json
 | `pages` | up to 5 strings | addresses or paths scout also opens, each on an allowed origin |
 | `mask` | up to 20 targets | each `{ role, name }` or `{ css }`, written like a step's `target`. Every element it matches is covered by an opaque box in each picture of a take, and in scout's signed-out pictures. It is part of the plan the owner approves, so changing it needs a new scout and a new approval. Default: none |
 | `useCases` | 1 to 5 | `{ id, title, goal?, steps }` |
+| `look` | `keynote` or `desk` | the look of the film. Default `keynote`, applied where it is read. A word field (see below) |
+| `opening` | `{ hook, facts? }` | the start of the film. `hook` is 1 to 120 characters. `facts` is 1 to 3 entries of `{ text, value?, from }`: `text` is 1 to 80 characters, `value` is a number, `from` is `user` or an `http` or `https` address. A word field |
+| `ending` | `{ ask, say? }` | the end of the film. `ask` is 1 to 60 characters, `say` is 1 to 120. A word field |
+| `brand` | `{ name?, accent? }` | at least one key. `name` is 1 to 40 characters. `accent` is `#` and six lower-case hex digits, such as `#1f6feb`. The user approves it on the click plan, so the plan hash binds it |
 | `generatedBy` | `{ model?, effort?, agent? }` | provenance |
 
 A use case has 1 to 20 `steps`, and its first step is a `goto`. A step is `{ id, do, target?, value?, intent? }`.
@@ -36,5 +40,17 @@ digest prints `css=` (an nth-of-type path such as `html > body:nth-of-type(1) > 
 field and every email, long number (7 or more digits) and key (20 or more letters, digits, `_` and `-`, with a digit and a letter)
 is covered without being listed, in the page, in shadow roots and in frames. A `mask` target that matches nothing on a page covers
 nothing there, and says nothing.
+
+Rules for `brand` and for the facts in `opening`:
+
+- A `third-party` demo has no `brand`. The error is "a third party's brand is not taken: remove brand".
+- A fact whose `from` is an address must give an address on an allowed origin (`origins`). Later, `film.mjs` also checks that
+  it is a page that scout read; that check needs scout.json, so validation alone does not do it.
+- With a `session`, every fact has `from: "user"`. The error is "signed in, a fact comes from the user's own words".
+
+Word fields and bound fields: `look`, `opening` and `ending`, with `generatedBy` and each use case's `title` and `goal`, are
+word fields. Changing one does not change the plan hash, so the click plan stays approved and a take stays valid. Every other
+field is bound by the hash, `brand` included. Changing `brand`, a step, `origins`, `mask` or `session` makes the take stale: plan,
+approve and take again.
 
 Validation reads the file only. Whether a `target` names a control on the page is checked later, against scout's digest.

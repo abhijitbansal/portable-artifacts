@@ -6,6 +6,16 @@
   "viewport": { "width": 1280, "height": 720 },
   "pages": ["/pricing"],
   "mask": [{ "css": "html > body:nth-of-type(1) > footer:nth-of-type(1)" }],
+  "look": "keynote",
+  "opening": {
+    "hook": "Find the right plan in two clicks.",
+    "facts": [
+      { "text": "Plans start at 5 dollars a month", "value": 5, "from": "https://shop.example.test/pricing" },
+      { "text": "No contract", "from": "user" }
+    ]
+  },
+  "ending": { "ask": "Start free today", "say": "That is the whole shop." },
+  "brand": { "name": "Example Shop", "accent": "#1f6feb" },
   "useCases": [
     {
       "id": "find-pricing",

@@ -283,5 +283,5 @@ test('the hash changes when a row effect or a page address changes, and not for 
   shuffled.useCases = [Object.fromEntries(Object.entries(spec.useCases[0]).reverse())];
   shuffled.useCases[0].steps = spec.useCases[0].steps.map((s) => Object.fromEntries(Object.entries(s).reverse()));
   assert.equal(planHash(shuffled, rows), reference);
-  assert.deepEqual(WORD_FIELDS, ['generatedBy', 'useCases[].title', 'useCases[].goal']);
+  assert.deepEqual(WORD_FIELDS, ['generatedBy', 'useCases[].title', 'useCases[].goal', 'look', 'opening', 'ending']);
 });

@@ -19,7 +19,7 @@ import { pageIdentity } from './page-identity.mjs';
 import { cutLeft } from './text-cut.mjs';
 
 /** Fields that hold only words: changing one does not change the hash. Every other field of demo.json is bound by it. */
-export const WORD_FIELDS = ['generatedBy', 'useCases[].title', 'useCases[].goal'];
+export const WORD_FIELDS = ['generatedBy', 'useCases[].title', 'useCases[].goal', 'look', 'opening', 'ending'];
 
 const HASH_CHARS = 12;
 const ECHO_MAX = 80;
@@ -44,7 +44,7 @@ function canonical(value) {
 }
 
 function withoutWords(spec) {
-  const { generatedBy, mask, ...kept } = spec;
+  const { generatedBy, look, opening, ending, mask, ...kept } = spec;
   const rest = Array.isArray(mask) && mask.length === 0 ? kept : { ...kept, ...(mask === undefined ? {} : { mask }) }; // an empty mask is no mask
   if (!Array.isArray(rest.useCases)) return rest;
   return { ...rest, useCases: rest.useCases.map(({ title, goal, ...useCase }) => useCase) };

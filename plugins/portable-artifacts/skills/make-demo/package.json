@@ -16,7 +16,7 @@
     "playwright": "1.64.0"
   },
   "portableArtifacts": {
-    "requires": ["make-explainer"]
+    "requires": ["make-explainer", "make-motion"]
   },
   "overrides": {
     "fast-uri": "3.1.9"

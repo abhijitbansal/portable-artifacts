@@ -42,6 +42,20 @@ test('a row carries the control it resolved: id, kind, address and form', () => 
   assert.equal(rows[0].address, `${ORIGIN}/`, 'a goto holds the whole address, resolved');
 });
 
+test('the hash ignores look, opening and ending, and binds brand', () => {
+  const scout = scoutOf([page({ controls: [control({ role: 'textbox', name: 'Find', kind: 'field' })] })]);
+  const base = specOf([{ id: 't', do: 'type', target: { role: 'textbox', name: 'Find' }, value: 'tent' }], { brand: { name: 'Harbor', accent: '#1f6feb' } });
+  const reference = hashOf(base, scout);
+  assert.equal(hashOf({ ...base, look: 'desk' }, scout), reference, 'look');
+  assert.equal(hashOf({ ...base, opening: { hook: 'A hook', facts: [{ text: 'A fact', from: 'user' }] } }, scout), reference, 'opening');
+  assert.equal(hashOf({ ...base, ending: { ask: 'Try it' } }, scout), reference, 'ending');
+  assert.equal(hashOf({ ...base, look: 'desk', opening: { hook: 'Other' }, ending: { ask: 'Other' } }, scout), reference, 'all three together');
+  assert.notEqual(hashOf({ ...base, brand: { name: 'Harbor', accent: '#1f6fec' } }, scout), reference, 'brand accent');
+  assert.notEqual(hashOf({ ...base, brand: { name: 'Other', accent: '#1f6feb' } }, scout), reference, 'brand name');
+  const { brand, ...unbranded } = base;
+  assert.notEqual(hashOf(unbranded, scout), reference, 'brand present or not');
+});
+
 // ---- page identity (F6, F17, F18) ----
 
 const hashRoutes = () => scoutOf([page({ controls: [link('Settings', '/#/settings'), control({ name: 'Save', css: 'save' })] })]);

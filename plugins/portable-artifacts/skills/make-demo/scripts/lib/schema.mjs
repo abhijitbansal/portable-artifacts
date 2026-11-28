@@ -10,7 +10,12 @@ export const LIMITS = {
   waitSeconds: [0.1, 10],
   typedValue: 300, // characters in a `type` or `select` value: the plan page shows it whole
   defaultViewport: { width: 1280, height: 720 },
+  hook: 120, facts: 3, factText: 80, ask: 60, say: 120, brandName: 40, // characters, or a count for facts
 };
+
+export const LOOKS = ['keynote', 'desk'];
+export const DEFAULT_LOOK = 'keynote';
+export const ACCENT_PATTERN = '^#[0-9a-f]{6}$';
 
 export const ID_PATTERN = '^[a-z][a-z0-9-]{0,40}$';
 export const SESSION_PATTERN = '^[a-z0-9][a-z0-9-]{0,40}$';
@@ -51,6 +56,47 @@ const USE_CASE_SCHEMA = {
   },
 };
 
+const text = (max) => ({ type: 'string', minLength: 1, maxLength: max });
+
+// A fact for the film's opening: its words, an optional number to show big, and where it came from (the user, or a page of the site).
+const FACT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['text', 'from'],
+  properties: {
+    text: text(LIMITS.factText),
+    value: { type: 'number' },
+    from: { type: 'string', pattern: '^(user|https?://.+)$', description: '"user", or an http or https address on an allowed origin' },
+  },
+};
+
+const OPENING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['hook'],
+  properties: {
+    hook: text(LIMITS.hook),
+    facts: { type: 'array', minItems: 1, maxItems: LIMITS.facts, items: FACT_SCHEMA },
+  },
+};
+
+const ENDING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['ask'],
+  properties: { ask: text(LIMITS.ask), say: text(LIMITS.say) },
+};
+
+const BRAND_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    name: text(LIMITS.brandName),
+    accent: { type: 'string', pattern: ACCENT_PATTERN, description: 'six lower-case hex digits after #' },
+  },
+};
+
 export const SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -73,6 +119,10 @@ export const SCHEMA = {
     session: { type: 'string', pattern: SESSION_PATTERN, description: 'lower-case letters, digits and hyphens, starting with a letter or digit, up to 41 characters' },
     pages: { type: 'array', maxItems: LIMITS.pages, items: word },
     useCases: { type: 'array', minItems: 1, maxItems: LIMITS.useCases, items: USE_CASE_SCHEMA },
+    look: { enum: LOOKS },
+    opening: OPENING_SCHEMA,
+    ending: ENDING_SCHEMA,
+    brand: BRAND_SCHEMA,
     generatedBy: GENERATED_BY_SCHEMA,
   },
 };

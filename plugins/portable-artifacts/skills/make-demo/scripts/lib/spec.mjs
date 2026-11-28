@@ -163,6 +163,24 @@ function checkUseCases(errors, spec) {
   });
 }
 
+// ---- brand and opening facts ---------------------------------------------------------------------------------------------
+
+// A fact's `from` is "user" or an address on an allowed origin; signed in, only "user" (text read from a signed-in page does not go into a film).
+// Whether the address is a page scout read is checked where scout.json is read.
+function checkFacts(errors, spec) {
+  (spec.opening?.facts ?? []).forEach((fact, i) => {
+    const at = `opening.facts[${i}].from`;
+    if (fact.from === 'user') return;
+    if (spec.session !== undefined) errors.push({ path: at, message: "signed in, a fact comes from the user's own words" });
+    else if (hasUserinfo(fact.from, spec.source.url)) errors.push({ path: at, message: USERINFO_MESSAGE });
+    else if (!insideOrigins(fact.from, spec)) errors.push({ path: at, message: `${echo(fact.from)} is not on an allowed origin; allowed: ${originsOf(spec).join(', ')}` });
+  });
+}
+
+function checkBrand(errors, spec) {
+  if (spec.brand !== undefined && spec.rights === 'third-party') errors.push({ path: 'brand', message: "a third party's brand is not taken: remove brand" });
+}
+
 /**
  * Validate a parsed demo.json. Returns { ok, errors: [{ path, message }] }, plus `warnings` when there are any.
  * Never throws on bad input: a spec that is not an object is a list of errors.
@@ -173,5 +191,7 @@ export function validateSpec(spec) {
   checkOrigins(errors, spec);
   checkPages(errors, spec);
   checkUseCases(errors, spec);
+  checkFacts(errors, spec);
+  checkBrand(errors, spec);
   return makeResult(errors);
 }

@@ -9,11 +9,18 @@ import { targets, requirementsFor } from '../scripts/lib/requirements.mjs';
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const byId = (list, id) => list.find((r) => r.id === id);
 
-test('the one doctor target is check, and every target lists the same five needs', () => {
+test('the one doctor target is check, and every target lists the same six needs', () => {
   assert.deepEqual(targets, ['check']);
   for (const target of ['check', ALL, 'demo.json']) {
-    assert.deepEqual(requirementsFor(target).map((r) => r.id), ['node', 'node_modules', 'chromium', 'make-explainer', 'builder_agent'], String(target));
+    assert.deepEqual(requirementsFor(target).map((r) => r.id), ['node', 'node_modules', 'chromium', 'make-explainer', 'make-motion', 'builder_agent'], String(target));
   }
+});
+
+test('make-motion is a required sister skill: the film is made there', () => {
+  const motion = byId(requirementsFor('check'), 'make-motion');
+  assert.equal(motion.required, true);
+  const here = { platform: 'darwin', env: {}, skillDir: '/x/make-demo', exists: () => false };
+  assert.equal(motion.check(here), false, 'absent when the folder next to the skill has no SKILL.md');
 });
 
 test('the browser is required and an installed Chrome does not count as present', async () => {

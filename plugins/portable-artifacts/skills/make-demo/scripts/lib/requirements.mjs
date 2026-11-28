@@ -27,11 +27,12 @@ const bundledBrowser = () => ({
 });
 
 // Every target needs the same things: playwright is a production dependency here, so node_modules keeps it, and scout
-// needs the browser. make-explainer draws the plan page. The builder agent is optional.
+// needs the browser. make-explainer draws the plan page and the guide, make-motion renders the film. The builder agent is optional.
 export const requirementsFor = () => [
   nodeVersion(20),
   nodeModules({ omitDev: false }),
   bundledBrowser(),
   sisterSkill('make-explainer'),
+  sisterSkill('make-motion'),
   builderAgent(),
 ];
