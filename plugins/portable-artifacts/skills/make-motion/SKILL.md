@@ -1,6 +1,6 @@
 ---
 name: make-motion
-description: Use when the user wants a short explainer video, animated and rendered to MP4 from a script of shots (statements, numbers, lists, quotes, comparisons, charts, maps, timelines, diagrams, code, screenshots, and photos or clips with highlights), in one of several looks from editorial to a hand-drawn whiteboard, as a widescreen film or a vertical short for Reels, TikTok and Shorts, silent or with a local voiceover, a music bed and sound cues, previewed locally. Spec-driven and offline except the voice model and cutout model downloads. Not for a static page or diagram (make-explainer, make-diagram) or a recording of a running app.
+description: Use when the user wants a short explainer video, animated and rendered to MP4 from a script of shots (statements, numbers, lists, quotes, comparisons, charts, maps, timelines, diagrams, code, screenshots, and photos or clips with highlights), in one of several looks from editorial to a hand-drawn whiteboard, as a widescreen film or a vertical short for Reels, TikTok and Shorts, silent or with a local voiceover, a music bed and sound cues, previewed locally. Spec-driven and offline except the voice model and cutout model downloads. Not for a static page or diagram (make-explainer, make-diagram) or a demo recorded from a web product (make-demo).
 argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar chart of Q1-Q3
 ---
 

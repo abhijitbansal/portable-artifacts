@@ -514,6 +514,12 @@ test('guardrail: an unqualified "no network at render time" is caught', () => {
   assert.equal(unqualifiedNoNetwork('no network at render time except the voice model, once.').length, 0);
 });
 
+test('the description sends a recording of a web product to make-demo, and no longer names "a running app"', () => {
+  const description = read('SKILL.md').match(/^description: (.*)$/m)[1];
+  assert.ok(description.endsWith('Not for a static page or diagram (make-explainer, make-diagram) or a demo recorded from a web product (make-demo).'), description);
+  assert.ok(!description.includes('running app'), description);
+});
+
 test('every install command in the skill folder documents carries --ignore-scripts', () => {
   for (const doc of DOCS) {
     for (const line of read(doc).split('\n')) {
