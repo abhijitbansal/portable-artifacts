@@ -156,9 +156,53 @@ make-motion's `walk` shot plays a take as a film shot (make-motion's `references
 - **A box with no area keeps the picture whole.** A step whose box has no width or height, or lies off the page, has its marks
   and stops on the whole picture.
 - **At most 4 takes a film**, counted by how `src` is spelled, and checked when the render starts, after the voice is made.
+- **A stop onto a step is refused.** `step:<id>` stops give `a stop onto a step is parked`: a push can cut a row of the page. The
+  walk plays the whole view and lifts only. A look turns pushes back on with `kinds.walk.pushes`; none does yet.
 - **Walk stops make no sound in this phase.**
 - **The text finding on a 3x take is narrow.** The push is capped at the take's own resolution, where text shows at three times
   its page size, so the finding "page text of <n> px shows at <m> px at its stop" fires at a stop only for text under about 9 px.
+
+## The film
+
+`film.mjs` drafts the film by fixed rules, with no model (`references/walkthrough.md`). What it does not do:
+
+- **Silent, 16:9, walkthrough only.** The sentences are plain placeholders built from control names, for the agent to rewrite. A
+  voice or a music bed is the agent's to add in `film.json`, and only when the user asks.
+- **Whole view only.** No stop pushes in. Page text shows at about its CSS size at 1080p on a 1280-wide take (measured 0.94 times
+  in keynote, 1.01 in desk; 1.26 and 1.35 on a 960-wide take), so small text stays small. The lift is the only closer look: one per use case, on the last boxed `hover`, `show`, `type` or `select`
+  step, never on a click, and none when the use case has no such step.
+- **Hard cuts.** The seams into and out of the product are plain cuts. A dissolve laid the opening's type over the page and a fade
+  dipped to blank in the look gate. The film does not open from a named thing on the page.
+- **One walk shot per use case.** `film.mjs` does not split one. make-motion refuses a walk shot of more than 40 steps; a use case
+  has at most 20 steps in `demo.json`, so a draft stays under that.
+- **Brand is a name and an accent.** They come from `og:site_name`, the title and `theme-color` of the first page. No logo, no
+  colour read from the page's own styles. A site without `theme-color` gives no accent.
+- **A third party's film has no brand.** It gets the mark `Source: <host>` and no accent.
+- **Facts are checked by address, not by content.** `film.mjs` checks that a fact's `from` is `user` or a page scout read. It does
+  not check the fact's words against that page. Never inventing a fact is the director's rule.
+- **`film.mjs` reads little of `take.json`.** Only the step ids, verbs, box flags and frame names, the flags `signedIn` and
+  `stopped`, and the plan key. The frames themselves are checked when make-motion renders.
+- **It never overwrites.** A second draft needs `--out` with a new name, and a `film.json` you edited is kept as it is.
+- **No storyboard for yes 2.** The user watches the MP4. Signed out, the director also views the sheets.
+- **Signed in.** `film.mjs` prints a notice. The model never opens the film's sheets or the MP4, and gives them to no agent, not
+  even `motion-reviewer`: it works from make-motion's `--json` report. The rule is the agent's to keep: make-motion still writes
+  the sheets and the film.
+- **`walk` in `cosmos`, `ledger`, `poster` and `pop`:** not yet.
+
+## The guide
+
+`guide.mjs` writes a make-explainer spec from the same take and the rendered MP4 (`references/walkthrough.md`):
+
+- **It inlines the settled 3x frames.** A long guide weighs several MB. A picture over make-explainer's 1.5 MB limit fails at
+  validation, so `build.mjs` refuses the guide until that picture is removed.
+- **At most 40 sections.** Past that, only the last step of each use case keeps its picture, and a note says so.
+- **The sentences are the draft film's placeholders,** not the words in `film.json`. The agent edits them in `guide.json`.
+- **Paths.** `--out` must sit directly in the demo folder, because the guide's paths are relative to its own folder. `--video` is
+  an `.mp4` inside the demo folder of at most 50 MB.
+- **It never overwrites,** as `film.mjs` does not.
+- **Signed in.** `guide.mjs` prints a notice. The model never opens the guide, its pictures or its check PNGs, and gives them to
+  no agent. The user opens the page.
+- **A third party's guide** carries the callout `Source: <host>. Not made by its owner.`
 
 ## The hash
 

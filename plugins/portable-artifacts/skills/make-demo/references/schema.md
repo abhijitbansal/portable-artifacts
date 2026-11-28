@@ -1,7 +1,7 @@
 # demo.json
 
-One file that says which site to scout and which use cases to plan. Phase 1 reads it and checks it
-(`node scripts/validate.mjs <demo.json>`); nothing in it is ever clicked, typed or submitted. The schema is closed: a key
+One file that says which site to scout and which use cases to plan. `node scripts/validate.mjs <demo.json>` checks it; nothing in it is ever clicked, typed or submitted until the user
+approves the click plan. The schema is closed: a key
 not listed here is an error. A worked file is in `examples/walkthrough.demo.json`.
 
 | Field | Type | Rule |
