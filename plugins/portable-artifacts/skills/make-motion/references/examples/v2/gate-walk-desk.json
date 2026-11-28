@@ -24,7 +24,7 @@
       "steps": [{ "id": "open" }, { "id": "tab" }, { "id": "search" }, { "id": "hover" }, { "id": "add" }],
       "stops": [{ "to": "whole" }],
       "lift": [{ "step": "hover" }],
-      "on": [{ "at": "sentence:2", "do": "circle", "target": "step:search" }]
+      "on": [{ "at": "sentence:1", "do": "circle", "target": "step:tab" }]
     },
     {
       "id": "close",

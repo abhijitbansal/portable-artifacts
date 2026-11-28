@@ -80,7 +80,7 @@ function widthHolds(file, tour, from, until) {
 
 for (const file of FILMS) {
   // ---- as shipped: a whole stop and one lift (on the hover card) ----
-  test(`${file}: the mark on the search field stays out of the title-safe pad at every frame it is up`, () => markStaysInPad(file, false));
+  test(`${file}: the mark on the Activity tab stays out of the title-safe pad at every frame it is up`, () => markStaysInPad(file, false));
 
   test(`${file}: from the add click to the shot's end the frame shows (all but 1% of) the page's width, so the card the click adds is in frame whole`, () => {
     const tour = gateTour(file);
@@ -99,7 +99,7 @@ for (const file of FILMS) {
   // the pushed copies are a todo (it runs and reports, it does not fail the run); the push camera must frame the mark's own
   // extent before pushes return. The shipped films' guard above passes.
   const parked = { todo: 'pushes are parked: the ellipse round the whole field reaches into the pad on the old step stops' };
-  test(`${file} (pushed copy): the mark on the search field stays out of the title-safe pad at every frame it is up`, parked, () => markStaysInPad(file, true));
+  test(`${file} (pushed copy): the mark on the Activity tab stays out of the title-safe pad at every frame it is up`, parked, () => markStaysInPad(file, true));
 
   test(`${file} (pushed copy): the last step's hold shows (all but 1% of) the page's width, so the card the click adds is in frame whole`, () => {
     const tour = gateTour(file, { pushed: true });
