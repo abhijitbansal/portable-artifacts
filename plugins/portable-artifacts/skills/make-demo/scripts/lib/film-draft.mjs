@@ -11,7 +11,9 @@ import { planProblems, hostOf } from './take-plan.mjs';
 const TITLE_MAX = 40;
 const LABEL_MAX = 40;
 const LIFTABLE = new Set(['hover', 'show', 'type', 'select']); // a card, a field or a panel; a raised button reads badly
-const CUT = { keynote: 'zoom', desk: 'crossfade' };
+// The seams into the product and out of it are hard cuts: in the walk look gate a dissolve laid the opening's type over the page and a fade
+// dipped through a blank frame (phase 4 gate record).
+const HARD = 'cut';
 
 const cut = (text, max) => [...text].slice(0, max).join('').trim();
 const sayName = (text) => text.replace(/[^\p{L}\p{N} ,'-]+/gu, ' ').replace(/ +/g, ' ').trim();
@@ -53,8 +55,8 @@ function walkShot({ useCase, steps, rows, src }) {
   };
 }
 
-// The cut into the first walk shot, when a shot comes before it: make-motion refuses any cut but the hard cut on a film's first shot.
-function walkShots({ spec, rows, take }, look, hasOpening) {
+// The cut into the first walk shot, when a shot comes before it (a film's first shot takes no cut).
+function walkShots({ spec, rows, take }, hasOpening) {
   const rowUseCase = new Map(rows.map((r) => [r.id, r.useCase]));
   const src = take.dir.split(/[\\/]/).at(-1);
   const left = [];
@@ -64,7 +66,7 @@ function walkShots({ spec, rows, take }, look, hasOpening) {
     if (steps.length === 0) left.push(`use case ${useCase.id} left out: the take finished none of its steps`);
     else shots.push(walkShot({ useCase, steps, rows, src }));
   }
-  if (shots.length > 0 && hasOpening) shots[0] = { ...shots[0], cut: CUT[look] };
+  if (shots.length > 0 && hasOpening) shots[0] = { ...shots[0], cut: HARD };
   return { shots, left };
 }
 
@@ -73,7 +75,7 @@ function endShot(spec) {
   const thirdParty = spec.rights === 'third-party';
   const name = brand?.name === undefined ? hostOf(spec) : sayName(brand.name) || hostOf(spec);
   const mark = thirdParty ? `Source: ${hostOf(spec)}` : brand?.name;
-  return { id: 'close', show: 'end', say: ending.say ?? `That is ${thirdParty ? hostOf(spec) : name}.`, ask: ending.ask, ...(mark === undefined ? {} : { mark }) };
+  return { id: 'close', show: 'end', cut: HARD, say: ending.say ?? `That is ${thirdParty ? hostOf(spec) : name}.`, ask: ending.ask, ...(mark === undefined ? {} : { mark }) };
 }
 
 /**
@@ -84,7 +86,7 @@ export function draftFilm({ spec, rows, scout, take }) {
   const errors = problems({ spec, rows, scout, take });
   if (errors.length > 0) throw new Refused(errors);
   const look = spec.look ?? DEFAULT_LOOK;
-  const walked = walkShots({ spec, rows, take }, look, spec.opening !== undefined);
+  const walked = walkShots({ spec, rows, take }, spec.opening !== undefined);
   const shots = [...openingShots(spec.opening), ...walked.shots, ...(spec.ending === undefined ? [] : [endShot(spec)])];
   const accent = spec.rights === 'third-party' ? undefined : spec.brand?.accent;
   const film = { version: 2, mode: 'pro', look, format: '16:9', ...(accent === undefined ? {} : { accent }), shots };

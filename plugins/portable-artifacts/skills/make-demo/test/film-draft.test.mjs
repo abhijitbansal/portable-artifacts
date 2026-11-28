@@ -48,18 +48,20 @@ test('the shot order is hook, facts, walk shots, close; the root carries the loo
   assert.deepEqual(film.shots[0], { id: 'hook', show: 'statement', say: 'Buying is *quick*.' });
   assert.deepEqual(film.shots[1], { id: 'fact-1', show: 'number', value: 3, label: 'Three clicks', say: 'Three clicks' });
   assert.deepEqual(film.shots[2], { id: 'fact-2', show: 'statement', say: 'No account needed' });
-  assert.deepEqual(film.shots.at(-1), { id: 'close', show: 'end', say: 'That is Shop.', ask: 'Try it today', mark: 'Shop' });
+  assert.deepEqual(film.shots.at(-1), { id: 'close', show: 'end', cut: 'cut', say: 'That is Shop.', ask: 'Try it today', mark: 'Shop' });
   assert.deepEqual(notes, []);
 });
 
-test('the first walk shot cuts in with zoom (keynote) or crossfade (desk); the second has no cut', () => {
-  const keynote = walks(draft(FULL).film);
-  assert.equal(keynote[0].cut, 'zoom');
-  assert.equal(keynote[1].cut, undefined);
-  const desk = baseSpec({ ...FULL, look: 'desk' });
-  const film = draft(desk).film;
+// The look gate (phase 4) found a dissolve laid the opening's type over the page and a fade dipped to a blank frame: both seams are hard cuts.
+test('the first walk shot and the closing card cut in hard in both looks; the second walk shot takes the look default', () => {
+  const keynote = draft(FULL).film;
+  assert.equal(walks(keynote)[0].cut, 'cut');
+  assert.equal(walks(keynote)[1].cut, undefined);
+  assert.equal(keynote.shots.at(-1).cut, 'cut');
+  const film = draft(baseSpec({ ...FULL, look: 'desk' })).film;
   assert.equal(film.look, 'desk');
-  assert.equal(walks(film)[0].cut, 'crossfade');
+  assert.equal(walks(film)[0].cut, 'cut');
+  assert.equal(film.shots.at(-1).cut, 'cut');
 });
 
 test('with no opening the first walk shot is the film\'s first shot and has no cut (make-motion refuses one there)', () => {
@@ -122,7 +124,7 @@ test('an ending with no brand says the URL host; ending.say wins', () => {
 test('a third-party demo gets a source credit as the mark, keeps the ask and has no accent', () => {
   const spec = baseSpec({ rights: 'third-party', ending: { ask: 'See the real site' } });
   const { film } = draft(spec);
-  assert.deepEqual(film.shots.at(-1), { id: 'close', show: 'end', say: 'That is shop.example.test.', ask: 'See the real site', mark: 'Source: shop.example.test' });
+  assert.deepEqual(film.shots.at(-1), { id: 'close', show: 'end', cut: 'cut', say: 'That is shop.example.test.', ask: 'See the real site', mark: 'Source: shop.example.test' });
   assert.equal(film.accent, undefined);
 });
 
