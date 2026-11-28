@@ -7,6 +7,7 @@ import { layeredCamera, pointThroughCamera } from '../../engine/graph/camera.mjs
 import { sample } from '../../engine/time/track.mjs';
 import { GLIDE, HOLD_MIN, LIFT_LEAD, LIFT_MOVES } from '../../engine/kinds/walk-time.mjs';
 import { walkSetup } from '../../engine/kinds/walk-layout.mjs';
+import { liftAt } from '../../engine/kinds/walk-pose.mjs';
 import { all } from './helpers/kinds.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { EXAMPLES_DIR, committed, expandWalk, handShot, handTake, walkFilm, walkShot } from './helpers/walk.mjs';
@@ -192,7 +193,8 @@ test('a lift crops the step\'s settled frame to its box in frame pixels, on a co
 
 test('the lift scales to the look\'s scale over 0.4 s, holds, and returns over 0.4 s to the same box', () => {
   const out = expandWalk(walkFilm(LIFT_SHOT()), { w: committed() });
-  const { scale, hold } = out.ctx.look.kinds.walk.lift;
+  const { hold } = out.ctx.look.kinds.walk.lift;
+  const { scale } = liftAt(out.ctx.look.kinds.walk.lift, 1); // the camera is at zoom 1 here: the whole view's scale
   const start = out.plan.steps[1].end + LIFT_LEAD;
   const group = out.nodes.find((n) => n.id === 'w.lift0');
   near(sample(group.tracks.scale, start), 1, 'starts at the box');
@@ -263,18 +265,23 @@ test('a lift never draws past the take\'s native pixels: at a capped stop the ca
   assert.ok(stop.zoom * scale > native, 'the stop\'s zoom with the look\'s scale would pass the native pixels');
   assert.ok(drawnScale(out) <= native + 1e-6, `${drawnScale(out)} vs native ${native}`);
   const group = out.nodes.find((n) => n.id === 'w.lift0');
-  near(sample(group.tracks.scale, out.plan.steps[1].end + LIFT_LEAD + 0.4), scale, 'the card still scales to the look\'s scale');
+  // the lift is raised before the stop lands, with the camera at zoom 1: the whole view's scale
+  const start = out.plan.steps[1].end + LIFT_LEAD;
+  near(sample(group.tracks.scale, start + 0.4), liftAt(out.ctx.look.kinds.walk.lift, layeredCamera(out.camera, 'test')(start).zoom).scale, 'the card still scales to the look\'s scale');
   const room = expandWalk(walkFilm(shot, { look: 'keynote' }), { w: { ...committed(), width: 5760, height: 3240, scale: 6 } });
   const roomy = room.data.width / room.boxes.image[2];
-  near(drawnScale(room), room.ctx.look.kinds.walk.lift.scale * layeredCamera(room.camera, 'test')(room.plan.steps[1].end + LIFT_LEAD + 0.4).zoom, 'with room above the push the look\'s scale holds');
+  const roomCam = layeredCamera(room.camera, 'test');
+  near(drawnScale(room), liftAt(room.ctx.look.kinds.walk.lift, roomCam(start).zoom).scale * roomCam(start + 0.4).zoom, 'with room above the push the look\'s scale holds');
   assert.ok(drawnScale(room) <= roomy + 1e-6);
 });
 
-test('at whole view the lift keeps the look\'s scale', () => {
+test('at whole view the lift takes the look\'s wholeScale (smaller than its scale, so the card keeps clear of its neighbours)', () => {
   const out = expandWalk(walkFilm(LIFT_SHOT()), { w: committed() });
   const group = out.nodes.find((n) => n.id === 'w.lift0');
   const peak = out.plan.steps[1].end + LIFT_LEAD + 0.4;
-  near(sample(group.tracks.scale, peak), out.ctx.look.kinds.walk.lift.scale, 'scale at the peak');
+  const { scale, wholeScale } = out.ctx.look.kinds.walk.lift;
+  assert.ok(wholeScale > 1 && wholeScale < scale, `the look names a wholeScale: ${wholeScale} under ${scale}`);
+  near(sample(group.tracks.scale, peak), wholeScale, 'scale at the peak');
 });
 
 test('every lift of a shot is drawn, each under its own id', () => {

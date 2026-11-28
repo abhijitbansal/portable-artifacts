@@ -90,7 +90,7 @@ test('both gate films and the kind\'s example validate, in whole stops and lifts
     assert.deepEqual(validateFilm(film, { specDir: EXAMPLES_DIR }).errors, [], file);
     const tour = film.shots.find((s) => s.show === 'walk');
     assert.deepEqual(tour.stops, [{ to: 'whole' }], `${file}: one whole stop`);
-    assert.deepEqual(tour.lift.map((l) => l.step), ['hover', 'add'], `${file}: lifts on hover and add`);
+    assert.deepEqual(tour.lift.map((l) => l.step), ['hover'], `${file}: one lift, on hover`);
     assert.equal(film.look, look);
   }
   assert.deepEqual(walk.example.stops, [{ to: 'whole' }]);

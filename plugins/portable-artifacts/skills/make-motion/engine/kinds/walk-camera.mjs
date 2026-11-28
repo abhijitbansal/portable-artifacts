@@ -11,7 +11,7 @@ import { layeredCamera } from '../graph/camera.mjs';
 import { kindData } from '../looks/index.mjs';
 import { cutEnd, defaultCamera } from './camera.mjs';
 import { HOLD_MIN, LIFT_MOVES, MOVE_SECONDS, STEP_PREFIX, wholeLanding } from './walk-time.mjs';
-import { WHOLE, liftPose, liftRise, stepPose } from './walk-pose.mjs';
+import { WHOLE, liftAt, liftPose, liftRise, stepPose } from './walk-pose.mjs';
 
 export { MOVE_SECONDS, STEP_PREFIX };
 /** The seconds of the whole picture the shot holds, after its incoming cut ends, before any stop moves the camera. */
@@ -114,7 +114,8 @@ function liftMove(keys, e, state, ctx, geo, look) {
   const box = geo.stepBoxes.get(lift.step);
   if (!box || look.lift === undefined) return state;
   const start = Math.max(lift.start, state.free);
-  const pose = liftPose(ctx, geo, box, state.was, { scale: look.lift.scale, pad: look.pushPad * ctx.unit, snap: look.snap, rise: liftRise(look.lift, box, ctx.canvas.h), at: start + LIFT_HALF });
+  const applied = liftAt(look.lift, state.was.zoom);
+  const pose = liftPose(ctx, geo, box, state.was, { scale: applied.scale, pad: look.pushPad * ctx.unit, snap: look.snap, rise: liftRise(applied, box, ctx.canvas.h), at: start + LIFT_HALF });
   if (samePose(pose, state.was, ctx.canvas)) return state;
   addKey(keys, { t: start, ...state.was });
   addKey(keys, { t: start + LIFT_HALF, ...poseKey(pose), ease: MOVE_EASE });

@@ -128,10 +128,10 @@ test('the whole lifted card stays inside the title-safe pad for as long as it is
   }
 });
 
-test('a lift at the whole view keeps the look\'s scale and the camera where it is', () => {
+test('a lift at the whole view takes the look\'s wholeScale and leaves the camera where it is', () => {
   const out = outOf('keynote', walkShot({ lift: [{ step: 'tab' }] }));
   const { peak } = spanOf(out);
-  assert.equal(sample(byId(out, 'w.lift0').tracks.scale, peak), out.ctx.look.kinds.walk.lift.scale);
+  assert.equal(sample(byId(out, 'w.lift0').tracks.scale, peak), out.ctx.look.kinds.walk.lift.wholeScale);
   assert.ok(layeredCamera(out.camera, 'test')(peak).zoom < 1 + 1e-9);
 });
 

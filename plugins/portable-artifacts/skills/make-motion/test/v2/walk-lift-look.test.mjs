@@ -67,11 +67,10 @@ for (const { file, pushed, label } of VARIANTS) {
   });
 
   // The pushed camera centres the raised card; the shipped whole picture raises it where it sits, so only the pushed copy is held
-  // to the centring. The clearance rule (neighbours MIN_CLEAR px off) holds for the pushed copy. As shipped, the card measured
-  // 7.4 px (keynote) and 7.6 px (desk) from its left and right neighbours: a TODO for the look gate (Task 4), which decides
-  // whether the look or the rule moves. The rule is not loosened.
-  const clearOptions = pushed ? {} : { todo: 'whole-and-lift: 7.4 px (keynote) and 7.6 px (desk) from the neighbours, the rule is 10 px (look gate)' };
-  test(`${label}: the raised card ${pushed ? 'is centred in the frame with ' : 'has '}clear space round it: its neighbours stay ${MIN_CLEAR} px off`, clearOptions, () => {
+  // to the centring. The clearance rule (neighbours MIN_CLEAR px off) holds for both. At the whole view a 1.1 lift grew the card
+  // about 12 px a side into a ~19 px gap (7.4 px left in keynote, 7.6 px in desk), so each look's lift.wholeScale is the scale
+  // of a lift raised with the camera at zoom 1. The rule is not loosened.
+  test(`${label}: the raised card ${pushed ? 'is centred in the frame with ' : 'has '}clear space round it: its neighbours stay ${MIN_CLEAR} px off`, () => {
     const tour = gateTour(file, { pushed });
     const { from, to } = holdOf(tour);
     const { w, h } = tour.ctx.canvas;

@@ -162,7 +162,7 @@ export const desk = {
     // Gate round 2: as keynote's (see there): the lift's `radius` (page px), the whole-width last step, the `ripple` in ink
     walk: {
       experimental: true, fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } },
-      lift: { scale: 1.1, hold: 1.2, rise: 0.005, radius: 12, dim: 0.4, scrim: 'ink', layers: [{ color: 'ink', alpha: 0.1, reach: 12, dy: 5 }, { color: 'ink', alpha: 0.14, reach: 70, dy: 32 }] },
+      lift: { scale: 1.1, wholeScale: 1.06, wholeRise: 0.001, hold: 1.2, rise: 0.005, radius: 12, dim: 0.4, scrim: 'ink', layers: [{ color: 'ink', alpha: 0.1, reach: 12, dy: 5 }, { color: 'ink', alpha: 0.14, reach: 70, dy: 32 }] },
       mark: { circle: { color: 'ink' }, fit: 0.8 },
       ripple: { color: 'ink', width: 0.14, keyline: 'paper' },
     },

@@ -117,8 +117,9 @@ section says how a push behaves once one does.
   with no box leaves the cursor where it was. It never leaves the frame.
 - A lift crops the step's settled frame at the step's box, drawn through a rounded rectangle of the look's `lift.radius` (page px; the
   page's own card corner), so no square corner shows; the crop never shows a pixel outside the box. It comes up over 0.4 s from `at`
-  (default 0.5 s after the step ends), scales to 1.1x, rises (the look's `rise`, held to 60% of the card's own growth so the raised
-  card still covers its slot), holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear shadow of the look's own
+  (default 0.5 s after the step ends), scales to 1.1x (1.06x at the whole view, with the camera at zoom 1: the look's `wholeScale`, so
+  the raised card keeps 10 px off its neighbours), rises (the look's `rise`, `wholeRise` at the whole view, held to 60% of the card's
+  own growth so the raised card still covers its slot), holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear shadow of the look's own
   and the rest dims under a darker scrim with no hole: the card's own slot is dimmed too and the raised card covers it, so no outline
   of the slot shows (`keynote` and `desk`: `kinds.walk.lift`).
 - The camera eases its zoom down with the card so the card can scale within the take's own pixels (camera zoom at most the native zoom

@@ -28,7 +28,7 @@
       "say": "Here is the board, every project at a glance. The activity tab shows what changed this week. Search takes a project's name or number. Pointing at a card lifts it off the board. And one click adds a new project.",
       "steps": [{ "id": "open" }, { "id": "tab" }, { "id": "search" }, { "id": "hover" }, { "id": "add" }],
       "stops": [{ "to": "whole" }],
-      "lift": [{ "step": "hover" }, { "step": "add" }],
+      "lift": [{ "step": "hover" }],
       "on": [{ "at": "sentence:2", "do": "circle", "target": "step:search" }]
     },
     {

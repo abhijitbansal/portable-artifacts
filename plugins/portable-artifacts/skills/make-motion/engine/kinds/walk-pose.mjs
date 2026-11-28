@@ -81,6 +81,18 @@ export function stepPose(ctx, geo, box, { share, heightShare = share, pad, snap 
 
 const COVER_SHARE = 0.6; // a card rises at most this share of its own growth, so it still reaches past its slot's bottom edge
 
+const WHOLE_ZOOM = 1 + 1e-6; // a camera at or under this zoom shows the whole picture
+
+/**
+ * The look's lift as it applies with the camera at `zoom`: at the whole view (not pushed) the cards sit close together, so the
+ * look's `lift.wholeScale` and `lift.wholeRise`, when it names them, are the scale and the rise; pushed, `lift.scale` and
+ * `lift.rise`. A smaller scale grows the card less past its slot, so the rise is smaller too (liftRise holds it anyway).
+ */
+export const liftAt = (lift, zoom) => {
+  if (zoom > WHOLE_ZOOM) return lift;
+  return { ...lift, scale: lift.wholeScale ?? lift.scale, rise: lift.wholeRise ?? lift.rise };
+};
+
 /**
  * The px a lifted card rises: the look's `lift.rise` (a share of the canvas height), held to COVER_SHARE of the card's
  * vertical growth (`lift.scale` about its centre), so the raised card always covers its slot, corners included.

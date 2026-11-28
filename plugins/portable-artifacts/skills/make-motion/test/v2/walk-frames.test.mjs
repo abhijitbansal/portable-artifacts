@@ -1,7 +1,7 @@
 // The gate films' tour (keynote and desk) at every film frame of every hold: no word of the fixture page is cut by a frame
 // edge while the camera rests on a stop or a lift is up (gate round 2: the tab row cut at the top during the lift, the header
 // cut in a hold). Mid-move frames may slice for a moment, so only the holds are checked. Pure, on the committed take.
-// Two variants of each film: the films as shipped (a whole stop and two lifts: pushes are parked) and a pushed copy with the
+// Two variants of each film: the films as shipped (a whole stop and one lift: pushes are parked) and a pushed copy with the
 // old step stops, built without validation, so the push camera keeps the guards it earned.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,19 +79,19 @@ function widthHolds(file, tour, from, until) {
 }
 
 for (const file of FILMS) {
-  // ---- as shipped: a whole stop and two lifts ----
+  // ---- as shipped: a whole stop and one lift (on the hover card) ----
   test(`${file}: the mark on the search field stays out of the title-safe pad at every frame it is up`, () => markStaysInPad(file, false));
 
-  test(`${file}: from the add click until its lift starts the frame shows (all but 1% of) the page's width, so the card the click adds is in frame whole`, () => {
+  test(`${file}: from the add click to the shot's end the frame shows (all but 1% of) the page's width, so the card the click adds is in frame whole`, () => {
     const tour = gateTour(file);
     const addAct = tour.setup.plan.steps.at(-1).act;
-    const liftStart = tour.setup.lifts.find((l) => l.step === 'add').start;
-    assert.ok(liftStart > addAct + 0.5, `the add lift starts after the click has had time to show: ${addAct} then ${liftStart}`);
-    widthHolds(file, tour, addAct + 0.5, liftStart);
+    assert.deepEqual(tour.setup.lifts.map((l) => l.step), ['hover'], 'the one lift is on the hover card, so nothing lifts after the click');
+    assert.ok(tour.duration > addAct + 0.5, `the shot runs on past the click: ${addAct} then ${tour.duration}`);
+    widthHolds(file, tour, addAct + 0.5, tour.duration);
   });
 
-  // the camera stays on the whole picture here, so these hold at zoom 1 by construction; they guard a look that moves it
-  test(`${file}: no word is cut by a frame edge at any film frame of either lift hold`, () => noWordCut(file, false, 2));
+  // the camera stays on the whole picture here, so this holds at zoom 1 by construction; it guards a look that moves it
+  test(`${file}: no word is cut by a frame edge at any film frame of the lift hold`, () => noWordCut(file, false, 1));
 
   // ---- the pushed copy: the old step stops, the guards the push camera earned ----
   test(`${file} (pushed copy): the mark on the search field stays out of the title-safe pad at every frame it is up`, () => markStaysInPad(file, true));

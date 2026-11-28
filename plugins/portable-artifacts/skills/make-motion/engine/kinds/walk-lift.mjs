@@ -16,7 +16,7 @@ import { elevatedShadow } from '../devices/card.mjs';
 import { paperScrim } from './shared.mjs';
 import { nativeZoom } from './screen-layout.mjs';
 import { LIFT_MOVES } from './walk-time.mjs';
-import { liftRise } from './walk-pose.mjs';
+import { liftAt, liftRise } from './walk-pose.mjs';
 
 const HALF = 2;
 const MOVE = LIFT_MOVES / HALF; // s, up and back
@@ -92,9 +92,10 @@ export function liftNodes(shot, ctx, { geo, data, look, lifts }, cam) {
     const take = data.steps.find((s) => s.id === span.step);
     if (!box || !take || look.lift === undefined) return [];
     const id = `${shot.id}.lift${span.k}`;
-    const sizing = scaleTrack(span, { scale: look.lift.scale, cam, native, fps: ctx.fps });
+    const lift = liftAt(look.lift, cam(span.start).zoom); // the whole view lifts by lift.wholeScale
+    const sizing = scaleTrack(span, { scale: lift.scale, cam, native, fps: ctx.fps });
     const radius = (look.lift.radius ?? 0) * (geo.image[2] / geo.viewport.width); // the look's page px, in drawn px
-    const parts = { box, look, ctx, span, sizing, radius };
+    const parts = { box, look: { ...look, lift }, ctx, span, sizing, radius };
     return [...dimNode(id, parts), cardNode(id, shot, { ...parts, clip: clipOf(box, geo.image, geo.picture), take, data })];
   });
 }
