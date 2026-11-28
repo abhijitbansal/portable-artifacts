@@ -36,11 +36,12 @@ test('look data: the frame keys copied from each look\'s screen, a wide share, a
     const look = registries.looks.get(name);
     for (const key of ['fill', 'line', 'lineWidth', 'dots', 'pill', 'text', 'urlText', 'wideShare']) assert.equal(look.kinds.walk[key], look.kinds.screen[key], `${name}.${key}`);
     const { lift, pushPad, context, snap, mark, ripple } = look.kinds.walk;
-    assert.deepEqual([lift.scale, lift.hold, lift.rise, lift.radius], [1.1, 1.2, 0.005, 12]);
+    // scale 1.08 and wholeScale 1.04: the crop grown by 3 page px a side keeps the 10 px clearance (walk-lift-look.test.mjs)
+    assert.deepEqual([lift.scale, lift.wholeScale, lift.hold, lift.rise, lift.radius], [1.08, 1.04, 1.2, 0.005, 12]);
     assert.ok(lift.layers.length >= 2 && lift.dim > 0 && typeof lift.scrim === 'string', `${name}: the lift's own shadow layers and scrim`);
     assert.deepEqual([pushPad, snap, context], [60, 0.1, { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } }]);
     assert.equal(typeof (mark.rounded ?? mark.circle).color, 'string', `${name}: the mark's style`);
-    assert.deepEqual([ripple.color, ripple.keyline], ['ink', 'paper'], `${name}: the ripple's ink on a paper keyline`);
+    assert.deepEqual([ripple.color, ripple.keyline, ripple.width], ['ink', 'paper', 0.04], `${name}: the ripple's thin ink ring on a paper keyline`);
   }
 });
 

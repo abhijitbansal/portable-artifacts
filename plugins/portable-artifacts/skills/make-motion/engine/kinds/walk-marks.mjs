@@ -45,14 +45,19 @@ function clearing(device, id, { clear, at, glow }) {
   return { ...device, nodes: [node('group', `${id}.clear`, {}, { tracks: { opacity }, children: withGlow(device.nodes, glow) })] };
 }
 
-// The rounded-rectangle mark (look data kinds.walk.mark.rounded: { color, width, gap, radius }, all in units): a stroke
-// `gap` outside `box`, its corners concentric with a box corner of `radius`, drawn on landing on `at`.
+// The seconds a mark's draw-on takes: the look's `kinds.walk.mark.rounded.dur` when it names one, else the look's draw move.
+const drawSeconds = (look, rounded) => rounded?.dur ?? look.moves.draw.dur;
+
+// The rounded-rectangle mark (look data kinds.walk.mark.rounded: { color, width, gap, radius, dur }, sizes in units, `dur` in
+// seconds): a stroke `gap` outside `box`, its corners concentric with a box corner of `radius`, revealed around its path over
+// `dur` and landing on `at`.
 function roundedMark(id, { box, at, look, unit, rounded }) {
   const [x, y, w, h] = box;
   const gap = rounded.gap * unit;
   const d = roundedRect(x - gap, y - gap, w + HALF * gap, h + HALF * gap, (rounded.radius + rounded.gap) * unit);
   const step = look.hand ? look.moves.draw.step : undefined;
-  return [node('path', id, { d, stroke: colourOf(look, rounded.color), strokeWidth: rounded.width * unit, lineJoin: 'round' }, { tracks: { draw: landing(at, look.moves.draw, 0, 1, step) }, step })];
+  const move = { ...look.moves.draw, dur: drawSeconds(look, rounded) };
+  return [node('path', id, { d, stroke: colourOf(look, rounded.color), strokeWidth: rounded.width * unit, lineJoin: 'round' }, { tracks: { draw: landing(at, move, 0, 1, step) }, step })];
 }
 
 // One step-aimed mark as a device: { nodes, target, at, before, camera }.
@@ -78,7 +83,7 @@ export function walkDevices(shot, ctx, setup, boxes) {
     if (!box) throw new Error(`shot "${shot.id}": on[${j}] target "${item.target}" has no box (have: ${Object.keys(stepBoxes).join(', ')})`);
     const index = indexOf(item);
     // not before the step acts: the first stroke (the draw move before `at`) starts no earlier than its act
-    const at = Math.max(ctx.at(item.at), (plan.steps[index]?.act ?? 0) + ctx.look.moves.draw.dur);
+    const at = Math.max(ctx.at(item.at), (plan.steps[index]?.act ?? 0) + drawSeconds(ctx.look, data.mark?.rounded));
     const device = stepMark(shot, styled, { item, j, box, at, rounded: data.mark?.rounded });
     return [clearing(device, `${shot.id}.on${j}`, { clear: clearSecond(at, index, { plan, lifts }), at, glow: data.mark?.glow })];
   });

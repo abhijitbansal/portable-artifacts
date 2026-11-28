@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { pointThroughCamera } from '../../engine/graph/camera.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { LIFT_MOVES } from '../../engine/kinds/walk-time.mjs';
+import { LIFT_GROW } from '../../engine/kinds/walk-lift.mjs';
 import { all } from './helpers/kinds.mjs';
 import { PAGE, gateTour } from './helpers/walk-gate.mjs';
 
@@ -26,10 +27,10 @@ function frameRect(tour, t, [x, y, w, h]) {
   return [...map([x, y]), ...map([x + w, y + h])];
 }
 
-// the raised card in frame px at t
+// the raised card in frame px at t: the crop as drawn, which is the box grown by LIFT_GROW page px a side (the card's own border)
 function cardRect(tour, t) {
   const group = byId(tour.out, `${tour.shot.id}.lift0`);
-  const [w, h] = [tour.out.boxes['step:hover'][2], tour.out.boxes['step:hover'][3]];
+  const { w, h } = byId(tour.out, `${tour.shot.id}.lift0.image`).props;
   const s = sample(group.tracks.scale, t), y = sample(group.tracks.y, t);
   return [...pointThroughCamera([group.props.x - (w * s) / 2, y - (h * s) / 2], tour.cam(t), tour.ctx.canvas), ...pointThroughCamera([group.props.x + (w * s) / 2, y + (h * s) / 2], tour.cam(t), tour.ctx.canvas)];
 }
@@ -44,7 +45,8 @@ for (const { file, pushed, label } of VARIANTS) {
     const image = byId(tour.out, `${tour.shot.id}.lift0.image`);
     const { radius } = tour.ctx.look.kinds.walk.lift;
     assert.ok(radius >= 8, `the look names a radius: ${radius}`);
-    const wanted = (radius * tour.out.boxes.image[2]) / PAGE.w;
+    // the crop is the box grown by LIFT_GROW, so its corners are concentric with the card's: the radius grows by as much
+    const wanted = ((radius + LIFT_GROW) * tour.out.boxes.image[2]) / PAGE.w;
     assert.ok(Math.abs(image.props.round - wanted) < 1e-6, `${image.props.round} vs ${wanted}`);
   });
 

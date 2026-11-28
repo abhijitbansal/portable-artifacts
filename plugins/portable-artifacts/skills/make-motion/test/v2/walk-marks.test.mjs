@@ -36,7 +36,7 @@ test('the mark clears when the next played step starts, if that is sooner than M
 test('the mark clears after MARK_SECONDS when the next step starts later', () => {
   const data = THREE();
   const out = expandWalk(walkFilm(handShot(data, { steps: [{ id: 's0' }, { id: 's1' }, { id: 's2', at: 9 }], on: [MARK()] })), { w: data });
-  const landed = Math.max(2, out.plan.steps[1].act + out.ctx.look.moves.draw.dur); // not before the step acts
+  const landed = Math.max(2, out.plan.steps[1].act + out.ctx.look.kinds.walk.mark.rounded.dur); // not before the step acts
   near(clearOf(out).gone, landed + MARK_SECONDS, '2.0 s after it is drawn');
 });
 
@@ -90,6 +90,26 @@ test('keynote: the mark on a step is a rounded rectangle of the look\'s radius a
   assert.ok(glow.props.strokeWidth / 2 <= gap + ring.props.strokeWidth / 2, 'the glow does not reach the box either');
   const group = byId(out, 'w.on0.clear');
   assert.ok(group.children.indexOf(glow) < group.children.indexOf(ring), 'the glow is drawn under the ring');
+});
+
+test('keynote: the mark stands a clear gap (10 units) off the box, so it is not read as the page\'s own focus border, and draws on over 0.4 s', () => {
+  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] })), { w: committed() });
+  const { mark } = out.ctx.look.kinds.walk;
+  assert.equal(mark.rounded.gap, 10);
+  assert.ok(mark.rounded.gap >= 3 * mark.rounded.width, 'at least three stroke widths clear of the box');
+  const drawn = byId(out, 'w.on0').tracks.draw.points;
+  near(drawn.at(-1).t - drawn[0].t, 0.4, 'the stroke reveals around its path over 0.4 s', 1e-9);
+  assert.equal(drawn[0].v, 0);
+  assert.equal(drawn.at(-1).v, 1);
+  const glow = byId(out, 'w.on0.glow');
+  assert.deepEqual(glow.tracks.draw.points, drawn, 'the glow draws on with it');
+});
+
+test('keynote: a mark aimed before the step acts still starts its 0.4 s draw-on on the act', () => {
+  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 0.2, do: 'circle', target: 'step:search' }] })), { w: committed() });
+  const drawn = byId(out, 'w.on0').tracks.draw.points;
+  near(drawn[0].t, out.plan.steps[2].act, 'starts on the act', 1e-6);
+  near(drawn.at(-1).t, out.plan.steps[2].act + 0.4, 'and lands 0.4 s on', 1e-6);
 });
 
 test('a mark on a step never starts to draw before the step\'s act, in both looks', () => {

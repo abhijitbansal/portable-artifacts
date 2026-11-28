@@ -12,7 +12,7 @@ import { NARRATION_LEAD, buildTimeline, narrationStart } from '../../engine/scri
 import { anchorSeconds } from '../../engine/script/anchors.mjs';
 import { createRegistry, registries } from '../../engine/registry.mjs';
 import { validateSidecar } from '../../scripts/v2/voice/sidecar.mjs';
-import { walkMinSeconds, walkPlan } from '../../engine/kinds/walk-time.mjs';
+import { FINAL_HOLD, LIFT_LEAD, LIFT_MOVES, walkMinSeconds, walkPlan } from '../../engine/kinds/walk-time.mjs';
 import { prepareWalk } from '../../scripts/v2/prepare/walk.mjs';
 import { FIXTURE, digestOf, exampleFiles, firstDifference } from './helpers/example-timelines.mjs';
 
@@ -260,7 +260,10 @@ test('a say-less walk shot lasts its steps back to back', () => {
 test('a lift the shot lists holds its step, so the shot grows with it', () => {
   const film = walkFilm(FIVE_SHORT, { lift: [{ step: 'add', hold: 4 }] });
   const lifted = stretched(film);
-  assert.ok(walkShot(lifted).duration >= walkShot(stretched(walkFilm(FIVE_SHORT))).duration + 4);
+  // the lift's wait, moves and hold (0.5 + 0.8 + 4 s past the step's end) replace the last step's FINAL_HOLD that the shot had
+  const grown = LIFT_LEAD + LIFT_MOVES + 4 - FINAL_HOLD;
+  assert.ok(walkShot(lifted).duration >= walkShot(stretched(walkFilm(FIVE_SHORT))).duration + grown - 1 / FPS);
+  assert.ok(grown > 3, `the lift grows the shot by ${grown} s`);
 });
 
 test('no existing film moves: every example film\'s timeline is the one frozen before the hook, hooked registry or not', () => {

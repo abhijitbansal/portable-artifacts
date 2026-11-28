@@ -30,7 +30,7 @@ function spanOf(out) {
 function cardRect(out, t) {
   const group = byId(out, 'w.lift0');
   const [x, y, s] = [group.props.x, sample(group.tracks.y, t), sample(group.tracks.scale, t)];
-  const [w, h] = [out.boxes['step:hover'][2], out.boxes['step:hover'][3]];
+  const { w, h } = byId(out, 'w.lift0.image').props; // the crop as drawn: the box and its LIFT_GROW margin
   const cam = layeredCamera(out.camera, 'test')(t);
   const [l, top] = pointThroughCamera([x - (w * s) / 2, y - (h * s) / 2], cam, out.ctx.canvas);
   const [r, bottom] = pointThroughCamera([x + (w * s) / 2, y + (h * s) / 2], cam, out.ctx.canvas);
@@ -79,7 +79,8 @@ test('the card rises (the look\'s rise, held under 60% of its own growth so it s
     const group = byId(out, 'w.lift0');
     const [, by, , bh] = out.boxes['step:hover'];
     const centre = by + bh / 2;
-    const rise = liftRise(out.ctx.look.kinds.walk.lift, out.boxes['step:hover'], out.ctx.canvas.h);
+    const crop = byId(out, 'w.lift0.image').props; // the box and its margin: the card that rises
+    const rise = liftRise(out.ctx.look.kinds.walk.lift, [crop.x, crop.y, crop.w, crop.h], out.ctx.canvas.h);
     assert.ok(rise > 0 && rise <= out.ctx.look.kinds.walk.lift.rise * out.ctx.canvas.h + 1e-9, `${look}: a rise, ${rise}`);
     assert.ok(Math.abs(sample(group.tracks.y, start) - centre) < 1e-6, `${look}: on the box at the start`);
     assert.ok(Math.abs(centre - sample(group.tracks.y, peak) - rise) < 1e-6, `${look}: risen at the peak`);

@@ -217,12 +217,17 @@ export const keynote = {
     // slot; `wholeScale` and `wholeRise` replace them while the camera is at zoom 1 (the whole view: at 1.1 the card grew about
     // 12 px a side into a ~19 px gap, 7.4 px clear against the 10 px rule; 1.06 leaves 13 px, the smaller rise keeps it past its slot)); the last step's context is the page's width less 1% with no pad (as large as the page's own margins allow, so its text still reads, and the card its click adds is in frame); a mark on a step is a
     // `rounded` rectangle (units, in ink: the page's own focus border is blue, and an accent ring beside it read as a doubled border) a `gap` outside the box, not the circle device; a click `ripple` is ink on a paper
-    // keyline (share of the cursor's size), never the accent the page's own buttons use
+    // keyline (share of the cursor's size), never the accent the page's own buttons use.
+    // Look-gate revision 1: the lift crop is the box grown 3 page px a side (the card's own border comes along), which takes
+    // clearance from its neighbours, so `wholeScale` 1.04 (11.8 px clear at the whole view) and `scale` 1.08 (11.5 px clear
+    // at a push, measured on the gate films by test/v2/walk-lift-look.test.mjs); the ripple is a thin ring (`width` 0.04 of the
+    // cursor's size, drawn from 1.6 times it, so the clicked label stays readable); the mark stands a `gap` of 10 units off
+    // the box (not read as the page's own focus border) and draws on over `dur` seconds
     walk: {
       experimental: true, elevated: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } },
-      lift: { scale: 1.1, wholeScale: 1.06, wholeRise: 0.001, hold: 1.2, rise: 0.005, radius: 12, dim: 0.4, scrim: 'ink', layers: [{ color: 'shade', alpha: 0.18, reach: 14, dy: 6 }, { color: 'shade', alpha: 0.22, reach: 90, dy: 40 }] },
-      mark: { rounded: { color: 'ink', width: 3, gap: 3, radius: 12 }, glow: { alpha: 0.18, widen: 1.8 } },
-      ripple: { color: 'ink', width: 0.14, keyline: 'paper' },
+      lift: { scale: 1.08, wholeScale: 1.04, wholeRise: 0.001, hold: 1.2, rise: 0.005, radius: 12, dim: 0.4, scrim: 'ink', layers: [{ color: 'shade', alpha: 0.18, reach: 14, dy: 6 }, { color: 'shade', alpha: 0.22, reach: 90, dy: 40 }] },
+      mark: { rounded: { color: 'ink', width: 3, gap: 10, radius: 12, dur: 0.4 }, glow: { alpha: 0.18, widen: 1.8 } },
+      ripple: { color: 'ink', width: 0.04, keyline: 'paper' },
     },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to
     // hold a third place name, a creative finding on the first render)

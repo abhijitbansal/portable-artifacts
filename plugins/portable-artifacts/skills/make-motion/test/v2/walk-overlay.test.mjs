@@ -1,16 +1,16 @@
-// What the walk kind draws over its picture: the cursor and its click ripple, the lift, and the `on` devices aimed at a
-// step. Pure: the take is the committed fixture, or a hand-made one of plain runs of frames (test/v2/helpers/walk.mjs).
+// What the walk kind draws over its picture: the cursor (on from the first frame, at rest, travelling at least 0.6 s to a click)
+// and its click ripple. The lift and the `on` devices aimed at a step are in walk-lift-overlay.test.mjs. Pure: the take is the
+// committed fixture, or a hand-made one of plain runs of frames (test/v2/helpers/walk.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { registries } from '../../engine/registry.mjs';
 import { layeredCamera, pointThroughCamera } from '../../engine/graph/camera.mjs';
 import { sample } from '../../engine/time/track.mjs';
-import { GLIDE, HOLD_MIN, LIFT_LEAD, LIFT_MOVES } from '../../engine/kinds/walk-time.mjs';
+import { GLIDE, LIFT_MOVES } from '../../engine/kinds/walk-time.mjs';
 import { walkSetup } from '../../engine/kinds/walk-layout.mjs';
-import { liftAt } from '../../engine/kinds/walk-pose.mjs';
+import { REST, TRAVEL_MIN } from '../../engine/kinds/walk-cursor.mjs';
 import { all } from './helpers/kinds.mjs';
-import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
-import { EXAMPLES_DIR, committed, expandWalk, handShot, handTake, walkFilm, walkShot } from './helpers/walk.mjs';
+import { gateTour } from './helpers/walk-gate.mjs';
+import { committed, expandWalk, handShot, handTake, walkFilm } from './helpers/walk.mjs';
 
 const FPS = 30;
 const near = (actual, wanted, label, tolerance = 1e-6) => assert.ok(Math.abs(actual - wanted) < tolerance, `${label}: ${actual} is not ${wanted}`);
@@ -93,14 +93,34 @@ test('it stays inside the frame at full push on a corner step', () => {
   }
 });
 
-test('it is off until the first step with a pointer: the committed take\'s first step has no box, so no cursor yet', () => {
+test('it is drawn from the shot\'s first frame: at rest on the REST point of the page until it travels to the first pointer', () => {
   const out = expandWalk(walkFilm(), { w: committed() });
-  const { opacity } = byId(out, 'w.cursor').tracks;
-  assert.equal(sample(opacity, 0), 0);
-  assert.equal(sample(opacity, out.plan.steps[0].act), 0);
-  assert.equal(sample(opacity, out.plan.steps[1].start - 1e-6), 0, 'still off while step 1 has not started its glide');
-  assert.equal(sample(opacity, out.plan.steps[1].act), 1);
-  assert.equal(sample(opacity, out.timing.duration), 1, 'and it stays on');
+  const cursor = byId(out, 'w.cursor');
+  const opacityAt = (t) => (cursor.tracks.opacity === undefined ? 1 : sample(cursor.tracks.opacity, t)); // no track: always on
+  assert.equal(opacityAt(0), 1, 'on at second 0');
+  assert.equal(opacityAt(out.plan.steps[0].act), 1, 'and during the first step, which has no pointer');
+  assert.equal(REST.x, 0.62);
+  assert.equal(REST.y, 0.7);
+  const { width, height } = out.data.viewport;
+  const [rx, ry] = through(out, { x: REST.x * width, y: REST.y * height }, 0);
+  const [x0, y0] = cursorAt(out, 0);
+  near(x0, rx, 'rests at 62% across (x)', 1e-6);
+  near(y0, ry, 'rests at 70% down (y)', 1e-6);
+  const first = out.plan.steps[1];
+  const before = first.act - TRAVEL_MIN - 0.01; // the camera's resting drift moves the point on the canvas, so compare at the same second
+  const [bx, by] = cursorAt(out, before);
+  const [ex, ey] = through(out, { x: REST.x * width, y: REST.y * height }, before);
+  near(bx, ex, 'still at rest just before the travel starts (x)', 1e-2); // keyed per film frame: the drift between keys is linear
+  near(by, ey, 'still at rest just before the travel starts (y)', 1e-2);
+  const rest = out.boxes.image;
+  assert.ok(rx > rest[0] && rx < rest[0] + rest[2] && ry > rest[1] && ry < rest[1] + rest[3], 'the rest point is inside the picture');
+});
+
+test('a take with no pointer at all has no cursor', () => {
+  const data = THREE();
+  data.steps = data.steps.map((s) => ({ ...s, pointer: null }));
+  const out = expandHand(data);
+  assert.equal(byId(out, 'w.cursor'), undefined);
 });
 
 test('a step with no box keeps the cursor where it was', () => {
@@ -108,7 +128,7 @@ test('a step with no box keeps the cursor where it was', () => {
   data.steps[1] = { ...data.steps[1], box: null };
   const out = expandHand(data);
   const [from, to] = [out.plan.steps[1].start, out.plan.steps[1].end];
-  for (const t of [from, (from + to) / 2, to]) {
+  for (const t of [from, (from + to) / 2, to - TRAVEL_MIN]) { // the travel to step 2 borrows the last TRAVEL_MIN s of this step
     const [x, y] = cursorAt(out, t);
     const [ex, ey] = through(out, data.steps[0].pointer, t);
     near(x, ex, `x at ${t}`);
@@ -116,12 +136,16 @@ test('a step with no box keeps the cursor where it was', () => {
   }
 });
 
-test('it travels over the GLIDE frames before act on one curve from the previous pointer, and dips to 0.9 at act for 0.12 s', () => {
+test('it travels over the TRAVEL_MIN (0.6 s) before act on one curve from the previous pointer, and dips to 0.9 at act for 0.12 s', () => {
   const data = THREE();
-  data.steps = data.steps.map((s) => ({ ...s, actIndex: s.startIndex + 12 })); // twelve frames before act: a full glide
+  data.steps = data.steps.map((s) => ({ ...s, actIndex: s.startIndex + 12 })); // twelve frames before act: the take's own glide
   const out = expandHand(data);
   const { act } = out.plan.steps[1];
-  const glideFrom = act - GLIDE / data.fps;
+  assert.ok(TRAVEL_MIN >= 0.6, `the least travel: ${TRAVEL_MIN}`);
+  assert.ok(TRAVEL_MIN > GLIDE / data.fps, 'longer than the take\'s own glide frames');
+  const glideFrom = act - TRAVEL_MIN;
+  assert.ok(glideFrom < out.plan.steps[1].start, 'it borrows from the previous step\'s hold');
+  assert.ok(glideFrom >= out.plan.steps[0].act, 'but never from before the previous step\'s act');
   const [x0, y0] = cursorAt(out, glideFrom);
   const [ex, ey] = through(out, data.steps[0].pointer, glideFrom);
   near(x0, ex, 'glide starts on the previous pointer (x)');
@@ -139,176 +163,106 @@ test('it travels over the GLIDE frames before act on one curve from the previous
   near(sample(scale, act + 0.5), 1, 'back to full size');
 });
 
+test('the travel never starts while a lift holds its card up: it waits until the card starts back down', () => {
+  const data = THREE();
+  data.steps = data.steps.map((s) => ({ ...s, actIndex: s.startIndex + 3 })); // act close to the step's start: 0.6 s back reaches into the lift
+  const film = filmOfHand(data, { lift: [{ step: 's0' }] });
+  const out = expandWalk(film, { w: data });
+  const [span] = walkSetup(film.shots[0], out.ctx).lifts;
+  const back = span.end - LIFT_MOVES / 2; // the card starts back
+  const { act } = out.plan.steps[1];
+  assert.ok(act - TRAVEL_MIN < back - 1e-6, `without the rule the travel would start at ${(act - TRAVEL_MIN).toFixed(2)}, before the card is back (${back.toFixed(2)})`);
+  const [ex, ey] = through(out, data.steps[0].pointer, back);
+  const [x, y] = cursorAt(out, back);
+  near(x, ex, 'still on the lifted step\'s pointer as the card starts back (x)');
+  near(y, ey, 'still on the lifted step\'s pointer as the card starts back (y)');
+  assert.ok(Math.hypot(...cursorAt(out, back + 0.15).map((v, i) => v - [ex, ey][i])) > 1, 'and it is under way soon after');
+});
+
+test('both gate films: from the lifted card to "Add project" the cursor travels at least 0.6 s, and not before the card starts back', () => {
+  for (const file of ['gate-walk-keynote.json', 'gate-walk-desk.json']) {
+    const tour = gateTour(file);
+    const { plan, geo, data, lifts } = tour.setup;
+    const [hover, add] = [plan.steps[3], plan.steps[4]];
+    const back = lifts[0].end - LIFT_MOVES / 2;
+    const from = Math.max(add.act - TRAVEL_MIN, back);
+    assert.ok(add.act - from >= TRAVEL_MIN - 1e-9, `${file}: the travel is ${(add.act - from).toFixed(2)} s`);
+    assert.ok(from < hover.until, `${file}: it starts (${from.toFixed(2)}) before the add step does (${add.start.toFixed(2)}), borrowing the hold`);
+    const cursor = tour.out.nodes.find((n) => n.id === `${tour.shot.id}.cursor`);
+    const pointer = geo.mapPoint(data.steps.find((s) => s.id === 'hover').pointer);
+    const standing = (t) => pointThroughCamera(pointer, tour.cam(t), tour.ctx.canvas);
+    const at = (t) => [sample(cursor.tracks.x, t), sample(cursor.tracks.y, t)];
+    const [sx, sy] = standing(from - 0.01);
+    near(at(from - 0.01)[0], sx, `${file}: on the hovered card until the card is back (x)`, 1e-2);
+    near(at(from - 0.01)[1], sy, `${file}: on the hovered card until the card is back (y)`, 1e-2);
+    const [mx, my] = standing(from + 0.2);
+    assert.ok(Math.hypot(at(from + 0.2)[0] - mx, at(from + 0.2)[1] - my) > 2, `${file}: under way 0.2 s later`);
+  }
+});
+
 // ---- the ripple ----
 
-test('a click step adds a ripple ring in the look\'s ripple colour,0.5 to 2 times the cursor size over 0.4 s; other steps add none', () => {
-  const data = THREE();
-  data.steps[1] = { ...data.steps[1], do: 'hover' };
+const boundsOf = (d) => {
+  const nums = d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  const [xs, ys] = [nums.filter((_, i) => i % 2 === 0), nums.filter((_, i) => i % 2 === 1)];
+  return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+};
+
+test('a click step adds a thin outline ring that starts at 1.6 times the cursor and grows outward, fading, over 0.4 s, in both looks; other steps add none', () => {
+  for (const look of ['keynote', 'desk']) {
+    const data = THREE();
+    data.steps[1] = { ...data.steps[1], do: 'hover' };
+    const out = expandWalk(walkFilm(handShot(data), { look }), { w: data });
+    const ids = all(out.nodes).filter((n) => /^w\.ripple\d+$/.test(n.id)).map((n) => n.id);
+    assert.deepEqual(ids, ['w.ripple0', 'w.ripple2'], `${look}: the click steps only`);
+    const ripple = out.nodes.find((n) => n.id === 'w.ripple2');
+    const ring = byId(out, 'w.ripple2.ring');
+    const size = 0.05 * out.ctx.canvas.h;
+    const { act } = out.plan.steps[2];
+    assert.equal(ripple.props.fixed, true);
+    assert.equal(ring.props.stroke, out.ctx.look.palette[out.ctx.look.kinds.walk.ripple.color]);
+    const across = (t) => boundsOf(ring.props.d).w * sample(ripple.tracks.scale, t); // the ring's diameter on the canvas
+    assert.ok(across(act) >= 1.6 * size - 0.5, `${look}: starts at ${(across(act) / size).toFixed(2)} times the cursor, at least 1.6`);
+    assert.ok(across(act + 0.4) > across(act) + 0.5 * size, `${look}: grows outward`);
+    const widest = ring.props.strokeWidth * sample(ripple.tracks.scale, act + 0.4);
+    assert.ok(widest <= 0.1 * size, `${look}: thin at its widest, ${widest.toFixed(2)} px against the cursor's ${size}`);
+    const keyline = byId(out, 'w.ripple2.keyline');
+    assert.ok(keyline.props.strokeWidth * sample(ripple.tracks.scale, act + 0.4) <= 0.2 * size, `${look}: so is its paper keyline`);
+    assert.equal(sample(ripple.tracks.opacity, act - 0.01), 0, `${look}: not there before the click`);
+    assert.ok(sample(ripple.tracks.opacity, act + 0.2) < sample(ripple.tracks.opacity, act + 0.05), `${look}: fading`);
+    assert.equal(sample(ripple.tracks.opacity, act + 0.4 + 0.01), 0, `${look}: gone after 0.4 s`);
+    assert.ok(sample(ripple.tracks.opacity, act + 0.05) > 0);
+    const [rx, ry] = [sample(ripple.tracks.x, act), sample(ripple.tracks.y, act)];
+    const [cx, cy] = through(out, data.steps[2].pointer, act);
+    near(rx, cx, `${look}: ripple x`);
+    near(ry, cy, `${look}: ripple y`);
+  }
+});
+
+test('the ring stays on its click point for its whole 0.4 s, though the cursor has set off for the next step', () => {
+  const data = handTake([6, 6, 6], [[40, 40, 120, 60], [400, 200, 120, 60], [760, 420, 120, 60]]); // short steps: the next travel starts inside the ring
   const out = expandHand(data);
-  const ids = all(out.nodes).filter((n) => /^w\.ripple\d+$/.test(n.id)).map((n) => n.id);
-  assert.deepEqual(ids, ['w.ripple0', 'w.ripple2'], 'the click steps only');
-  const ripple = out.nodes.find((n) => n.id === 'w.ripple2');
-  assert.equal(ripple.props.fixed, true);
-  assert.equal(byId(out, 'w.ripple2.ring').props.stroke, out.ctx.look.palette[out.ctx.look.kinds.walk.ripple.color]);
-  const { act } = out.plan.steps[2];
-  near(sample(ripple.tracks.scale, act), 0.5, 'starts at half the cursor size');
-  near(sample(ripple.tracks.scale, act + 0.4), 2, 'ends at twice the cursor size');
-  assert.equal(sample(ripple.tracks.opacity, act - 0.01), 0, 'not there before the click');
-  assert.equal(sample(ripple.tracks.opacity, act + 0.4 + 0.01), 0, 'gone after 0.4 s');
-  assert.ok(sample(ripple.tracks.opacity, act + 0.05) > 0);
-  const [rx, ry] = [sample(ripple.tracks.x, act), sample(ripple.tracks.y, act)];
-  const [cx, cy] = through(out, data.steps[2].pointer, act);
-  near(rx, cx, 'ripple x');
-  near(ry, cy, 'ripple y');
+  const { act } = out.plan.steps[0];
+  assert.ok(out.plan.steps[1].act - TRAVEL_MIN < act + 0.3, 'the cursor is already travelling to step 1 while the ring is up');
+  const ripple = out.nodes.find((n) => n.id === 'w.ripple0');
+  for (const t of [act, act + 0.1, act + 0.2, act + 0.3, act + 0.4]) {
+    const [ex, ey] = through(out, data.steps[0].pointer, t);
+    near(sample(ripple.tracks.x, t), ex, `ring x at +${(t - act).toFixed(1)} s`, 1e-2);
+    near(sample(ripple.tracks.y, t), ey, `ring y at +${(t - act).toFixed(1)} s`, 1e-2);
+  }
+});
+
+test('on the click frame of "Add project" the ring is a hairline round the label, not a blot over it (at most 4 px of ink)', () => {
+  const out = expandWalk(walkFilm(), { w: committed() });
+  const ring = byId(out, 'w.ripple4.ring');
+  const ripple = out.nodes.find((n) => n.id === 'w.ripple4');
+  const { act } = out.plan.steps[4];
+  const stroke = ring.props.strokeWidth * sample(ripple.tracks.scale, act);
+  assert.ok(stroke <= 4, `${stroke.toFixed(2)} px of ink at the click frame`);
 });
 
 test('the committed take ripples on its two click steps, tab and add, and not on typing or hovering', () => {
   const out = expandWalk(walkFilm(), { w: committed() });
   const ids = all(out.nodes).filter((n) => /^w\.ripple\d+$/.test(n.id)).map((n) => n.id);
   assert.deepEqual(ids, ['w.ripple1', 'w.ripple4']);
-});
-
-// ---- the lift ----
-
-const LIFT_SHOT = (extra = {}) => walkShot({ lift: [{ step: 'tab' }], ...extra });
-
-test('a lift crops the step\'s settled frame to its box in frame pixels, on a constant frame track', () => {
-  const prepared = { w: committed() };
-  const out = expandWalk(walkFilm(LIFT_SHOT()), prepared);
-  const crop = byId(out, 'w.lift0.image');
-  const tab = prepared.w.steps.find((s) => s.id === 'tab');
-  assert.equal(crop.type, 'image');
-  assert.equal(crop.props.src, 'walk-take');
-  assert.deepEqual(crop.props.video, { count: prepared.w.names.length });
-  assert.deepEqual(crop.props.clip.map((v) => Number(v.toFixed(6))), [tab.box.x, tab.box.y, tab.box.width, tab.box.height].map((v) => Number((v * prepared.w.scale).toFixed(6))));
-  assert.deepEqual(crop.tracks.frame.points.map((p) => p.v), [tab.settledIndex]);
-  const [bx, by, bw, bh] = out.boxes['step:tab'];
-  near(crop.props.w, bw, 'drawn as wide as the box', 1e-9);
-  near(crop.props.h, bh, 'drawn as high as the box', 1e-9);
-  const group = out.nodes.find((n) => n.id === 'w.lift0');
-  near(group.props.x, bx + bw / 2, 'centred on the box (x)');
-  near(group.props.y, by + bh / 2, 'centred on the box (y)');
-  assert.notEqual(group.props.fixed, true, 'it moves with the picture under the camera');
-});
-
-test('the lift scales to the look\'s scale over 0.4 s, holds, and returns over 0.4 s to the same box', () => {
-  const out = expandWalk(walkFilm(LIFT_SHOT()), { w: committed() });
-  const { hold } = out.ctx.look.kinds.walk.lift;
-  const { scale } = liftAt(out.ctx.look.kinds.walk.lift, 1); // the camera is at zoom 1 here: the whole view's scale
-  const start = out.plan.steps[1].end + LIFT_LEAD;
-  const group = out.nodes.find((n) => n.id === 'w.lift0');
-  near(sample(group.tracks.scale, start), 1, 'starts at the box');
-  near(sample(group.tracks.scale, start + 0.4), scale, 'up in 0.4 s');
-  near(sample(group.tracks.scale, start + 0.4 + hold), scale, 'held');
-  near(sample(group.tracks.scale, start + 0.8 + hold), 1, 'back on the same box');
-  assert.equal(sample(group.tracks.opacity, start - 0.01), 0, 'not drawn before it starts');
-  assert.equal(sample(group.tracks.opacity, start + 0.1), 1);
-  assert.equal(sample(group.tracks.opacity, start + 0.8 + hold + 0.01), 0, 'not drawn after it returns');
-});
-
-test('its seconds are the ones walk-time counts in `until`, by default and with an at', () => {
-  const prepared = { w: committed() };
-  const { hold } = registries.looks.get('keynote').kinds.walk.lift;
-  const plain = expandWalk(walkFilm(LIFT_SHOT()), prepared);
-  const spanOf = (out, id) => {
-    const { opacity } = out.nodes.find((n) => n.id === id).tracks;
-    return [opacity.points.find((p) => p.v === 1).t, opacity.points.findLast((p) => p.v === 1).t];
-  };
-  const [from, to] = spanOf(plain, 'w.lift0');
-  near(from, plain.plan.steps[1].end + LIFT_LEAD, 'default start');
-  near(to, plain.plan.steps[1].until, 'ends where the step\'s until ends');
-  near(to - from, LIFT_MOVES + hold, 'moves and hold');
-  const end = plain.plan.steps[1].end;
-  const later = expandWalk(walkFilm(LIFT_SHOT({ lift: [{ step: 'tab', at: end + 2 }] })), prepared);
-  const [from2, to2] = spanOf(later, 'w.lift0');
-  near(from2, end + 2, 'an at starts it there');
-  near(to2, later.plan.steps[1].until, 'and the next step still waits for it');
-  assert.ok(later.plan.steps[1].until > plain.plan.steps[1].until);
-  assert.ok(HOLD_MIN < LIFT_LEAD + LIFT_MOVES + hold);
-});
-
-test('the rest dims with the look\'s lift scrim for as long as the lift is up', () => {
-  const out = expandWalk(walkFilm(LIFT_SHOT()), { w: committed() });
-  const { hold } = out.ctx.look.kinds.walk.lift;
-  const start = out.plan.steps[1].end + LIFT_LEAD;
-  const dim = out.nodes.find((n) => n.id === 'w.lift0.dim');
-  assert.ok(dim, 'a dim group before the lift');
-  assert.ok(out.nodes.indexOf(dim) < out.nodes.findIndex((n) => n.id === 'w.lift0'), 'drawn under the lifted card');
-  const scrim = all([dim]).find((n) => n.id === 'w.lift0.focus');
-  assert.ok(scrim && scrim.type === 'path', 'the focus device\'s scrim');
-  assert.equal(sample(dim.tracks.opacity, start - 0.01), 0);
-  assert.equal(sample(dim.tracks.opacity, start + 0.4 + hold / 2), 1);
-  assert.equal(sample(dim.tracks.opacity, start + 0.8 + hold + 0.01), 0);
-  assert.ok(sample(scrim.tracks.opacity, start + 0.4 + hold / 2) > 0, 'the scrim is up while the lift is');
-  assert.equal(scrim.props.d.match(/M/g).length, 1, 'no hole: the card\'s own slot is dimmed too, and the raised card covers it');
-});
-
-test('a lift on a step the take has no box for is a preparer problem at the lift\'s step, not silent nodes', () => {
-  const problems = prepareFilm(walkFilm(walkShot({ lift: [{ step: 'tab' }, { step: 'open' }] })), { filmDir: EXAMPLES_DIR }).problems.map((p) => `${p.path}: ${p.message}`);
-  assert.deepEqual(problems, ['shots[0].lift[1].step: lift on step open: the take has no box for it']);
-  assert.deepEqual(prepareFilm(walkFilm(walkShot({ lift: [{ step: 'tab' }] })), { filmDir: EXAMPLES_DIR }).problems, []);
-});
-
-// the lifted crop's drawn scale: the camera's zoom at the lift's peak times the lift group's scale there
-const drawnScale = (out, id = 'w.lift0') => {
-  const group = out.nodes.find((n) => n.id === id);
-  const peak = group.tracks.opacity.points.find((p) => p.v === 1).t + LIFT_MOVES / 2;
-  return layeredCamera(out.camera, 'test')(peak).zoom * sample(group.tracks.scale, peak);
-};
-
-test('a lift never draws past the take\'s native pixels: at a capped stop the camera eases down and the card keeps the look\'s scale', () => {
-  const shot = LIFT_SHOT({ steps: [{ id: 'open' }, { id: 'tab' }, { id: 'search', at: 9 }, { id: 'hover' }, { id: 'add' }], stops: [{ to: 'step:tab' }] });
-  const out = expandWalk(walkFilm(shot), { w: { ...committed(), width: 1920, height: 1080, scale: 2 } }); // a take at 2x: its pixels cap the stop
-  const native = out.data.width / out.boxes.image[2];
-  const { scale } = out.ctx.look.kinds.walk.lift;
-  const stop = walkSetup(shot, out.ctx).planned.stops[0];
-  assert.ok(stop.zoom * scale > native, 'the stop\'s zoom with the look\'s scale would pass the native pixels');
-  assert.ok(drawnScale(out) <= native + 1e-6, `${drawnScale(out)} vs native ${native}`);
-  const group = out.nodes.find((n) => n.id === 'w.lift0');
-  // the lift is raised before the stop lands, with the camera at zoom 1: the whole view's scale
-  const start = out.plan.steps[1].end + LIFT_LEAD;
-  near(sample(group.tracks.scale, start + 0.4), liftAt(out.ctx.look.kinds.walk.lift, layeredCamera(out.camera, 'test')(start).zoom).scale, 'the card still scales to the look\'s scale');
-  const room = expandWalk(walkFilm(shot, { look: 'keynote' }), { w: { ...committed(), width: 5760, height: 3240, scale: 6 } });
-  const roomy = room.data.width / room.boxes.image[2];
-  const roomCam = layeredCamera(room.camera, 'test');
-  near(drawnScale(room), liftAt(room.ctx.look.kinds.walk.lift, roomCam(start).zoom).scale * roomCam(start + 0.4).zoom, 'with room above the push the look\'s scale holds');
-  assert.ok(drawnScale(room) <= roomy + 1e-6);
-});
-
-test('at whole view the lift takes the look\'s wholeScale (smaller than its scale, so the card keeps clear of its neighbours)', () => {
-  const out = expandWalk(walkFilm(LIFT_SHOT()), { w: committed() });
-  const group = out.nodes.find((n) => n.id === 'w.lift0');
-  const peak = out.plan.steps[1].end + LIFT_LEAD + 0.4;
-  const { scale, wholeScale } = out.ctx.look.kinds.walk.lift;
-  assert.ok(wholeScale > 1 && wholeScale < scale, `the look names a wholeScale: ${wholeScale} under ${scale}`);
-  near(sample(group.tracks.scale, peak), wholeScale, 'scale at the peak');
-});
-
-test('every lift of a shot is drawn, each under its own id', () => {
-  const out = expandWalk(walkFilm(walkShot({ lift: [{ step: 'tab' }, { step: 'add' }] })), { w: committed() });
-  for (const id of ['w.lift0', 'w.lift1', 'w.lift0.dim', 'w.lift1.dim']) assert.ok(out.nodes.some((n) => n.id === id), id);
-});
-
-// ---- `on` devices aimed at a step ----
-
-test('desk: a circle on step:search is the circle device, in the walk look\'s mark style, built round that step\'s mapped box (fitted)', () => {
-  const prepared = { w: committed() };
-  const out = expandWalk(walkFilm(walkShot({ on: [{ at: 'sentence:3', do: 'circle', target: 'step:search' }] }), { look: 'desk' }), prepared);
-  const { look } = out.ctx;
-  const whole = out.boxes['step:search'];
-  assert.notDeepEqual(whole, out.boxes.image, 'the step has a box of its own');
-  const box = [whole[0] + (whole[2] * (1 - look.kinds.walk.mark.fit)) / 2, whole[1], whole[2] * look.kinds.walk.mark.fit, whole[3]];
-  const styled = { ...look, devices: { ...look.devices, circle: { ...look.devices.circle, ...look.kinds.walk.mark.circle } } };
-  const built = registries.devices.get('circle').build({ id: 'w.on0', box, at: out.ctx.at('sentence:3'), look: styled, unit: out.ctx.unit, seed: out.ctx.seed, measure: out.ctx.measure });
-  const group = all(out.nodes).find((n) => n.id === 'w.on0.clear');
-  const drawn = group.children.filter((n) => !n.id.endsWith('.glow'));
-  assert.equal(drawn.length, built.nodes.length);
-  assert.deepEqual(drawn, built.nodes);
-  const numbers = drawn.flatMap((n) => n.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number));
-  const xs = numbers.filter((_, i) => i % 2 === 0), ys = numbers.filter((_, i) => i % 2 === 1);
-  const [left, right, top, bottom] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  const slack = 0.01; // the path is written to two decimals
-  assert.ok(left <= box[0] + slack && right >= box[0] + box[2] - slack && top <= box[1] + slack && bottom >= box[1] + box[3] - slack, `round the box: ${[left, top, right, bottom]} vs ${box}`);
-  near((left + right) / 2, box[0] + box[2] / 2, 'centred on the box (x)', 6); // a hand circle runs on past where it began
-  near((top + bottom) / 2, box[1] + box[3] / 2, 'centred on the box (y)', 6);
 });

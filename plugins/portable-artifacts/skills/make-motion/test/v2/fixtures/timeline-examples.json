@@ -1155,11 +1155,11 @@
   ]
  },
  "gate-walk-desk.json": {
-  "sha": "b8c46ddfb2c54ebe563c2d29d161bbeda7ab54d2329883c50e3d413126cd4fab",
+  "sha": "5cc250b67fabca82ce1c8aeccbc885db49e62a31e540d250c511072ae4e76bc9",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "ef36e4147c04",
-   "frameCount": "47fec9f49117",
+   "duration": "b17da6fddb78",
+   "frameCount": "b2cc86ae48fd",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1176,28 +1176,28 @@
     "id": "eacbe1227668",
     "index": "6b86b273ff34",
     "start": "120f2637e696",
-    "end": "cb9a670166c1",
-    "duration": "16c84a5a62e2",
-    "words": "948fe9857cb1",
-    "sentences": "f2f530588923"
+    "end": "591b139bd8a4",
+    "duration": "ad78cb9f2d23",
+    "words": "cd647aad4810",
+    "sentences": "e15b703cb9c6"
    },
    {
     "id": "97959247360c",
     "index": "d4735e3a265e",
-    "start": "cb9a670166c1",
-    "end": "ef36e4147c04",
-    "duration": "2912aa729c97",
-    "words": "a8de804f8288",
-    "sentences": "b17bf833e717"
+    "start": "591b139bd8a4",
+    "end": "b17da6fddb78",
+    "duration": "d9cfac58960b",
+    "words": "e16d1be4d262",
+    "sentences": "61860bddea5b"
    }
   ]
  },
  "gate-walk-keynote.json": {
-  "sha": "d8f1af66127ea5fee06d8b22748cbb38f6534ddda59a207d9910299c4c80e386",
+  "sha": "9e2ef98cc02f3c449d8bd405527cadff189281df30b4c70cd5df61bef8254b41",
   "top": {
    "fps": "624b60c58c9d",
-   "duration": "c2f18b1d7129",
-   "frameCount": "81defd9e2e8f",
+   "duration": "d9806955d529",
+   "frameCount": "1de4d95a81eb",
    "timed": "53c7890a0add"
   },
   "shots": [
@@ -1214,19 +1214,19 @@
     "id": "eacbe1227668",
     "index": "6b86b273ff34",
     "start": "fc0581057f96",
-    "end": "ff4c49bfaace",
-    "duration": "16c84a5a62e2",
-    "words": "948fe9857cb1",
-    "sentences": "f2f530588923"
+    "end": "4ecbf5754798",
+    "duration": "ad78cb9f2d23",
+    "words": "cd647aad4810",
+    "sentences": "e15b703cb9c6"
    },
    {
     "id": "97959247360c",
     "index": "d4735e3a265e",
-    "start": "ff4c49bfaace",
-    "end": "c2f18b1d7129",
-    "duration": "2912aa729c97",
-    "words": "a8de804f8288",
-    "sentences": "b17bf833e717"
+    "start": "4ecbf5754798",
+    "end": "d9806955d529",
+    "duration": "d9cfac58960b",
+    "words": "e16d1be4d262",
+    "sentences": "61860bddea5b"
    }
   ]
  },

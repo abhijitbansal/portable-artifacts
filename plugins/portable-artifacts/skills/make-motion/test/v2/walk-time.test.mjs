@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sample } from '../../engine/time/track.mjs';
 import { frameIndexOf } from '../../engine/kinds/media-clip.mjs';
-import { GLIDE, HOLD_MIN, IDLE_KEEP, IDLE_RUN, keptFrames, walkFrameTrack, walkPlan, walkProblems } from '../../engine/kinds/walk-time.mjs';
+import { FINAL_HOLD, GLIDE, HOLD_MIN, IDLE_KEEP, IDLE_RUN, keptFrames, walkFrameTrack, walkMinSeconds, walkPlan, walkProblems } from '../../engine/kinds/walk-time.mjs';
 import { prepareWalk } from '../../scripts/v2/prepare/walk.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -76,7 +76,20 @@ test('three steps on three sentences start on them', () => {
   near(plan.steps[0].act, 3 / FPS, 'act of a');
   near(plan.steps[1].end, 3 + 6 / FPS, 'end of b');
   near(plan.steps[1].until, 3 + 6 / FPS + HOLD_MIN, 'until of b');
-  near(plan.end, 6 + 6 / FPS + HOLD_MIN, 'the shot end is the last until');
+  near(plan.end, 6 + 6 / FPS + FINAL_HOLD, 'the shot end is the last step\'s end and the final hold');
+});
+
+test('the last step\'s settled frame holds FINAL_HOLD (2.0 s) before the shot ends, with or without a lift or a closing stop', () => {
+  assert.equal(FINAL_HOLD, 2);
+  const last = (plan) => plan.steps.at(-1);
+  const plain = walkPlan(refs('a', 'b', 'c'), sentencesAt(0, 3, 6), SHORT);
+  assert.ok(plain.end - last(plain).end >= FINAL_HOLD - 1e-9, `plain: ${plain.end - last(plain).end}`);
+  const lifted = walkPlan(refs('a', 'b', 'c'), sentencesAt(0, 3, 6), SHORT, { lifts: [{ step: 'c', hold: 1.2 }] });
+  near(lifted.end, last(lifted).until, 'a lift that holds longer than FINAL_HOLD keeps its own end');
+  const closing = walkPlan({ ...refs('a', 'b', 'c'), stops: [{ to: 'step:c' }, { to: 'whole' }] }, sentencesAt(0, 3, 6), SHORT);
+  assert.ok(closing.end - last(closing).end >= FINAL_HOLD - 1e-9, `closing: ${closing.end - last(closing).end}`);
+  const asked = walkMinSeconds(refs('a', 'b', 'c'), { sentences: sentencesAt(0, 3, 6).sentences, words: [], seconds: 1, prepared: SHORT });
+  assert.equal(asked, plain.end, 'minSeconds says so too');
 });
 
 test('a step whose action outruns its sentence pushes the next step to its until; the shot end grows', () => {
@@ -85,7 +98,7 @@ test('a step whose action outruns its sentence pushes the next step to its until
   near(plan.steps[0].end, 5, 'slow takes 150 frames at real speed');
   near(plan.steps[0].until, 5 + HOLD_MIN, 'slow holds');
   near(plan.steps[1].start, 5 + HOLD_MIN, 'next waits for the hold');
-  near(plan.end, 5 + HOLD_MIN + 6 / FPS + HOLD_MIN, 'the shot lasts to the last hold');
+  near(plan.end, 5 + HOLD_MIN + 6 / FPS + FINAL_HOLD, 'the shot lasts to the last step\'s final hold');
 });
 
 test('a say-less shot plays its steps back to back', () => {

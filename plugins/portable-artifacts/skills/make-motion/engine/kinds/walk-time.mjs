@@ -25,6 +25,8 @@ export const RESULT_HOLD = 1;
 export const WHOLE_HOLD = 1.5;
 /** The most seconds a step, stop or lift `at` may name (the validator), and how far past its natural length a shot may stretch. */
 export const WALK_AT_MAX = 180;
+/** The least seconds the last step's settled frame holds before the shot ends (the walk's result is its payoff). */
+export const FINAL_HOLD = 2;
 /** The prefix of a stop that goes to a step. */
 export const STEP_PREFIX = 'step:';
 
@@ -123,7 +125,7 @@ function closingEnd(shot, steps, anchor) {
 
 /**
  * Where each of `shot.steps` starts, acts and ends, in shot seconds, and where the shot ends (`end`, the last step's
- * `until`, or later for a closing whole stop: closingEnd). `timing` is the shot's { words, sentences, duration }; a step
+ * `until`, or later for a closing whole stop: closingEnd, or for the last step's settled frame to hold FINAL_HOLD). `timing` is the shot's { words, sentences, duration }; a step
  * without `at` takes its sentence's start, or 0 in a shot with no say. `start` is the later of that and the previous step's
  * `until`, the end of its hold: `until = end + max(HOLD_MIN, lift seconds)`. `lifts` is [{ step, at?, hold }]. Throws for a
  * step id the take lacks (walkProblems says so first).
@@ -142,7 +144,7 @@ export function walkPlan(shot, timing, data, { lifts = [] } = {}) {
     until = end + Math.max(HOLD_MIN, liftSeconds(lifts, ref.id, end, anchor));
     return { id: ref.id, start, act: start + kept.filter((k) => k < take.actIndex).length / data.fps, end, until };
   });
-  return { steps, end: Math.max(until, closingEnd(shot, steps, anchor)) };
+  return { steps, end: Math.max(until, closingEnd(shot, steps, anchor), (steps.at(-1)?.end ?? 0) + FINAL_HOLD) };
 }
 
 /**

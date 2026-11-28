@@ -2,8 +2,9 @@
 // else LIFT_LEAD after the step ends: walk-time.mjs liftSpans) the crop, drawn exactly over the box it was cut from, scales up
 // to the look's kinds.walk.lift.scale over LIFT_MOVES / 2 seconds and rises lift.rise of the canvas height, on the look's own
 // shadow layers (lift.layers), holds lift.hold, and returns over the same time to the same box. The crop is drawn through a
-// rounded rectangle of lift.radius (page px). The whole picture dims (no hole: the card covers its own slot), in the look's lift
-// scrim colour and dim, for as long as the lift is up. The camera eases its zoom
+// rounded rectangle of lift.radius (page px) grown by LIFT_GROW, and the crop is the box grown by LIFT_GROW page px a side, so
+// the card's own border comes along. The page picture dims (not the ground round the window; no hole: the card covers its own
+// slot), in the look's lift scrim colour and dim, from the card's rise until it returns. The camera eases its zoom
 // down with the card (walk-camera.mjs), so the card's scale, held at every film frame to the take's native zoom over the
 // camera's, never draws past the take's own pixels (claim 1). The crop is an image node on the take's frames (props.video)
 // with a constant frame track and `clip` the box in the take's own pixels, so the lift shows the frame as stored, never a
@@ -21,8 +22,9 @@ import { liftAt, liftRise } from './walk-pose.mjs';
 const HALF = 2;
 const MOVE = LIFT_MOVES / HALF; // s, up and back
 const MOVE_EASE = 'inOutCubic';
-const COVER = 4; // the dim covers the canvas grown this much about its centre, so a camera push leaves no edge bare
 const EPSILON = 1e-9;
+/** The page px the lifted crop reaches past the step's box on each side, so the card's own border comes along. */
+export const LIFT_GROW = 3;
 const DEFAULT_DIM = 0.6; // the focus device's own, when neither the look's lift nor its focus device names one
 
 // A track that is 1 from `from` to `to` and 0 outside; with `fall` it goes off over the `fall` seconds before `to`.
@@ -68,16 +70,25 @@ function cardNode(id, shot, { box, clip, take, data, look, ctx, span, sizing, ra
 // The look with the lift's own scrim: the colour and dim kinds.walk.lift names, in place of the focus device's.
 const scrimLook = (ctx, lift) => ({ ...ctx.look, devices: { ...ctx.look.devices, focus: { ...ctx.look.devices.focus, dim: lift.dim ?? ctx.look.devices.focus.dim, ...(lift.scrim === undefined ? {} : { scrim: lift.scrim }) } } });
 
-// The rest dimmed: the focus device's scrim (the look's lift colour and dim) over the whole canvas, on while the lift is up
-// and fading with its return. It has no hole: the card's own slot is dimmed too, and the raised card (which covers its slot,
-// walk-pose.mjs liftRise) is drawn over it, so no outline of the slot shows round the card.
-function dimNode(id, { ctx, span, look }) {
+// The page picture dimmed (not the ground round the frame): the focus device's scrim (the look's lift colour and dim) over the
+// picture rectangle exactly as it is drawn (the frame draws the picture square, under its rounded outline, so the dim matches it
+// and leaves no bright corner), rising with the card (from the lift's start to the card's peak), on while the lift is up and
+// fading with its return. It has no hole: the card's own slot is dimmed too, and the raised card (which covers its slot,
+// walk-pose.mjs liftRise) is drawn over it, so no outline of the slot shows round the card. Camera moves carry it, as they
+// carry the picture.
+function dimNode(id, { ctx, span, look, geo }) {
   if (!registries.devices.get('focus').supports(ctx.look)) return [];
-  const { canvas } = ctx;
   const lift = scrimLook(ctx, look.lift);
-  const [x, y, w, h] = [-((COVER - 1) * canvas.w) / HALF, -((COVER - 1) * canvas.h) / HALF, COVER * canvas.w, COVER * canvas.h];
-  const scrim = paperScrim({ id: `${id}.focus`, cover: [[[x, y], [x + w, y], [x + w, y + h], [x, y + h]]], at: span.start + MOVE, dur: ctx.look.moves.draw.dur, opacity: lift.devices.focus.dim ?? DEFAULT_DIM, look: lift });
+  const [x, y, w, h] = geo.image;
+  const scrim = paperScrim({ id: `${id}.focus`, cover: [[[x, y], [x + w, y], [x + w, y + h], [x, y + h]]], at: span.start + MOVE, dur: MOVE, opacity: lift.devices.focus.dim ?? DEFAULT_DIM, look: lift });
   return [node('group', `${id}.dim`, {}, { tracks: { opacity: windowTrack(span.start, span.end, MOVE) }, children: [scrim] })];
+}
+
+// `box` ([x, y, w, h] on the drawn picture) grown by LIFT_GROW page px on each side, kept inside the picture.
+function grownBox([x, y, w, h], { image, viewport }) {
+  const grow = (LIFT_GROW * image[2]) / viewport.width;
+  const [left, top] = [Math.max(image[0], x - grow), Math.max(image[1], y - grow)];
+  return [left, top, Math.min(image[0] + image[2], x + w + grow) - left, Math.min(image[1] + image[3], y + h + grow) - top];
 }
 
 /**
@@ -88,14 +99,15 @@ function dimNode(id, { ctx, span, look }) {
 export function liftNodes(shot, ctx, { geo, data, look, lifts }, cam) {
   const native = nativeZoom(geo.picture, geo.image);
   return lifts.flatMap((span) => {
-    const box = geo.stepBoxes.get(span.step);
+    const step = geo.stepBoxes.get(span.step);
     const take = data.steps.find((s) => s.id === span.step);
-    if (!box || !take || look.lift === undefined) return [];
+    if (!step || !take || look.lift === undefined) return [];
+    const box = grownBox(step, geo); // the card's own border comes along
     const id = `${shot.id}.lift${span.k}`;
     const lift = liftAt(look.lift, cam(span.start).zoom); // the whole view lifts by lift.wholeScale
     const sizing = scaleTrack(span, { scale: lift.scale, cam, native, fps: ctx.fps });
-    const radius = (look.lift.radius ?? 0) * (geo.image[2] / geo.viewport.width); // the look's page px, in drawn px
-    const parts = { box, look: { ...look, lift }, ctx, span, sizing, radius };
+    const radius = ((look.lift.radius ?? 0) + LIFT_GROW) * (geo.image[2] / geo.viewport.width); // the card's corner, concentric with the grown crop's, in drawn px
+    const parts = { box, look: { ...look, lift }, ctx, span, sizing, radius, geo };
     return [...dimNode(id, parts), cardNode(id, shot, { ...parts, clip: clipOf(box, geo.image, geo.picture), take, data })];
   });
 }

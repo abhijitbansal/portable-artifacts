@@ -12,16 +12,16 @@
     {
       "id": "open",
       "show": "statement",
-      "kicker": "Harbor",
       "say": "Every project, on one *board*. (0.8)"
     },
     {
       "id": "tour",
       "show": "walk",
+      "cut": "crossfade",
       "src": "walk-take",
-      "title": "Harbor",
+      "title": "Projects",
       "frame": "window",
-      "say": "Here is the board, every project at a glance. The activity tab shows what changed this week. Search takes a project's name or number. Pointing at a card lifts it off the board. And one click adds a new project.",
+      "say": "Here is the board. The tabs switch the view. Search for 42 finds Mobile onboarding. Pointing at it lifts it off the board. And one click adds a new project.",
       "steps": [{ "id": "open" }, { "id": "tab" }, { "id": "search" }, { "id": "hover" }, { "id": "add" }],
       "stops": [{ "to": "whole" }],
       "lift": [{ "step": "hover" }],
@@ -30,7 +30,7 @@
     {
       "id": "close",
       "show": "end",
-      "say": "Your projects, all in one place. (1.5)",
+      "say": "Try the board with your team. (1.5)",
       "ask": "harbor.example/board",
       "mark": "Harbor"
     }

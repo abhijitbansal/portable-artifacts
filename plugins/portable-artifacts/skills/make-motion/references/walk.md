@@ -67,12 +67,14 @@ The example circles the search field on its sentence: `sentence:<n>` counts from
   `end` form is refused: the shot stretches to its steps, so its end is not known. In a shot with a `say`, the steps and the
   sentences must be the same number unless every step has an `at`. Else: `2 steps, 5 sentences: give each step a sentence or an at`.
 - A step plays at the take's real speed (30 frames a second). Idle stretches are cut: where more than 15 frames in a row are the
-  same file, the first 6 stay. The 10 frames before the step's click stay whatever they are, so the cursor has time to arrive.
+  same file, the first 6 stay. The 10 frames before the step's click stay whatever they are (the cursor's travel starts earlier than that: Cursor and lift).
 - A step's last frame holds until the next step starts, at least 0.5 s.
 - If the step before it, with its hold, ends later than its sentence starts, the step starts then. An action longer than its
   words stretches the shot. The shot lasts until the last step's hold ends.
 - A shot with no `say` plays its steps one after the other.
 - A shot whose last stop is `whole` lasts until that stop has landed and the whole picture has held 1.5 s (see Stops). The shot stretches to fit.
+- The last step's settled frame holds at least 2.0 s before the shot ends (the result is the walk's payoff), whatever the stops and
+  lifts ask. The shot stretches to fit; no other kind's timing changes.
 - A shot may play fewer steps than the take has, in the take's order. A take step skipped between two played ones is a finding
   (below). A step id the take lacks, or steps out of the take's order, is refused: `step "nope" is not a step of the take (it
   has: open, tab, search, hover, add)`, and `step "tab" comes after "add" in the shot but before "add" in the take: steps follow
@@ -111,17 +113,24 @@ section says how a push behaves once one does.
 ## Cursor and lift
 
 - The cursor is drawn, an arrow in the look's ink with a paper keyline and a soft shadow so it reads on white, 5% of the canvas high
-  (measured on the arrow's own path). It first shows at the first step that has a pointer and a box, travels over the 10 frames before each
-  click, and dips as it clicks (never under 4% of the canvas height, also in the whole-picture pull-back). A `click` also draws a
-  ripple ring: the look's `ripple` (ink, thick) on a wider paper keyline, so it reads on white UI and on the page's blue button. A step
-  with no box leaves the cursor where it was. It never leaves the frame.
-- A lift crops the step's settled frame at the step's box, drawn through a rounded rectangle of the look's `lift.radius` (page px; the
-  page's own card corner), so no square corner shows; the crop never shows a pixel outside the box. It comes up over 0.4 s from `at`
-  (default 0.5 s after the step ends), scales to 1.1x (1.06x at the whole view, with the camera at zoom 1: the look's `wholeScale`, so
+  (measured on the arrow's own path). It is on from the shot's first frame, at rest 62% across and 70% down the page until it travels to
+  the first step that has a pointer and a box (a take with no pointer at all has no cursor). Each travel to a click takes at least
+  0.6 s, ending on the step's act: it starts early, borrowing from the previous step's hold, but never before that step's act and never
+  while a lift holds its card up (it waits until the card starts back down). A step that acts within 0.6 s of the previous one's act
+  travels for as long as that gap allows. The cursor dips as it clicks (never under 4% of the canvas height, also in the whole-picture
+  pull-back). A `click` also draws a ripple: a thin outline ring (the look's `ripple`, ink on a wider paper keyline, 2 to 3 px at 1080p)
+  that starts 1.6 times the cursor's size and grows outward to 2.6 times over 0.4 s, fading, so the clicked label stays readable on the
+  click frame and the ring still reads on white UI and on the page's blue button. A step with no box leaves the cursor where it was. It
+  never leaves the frame.
+- A lift crops the step's settled frame at the step's box grown by 3 page px on each side (clamped to the frame, so the card's own
+  border comes along), drawn through a rounded rectangle of the look's `lift.radius` plus 3 (page px; the page's own card corner, kept
+  concentric), so no square corner shows; the crop never shows a pixel outside that box. It comes up over 0.4 s from `at`
+  (default 0.5 s after the step ends), scales to 1.08x (1.04x at the whole view, with the camera at zoom 1: the look's `wholeScale`, so
   the raised card keeps 10 px off its neighbours), rises (the look's `rise`, `wholeRise` at the whole view, held to 60% of the card's
-  own growth so the raised card still covers its slot), holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear shadow of the look's own
-  and the rest dims under a darker scrim with no hole: the card's own slot is dimmed too and the raised card covers it, so no outline
-  of the slot shows (`keynote` and `desk`: `kinds.walk.lift`).
+  own growth so the raised card still covers its slot), holds for the look's hold (1.2 s), and goes back over 0.4 s. It carries a clear
+  shadow of the look's own. The page picture (the framed screen: not the ground round the window) dims under a darker scrim with no
+  hole, rising with the card and leaving as it returns: the card's own slot is dimmed too and the raised card covers it, so no
+  outline of the slot shows (`keynote` and `desk`: `kinds.walk.lift`).
 - The camera eases its zoom down with the card so the card can scale within the take's own pixels (camera zoom at most the native zoom
   over the card's scale), and keeps the whole card inside the title-safe pad. At every frame the card's scale is held to the native
   zoom over the camera's, so a lift never draws past the take's own pixels; a take with no room to zoom keeps the camera and the card
@@ -137,8 +146,9 @@ number inside it.
 A mark aimed at a step is cleared: it fades out when the next played step starts, or 2.0 s after it is drawn if that is sooner, and it
 is never left up over a lift (it clears as the lift starts). A mark never starts to draw before its step acts: its landing moves
 later, so its first stroke is on the step's act. The look styles it as an overlay (`kinds.walk.mark`): in `keynote` a rounded rectangle
-of the look's radius in ink, a moderate stroke 3 units outside the box (so it does not double the page's own blue focus border), with a
-soft glow under it; in `desk` the hand circle in ink, fitted inside the field. Both keep out of the title-safe pad of the frame while the
+of the look's radius in ink, a moderate stroke 10 units outside the box (a clear gap, so it reads as an annotation and not as the
+page's own blue focus border), with a soft glow under it, revealed around its path over 0.4 s; in `desk` the hand circle in ink, fitted
+inside the field. Both keep out of the title-safe pad of the frame while the
 camera rests. A mark aimed at `screen` is the device as built. The draw-on lands on `at`, so aim the mark at the sentence of its step
 (`sentence:<n>` counts from 0).
 
@@ -181,3 +191,9 @@ a line in the text report (`notice: ...`) and in `notices` with `--json`. Then:
 No captured parts: a lift is a crop and no sharper than the frame. Idle
 means identical frame files, so a blinking caret or a spinner plays at real speed. A covered value in the take shows as its
 grey cover at any zoom. Walk stops make no sound in this phase. The longer list: make-demo's `limits.md`, "The walk shot".
+
+Known limits the engine cannot fix (the take or the product decides them):
+
+- The take's viewport can crop the page's last row at the bottom edge of the window: record at a height that holds the list's end.
+- A tab that changes only a subtitle (the fixture's Activity tab) shows little change at the whole view: name the change in the words, or pick a step that changes the page.
+- Small product text (card sublines, list times, about 10 to 12 px at 1080p) stays small at the whole view, and is unreadable at phone size: lift the step you want read.
