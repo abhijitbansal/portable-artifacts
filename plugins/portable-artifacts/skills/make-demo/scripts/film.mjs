@@ -10,7 +10,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
-import { printResult } from '../shared/errors.mjs';
 import { escapeJsonInvisible } from '../shared/agent-text.mjs';
 import { quoteArg } from '../shared/doctor.mjs';
 import { preflight } from '../shared/preflight.mjs';
@@ -21,22 +20,6 @@ const USAGE = 'node scripts/film.mjs <demo.json> --take take-<n> [--out <file>] 
 const OPTIONS = { take: { type: 'string' }, out: { type: 'string' }, json: { type: 'boolean' } };
 const SIGNED_IN_NOTICE = "this film plays a signed-in take: its sheets and MP4 are the user's to look at; do not open them or send them to an agent.";
 const say = (line) => process.stdout.write(`${line}\n`);
-
-function stop(errors, { json, label, demo }) {
-  const again = errors.some((e) => e.path === 'take.planKey' || e.path.startsWith('take.steps'));
-  const hint = again ? [{ path: 'take', message: `to plan again: node ${quoteArg(path.join(SKILL_ROOT, 'scripts', 'build.mjs'))} ${quoteArg(demo)}` }] : [];
-  printResult({ ok: false, errors: [...errors, ...hint] }, { json, label });
-  process.exitCode = 1;
-}
-
-function readScout(dir) {
-  try {
-    const scout = JSON.parse(fs.readFileSync(path.join(dir, 'scout', 'scout.json'), 'utf8'));
-    return scout?.version === 1 && Array.isArray(scout.pages) ? scout : null;
-  } catch {
-    return null;
-  }
-}
 
 function report({ file, film, notes, take, makeScript }) {
   const walks = film.shots.filter((s) => s.show === 'walk').map((s) => ({ id: s.id, steps: s.steps.length }));
@@ -59,26 +42,21 @@ async function film(file, values) {
   const json = values.json === true;
   const { siblingScript } = await import('./lib/siblings.mjs');
   const makeScript = siblingScript('make-motion', 'scripts/make.mjs'); // a missing make-motion is usage, before anything is read
-  const { loadSpec, validateSpec } = await import('./lib/spec.mjs');
-  const { spec, dir } = loadSpec(file);
-  const checked = validateSpec(spec);
-  if (!checked.ok) return stop(checked.errors, { json, label: file, demo: file });
-  const scout = readScout(dir);
-  if (scout === null) return stop([{ path: 'scout', message: `run scout first: node ${quoteArg(path.join(SKILL_ROOT, 'scripts', 'scout.mjs'))} ${quoteArg(file)}` }], { json, label: file, demo: file });
-  const { planRows } = await import('./lib/plan-rows.mjs');
-  const planned = planRows(spec, scout);
-  if (planned.errors.length > 0) return stop(planned.errors, { json, label: file, demo: file });
+  const { loadDemo, stop } = await import('./lib/demo-load.mjs');
+  const demo = await loadDemo(file, { json, skillRoot: SKILL_ROOT });
+  if (demo === null) return undefined;
+  const { spec, dir, scout, rows } = demo;
   const { Refused, outPath } = await import('./lib/demo-out.mjs');
   try {
     const { readDemoTake } = await import('./lib/take-read.mjs');
     const { draftFilm } = await import('./lib/film-draft.mjs');
     const take = readDemoTake(dir, values.take);
-    const drafted = draftFilm({ spec, rows: planned.rows, scout, take });
+    const drafted = draftFilm({ spec, rows, scout, take });
     const target = outPath(dir, values.out, path.join(dir, 'film.json'));
     fs.writeFileSync(target, `${escapeJsonInvisible(JSON.stringify(drafted.film, null, 2))}\n`, { flag: 'wx' });
     printReport(report({ file: target, film: drafted.film, notes: drafted.notes, take, makeScript }), json);
   } catch (error) {
-    if (error instanceof Refused) return stop(error.errors, { json, label: file, demo: file });
+    if (error instanceof Refused) return stop(error.errors, { json, demo: file, skillRoot: SKILL_ROOT });
     throw error;
   }
   return undefined;

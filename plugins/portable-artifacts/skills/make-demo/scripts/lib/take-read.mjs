@@ -10,6 +10,7 @@ import { Refused, isInside } from './demo-out.mjs';
 
 const NAME = /^take-[0-9]{1,4}$/;
 const ID = new RegExp(ID_PATTERN);
+const FRAME = /^[0-9a-f]{16}\.(jpg|png)$/;
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_STEPS = 200;
 const ECHO_MAX = 40;
@@ -47,12 +48,21 @@ function readTakeJson({ root, dir }) {
   }
 }
 
-function stepOf(raw, i) {
+function framesOf(raw) {
+  if (!Array.isArray(raw)) throw refuse('frames', 'is not a list of frame names');
+  raw.forEach((name, i) => {
+    if (typeof name !== 'string' || !FRAME.test(name)) throw refuse(`frames[${i}]`, `${agentJson(name, { max: ECHO_MAX })} is not a frame name (16 hex characters, then .jpg or .png)`);
+  });
+  return raw;
+}
+
+const stepOf = (frameCount) => (raw, i) => {
   if (raw === null || typeof raw !== 'object') throw refuse(`steps[${i}]`, 'is not an object');
   if (typeof raw.id !== 'string' || !ID.test(raw.id)) throw refuse(`steps[${i}].id`, `${agentJson(raw.id, { max: ECHO_MAX })} is not a step id`);
   if (!VERBS.includes(raw.do)) throw refuse(`steps[${i}].do`, `${agentJson(raw.do, { max: ECHO_MAX })} is not a step verb`);
-  return { id: raw.id, do: raw.do, hasBox: raw.box !== null && typeof raw.box === 'object' };
-}
+  if (!Number.isInteger(raw.settledIndex) || raw.settledIndex < 0 || raw.settledIndex >= frameCount) throw refuse(`steps[${i}].settledIndex`, `${agentJson(raw.settledIndex, { max: ECHO_MAX })} is not an index into the ${frameCount} frames`);
+  return { id: raw.id, do: raw.do, hasBox: raw.box !== null && typeof raw.box === 'object', settledIndex: raw.settledIndex };
+};
 
 function stoppedOf(stopped) {
   if (stopped === null) return null;
@@ -60,7 +70,10 @@ function stoppedOf(stopped) {
   return stopped.row;
 }
 
-/** { dir, signedIn, planKey, stoppedAt, steps: [{ id, do, hasBox }] } of `<demoDir>/<name>`; a Refused (with { path, message }) when it is not a take of this folder. */
+/**
+ * { dir, signedIn, planKey, stoppedAt, frames, steps: [{ id, do, hasBox, settledIndex }] } of `<demoDir>/<name>`; a Refused (with { path, message })
+ * when it is not a take of this folder. `frames` are file names under `<dir>/frames`; `settledIndex` is the step's own picture in them.
+ */
 export function readDemoTake(demoDir, name) {
   const folder = realFolder(demoDir, name);
   const raw = readTakeJson(folder);
@@ -69,5 +82,6 @@ export function readDemoTake(demoDir, name) {
   if (typeof raw.signedIn !== 'boolean') throw refuse('signedIn', 'is not true or false');
   if (typeof raw.planKey !== 'string') throw refuse('planKey', 'is not a string');
   const stoppedAt = stoppedOf(raw.stopped ?? null);
-  return { dir: path.join(demoDir, name), signedIn: raw.signedIn, planKey: raw.planKey, stoppedAt, steps: raw.steps.map(stepOf) };
+  const frames = framesOf(raw.frames);
+  return { dir: path.join(demoDir, name), signedIn: raw.signedIn, planKey: raw.planKey, stoppedAt, frames, steps: raw.steps.map(stepOf(frames.length)) };
 }

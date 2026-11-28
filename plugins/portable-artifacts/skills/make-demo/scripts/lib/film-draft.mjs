@@ -3,29 +3,21 @@
 // one sentence per finished step, and a closing `end` card. The words from the page (control names, typed values) pass through `sayLine`, so
 // they add no sentence and no markup. The take must be of this plan: its `planKey` is `demo-<hash>` of the rows, and a demo.json whose bound
 // fields (a step, origins, mask, session, brand) changed after the take gives another hash and is refused.
-import { planHash } from './plan-rows.mjs';
 import { sayLine } from './say-line.mjs';
 import { DEFAULT_LOOK } from './schema.mjs';
 import { Refused } from './demo-out.mjs';
+import { planProblems, hostOf } from './take-plan.mjs';
 
 const TITLE_MAX = 40;
 const LABEL_MAX = 40;
 const LIFTABLE = new Set(['hover', 'show', 'type', 'select']); // a card, a field or a panel; a raised button reads badly
 const CUT = { keynote: 'zoom', desk: 'crossfade' };
-const STALE = 'this take is of another plan: demo.json changed after the take (a step, origins, mask, session or brand). Undo the change, or plan, approve and take again';
 
 const cut = (text, max) => [...text].slice(0, max).join('').trim();
-// A host cannot hold a space, but it can hold * _ ( and repeated dots, which make-motion would read as markup.
-const hostOf = (spec) => new URL(spec.source.url).host.replace(/[^\p{L}\p{N}.:-]/gu, '').replace(/\.{2,}/g, '.');
 const sayName = (text) => text.replace(/[^\p{L}\p{N} ,'-]+/gu, ' ').replace(/ +/g, ' ').trim();
 
 function problems({ spec, rows, scout, take }) {
-  const errors = [];
-  if (planHash(spec, rows) !== take.planKey.replace(/^demo-/, '') || !take.planKey.startsWith('demo-')) errors.push({ path: 'take.planKey', message: STALE });
-  const ids = new Set(rows.map((r) => r.id));
-  take.steps.forEach((step, i) => {
-    if (!ids.has(step.id)) errors.push({ path: `take.steps[${i}].id`, message: `the take has step ${step.id}, which the plan does not have; ${STALE}` });
-  });
+  const errors = planProblems({ spec, rows, take });
   const pages = new Set((scout.pages ?? []).map((p) => p.url));
   (spec.opening?.facts ?? []).forEach((fact, i) => {
     if (fact.from !== 'user' && !pages.has(fact.from)) errors.push({ path: `opening.facts[${i}].from`, message: 'is an address scout did not read; use a page of scout.json, or "user"' });

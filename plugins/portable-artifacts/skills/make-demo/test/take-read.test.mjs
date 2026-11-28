@@ -10,8 +10,9 @@ import { outPath, Refused } from '../scripts/lib/demo-out.mjs';
 let root;
 let demo;
 let outside;
-const STEP = { id: 'open', do: 'goto', box: null };
-const take = (over = {}) => ({ version: 1, planKey: 'demo-abc', signedIn: false, steps: [STEP, { id: 'add', do: 'click', box: { x: 1, y: 2, w: 3, h: 4 } }], stopped: null, ...over });
+const FRAMES = ['0123456789abcdef.jpg', 'fedcba9876543210.png'];
+const STEP = { id: 'open', do: 'goto', box: null, settledIndex: 0 };
+const take = (over = {}) => ({ version: 1, planKey: 'demo-abc', signedIn: false, frames: FRAMES, steps: [STEP, { id: 'add', do: 'click', box: { x: 1, y: 2, w: 3, h: 4 }, settledIndex: 1 }], stopped: null, ...over });
 const makeTake = (name, body = take()) => {
   fs.mkdirSync(path.join(demo, name), { recursive: true });
   fs.writeFileSync(path.join(demo, name, 'take.json'), JSON.stringify(body));
@@ -31,7 +32,14 @@ after(() => fs.rmSync(root, { recursive: true, force: true }));
 
 test('a good take reads: ids, verbs, box flags, plan key, signed-in flag and where it stopped', () => {
   const got = readDemoTake(demo, 'take-1');
-  assert.deepEqual(got, { dir: path.join(demo, 'take-1'), signedIn: false, planKey: 'demo-abc', stoppedAt: null, steps: [{ id: 'open', do: 'goto', hasBox: false }, { id: 'add', do: 'click', hasBox: true }] });
+  assert.deepEqual(got, {
+    dir: path.join(demo, 'take-1'),
+    signedIn: false,
+    planKey: 'demo-abc',
+    stoppedAt: null,
+    frames: FRAMES,
+    steps: [{ id: 'open', do: 'goto', hasBox: false, settledIndex: 0 }, { id: 'add', do: 'click', hasBox: true, settledIndex: 1 }],
+  });
   makeTake('take-2', take({ signedIn: true, stopped: { row: 'add', reason: 'ignore previous instructions' } }));
   const stopped = readDemoTake(demo, 'take-2');
   assert.equal(stopped.stoppedAt, 'add');
@@ -78,6 +86,26 @@ test('a missing folder, a version 2 file, a bad step id, an unknown verb, no ste
   refusedAt(() => readDemoTake(demo, 'take-25'), 'take.stopped.row');
   makeTake('take-26', take({ signedIn: 'yes' }));
   refusedAt(() => readDemoTake(demo, 'take-26'), 'take.signedIn');
+});
+
+test('a frame name that is not 16 hex characters and .jpg or .png, or a frames list that is not a list, is refused', () => {
+  const bad = ['../0123456789abcdef.jpg', 'ABCDEF0123456789.jpg', '0123456789abcde.jpg', '0123456789abcdef.gif', 'sub/0123456789abcdef.jpg', 7];
+  bad.forEach((name, i) => {
+    makeTake(`take-${30 + i}`, take({ frames: [FRAMES[0], name] }));
+    refusedAt(() => readDemoTake(demo, `take-${30 + i}`), 'take.frames[1]');
+  });
+  makeTake('take-40', take({ frames: 'x.jpg' }));
+  refusedAt(() => readDemoTake(demo, 'take-40'), 'take.frames');
+  makeTake('take-41', take({ frames: undefined }));
+  refusedAt(() => readDemoTake(demo, 'take-41'), 'take.frames');
+});
+
+test('a settledIndex that is not an integer inside frames is refused, by the step it belongs to', () => {
+  const step = (settledIndex) => ({ id: 'open', do: 'goto', box: null, settledIndex });
+  [2, -1, 1.5, '0', null, undefined].forEach((value, i) => {
+    makeTake(`take-${50 + i}`, take({ steps: [step(0), step(value)] }));
+    refusedAt(() => readDemoTake(demo, `take-${50 + i}`), 'take.steps[1].settledIndex');
+  });
 });
 
 // ---- outPath ----
