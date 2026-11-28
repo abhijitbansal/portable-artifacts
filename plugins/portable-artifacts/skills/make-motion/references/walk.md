@@ -151,8 +151,8 @@ A mark aimed at a step is cleared: it fades out when the next played step starts
 is never left up over a lift (it clears as the lift starts). A mark never starts to draw before its step acts: its landing moves
 later, so its first stroke is on the step's act. The look styles it as an overlay (`kinds.walk.mark`): a `circle` on a step is an ink
 ellipse drawn on by the circle device (in `keynote` a clean ellipse; in `desk` the hand circle), centred on the step box with radii of
-1.45 times half the box (so the box's corners are inside it), and at least 8 units past each side. The ellipse is wider than a wide
-field: it rings the whole box, not a part of it. Both keep out of the title-safe pad of the frame while the
+1.25 times half the box, and at least 8 units past each side. On a wide, short box (a search field) the ellipse crosses the box
+near its two ends: mark a small control, or lift the field instead. Both keep out of the title-safe pad of the frame while the
 camera rests (on the old step stops, parked, a wide ellipse can reach past the frame's edge). A mark aimed at `screen` is the device as built. The draw-on lands on `at`, so aim the mark at the sentence of its step
 (`sentence:<n>` counts from 0).
 

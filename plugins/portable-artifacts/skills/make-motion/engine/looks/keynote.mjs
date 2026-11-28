@@ -229,7 +229,7 @@ export const keynote = {
     walk: {
       experimental: true, elevated: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.88, pushPad: 60, snap: 0.1, context: { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } },
       lift: { scale: 1.08, wholeScale: 1.04, wholeRise: 0.001, hold: 1.2, rise: 0.005, radius: 12, dim: 0.3, scrim: 'ink', layers: [{ color: 'shade', alpha: 0.18, reach: 14, dy: 6 }, { color: 'shade', alpha: 0.22, reach: 90, dy: 40 }] },
-      mark: { circle: { color: 'ink', shape: 'ellipse', split: false, width: 4 }, ellipse: { factor: 1.45, clear: 8 } },
+      mark: { circle: { color: 'ink', shape: 'ellipse', split: false, width: 4 }, ellipse: { factor: 1.25, clear: 8 } },
       ripple: { color: 'ink', width: 0.08, keyline: 'paper' },
     },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to

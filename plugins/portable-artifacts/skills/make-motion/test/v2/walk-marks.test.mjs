@@ -68,8 +68,9 @@ test('a mark aimed at the screen is the device as built, never cleared by the wa
 const numbersOf = (d) => d.match(/-?\d+(?:\.\d+)?/g).map(Number);
 
 // the box [x, y, w, h] the circle device is given round `box` so its ellipse has radii of half the box times `factor`, at least
-// `clear` units past each side, about the box's centre
-const ELLIPSE_FACTOR = 1.45;
+// `clear` units past each side, about the box's centre. 1.25 is the circle device's own size round a box (desk gate round 1
+// passed it); 1.45 ran a ring on a wide field out of the window and over the button beside it (round 3 render).
+const ELLIPSE_FACTOR = 1.25;
 const CLEAR = 8;
 
 test('both looks: the mark on a step is an ink ellipse about the box centre that clears the box by at least 8 units on every side (drawn by the circle device, no rounded rectangle)', () => {

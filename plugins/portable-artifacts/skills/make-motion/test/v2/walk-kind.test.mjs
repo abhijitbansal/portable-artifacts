@@ -43,7 +43,7 @@ test('look data: the frame keys copied from each look\'s screen, a wide share, a
     assert.ok(lift.layers.length >= 2 && lift.dim > 0 && typeof lift.scrim === 'string', `${name}: the lift's own shadow layers and scrim`);
     assert.deepEqual([pushPad, snap, context], [60, 0.1, { width: 0.7, height: 0.45, last: { width: 0.99, height: 0.8, pad: 0 } }]);
     assert.equal(mark.circle.color, 'ink', `${name}: the mark is the circle device, in ink`);
-    assert.deepEqual(mark.ellipse, { factor: 1.45, clear: 8 }, `${name}: an ellipse about the box centre that clears the box by 8 units`);
+    assert.deepEqual(mark.ellipse, { factor: 1.25, clear: 8 }, `${name}: an ellipse about the box centre that clears the box by 8 units`);
     assert.equal(mark.rounded, undefined, `${name}: no rounded rectangle`);
     assert.deepEqual([ripple.color, ripple.keyline, ripple.width], ['ink', 'paper', 0.08], `${name}: the ripple's ink ring on a paper keyline`);
   }
