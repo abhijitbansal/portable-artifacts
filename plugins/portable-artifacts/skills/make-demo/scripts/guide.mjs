@@ -21,10 +21,10 @@ const OPTIONS = { take: { type: 'string' }, video: { type: 'string' }, out: { ty
 const SIGNED_IN_NOTICE = "this guide shows a signed-in take's frames: it is the user's to open; do not open it or its check pictures";
 const say = (line) => process.stdout.write(`${line}\n`);
 
-function report({ file, guide, notes, take, buildScript }) {
+function report({ file, guide, notes, signedIn, buildScript }) {
   const page = path.join(path.dirname(file), 'guide.html');
   const next = `node ${quoteArg(buildScript)} ${quoteArg(file)} --out ${quoteArg(page)}`;
-  return { file, sections: guide.sections.length, notes, next, notice: take.signedIn ? SIGNED_IN_NOTICE : null };
+  return { file, sections: guide.sections.length, notes, next, notice: signedIn ? SIGNED_IN_NOTICE : null };
 }
 
 function printReport(body, json) {
@@ -37,11 +37,6 @@ function printReport(body, json) {
   return undefined;
 }
 
-// The guide's paths (the film, the frames) are relative to the folder that holds it, so it has to sit beside demo.json and the take folders.
-function besideDemo(Refused, dir, target) {
-  if (fs.realpathSync(path.dirname(target)) !== fs.realpathSync(dir)) throw new Refused({ path: 'out', message: `${target} is not directly in the demo folder ${dir}; the guide's paths are relative to its own folder, so pass --out with a name there` });
-}
-
 async function guide(file, values) {
   const json = values.json === true;
   const { siblingScript } = await import('./lib/siblings.mjs');
@@ -50,17 +45,18 @@ async function guide(file, values) {
   const demo = await loadDemo(file, { json, skillRoot: SKILL_ROOT });
   if (demo === null) return undefined;
   const { spec, dir, rows } = demo;
-  const { Refused, outPath } = await import('./lib/demo-out.mjs');
+  const { Refused, outPath, besideDemo } = await import('./lib/demo-out.mjs');
   try {
     const { readDemoTake } = await import('./lib/take-read.mjs');
     const { draftGuide } = await import('./lib/guide-draft.mjs');
     const { videoRef } = await import('./lib/guide-video.mjs');
+    const { isSignedIn } = await import('./lib/take-plan.mjs');
     const take = readDemoTake(dir, values.take);
     const drafted = draftGuide({ spec, rows, take, video: videoRef(dir, values.video) });
     const target = outPath(dir, values.out, path.join(dir, 'guide.json'));
-    besideDemo(Refused, dir, target);
+    besideDemo(dir, target); // the guide's paths (the film, the frames) are relative to the folder that holds it
     fs.writeFileSync(target, `${escapeJsonInvisible(JSON.stringify(drafted.guide, null, 2))}\n`, { flag: 'wx' });
-    printReport(report({ file: target, guide: drafted.guide, notes: drafted.notes, take, buildScript }), json);
+    printReport(report({ file: target, guide: drafted.guide, notes: drafted.notes, signedIn: isSignedIn({ spec, take }), buildScript }), json);
   } catch (error) {
     if (error instanceof Refused) return stop(error.errors, { json, demo: file, skillRoot: SKILL_ROOT });
     throw error;

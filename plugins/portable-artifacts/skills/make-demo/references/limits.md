@@ -173,11 +173,13 @@ make-motion's `walk` shot plays a take as a film shot (make-motion's `references
   step, never on a click, and none when the use case has no such step.
 - **Hard cuts.** The seams into and out of the product are plain cuts. A dissolve laid the opening's type over the page and a fade
   dipped to blank in the look gate. The film does not open from a named thing on the page.
-- **One walk shot per use case.** `film.mjs` does not split one. make-motion refuses a walk shot of more than 40 steps; a use case
-  has at most 20 steps in `demo.json`, so a draft stays under that.
+- **One walk shot per use case, unless its sentences are too long.** make-motion caps a shot's `say` at 400 characters, so
+  `film.mjs` splits a long use case into consecutive walk shots (`uc-<id>`, `uc-<id>-2`, ...), each with the use case title and
+  its own lift. Only the film's first walk shot gets the hard cut when an opening comes before it.
 - **Brand is a name and an accent.** They come from `og:site_name`, the title and `theme-color` of the first page. No logo, no
   colour read from the page's own styles. A site without `theme-color` gives no accent.
-- **A third party's film has no brand.** It gets the mark `Source: <host>` and no accent.
+- **A third party's film has no brand.** It gets the mark `Source: <host>` and no accent, and it always closes on a card with the
+  credit (`Shown from <host>.`) even when `demo.json` has no `ending`. The end card's mark is cut to 32 characters at a word.
 - **Facts are checked by address, not by content.** `film.mjs` checks that a fact's `from` is `user` or a page scout read. It does
   not check the fact's words against that page. Never inventing a fact is the director's rule.
 - **`film.mjs` reads little of `take.json`.** Only the step ids, verbs, box flags and frame names, the flags `signedIn` and
@@ -187,6 +189,21 @@ make-motion's `walk` shot plays a take as a film shot (make-motion's `references
 - **Signed in.** `film.mjs` prints a notice. The model never opens the film's sheets or the MP4, and gives them to no agent, not
   even `motion-reviewer`: it works from make-motion's `--json` report. The rule is the agent's to keep: make-motion still writes
   the sheets and the film.
+- **`--out` sits in the demo folder.** The walk shot's `src` is the take folder's name, relative to the folder that holds `film.json`.
+- **Typed values are spoken.** The narration and the guide's captions say a typed value as the author wrote it, even where the take
+  masks that field on its frames. Signed in, put nothing private in a `type` value.
+- **The brand name is page text.** Signed in, the proposed brand name can come from the page title, masked only by pattern (emails,
+  keys, long numbers), so a person's name in a title passes. Read the proposal before you copy it into `brand.name`. It then
+  reaches the end card and the guide title.
+- **The take is trusted at its plan key.** `film.mjs` and `guide.mjs` compare the hash with `planKey` in `take.json`, and do not
+  re-check the click-plan answers. Editing `planKey` on purpose defeats the binding; it guards against drift only.
+- **Take steps are checked by id only.** Duplicates, order and each step's verb are not checked by `film.mjs` (the lift reads the
+  take's verb). make-motion refuses steps out of order.
+- **Words are not escaped.** A fact, a hook or an ending taken from a page can hold `*` or `_`, which make-motion reads as emphasis
+  and refuses (an unclosed `*`). Keep those words plain.
+- **Long hosts.** The default closing line `That is <host>.` can run long, and an international host shows as its `xn--` form.
+- **Sentences keep letters and digits only,** so combining marks drop (accented and Indic text reads garbled in a sentence).
+- **Odd names.** A name that is all marks gives a sentence of `this step`; a brand name with escapes (`\u{202e}`) shows them as text.
 - **`walk` in `cosmos`, `ledger`, `poster` and `pop`:** not yet.
 
 ## The guide
@@ -203,6 +220,15 @@ make-motion's `walk` shot plays a take as a film shot (make-motion's `references
 - **Signed in.** `guide.mjs` prints a notice. The model never opens the guide, its pictures or its check PNGs, and gives them to
   no agent. The user opens the page.
 - **A third party's guide** carries the callout `Source: <host>. Not made by its owner.`
+- **The guide's title is plain text.** The brand name keeps letters, digits, spaces and `, ' - . &` only, because make-explainer
+  renders a page title as markup. A name with no letter or digit gives the host.
+- **Any `.mp4` in the demo folder passes `--video`.** Nothing ties it to the take or to `film.json`, so an older film can play
+  beside this take's frames. Name the right file.
+- **The guide shares the film's limits** on typed values, the trusted plan key and the unchecked take steps (see "The film").
+- **Check-time gaps.** `take.json`'s size is read, then the file; a take folder or `frames/` that is a link inside the demo folder
+  passes `film.mjs` (make-explainer refuses a path through a link, so the guide build fails and nothing leaks).
+- **The plan's brand source label** (`scout: og:site_name`) trusts `scout.json` on disk; an edited file can mislabel where a name came from.
+- **Signed-in brand masking** counts a title's length before whitespace collapses, so a padded title is dropped, not leaked.
 
 ## The hash
 

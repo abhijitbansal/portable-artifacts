@@ -16,5 +16,8 @@ export function planProblems({ spec, rows, take }) {
   return errors;
 }
 
+/** True when the signed-in notice must print: take.json says `signedIn`, or demo.json has a `session` (the bound field; take.json is not trusted). */
+export const isSignedIn = ({ spec, take }) => take.signedIn === true || spec.session !== undefined;
+
 /** The host of the demo's start address, reduced to what cannot read as make-motion markup: a host can hold * _ ( and repeated dots. */
 export const hostOf = (spec) => new URL(spec.source.url).host.replace(/[^\p{L}\p{N}.:-]/gu, '').replace(/\.{2,}/g, '.');

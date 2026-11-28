@@ -20,6 +20,11 @@ export function isInside(base, target) {
 
 const refuse = (message) => new Refused({ path: 'out', message });
 
+/** Throws unless `target` sits directly in the demo folder: a film's `src` and a guide's paths are relative to the folder that holds the file. */
+export function besideDemo(demoDir, target) {
+  if (fs.realpathSync(path.dirname(target)) !== fs.realpathSync(demoDir)) throw refuse(`${target} is not directly in the demo folder ${demoDir}; the paths in the file are relative to its own folder, so pass --out with a name there`);
+}
+
 /** The absolute path of the file to write: `wanted` (against the working folder) or `fallback`, which must be new, a .json and inside `demoDir`. */
 export function outPath(demoDir, wanted, fallback) {
   const file = path.resolve(wanted ?? fallback);

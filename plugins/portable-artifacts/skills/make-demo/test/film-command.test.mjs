@@ -135,6 +135,11 @@ test('--out outside the demo folder, or not .json, exits 1 and writes nothing', 
   const text = await run(FILM, [demo.file, '--take', 'take-1', '--out', path.join(demo.dir, 'film.txt')]);
   assert.equal(text.code, 1);
   assert.ok(!fs.existsSync(path.join(demo.dir, 'film.txt')));
+  fs.mkdirSync(path.join(demo.dir, 'sub'));
+  const sub = await run(FILM, [demo.file, '--take', 'take-1', '--out', path.join(demo.dir, 'sub', 'film.json')]);
+  assert.equal(sub.code, 1, 'the walk shot\'s src is relative to the film\'s own folder, so it sits beside demo.json');
+  assert.match(sub.stdout, /pass --out with a name there/);
+  assert.ok(!fs.existsSync(path.join(demo.dir, 'sub', 'film.json')));
 });
 
 test('a demo.json whose brand changed after the take exits 1 and names the command to plan again; an edited opening is accepted', T, async () => {

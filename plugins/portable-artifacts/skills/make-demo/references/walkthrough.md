@@ -49,7 +49,7 @@ Draft three openings and recommend one, with the reason. Give each as a hook and
 **Never invent a fact.** A number, a name or a claim comes from the user's words or from a page scout read, and `from` says
 which. If the user gave no facts, write a hook only. Signed in, every fact is `from: "user"`: you did not read the pages.
 
-No opening means the film starts on the first walk shot. No ending means no closing card, and `film.mjs` says so.
+No opening means the film starts on the first walk shot. No ending means no closing card, and `film.mjs` says so; a third party's film still closes on its source credit.
 
 ## The draft film
 

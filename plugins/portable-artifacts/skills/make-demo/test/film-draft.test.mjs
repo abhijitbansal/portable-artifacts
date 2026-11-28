@@ -1,6 +1,7 @@
 // draftFilm on hand-made inputs: shot order, the cut, one sentence per step, the lift rule, the third-party mark, and the refusals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { draftFilm } from '../scripts/lib/film-draft.mjs';
@@ -155,6 +156,106 @@ test('a fact from an address scout did not read is refused; one it read is accep
   const bad = baseSpec({ opening: { hook: 'Hi', facts: [{ text: 'Seen', from: `${START}elsewhere` }] } });
   assert.throws(() => draft(bad), (e) => e.errors[0].path === 'opening.facts[0].from');
   assert.doesNotThrow(() => draft(baseSpec({ opening: { hook: 'Hi', facts: [{ text: 'Seen', from: `${START}cart` }] } })));
+});
+
+// make-motion keeps these two caps as unexported constants (scripts/v2/spec.mjs SAY_MAX, engine/kinds/end.mjs MARK_MAX), so the tests read them
+// from the source rather than copy a number.
+const constantOf = (name, ...parts) => Number(new RegExp(`const ${name} = (\\d+);`).exec(fs.readFileSync(path.join(SKILL, '..', 'make-motion', ...parts), 'utf8'))[1]);
+const SAY_MAX = constantOf('SAY_MAX', 'scripts', 'v2', 'spec.mjs');
+const MARK_MAX = constantOf('MARK_MAX', 'engine', 'kinds', 'end.mjs');
+
+function longUseCase(count) {
+  const verbs = ['hover', 'click', 'type'];
+  const rows = Array.from({ length: count }, (_, i) => row(`s${i}`, 'a', {
+    do: verbs[i % 3],
+    value: 'Ada',
+    target: { id: null, role: 'button', name: `Control number ${i} with a long descriptive name`, css: `#s${i}` },
+  }));
+  const spec = baseSpec({ useCases: [{ id: 'a', title: 'A long use case', steps: [] }], opening: { hook: 'Hello there' } });
+  const steps = rows.map((r) => stepOf(r.id, r.do, true));
+  const { film } = draftFilm({ spec, rows, scout: SCOUT, take: { ...takeOf(spec), steps, planKey: `demo-${planHash(spec, rows)}` } });
+  return { film, rows };
+}
+
+test('a use case of 20 long steps splits into consecutive walk shots, each say within make-motion\'s cap, every step once in order', () => {
+  const { film, rows } = longUseCase(20);
+  const shots = walks(film);
+  assert.ok(shots.length > 1, 'it needs more than one shot');
+  assert.deepEqual(shots.map((s) => s.id), shots.map((_, i) => (i === 0 ? 'uc-a' : `uc-a-${i + 1}`)));
+  for (const shot of shots) {
+    assert.ok(shot.say.length <= SAY_MAX, `${shot.id}: ${shot.say.length} > ${SAY_MAX}`);
+    assert.equal(sentences(shot.say), shot.steps.length);
+    assert.equal(shot.title, 'A long use case');
+  }
+  assert.deepEqual(shots.flatMap((s) => s.steps.map((x) => x.id)), rows.map((r) => r.id));
+  assert.deepEqual(shots.map((s) => s.cut), shots.map((_, i) => (i === 0 ? 'cut' : undefined)), 'only the first walk shot of the film cuts in');
+});
+
+test('each chunk gets its own lift, on its last boxed hover, show, type or select step', () => {
+  const { film, rows } = longUseCase(20);
+  const verbOf = new Map(rows.map((r) => [r.id, r.do]));
+  for (const shot of walks(film)) {
+    const want = shot.steps.map((s) => s.id).findLast((id) => ['hover', 'type'].includes(verbOf.get(id)));
+    assert.equal(shot.lift?.[0]?.step, want, shot.id);
+  }
+});
+
+test('a use case that fits in one shot keeps the id uc-<id> and is not split', () => {
+  const { film } = longUseCase(1);
+  assert.deepEqual(walks(film).map((s) => s.id), ['uc-a']);
+  const { film: whole } = draft(FULL);
+  assert.deepEqual(walks(whole).map((s) => s.id), ['uc-a', 'uc-b']);
+});
+
+test('a chunk id never collides with a use case id such as a-2', () => {
+  const spec = baseSpec({ useCases: [{ id: 'a', title: 'A', steps: [] }, { id: 'a-2', title: 'B', steps: [] }] });
+  const rows = [...Array.from({ length: 12 }, (_, i) => row(`s${i}`, 'a', { target: { id: null, role: 'button', name: `Control number ${i} with a long descriptive name`, css: '#x' } })), row('t0', 'a-2')];
+  const steps = rows.map((r) => stepOf(r.id, r.do, true));
+  const { film } = draftFilm({ spec, rows, scout: SCOUT, take: { ...takeOf(spec), steps, planKey: `demo-${planHash(spec, rows)}` } });
+  const ids = film.shots.map((s) => s.id);
+  assert.equal(new Set(ids).size, ids.length, ids.join(','));
+  assert.deepEqual(ids, ['uc-a', 'uc-a-3', 'uc-a-2'], 'the second chunk of a skips the number a-2 owns');
+});
+
+test('a brand name over the mark cap is cut at a word to the cap, with no trailing space', () => {
+  const name = 'Northwind Traders Hardware Supply Company';
+  assert.ok(name.length > MARK_MAX);
+  const mark = draft(baseSpec({ ending: { ask: 'Go' }, brand: { name } })).film.shots.at(-1).mark;
+  assert.equal(mark, 'Northwind Traders Hardware');
+  const forty = draft(baseSpec({ ending: { ask: 'Go' }, brand: { name: 'x'.repeat(40) } })).film.shots.at(-1).mark;
+  assert.equal(forty, 'x'.repeat(MARK_MAX));
+  assert.equal(draft(baseSpec({ ending: { ask: 'Go' }, brand: { name: 'Acme' } })).film.shots.at(-1).mark, 'Acme');
+});
+
+test('the cut never leaves half of a \\u{...} escape', () => {
+  const name = `${'a'.repeat(MARK_MAX - 3)}\\u{202e}more`;
+  const mark = draft(baseSpec({ ending: { ask: 'Go' }, brand: { name } })).film.shots.at(-1).mark;
+  assert.ok([...mark].length <= MARK_MAX);
+  assert.doesNotMatch(mark, /\\(u(\{[0-9a-f]*)?)?$/i, mark);
+});
+
+test('a third-party source credit is cut in the host part and keeps "Source: "', () => {
+  const host = 'docs.my-company-product-name.example.com';
+  assert.ok(host.length > 24);
+  const spec = baseSpec({ rights: 'third-party', source: { url: `https://${host}/` }, ending: { ask: 'See it' } });
+  const mark = draftFilm({ spec, rows: ROWS, scout: SCOUT, take: takeOf(spec) }).film.shots.at(-1).mark;
+  assert.ok(mark.startsWith('Source: docs.my-company'), mark);
+  assert.ok(mark.length <= MARK_MAX, mark);
+  assert.doesNotMatch(mark, /[\s.:-]$/);
+});
+
+test('a brand name blank after cleaning gives no mark and never an empty string', () => {
+  for (const name of ['***', '   ', '()']) {
+    const last = draft(baseSpec({ ending: { ask: 'Go' }, brand: { name } })).film.shots.at(-1);
+    assert.equal(Object.hasOwn(last, 'mark'), false, JSON.stringify(name));
+  }
+});
+
+test('a third-party demo with no ending still closes on a source credit and carries no ask', () => {
+  const { film, notes } = draft(baseSpec({ rights: 'third-party' }));
+  assert.deepEqual(film.shots.at(-1), { id: 'close', show: 'end', cut: 'cut', say: 'Shown from shop.example.test.', mark: 'Source: shop.example.test' });
+  assert.ok(notes.some((n) => /no ending/.test(n)));
+  assert.equal(draft(baseSpec()).film.shots.at(-1).show, 'walk', 'an own demo with no ending keeps no closing card');
 });
 
 test('a long fact text is cut to 40 characters in the number label', () => {

@@ -34,6 +34,16 @@ test('the title is the brand name, else the host, plus walkthrough', () => {
   assert.equal(draft(baseSpec()).guide.title, 'shop.example.test walkthrough');
 });
 
+test('a brand name with markup gives a plain title: no link, bracket, star or backtick', () => {
+  const title = (name) => draft(baseSpec({ brand: { name } })).guide.title;
+  const link = title('[Sign in](https://evil.test)');
+  assert.doesNotMatch(link, /[[\]()]/);
+  assert.equal(link, 'Sign in https evil.test walkthrough');
+  assert.doesNotMatch(title('**Bold** `code` _x_ <b>'), /[*`_<>]/);
+  assert.equal(title("Smith & Sons, Inc. - o'neil"), "Smith & Sons, Inc. - o'neil walkthrough");
+  assert.equal(title('***'), 'shop.example.test walkthrough', 'a name with no word falls back to the host');
+});
+
 test('the sections are the film first, then per use case its steps and one image per finished step', () => {
   const { guide, notes } = draft(baseSpec());
   assert.deepEqual(types(guide), ['motion', 'steps', 'image', 'image', 'image', 'steps', 'image', 'image']);

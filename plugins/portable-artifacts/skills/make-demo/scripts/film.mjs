@@ -21,10 +21,10 @@ const OPTIONS = { take: { type: 'string' }, out: { type: 'string' }, json: { typ
 const SIGNED_IN_NOTICE = "this film plays a signed-in take: its sheets and MP4 are the user's to look at; do not open them or send them to an agent.";
 const say = (line) => process.stdout.write(`${line}\n`);
 
-function report({ file, film, notes, take, makeScript }) {
+function report({ file, film, notes, signedIn, makeScript }) {
   const walks = film.shots.filter((s) => s.show === 'walk').map((s) => ({ id: s.id, steps: s.steps.length }));
   const next = `node ${quoteArg(makeScript)} ${quoteArg(file)} --json`;
-  return { file, shots: film.shots.length, walks, notes, next, notice: take.signedIn ? SIGNED_IN_NOTICE : null };
+  return { file, shots: film.shots.length, walks, notes, next, notice: signedIn ? SIGNED_IN_NOTICE : null };
 }
 
 function printReport(body, json) {
@@ -46,15 +46,17 @@ async function film(file, values) {
   const demo = await loadDemo(file, { json, skillRoot: SKILL_ROOT });
   if (demo === null) return undefined;
   const { spec, dir, scout, rows } = demo;
-  const { Refused, outPath } = await import('./lib/demo-out.mjs');
+  const { Refused, outPath, besideDemo } = await import('./lib/demo-out.mjs');
   try {
     const { readDemoTake } = await import('./lib/take-read.mjs');
     const { draftFilm } = await import('./lib/film-draft.mjs');
+    const { isSignedIn } = await import('./lib/take-plan.mjs');
     const take = readDemoTake(dir, values.take);
     const drafted = draftFilm({ spec, rows, scout, take });
     const target = outPath(dir, values.out, path.join(dir, 'film.json'));
+    besideDemo(dir, target); // the walk shot's `src` is the take folder's name, relative to the folder that holds film.json
     fs.writeFileSync(target, `${escapeJsonInvisible(JSON.stringify(drafted.film, null, 2))}\n`, { flag: 'wx' });
-    printReport(report({ file: target, film: drafted.film, notes: drafted.notes, take, makeScript }), json);
+    printReport(report({ file: target, film: drafted.film, notes: drafted.notes, signedIn: isSignedIn({ spec, take }), makeScript }), json);
   } catch (error) {
     if (error instanceof Refused) return stop(error.errors, { json, demo: file, skillRoot: SKILL_ROOT });
     throw error;

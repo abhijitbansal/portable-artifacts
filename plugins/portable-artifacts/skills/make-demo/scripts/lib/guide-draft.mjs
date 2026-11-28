@@ -11,6 +11,12 @@ const TITLE_MAX = 90; // make-explainer's section and page title limit
 const NAME_MAX = 60;
 
 const cut = (text, max) => [...text].slice(0, max).join('').trim();
+// The page title is rendered as markup by make-explainer (a link, bold, code), so a brand name reaches it as letters, digits, spaces and
+// , ' - . & only (sayable's set, plus . and &); a name with no letter or digit gives the host.
+function titleName(text, fallback) {
+  const plain = text.replace(/[^\p{L}\p{N} ,'.&-]+/gu, ' ').replace(/ +/g, ' ').trim();
+  return /[\p{L}\p{N}]/u.test(plain) ? plain : fallback;
+}
 
 function useCaseSection({ useCase, steps, byId, take }) {
   const lines = steps.map((s) => sayLine(byId.get(s.id)));
@@ -42,7 +48,7 @@ export function draftGuide({ spec, rows, take, video }) {
   if (errors.length > 0) throw new Refused(errors);
   const thirdParty = spec.rights === 'third-party';
   const host = hostOf(spec);
-  const name = cut(thirdParty || spec.brand?.name === undefined ? host : spec.brand.name, NAME_MAX);
+  const name = cut(thirdParty || spec.brand?.name === undefined ? host : titleName(spec.brand.name, host), NAME_MAX);
   const head = [{ type: 'motion', video, caption: 'The whole walkthrough, played as a short film.' }];
   if (thirdParty) head.push({ type: 'callout', tone: 'info', title: 'Source', text: `Source: ${host}. Not made by its owner.` });
   const { found, left } = useCaseSections({ spec, rows, take });
